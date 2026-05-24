@@ -1,0 +1,26 @@
+{
+  "name": "@openez-graph/indexer",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@openez-graph/config": "workspace:*",
+    "@openez-graph/core": "workspace:*",
+    "@openez-graph/db": "workspace:*",
+    "@openez-graph/queue": "workspace:*",
+    "drizzle-orm": "^0.44.0",
+    "fast-glob": "^3.3.3",
+    "github-slugger": "^2.0.0",
+    "js-yaml": "^4.1.1",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "toml": "^4.1.1",
+    "ts-morph": "^25.0.1",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0"
+  }
+}

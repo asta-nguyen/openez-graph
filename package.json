@@ -1,0 +1,48 @@
+{
+  "name": "openez-graph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.10.0",
+  "scripts": {
+    "start": "concurrently --names web,mcp --prefix-colors cyan,green --kill-others \"pnpm dev:web\" \"pnpm mcp\"",
+    "dev:web": "pnpm --filter @openez-graph/web dev",
+    "build:web": "pnpm --filter @openez-graph/web build",
+    "openez": "pnpm --filter @openez-graph/cli openez",
+    "init": "pnpm --filter @openez-graph/cli openez init",
+    "index": "pnpm --filter @openez-graph/cli openez index",
+    "reindex": "pnpm --filter @openez-graph/cli openez reindex",
+    "watch": "pnpm --filter @openez-graph/cli openez watch",
+    "serve": "pnpm --filter @openez-graph/cli openez serve",
+    "status": "pnpm --filter @openez-graph/cli openez status",
+    "list": "pnpm --filter @openez-graph/cli openez list",
+    "mcp": "pnpm --filter @openez-graph/cli openez serve --mcp",
+    "worker": "pnpm --filter @openez-graph/worker worker",
+    "benchmark:query": "pnpm --filter @openez-graph/worker benchmark:query",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.4",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "drizzle-kit": "^0.30.0",
+    "tsx": "^4.19.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "concurrently": "^9.2.1",
+    "server-only": "^0.0.1"
+  }
+}

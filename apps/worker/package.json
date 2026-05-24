@@ -1,0 +1,23 @@
+{
+  "name": "@openez-graph/worker",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "worker": "tsx src/index.ts",
+    "index": "tsx src/cli.ts index",
+    "reindex": "tsx src/cli.ts reindex",
+    "benchmark:query": "tsx src/cli.ts benchmark-query",
+    "watch": "tsx src/cli.ts watch",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@openez-graph/config": "workspace:*",
+    "@openez-graph/indexer": "workspace:*",
+    "bullmq": "^5.56.0",
+    "chokidar": "^4.0.3",
+    "commander": "^14.0.0",
+    "ioredis": "^5.5.0"
+  }
+}
