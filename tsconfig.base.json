@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": false,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "declaration": false,
+    "baseUrl": ".",
+    "paths": {
+      "@openez-graph/config": ["packages/config/src/index.ts"],
+      "@openez-graph/db": ["packages/db/src/index.ts"],
+      "@openez-graph/core": ["packages/core/src/index.ts"],
+      "@openez-graph/indexer": ["packages/indexer/src/index.ts"],
+      "@openez-graph/queue": ["packages/queue/src/index.ts"],
+      "@openez-graph/ui": ["packages/ui/src/index.ts"],
+      "@openez-graph/ui/*": ["packages/ui/src/*"]
+    }
+  }
+}

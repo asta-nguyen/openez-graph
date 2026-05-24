@@ -1,0 +1,25 @@
+{
+  "name": "@openez-graph/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/cli.ts",
+  "types": "./src/cli.ts",
+  "scripts": {
+    "openez": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@openez-graph/config": "workspace:*",
+    "@openez-graph/core": "workspace:*",
+    "@openez-graph/db": "workspace:*",
+    "@openez-graph/indexer": "workspace:*",
+    "chokidar": "^4.0.3",
+    "commander": "^14.0.0",
+    "smol-toml": "^1.6.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
