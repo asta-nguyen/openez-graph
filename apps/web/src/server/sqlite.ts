@@ -498,6 +498,49 @@ export function listGraphNodes(rootPath: string, limit = 500): WebGraphNode[] {
   }));
 }
 
+export function countGraphNodes(rootPath: string): number {
+  const row = getWorkspaceDb(rootPath)
+    .prepare("SELECT COUNT(*) AS count FROM graph_nodes")
+    .get() as { count: number };
+  return row.count;
+}
+
+const CURATED_TYPE_ORDER = [
+  "file",
+  "symbol",
+  "document",
+  "entity",
+  "class",
+  "function",
+  "method",
+  "variable",
+  "chunk",
+  "memory"
+];
+
+const typeOrderCase = CURATED_TYPE_ORDER
+  .map((t, i) => `WHEN '${t}' THEN ${i}`)
+  .join(" ");
+
+export function listGraphNodesCurated(rootPath: string, limit = 300): WebGraphNode[] {
+  const rows = getWorkspaceDb(rootPath)
+    .prepare(`
+      SELECT * FROM graph_nodes
+      ORDER BY
+        CASE type ${typeOrderCase} ELSE 999 END,
+        created_at DESC
+      LIMIT ?
+    `)
+    .all(limit) as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
+    id: String(row.id),
+    label: String(row.label),
+    type: String(row.type),
+    refId: row.ref_id ? String(row.ref_id) : null,
+    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
+  }));
+}
+
 export function listGraphEdges(rootPath: string, limit = 1000): WebGraphEdge[] {
   const rows = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM graph_edges LIMIT ?")

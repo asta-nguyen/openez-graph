@@ -39,6 +39,32 @@ export async function writeLocalWorkspaceConfig(workspace: Pick<RegistryWorkspac
     ) + "\n",
     "utf8"
   );
+
+  await ensureGitignoreEntry(workspace.rootPath, OPENEZ_DIRNAME);
+}
+
+const GITIGNORE = ".gitignore";
+
+async function ensureGitignoreEntry(rootPath: string, entry: string): Promise<void> {
+  const gitignorePath = path.join(rootPath, GITIGNORE);
+
+  let content = "";
+  try {
+    content = await fs.readFile(gitignorePath, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+
+  const lines = content.split("\n");
+  const pattern = entry.endsWith("/") ? entry : entry + "/";
+  const hasEntry = lines.some(
+    (l) => l.trim() === entry || l.trim() === pattern
+  );
+
+  if (hasEntry) return;
+
+  const nl = content.endsWith("\n") ? "" : "\n";
+  await fs.writeFile(gitignorePath, content + nl + entry + "/\n", "utf8");
 }
 
 export async function readLocalWorkspaceConfig(rootPath: string): Promise<LocalWorkspaceConfig | null> {
