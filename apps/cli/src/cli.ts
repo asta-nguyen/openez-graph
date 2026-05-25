@@ -238,9 +238,9 @@ program
     }
   });
 
-// ── openez setup codex [path] ──
+// ── openez setup codex|claude|opencode [path] ──
 
-const setup = program.command("setup").description("Configure editor/agent integrations");
+const setup = program.command("setup").description("Configure editor/agent integrations (codex, claude, opencode)");
 
 setup
   .command("codex")
@@ -249,6 +249,24 @@ setup
   .action(async (targetPath) => {
     const { setupCodex } = await import("./setup-codex");
     await setupCodex(targetPath);
+  });
+
+setup
+  .command("claude")
+  .description("Add or update the shared OpenEZ MCP server entry in ~/.claude/settings.json")
+  .argument("[path]", "path to the project directory", process.cwd())
+  .action(async (targetPath) => {
+    const { setupClaude } = await import("./setup-claude");
+    await setupClaude(targetPath);
+  });
+
+setup
+  .command("opencode")
+  .description("Add or update the shared OpenEZ MCP server entry in ~/.config/opencode/opencode.json")
+  .argument("[path]", "path to the project directory", process.cwd())
+  .action(async (targetPath) => {
+    const { setupOpenCode } = await import("./setup-opencode");
+    await setupOpenCode(targetPath);
   });
 
 program.parseAsync(process.argv).catch((error) => {

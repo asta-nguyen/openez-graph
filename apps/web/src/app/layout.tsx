@@ -16,7 +16,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={geist.variable}>
-      <body>
+      <body suppressHydrationWarning>
         <TooltipProvider>
           <SidebarProvider>
             <div className="flex h-svh w-full overflow-hidden">

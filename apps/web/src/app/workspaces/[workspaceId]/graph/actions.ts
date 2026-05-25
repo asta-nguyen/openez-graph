@@ -1,10 +1,12 @@
 "use server";
 
 import {
+  countGraphNodes,
   getGraphNodeById,
   getRegistryWorkspace,
   listGraphEdges,
   listGraphNodes,
+  listGraphNodesCurated,
   searchGraphNodesByLabel
 } from "../../../../server/sqlite";
 
@@ -43,7 +45,11 @@ export async function getWorkspaceGraph(workspaceId: string): Promise<WorkspaceG
   const workspace = getRegistryWorkspace(workspaceId);
   if (!workspace) return null;
 
-  const nodeRows = listGraphNodes(workspace.rootPath, 500);
+  const totalNodeCount = countGraphNodes(workspace.rootPath);
+  const isLarge = totalNodeCount > 300;
+  const nodeRows = isLarge
+    ? listGraphNodesCurated(workspace.rootPath, 300)
+    : listGraphNodes(workspace.rootPath, 500);
   const edgeRows = listGraphEdges(workspace.rootPath, 1000);
 
   const degreeMap = new Map<string, number>();

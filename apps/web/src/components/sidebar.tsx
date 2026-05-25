@@ -54,7 +54,7 @@ export function AppSidebar() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
                   <Brain className="h-4 w-4 text-primary" />
                 </div>
-                <div className="grid gap-0.5">
+                <div className="flex flex-col gap-0">
                   <span className="text-sm font-semibold">OpenEZ Graph</span>
                   <span className="text-xs text-muted-foreground">Local indexing</span>
                 </div>

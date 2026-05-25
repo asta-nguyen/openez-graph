@@ -58,13 +58,42 @@ export function GraphClient({ graphData }: GraphClientProps) {
     setMounted(true);
   }, []);
 
-  // Derive neighbors from graph data
+  // Fast lookup maps - computed once per graphData
+  const nodeById = useMemo(() => {
+    const map = new Map<string, GraphNodeData>();
+    for (const node of graphData.nodes) {
+      map.set(node.id, node);
+    }
+    return map;
+  }, [graphData.nodes]);
+
+  const edgesByTarget = useMemo(() => {
+    const map = new Map<string, GraphEdgeData[]>();
+    for (const edge of graphData.edges) {
+      const list = map.get(edge.target);
+      if (list) list.push(edge);
+      else map.set(edge.target, [edge]);
+    }
+    return map;
+  }, [graphData.edges]);
+
+  const edgesBySource = useMemo(() => {
+    const map = new Map<string, GraphEdgeData[]>();
+    for (const edge of graphData.edges) {
+      const list = map.get(edge.source);
+      if (list) list.push(edge);
+      else map.set(edge.source, [edge]);
+    }
+    return map;
+  }, [graphData.edges]);
+
+  // Derive neighbors from lookup maps
   const neighbors = useMemo(() => {
     if (!selectedNodeId) return null;
-    const incoming = graphData.edges.filter(e => e.target === selectedNodeId);
-    const outgoing = graphData.edges.filter(e => e.source === selectedNodeId);
+    const incoming = edgesByTarget.get(selectedNodeId) ?? [];
+    const outgoing = edgesBySource.get(selectedNodeId) ?? [];
     return { incoming, outgoing };
-  }, [selectedNodeId, graphData.edges]);
+  }, [selectedNodeId, edgesByTarget, edgesBySource]);
 
   // Filter nodes based on search and type selection
   const filteredNodes = useMemo(() => {
@@ -102,9 +131,9 @@ export function GraphClient({ graphData }: GraphClientProps) {
     }
 
     setSelectedNodeId(nodeId);
-    const node = graphData.nodes.find(n => n.id === nodeId);
-    setInspectorNode(node || null);
-  }, [graphData.nodes]);
+    const node = nodeById.get(nodeId) ?? null;
+    setInspectorNode(node);
+  }, [nodeById]);
 
   const handleNodeHover = useCallback((nodeId: string | null) => {
     setHoveredNodeId(nodeId);
@@ -237,8 +266,9 @@ export function GraphClient({ graphData }: GraphClientProps) {
       {/* Graph canvas */}
       <div className="flex-1 relative">
         <WorkspaceGraph
-          nodes={filteredNodes}
-          edges={filteredEdges}
+          allNodes={graphData.nodes}
+          allEdges={graphData.edges}
+          visibleNodeIds={filteredNodes.map(n => n.id)}
           selectedNodeId={selectedNodeId}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
@@ -246,16 +276,16 @@ export function GraphClient({ graphData }: GraphClientProps) {
         />
 
         {/* Hover tooltip */}
-        {hoveredNodeId && !selectedNodeId && (
-          <div className="absolute bottom-4 left-4 bg-background/95 border rounded-md px-3 py-2 shadow-lg">
-            <p className="text-sm font-medium">
-              {graphData.nodes.find(n => n.id === hoveredNodeId)?.label}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {graphData.nodes.find(n => n.id === hoveredNodeId)?.type}
-            </p>
-          </div>
-        )}
+        {hoveredNodeId && !selectedNodeId && (() => {
+          const node = nodeById.get(hoveredNodeId);
+          if (!node) return null;
+          return (
+            <div className="absolute bottom-4 left-4 bg-background/95 border rounded-md px-3 py-2 shadow-lg">
+              <p className="text-sm font-medium">{node.label}</p>
+              <p className="text-xs text-muted-foreground">{node.type}</p>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Inspector panel */}
@@ -318,7 +348,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Incoming</p>
                     {neighbors.incoming.slice(0, 5).map(edge => {
-                      const sourceNode = graphData.nodes.find(n => n.id === edge.source);
+                      const sourceNode = nodeById.get(edge.source);
                       return (
                         <button
                           key={edge.id}
@@ -337,7 +367,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Outgoing</p>
                     {neighbors.outgoing.slice(0, 5).map(edge => {
-                      const targetNode = graphData.nodes.find(n => n.id === edge.target);
+                      const targetNode = nodeById.get(edge.target);
                       return (
                         <button
                           key={edge.id}

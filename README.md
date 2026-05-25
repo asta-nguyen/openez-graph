@@ -1,112 +1,79 @@
 # OpenEZ Graph
 
-Local-first code intelligence engine with workspace management UI, MCP access, and SQLite-based indexing.
+OpenEZ Graph is a local-first code intelligence engine for indexing codebases and docs into a reusable retrieval runtime for CLI tools, MCP clients, and a management UI.
+It is designed around a SQLite-first, multi-workspace architecture with the CLI and MCP server as the primary workflow, while the web app acts as an operational layer for inspection and management.
 
-The current architectural direction is:
+## Why OpenEZ Graph
 
-- CodeGraph-style engine for semantic code indexing and retrieval
-- local runtime with simple setup
-- management UI for workspaces, indexing, queries, and graph inspection
+LLM coding agents waste tokens repeatedly re-reading the same codebase, configuration, and documentation context. A pre-indexed graph-and-chunk runtime reduces repeated file reads, improves retrieval quality, and makes local agent workflows cheaper and more predictable.
+OpenEZ Graph focuses on the local-first path: simple setup, local SQLite storage, workspace-aware indexing, and MCP access over the same indexed runtime.
 
-## Open Source Defaults
+## What it does
 
-This repository is intended to be safe to work with as an open source project:
+- Indexes local codebases and docs into documents, chunks, graph nodes, graph edges, memories, and queryable workspace state.
+- Stores workspace metadata and index state locally in SQLite rather than requiring Postgres or Redis for the default path.
+- Exposes the same runtime through a CLI, a web dashboard, and an MCP server.
+- Supports multi-workspace lookup and MCP reads across one or many registered workspaces.
+- Includes a graph explorer, indexing status surfaces, and workspace management in the web app.
 
-- local indexes stay under `.openez/` and are ignored by Git
-- registry state stays under `~/.openez/` and is never part of the repo
-- example environment variables belong in `.env.example`
-- real secrets belong in `.env.local`, `.env.development.local`, or other ignored `.env.*` files
-- `openez setup codex` writes to the user's global `~/.codex/config.toml`, not into the repo
+## Architecture
 
-If you contribute to this project, do not commit:
+OpenEZ Graph is organized as a monorepo with app entrypoints for the CLI, MCP server, web app, and worker, plus shared packages for config, core retrieval logic, database access, indexing, queue integration, and UI components.
+The current architectural direction in the repo explicitly describes the system as SQLite-first, multi-workspace, and CLI/MCP-first, with the web app positioned as a management layer rather than the center of the system.
 
-- SQLite databases
-- local `.openez/` contents
-- real API keys, tokens, or credentials
-- personal editor or MCP runtime state
+### Main runtime pieces
 
-## What This Repo Does
+- `apps/cli`: the `openez` command for initializing, indexing, watching, serving MCP, checking status, and listing workspaces.
+- `apps/mcp`: the standalone MCP server runtime.
+- `apps/web`: the Next.js management UI with workspaces, documents, jobs, query pages, settings, and graph explorer routes.
+- `packages/core`: retrieval, graph, memory, tokenizer, and ranking logic.
+- `packages/db`: SQLite registry/workspace repositories and resolution helpers.
+- `packages/indexer`: workspace indexing and language-specific parsing/chunking logic.
 
-- indexes local codebases and docs
-- extracts chunks, symbols, and graph relationships
-- stores workspace metadata and index state locally in SQLite
-- exposes CLI, web UI, and MCP interfaces over the same local runtime
+## Storage model
 
-## Current Architecture
+The default storage model is local SQLite in WAL mode, with a global registry database for workspace metadata, a per-workspace SQLite database for indexed data, and a project-local workspace hint file used for workspace resolution.
+The repo guidance explicitly says not to assume Postgres, pgvector, Redis, or BullMQ as part of the default local path.
 
-### Product split
+## Supported content
 
-1. `engine`
-   - scanning
-   - chunking
-   - symbol extraction
-   - graph building
-   - retrieval
-   - MCP-facing query primitives
-2. `runtime`
-   - workspace registry
-   - local storage
-   - index runs and status
-   - configuration defaults
-3. `ui`
-   - workspace management
-   - indexing controls
-   - query and graph inspection
+TypeScript and JavaScript currently have the richest indexing path in this round.
+Python, Go, and Rust are supported in a more basic structured form, while YAML, JSON, TOML, and Markdown (including checklists) are indexed for document context and retrieval rather than full semantic parity with the TS/JS path.
 
-### Storage
+## Quick start
 
-Default storage is SQLite in WAL mode.
+### Requirements
 
-- global registry DB:
-  - `~/.openez/`
-  - stores workspace registry and shared runtime metadata
-- per-workspace DB:
-  - `<workspace-root>/.openez/`
-  - stores documents, chunks, graph, memories, query logs, and index history
+- Node.js compatible with the repo toolchain.
+- `pnpm` as the package manager.
 
-## Indexing Model
+### Install
 
-Language support is intentionally uneven by design:
+```bash
+pnpm install
+```
 
-- TS/JS:
-  - parsed with `ts-morph`
-  - richest symbol and graph extraction path
-- Python, Go, Rust:
-  - basic top-level symbol extraction
-  - practical indexing path, not full semantic parity with TS/JS
-- YAML, JSON, TOML:
-  - structure-aware chunking for config and data files
-- Markdown:
-  - section-oriented chunking
+### Start with the recommended local workflow
 
-## Retrieval Model
+```bash
+pnpm openez init /path/to/project
+pnpm openez index /path/to/project
+pnpm openez serve --mcp
+```
 
-Default retrieval is:
+This preferred flow appears directly in the repo planning and MCP setup notes, and it reflects the intended CLI-first local workflow.
 
-1. full-text search
-2. graph expansion
+### Run the web dashboard
 
-Embeddings are optional and disabled by default. When configured, they augment retrieval rather than defining the default setup experience.
+```bash
+pnpm devweb
+```
 
-## Workspace Model
-
-`brain.config.*` is now optional.
-
-- if present, it can provide default tuning
-- it is no longer required for workspace registration
-- workspace registration is runtime-driven
-
-Multi-workspace operation is a first-class use case.
+The root scripts also include `start`, `buildweb`, `mcp`, `typecheck`, `lint`, and `test`.
 
 ## CLI
 
-The main entrypoint is:
-
-```bash
-pnpm openez init [path]
-```
-
-Expected command shape:
+The CLI package registers the `openez` command and currently supports the following main commands.
 
 ```bash
 pnpm openez init /path/to/project
@@ -114,85 +81,121 @@ pnpm openez index /path/to/project
 pnpm openez reindex /path/to/project
 pnpm openez watch /path/to/project
 pnpm openez status /path/to/project
+pnpm openez list
 pnpm openez serve --mcp
+pnpm openez setup codex /path/to/project
+pnpm openez setup claude /path/to/project
+pnpm openez setup opencode /path/to/project
 ```
 
-The default workflow should not require `--workspace`.
+### Command summary
 
-Quickstart:
+- `init`: register a workspace and optionally run the initial index.
+- `index`: run incremental indexing for a workspace.
+- `reindex`: run a full rebuild.
+- `watch`: watch files and re-index on changes.
+- `status`: show workspace indexing and graph counts.
+- `list`: list registered workspaces.
+- `serve --mcp`: start the MCP server.
+- `setup codex`: add or update a shared OpenEZ MCP entry in Codex config.
+- `setup claude`: add or update a shared OpenEZ MCP entry in Claude Code settings.
+- `setup opencode`: add or update a shared OpenEZ MCP entry in OpenCode config.
+
+## MCP usage
+
+OpenEZ Graph exposes MCP tools for listing workspaces, querying memory/retrieval context, fetching code context, inspecting graph neighbors, writing memory, and triggering workspace indexing.
+The MCP resolver supports default workspace resolution, explicit single-workspace resolution, and multi-workspace read scopes through `workspaceIds` or `paths`.
+
+### Core MCP tools
+
+- `listworkspaces`
+- `memoryquery`
+- `codecontext`
+- `graphneighbors`
+- `memorywrite`
+- `indexworkspace`
+
+### Agent MCP setup
 
 ```bash
-pnpm openez init /path/to/project
-pnpm openez index /path/to/project
-pnpm openez status /path/to/project
-pnpm openez serve --mcp
+pnpm openez setup codex /path/to/project
+pnpm openez setup claude /path/to/project
+pnpm openez setup opencode /path/to/project
 ```
 
-`openez init` and `openez index` keep `<project>/.openez/workspace.json` up to date so agents and MCP clients can resolve the default workspace from the current project directory.
+These commands write or update a shared OpenEZ MCP server entry in the respective agent's config:
 
-## MCP
+- **Codex**: `~/.codex/config.toml`
+- **Claude Code**: `~/.claude/settings.json`
+- **OpenCode**: `~/.config/opencode/opencode.json`
 
-MCP is workspace-aware.
+## Web UI
 
-Tools should accept either:
+The web app is a Next.js management UI with routes for overview, workspaces, documents, jobs, query, settings, and per-workspace graph exploration.
+Workspace detail pages expose status, indexing control, graph status, recent runs, and an entrypoint to the graph explorer, while the graph page renders workspace-scoped graph data and empty states when graph data is missing.
 
-- `workspaceId`
-- or `path`
+### UI Demo
 
-Read tools also support multi-workspace queries through:
+The web dashboard provides visual workspace management and graph exploration:
 
-- `workspaceIds`
-- or `paths`
+**Workspace**
+![Workspace](assets/workspace.png)
 
-If multiple workspaces exist and the request is ambiguous, MCP should require explicit scope instead of guessing.
+**Graph**
+![Graph](assets/graph.png)
 
-Recommended MCP capability set:
+## Project layout
 
-- `list_workspaces`
-- `memory_query`
-- `code_context`
-- `graph_neighbors`
-- `index_workspace`
+```text
+apps/
+  cli/
+  mcp/
+  web/
+  worker/
+packages/
+  config/
+  core/
+  db/
+  indexer/
+  queue/
+  ui/
+documents/
+openez-wiki/
+plans/
+tests/
+```
 
-For project-local agent usage, the shared MCP server resolves the default workspace from `.openez/workspace.json` before falling back to registry heuristics.
+This structure reflects the current repo organization captured in the repository snapshot.
 
-## Security Notes
+## Current status and constraints
 
-- Never commit `.env` or `.env.*` files other than `.env.example`.
-- Never commit `.openez/` or any generated SQLite files.
-- Treat `~/.codex/config.toml` and similar client config as user-local machine state.
-- If you enable embeddings or external providers, keep provider keys in ignored environment files only.
+The repo direction says the project should be treated as SQLite-first, multi-workspace, and local-first.
+It also notes that queue-backed jobs are compatibility-only in parts of the web UI and are not the default runtime path, and that TS/JS remains the richest language path while other languages are intentionally more limited in this round.
 
-## Setup Philosophy
+## Development
 
-The default local setup should not require:
+Useful root scripts include:
 
-- Postgres
-- Redis
-- Docker
-- manual workspace registration in `brain.config.*`
+```bash
+pnpm devweb
+pnpm buildweb
+pnpm mcp
+pnpm typecheck
+pnpm lint
+pnpm test
+```
 
-Optional components may still exist for compatibility or advanced workflows, but they are not part of the default path.
+These scripts are defined in the root `package.json`.
 
-## Local Artifacts
+## Contributing
 
-By default, OpenEZ writes local runtime data to:
+Contributions are most useful when they reinforce the current architecture: engine/runtime/UI separation, local-first defaults, SQLite as the main path, and MCP-first retrieval flows.
+Avoid introducing new hard dependencies on Postgres or Redis for the default path unless the architecture is intentionally changing.
 
-- `~/.openez/registry.sqlite`
-- `<workspace-root>/.openez/index.sqlite`
-- `<workspace-root>/.openez/workspace.json`
+## Roadmap themes
 
-These files are runtime state, not source files, and should stay untracked.
+Based on the planning docs in the repo, major themes include simpler one-command local setup, stronger multi-language support, SQLite-first indexing, removal of old config assumptions, and better MCP-first workflows.
 
-## Legacy Components
+## License
 
-Some legacy code and docs still reference:
-
-- Postgres
-- `pgvector`
-- Redis
-- BullMQ
-- `--workspace`
-- required `brain.config.*`
-
-These belong to the previous architecture and should be treated as compatibility or migration-era material unless updated.
+MIT
