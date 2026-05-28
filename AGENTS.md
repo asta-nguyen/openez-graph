@@ -45,7 +45,7 @@ Expected shape:
 The intended command shape is:
 
 ```bash
-openez init [path]
+openez init [path]          register workspace and run initial index (--no-index to skip)
 openez index [path]
 openez reindex [path]
 openez watch [path]

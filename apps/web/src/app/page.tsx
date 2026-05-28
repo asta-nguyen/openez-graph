@@ -9,6 +9,7 @@ import {
   TableRow
 } from "@openez-graph/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@openez-graph/ui";
+import { formatDate } from "../lib/utils";
 
 export default async function OverviewPage() {
   const snapshot = await getDashboardSnapshot();
@@ -72,7 +73,7 @@ export default async function OverviewPage() {
                       <TableCell>{run.mode}</TableCell>
                       <TableCell>{run.status}</TableCell>
                       <TableCell>{run.filesUpdated}/{run.filesScanned}</TableCell>
-                      <TableCell>{run.startedAt}</TableCell>
+                      <TableCell>{formatDate(run.startedAt)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

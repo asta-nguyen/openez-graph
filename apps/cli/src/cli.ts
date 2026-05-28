@@ -18,9 +18,9 @@ program
 
 program
   .command("init")
-  .description("Initialize a workspace at the given path")
+  .description("Initialize a workspace at the given path and run initial index")
   .argument("[path]", "path to the project directory", process.cwd())
-  .option("--index", "run initial index after init")
+  .option("--no-index", "skip initial indexing")
   .action(async (targetPath, options) => {
     const resolvedPath = path.resolve(targetPath);
 
@@ -40,7 +40,7 @@ program
     if (existing) {
       await writeLocalWorkspaceConfig(existing);
       console.log(`Workspace '${existing.name}' (${existing.id}) already registered at ${resolvedPath}`);
-      if (options.index) {
+      if (options.index !== false) {
         console.log("Running initial index...");
         const summary = await indexWorkspace({ rootPath: resolvedPath, mode: "incremental" });
         console.log(JSON.stringify(summary, null, 2));
@@ -55,7 +55,7 @@ program
 
     console.log(`Workspace '${workspace.name}' (${workspace.id}) initialized at ${resolvedPath}`);
 
-    if (options.index) {
+    if (options.index !== false) {
       console.log("Running initial index...");
       const summary = await indexWorkspace({ rootPath: resolvedPath, mode: "incremental" });
       console.log(JSON.stringify(summary, null, 2));

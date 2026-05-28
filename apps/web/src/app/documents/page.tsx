@@ -9,9 +9,21 @@ import {
   TableRow
 } from "@openez-graph/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@openez-graph/ui";
+import { PAGE_SIZE, Pagination } from "../../components/pagination";
 
-export default async function DocumentsPage() {
-  const documents = await getRecentDocuments();
+export default async function DocumentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageStr } = await searchParams;
+  const currentPage = Math.max(1, Number(pageStr) || 1);
+
+  const { items, totalCount } = await getRecentDocuments({
+    limit: PAGE_SIZE,
+    offset: (currentPage - 1) * PAGE_SIZE,
+  });
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   return (
     <div className="page">
@@ -25,6 +37,9 @@ export default async function DocumentsPage() {
           <CardTitle>Documents</CardTitle>
         </CardHeader>
         <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            Showing {items.length} of {totalCount} documents
+          </p>
           <Table>
             <TableHeader>
               <TableRow>
@@ -35,7 +50,7 @@ export default async function DocumentsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {documents.map((document) => (
+              {items.map((document) => (
                 <TableRow key={document.id}>
                   <TableCell>{document.path}</TableCell>
                   <TableCell>{document.kind}</TableCell>
@@ -45,6 +60,7 @@ export default async function DocumentsPage() {
               ))}
             </TableBody>
           </Table>
+          <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/documents" />
         </CardContent>
       </Card>
     </div>

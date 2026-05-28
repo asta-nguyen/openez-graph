@@ -7,7 +7,7 @@ export * from "./components/label";
 export * from "./components/select";
 export * from "./components/table";
 export * from "./components/textarea";
-export * from "./components/tooltip";
+export * from "./components/ui/tooltip";
 export * from "./components/ui/sidebar";
 export * from "./components/ui/sheet";
 export * from "./components/ui/separator";

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "../../lib/utils";
 import {
   listWorkspaces
 } from "./actions";
@@ -23,6 +24,7 @@ import {
   Layers,
   AlertTriangle
 } from "lucide-react";
+import { Pagination, paginate } from "../../components/pagination";
 
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -32,9 +34,8 @@ function StatusBadge({ status }: { status: string }) {
     error: "destructive",
     running: "secondary",
     completed: "default",
-    failed: "destructive"
+    failed: "destructive",
   };
-
   return (
     <Badge variant={variants[status] ?? "outline"}>
       {status}
@@ -42,17 +43,14 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Date(date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
+export default async function WorkspacesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageStr } = await searchParams;
+  const currentPage = Math.max(1, Number(pageStr) || 1);
 
-export default async function WorkspacesPage() {
   const result = await listWorkspaces();
 
   if (!result.ok) {
@@ -86,6 +84,7 @@ export default async function WorkspacesPage() {
   }
 
   const allWorkspaces = result.data;
+  const { paged, totalPages } = paginate(allWorkspaces, currentPage);
 
   return (
     <div className="page">
@@ -120,65 +119,71 @@ export default async function WorkspacesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {allWorkspaces.map((workspace) => (
-            <Link
-              key={workspace.id}
-              href={`/workspaces/${workspace.id}`}
-              className="block"
-            >
-              <Card className="hover:bg-muted/50 transition-colors">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h2 className="text-lg font-medium truncate">
-                          {workspace.name}
-                        </h2>
-                        <StatusBadge status={workspace.status} />
-                      </div>
-                      <p className="muted text-sm truncate mb-3">
-                        {workspace.rootPath}
-                      </p>
+        <>
+          <p className="text-sm text-muted-foreground">
+            Showing {paged.length} of {allWorkspaces.length} workspaces
+          </p>
+          <div className="space-y-4">
+            {paged.map((workspace) => (
+              <Link
+                key={workspace.id}
+                href={`/workspaces/${workspace.id}`}
+                className="block"
+              >
+                <Card className="hover:bg-muted/50 transition-colors">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h2 className="text-lg font-medium truncate">
+                            {workspace.name}
+                          </h2>
+                          <StatusBadge status={workspace.status} />
+                        </div>
+                        <p className="muted text-sm truncate mb-3">
+                          {workspace.rootPath}
+                        </p>
 
-                      <div className="flex flex-wrap gap-4 text-sm">
-                        <div className="flex items-center gap-1.5">
-                          <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {workspace.documentCount ?? 0} docs
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {workspace.chunkCount ?? 0} chunks
-                          </span>
-                        </div>
-                        {workspace.nodeCount != null && workspace.nodeCount > 0 && (
+                        <div className="flex flex-wrap gap-4 text-sm">
                           <div className="flex items-center gap-1.5">
+                            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="text-muted-foreground">
-                              {workspace.nodeCount} nodes
+                              {workspace.documentCount ?? 0} docs
                             </span>
                           </div>
-                        )}
+                          <div className="flex items-center gap-1.5">
+                            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-muted-foreground">
+                              {workspace.chunkCount ?? 0} chunks
+                            </span>
+                          </div>
+                          {workspace.nodeCount != null && workspace.nodeCount > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-muted-foreground">
+                                {workspace.nodeCount} nodes
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="text-right text-sm">
-                      <div className="flex gap-2 mb-1">
-                        <StatusBadge status={workspace.indexingStatus} />
-                        <StatusBadge status={workspace.graphStatus} />
+                      <div className="text-right text-sm">
+                        <div className="flex gap-2 mb-1">
+                          <StatusBadge status={workspace.indexingStatus} />
+                          <StatusBadge status={workspace.graphStatus} />
+                        </div>
+                        <p className="muted text-xs">
+                          Last indexed: {formatDate(workspace.lastIndexedAt)}
+                        </p>
                       </div>
-                      <p className="muted text-xs">
-                        Last indexed: {formatDate(workspace.lastIndexedAt)}
-                      </p>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+          <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/workspaces" />
+        </>
       )}
     </div>
   );
