@@ -266,9 +266,8 @@ export function GraphClient({ graphData }: GraphClientProps) {
       {/* Graph canvas */}
       <div className="flex-1 relative">
         <WorkspaceGraph
-          allNodes={graphData.nodes}
-          allEdges={graphData.edges}
-          visibleNodeIds={filteredNodes.map(n => n.id)}
+          nodes={filteredNodes}
+          edges={filteredEdges}
           selectedNodeId={selectedNodeId}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}

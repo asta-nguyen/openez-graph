@@ -24,7 +24,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  SidebarTrigger,
 } from "@openez-graph/ui";
+import { ThemeToggle } from "./theme-toggle";
 
 const mainNav = [
   { href: "/" as const, label: "Overview", icon: LayoutDashboard },
@@ -45,21 +47,25 @@ export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <Sidebar collapsible="offcanvas">
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild size="lg">
-              <Link href="/" className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                  <Brain className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex flex-col gap-0">
-                  <span className="text-sm font-semibold">OpenEZ Graph</span>
-                  <span className="text-xs text-muted-foreground">Local indexing</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
+            <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
+              <SidebarMenuButton asChild size="lg" tooltip="OpenEZ Graph">
+                <Link href="/" className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Brain className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="flex flex-col gap-0 group-data-[collapsible=icon]:hidden">
+                    <span className="text-sm font-semibold">OpenEZ Graph</span>
+                    <span className="text-xs text-muted-foreground">Local indexing</span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+              <SidebarTrigger />
+              <ThemeToggle />
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -74,7 +80,7 @@ export function AppSidebar() {
                 const isActive = pathname === item.href;
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
                       <Link href={item.href}>
                         <Icon className="h-4 w-4" />
                         <span>{item.label}</span>
@@ -98,7 +104,7 @@ export function AppSidebar() {
                 const isActive = pathname === item.href;
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
                       <Link href={item.href}>
                         <Icon className="h-4 w-4" />
                         <span>{item.label}</span>
@@ -121,7 +127,7 @@ export function AppSidebar() {
                 const isActive = pathname === item.href;
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
                       <Link href={item.href}>
                         <Icon className="h-4 w-4" />
                         <span>{item.label}</span>
@@ -136,7 +142,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="px-3 py-2">
+        <div className="px-3 py-2 group-data-[collapsible=icon]:hidden">
           <p className="text-xs text-muted-foreground">
             Workspace config, retrieval debugging, graph inspection.
           </p>

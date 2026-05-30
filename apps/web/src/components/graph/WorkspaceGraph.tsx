@@ -5,45 +5,15 @@ import Graph from "graphology";
 import Sigma from "sigma";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import type { GraphNodeData, GraphEdgeData } from "../../app/workspaces/[workspaceId]/graph/actions";
+import { getNodeColor, getEdgeColor } from "../../lib/utils";
 
 export interface WorkspaceGraphProps {
-  allNodes: GraphNodeData[];
-  allEdges: GraphEdgeData[];
-  visibleNodeIds: string[];
+  nodes: GraphNodeData[];
+  edges: GraphEdgeData[];
   selectedNodeId?: string | null;
   onNodeClick?: (nodeId: string) => void;
   onNodeHover?: (nodeId: string | null) => void;
   className?: string;
-}
-
-const NODE_COLORS: Record<string, string> = {
-  file: "#60a5fa",
-  chunk: "#34d399",
-  symbol: "#fbbf24",
-  memory: "#f472b6",
-  entity: "#c084fc",
-  document: "#22d3ee",
-  default: "#94a3b8"
-};
-
-const EDGE_COLORS: Record<string, string> = {
-  imports: "#60a5fa",
-  defines: "#fbbf24",
-  contains: "#34d399",
-  mentions: "#c084fc",
-  represented_by: "#f472b6",
-  calls: "#f97316",
-  links_to: "#22d3ee",
-  related_to: "#94a3b8",
-  default: "#64748b"
-};
-
-function getNodeColor(type: string): string {
-  return NODE_COLORS[type] ?? NODE_COLORS.default;
-}
-
-function getEdgeColor(type: string): string {
-  return EDGE_COLORS[type] ?? EDGE_COLORS.default;
 }
 
 function getNodeSize(degree: number): number {
@@ -53,9 +23,8 @@ function getNodeSize(degree: number): number {
 }
 
 export function WorkspaceGraph({
-  allNodes,
-  allEdges,
-  visibleNodeIds,
+  nodes,
+  edges,
   selectedNodeId,
   onNodeClick,
   onNodeHover,
@@ -69,36 +38,22 @@ export function WorkspaceGraph({
 
   const nodeTypeById = useMemo(() => {
     const map = new Map<string, string>();
-    for (const node of allNodes) {
+    for (const node of nodes) {
       map.set(node.id, node.type);
     }
     return map;
-  }, [allNodes]);
+  }, [nodes]);
 
-  // Fast lookup for degree
-  const degreeByNodeId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const edge of allEdges) {
-      map.set(edge.source, (map.get(edge.source) ?? 0) + 1);
-      map.set(edge.target, (map.get(edge.target) ?? 0) + 1);
-    }
-    return map;
-  }, [allEdges]);
+  const datasetKey = `${nodes.length}-${edges.length}`;
 
-  // Data revision key — rebuild only when the underlying dataset changes
-  const datasetKey = `${allNodes.length}-${allEdges.length}`;
-
-  // Visible node set for quick lookup
-  const visibleSet = useMemo(() => new Set(visibleNodeIds), [visibleNodeIds]);
-
-  // Build full graph once per dataset
+  // Build graph once per dataset
   useEffect(() => {
     if (!containerRef.current) return;
 
     const graph = new Graph({ multi: true, type: "directed" });
     const cache = positionCacheRef.current;
 
-    for (const node of allNodes) {
+    for (const node of nodes) {
       let pos = cache.get(node.id);
       if (!pos) {
         pos = { x: Math.random() * 100 - 50, y: Math.random() * 100 - 50 };
@@ -115,13 +70,12 @@ export function WorkspaceGraph({
         colorBorder: getNodeColor(node.type),
         borderSize: 2,
         labelSize: 12,
-        labelColor: "#e2e8f0",
+        labelColor: "#e2f8f0",
         zIndex: 0,
-        hidden: false
       });
     }
 
-    for (const edge of allEdges) {
+    for (const edge of edges) {
       if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
         graph.addEdge(edge.source, edge.target, {
           type: "line",
@@ -130,7 +84,6 @@ export function WorkspaceGraph({
           color: getEdgeColor(edge.type),
           size: Math.max(0.5, Math.min(edge.weight, 2)),
           zIndex: -1,
-          hidden: false
         });
       }
     }
@@ -138,7 +91,7 @@ export function WorkspaceGraph({
     if (graph.order > 0) {
       const settings = forceAtlas2.inferSettings(graph);
       forceAtlas2.assign(graph, {
-        iterations: 50,
+        iterations: 20,
         settings
       });
     }
@@ -155,7 +108,7 @@ export function WorkspaceGraph({
       labelFont: "Arial",
       labelSize: 12,
       labelWeight: "400",
-      labelColor: { color: "#e2e8f0" },
+      labelColor: { color: "#e2f8f0" },
       defaultNodeColor: "#94a3b8",
       defaultEdgeColor: "#64748b",
       minCameraRatio: 0.1,
@@ -190,27 +143,7 @@ export function WorkspaceGraph({
       sigmaRef.current = null;
       graphRef.current = null;
     };
-  }, [datasetKey, allNodes, allEdges, onNodeClick, onNodeHover]);
-
-  // Update visibility when filters change
-  useEffect(() => {
-    const graph = graphRef.current;
-    const sigma = sigmaRef.current;
-    if (!graph || !sigma) return;
-
-    graph.forEachNode((nodeId) => {
-      const shouldShow = visibleSet.has(nodeId);
-      graph.setNodeAttribute(nodeId, "hidden", !shouldShow);
-    });
-
-    graph.forEachEdge((edgeId, _attrs, source, target) => {
-      const sourceHidden = graph.getNodeAttribute(source, "hidden");
-      const targetHidden = graph.getNodeAttribute(target, "hidden");
-      graph.setEdgeAttribute(edgeId, "hidden", !!(sourceHidden || targetHidden));
-    });
-
-    sigma.refresh();
-  }, [visibleSet]);
+  }, [datasetKey, nodes, edges, onNodeClick, onNodeHover]);
 
   // Update selection styling
   useEffect(() => {

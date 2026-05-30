@@ -1,5 +1,7 @@
 "use server";
 
+import { cache } from "react";
+import { LRUCache } from "lru-cache";
 import {
   countGraphNodes,
   getGraphNodeById,
@@ -7,7 +9,8 @@ import {
   listGraphEdges,
   listGraphNodes,
   listGraphNodesCurated,
-  searchGraphNodesByLabel
+  searchGraphNodesByLabel,
+  getWorkspaceGraphOptimized
 } from "../../../../server/sqlite";
 
 export interface GraphNodeData {
@@ -41,17 +44,31 @@ export interface WorkspaceGraphData {
   totalEdges: number;
 }
 
+// LRU cache with TTL (30 seconds, max 50 workspaces)
+const graphCache = new LRUCache<string, WorkspaceGraphData>({
+  max: 50,
+  ttl: 30_000,
+  allowStale: true
+});
+
 export async function getWorkspaceGraph(workspaceId: string): Promise<WorkspaceGraphData | null> {
+  // Check cache first
+  const cached = graphCache.get(workspaceId);
+  if (cached) {
+    return cached;
+  }
+
   const workspace = getRegistryWorkspace(workspaceId);
   if (!workspace) return null;
 
-  const totalNodeCount = countGraphNodes(workspace.rootPath);
-  const isLarge = totalNodeCount > 300;
-  const nodeRows = isLarge
-    ? listGraphNodesCurated(workspace.rootPath, 300)
-    : listGraphNodes(workspace.rootPath, 500);
-  const edgeRows = listGraphEdges(workspace.rootPath, 1000);
+  // Use optimized single-query approach
+  const { nodes: nodeRows, edges: edgeRows } = getWorkspaceGraphOptimized(
+    workspace.rootPath,
+    300, // max nodes
+    1000 // max edges
+  );
 
+  // Build degree map from edges
   const degreeMap = new Map<string, number>();
   for (const edge of edgeRows) {
     const fromId = edge.source;
@@ -60,6 +77,10 @@ export async function getWorkspaceGraph(workspaceId: string): Promise<WorkspaceG
     degreeMap.set(toId, (degreeMap.get(toId) ?? 0) + 1);
   }
 
+  // Get valid node IDs for edge filtering
+  const validIds = new Set(nodeRows.map((n) => n.id));
+
+  // Transform nodes with degree
   const nodes: GraphNodeData[] = nodeRows.map((node) => {
     const metadata = node.metadata;
     return {
@@ -75,7 +96,7 @@ export async function getWorkspaceGraph(workspaceId: string): Promise<WorkspaceG
     };
   });
 
-  const validIds = new Set(nodes.map((n) => n.id));
+  // Transform edges (filter to valid nodes only)
   const edges: GraphEdgeData[] = edgeRows
     .filter((e) => validIds.has(e.source) && validIds.has(e.target))
     .map((edge) => ({
@@ -89,7 +110,7 @@ export async function getWorkspaceGraph(workspaceId: string): Promise<WorkspaceG
   const nodeTypes = [...new Set(nodes.map((n) => n.type))].sort();
   const edgeTypes = [...new Set(edges.map((e) => e.type))].sort();
 
-  return {
+  const result: WorkspaceGraphData = {
     workspaceId,
     workspaceName: workspace.name,
     nodes,
@@ -99,6 +120,19 @@ export async function getWorkspaceGraph(workspaceId: string): Promise<WorkspaceG
     totalNodes: nodes.length,
     totalEdges: edges.length,
   };
+
+  // Cache the result
+  graphCache.set(workspaceId, result);
+  return result;
+}
+
+// Cached version for React components (async wrapper for "use server" compliance)
+const _getWorkspaceGraphCached = cache(getWorkspaceGraph);
+
+export async function getWorkspaceGraphCached(
+  workspaceId: string
+): Promise<WorkspaceGraphData | null> {
+  return _getWorkspaceGraphCached(workspaceId);
 }
 
 export interface NodeNeighbors {

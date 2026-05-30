@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getWorkspace } from "../../actions";
-import { getWorkspaceGraph } from "./actions";
+import { getWorkspaceGraphCached } from "./actions";
 import { GraphClient } from "./GraphClient";
 import {
   Badge,
@@ -16,6 +16,9 @@ import {
 import {
   ChevronLeft
 } from "lucide-react";
+
+// Graph data should be fresh per-request
+export const dynamic = "force-dynamic";
 
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -40,7 +43,7 @@ export default async function WorkspaceGraphPage({ params }: PageProps) {
   const { workspaceId } = await params;
   const [workspaceResult, graphData] = await Promise.all([
     getWorkspace(workspaceId),
-    getWorkspaceGraph(workspaceId)
+    getWorkspaceGraphCached(workspaceId)
   ]);
 
   if (!workspaceResult.ok) {

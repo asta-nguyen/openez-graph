@@ -29,6 +29,17 @@ const clineConfig = `{
   }
 }`;
 
+const openCodeConfig = `{
+  "mcp": {
+    "servers": {
+      "openez-graph": {
+        "type": "local",
+        "command": ["pnpm", "--dir", "/path/to/openez", "mcp"]
+      }
+    }
+  }
+}`;
+
 function ConfigRow({ label, value }: { label: string; value: string | undefined }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3 border-b border-border last:border-0">
@@ -112,6 +123,11 @@ export default function SettingsPage() {
             name="Cline / VS Code"
             configPath="VS Code settings or Cline MCP config"
             config={clineConfig}
+          />
+          <McpProviderCard
+            name="OpenCode"
+            configPath="~/.config/opencode/opencode.json"
+            config={openCodeConfig}
           />
         </CardContent>
       </Card>

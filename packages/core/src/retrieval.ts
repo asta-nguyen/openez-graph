@@ -130,6 +130,7 @@ export async function memoryQuery(input: {
   query: string;
   limit?: number;
   maxTokens?: number;
+  skipGraphExpand?: boolean;
 }): Promise<MemoryQueryResult> {
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
@@ -149,26 +150,28 @@ export async function memoryQuery(input: {
     vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit)
   ]);
 
-  const fused = reciprocalRankFusion([
+  let fused = reciprocalRankFusion([
     ftsResults.map((item) => ({ item, score: item.score })),
     vectorResults.map((item) => ({ item, score: item.score }))
   ]);
 
-  const graphResults = await graphExpand(
-    workspace.rootPath,
-    fused.slice(0, finalLimit).map((entry) => entry.item.id),
-    retrieval.maxGraphNeighbors
-  );
+  if (!input.skipGraphExpand) {
+    const graphResults = await graphExpand(
+      workspace.rootPath,
+      fused.slice(0, finalLimit).map((entry) => entry.item.id),
+      retrieval.maxGraphNeighbors
+    );
 
-  const merged = reciprocalRankFusion([
-    fused,
-    graphResults.map((item) => ({ item, score: item.score }))
-  ]);
+    fused = reciprocalRankFusion([
+      fused,
+      graphResults.map((item) => ({ item, score: item.score }))
+    ]);
+  }
 
   const selected: ChunkHit[] = [];
   let usedTokens = 0;
 
-  for (const entry of merged) {
+  for (const entry of fused) {
     if (selected.length >= finalLimit) break;
 
     const tokenCount = countTokens(entry.item.content);

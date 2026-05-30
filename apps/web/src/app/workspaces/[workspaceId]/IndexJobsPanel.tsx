@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDate } from "../../../lib/utils";
 
 import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openez-graph/ui";
 import { AlertCircle, CheckCircle2, Clock, Loader2, Square } from "lucide-react";
@@ -29,20 +30,6 @@ interface IndexJobStatusResponse {
 
 interface IndexJobsPanelProps {
   workspaceId: string;
-}
-
-function formatDate(date: string | undefined): string {
-  if (!date) {
-    return "—";
-  }
-
-  return new Date(date).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  });
 }
 
 function StatusBadge({ status, cancelRequested }: { status: JobStatus; cancelRequested: boolean }) {

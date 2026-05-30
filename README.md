@@ -57,7 +57,6 @@ pnpm install
 
 ```bash
 pnpm openez init /path/to/project
-pnpm openez index /path/to/project
 pnpm openez serve --mcp
 ```
 
@@ -195,6 +194,38 @@ Avoid introducing new hard dependencies on Postgres or Redis for the default pat
 ## Roadmap themes
 
 Based on the planning docs in the repo, major themes include simpler one-command local setup, stronger multi-language support, SQLite-first indexing, removal of old config assumptions, and better MCP-first workflows.
+
+## Changelog
+
+### feat/graph-page-caching
+
+**Performance**
+- Graph page: LRU cache (30s TTL, max 50 workspaces) for workspace graph data
+- Graph page: prepared statements via `getWorkspaceGraphOptimized()` for single-query node+edge fetch
+- Graph page: composite DB indexes for faster edge lookups
+- WorkspaceGraph: reduced ForceAtlas2 iterations from 50 to 20
+- GraphClient: pass only `filteredNodes`/`filteredEdges` to graph instead of full dataset
+- WorkspaceGraph: removed `visibleNodeIds` prop and visibility hide/show effect
+
+**Pagination**
+- Reusable `Pagination` component with `<a>` tags (avoids Next.js 15 Link type issues)
+- `/workspaces/` — paginated via in-memory slice
+- `/documents/` — true SQL-level offset/limit pagination (no more 200-item ceiling)
+- `/jobs/` — page clamp, shows all `index_runs` across all workspaces (was showing only 1)
+
+**Bug Fixes**
+- `useTheme` toggle: use `resolvedTheme` instead of `theme` so `"system"` doesn't break toggle
+- `init` command: now runs index automatically (`--no-index` to skip)
+- `"use server"` compliance: wrapped `getWorkspaceGraphCached` in async function
+- Conflicting cache directives: removed `revalidate` from graph page (kept `force-dynamic`)
+- Jobs page: clamp `currentPage` to `[1, totalPages]` so `?page=999` doesn't show empty
+- Queue: fixed ioredis version type mismatch via type assertion
+- OpenCode config: fixed schema (top-level `mcp` key, `"type": "local"` server entries)
+
+**Refactors**
+- Consolidated duplicate `formatDate`, `NODE_COLORS`, `EDGE_COLORS`, `getNodeColor`, `getEdgeColor` into `lib/utils.ts`
+- StatusBadge component re-added to workspaces list page
+- `PAGE_SIZE` and `paginate()` exported from `Pagination` component, replacing inline slice arithmetic
 
 ## License
 
