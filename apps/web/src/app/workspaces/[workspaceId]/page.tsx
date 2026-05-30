@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { formatDate } from "../../../lib/utils";
 
 import { getWorkspace } from "../actions";
 import {
@@ -62,17 +63,6 @@ function RunStatusIcon({ status }: { status: string }) {
     return <AlertCircle className="h-4 w-4 text-destructive" />;
   }
   return <Clock className="h-4 w-4 text-muted-foreground" />;
-}
-
-function formatDate(date: Date | string | null | undefined): string {
-  if (!date) return "—";
-  return new Date(date).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
 }
 
 function formatDuration(start: Date | string, end: Date | string | null | undefined): string {

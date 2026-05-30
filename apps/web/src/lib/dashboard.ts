@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  countWorkspaceDocuments,
   getLatestIndexRun,
   getRegistryWorkspace,
   getWorkspaceCounts,
@@ -123,18 +124,25 @@ export async function getDashboardSnapshot(workspaceId?: string): Promise<Dashbo
   }
 }
 
-export async function getRecentDocuments(workspaceId?: string, limit = 50): Promise<DocRow[]> {
+export async function getRecentDocuments(
+  opts: { workspaceId?: string; limit?: number; offset?: number } = {}
+): Promise<{ items: DocRow[]; totalCount: number }> {
+  const { workspaceId, limit = 50, offset = 0 } = opts;
   try {
     const workspace = workspaceId ? getRegistryWorkspace(workspaceId) : null;
     if (!workspace) {
       const all = listRegistryWorkspaces();
-      if (all.length === 0) return [];
+      if (all.length === 0) return { items: [], totalCount: 0 };
       const fallback = all[0];
-      return listWorkspaceDocuments(fallback.rootPath, limit);
+      const items = listWorkspaceDocuments(fallback.rootPath, limit, offset);
+      const totalCount = countWorkspaceDocuments(fallback.rootPath);
+      return { items, totalCount };
     }
 
-    return listWorkspaceDocuments(workspace.rootPath, limit);
+    const items = listWorkspaceDocuments(workspace.rootPath, limit, offset);
+    const totalCount = countWorkspaceDocuments(workspace.rootPath);
+    return { items, totalCount };
   } catch {
-    return [];
+    return { items: [], totalCount: 0 };
   }
 }

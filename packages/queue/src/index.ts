@@ -50,7 +50,8 @@ export type CancelJobResult =
 
 export function getIndexQueue(): Queue<IndexWorkspaceJobData> {
   return new Queue<IndexWorkspaceJobData>(INDEX_QUEUE_NAME, {
-    connection: getRedisConnection()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    connection: getRedisConnection() as any
   });
 }
 

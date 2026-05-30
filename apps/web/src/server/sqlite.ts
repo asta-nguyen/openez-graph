@@ -444,10 +444,10 @@ export function getWorkspaceCounts(rootPath: string) {
   return { documents, chunks, nodes, edges, memories };
 }
 
-export function listWorkspaceDocuments(rootPath: string, limit = 50): WebDocumentRow[] {
+export function listWorkspaceDocuments(rootPath: string, limit = 50, offset = 0): WebDocumentRow[] {
   const rows = getWorkspaceDb(rootPath)
-    .prepare("SELECT * FROM documents ORDER BY updated_at DESC, path ASC LIMIT ?")
-    .all(limit) as Array<Record<string, unknown>>;
+    .prepare("SELECT * FROM documents ORDER BY updated_at DESC, path ASC LIMIT ? OFFSET ?")
+    .all(limit, offset) as Array<Record<string, unknown>>;
   return rows.map((row) => ({
     id: String(row.id),
     path: String(row.path),
@@ -455,6 +455,13 @@ export function listWorkspaceDocuments(rootPath: string, limit = 50): WebDocumen
     language: row.language ? String(row.language) : undefined,
     updatedAt: row.updated_at ? String(row.updated_at) : undefined
   }));
+}
+
+export function countWorkspaceDocuments(rootPath: string): number {
+  const row = getWorkspaceDb(rootPath)
+    .prepare("SELECT COUNT(*) as count FROM documents")
+    .get() as { count: number } | undefined;
+  return row?.count ?? 0;
 }
 
 export function getLatestIndexRun(rootPath: string): WebRunRow | null {
@@ -591,4 +598,47 @@ export function searchGraphNodesByLabel(rootPath: string, query: string, nodeTyp
     refId: row.ref_id ? String(row.ref_id) : null,
     metadata: safeParseJson(String(row.metadata ?? "{}"), {})
   }));
+}
+
+// Optimized combined query for graph page - fetches nodes and edges in parallel
+export function getWorkspaceGraphOptimized(
+  rootPath: string,
+  maxNodes: number,
+  maxEdges: number
+): { nodes: WebGraphNode[]; edges: WebGraphEdge[]; totalNodeCount: number } {
+  const db = getWorkspaceDb(rootPath);
+
+  // Use prepared statements for better performance
+  const countStmt = db.prepare("SELECT COUNT(*) AS count FROM graph_nodes");
+  const nodesStmt = db.prepare(`
+    SELECT * FROM graph_nodes
+    ORDER BY
+      CASE type ${typeOrderCase} ELSE 999 END,
+      created_at DESC
+    LIMIT ?
+  `);
+  const edgesStmt = db.prepare("SELECT * FROM graph_edges LIMIT ?");
+
+  // Execute all queries
+  const countResult = countStmt.get() as { count: number };
+  const nodeRows = nodesStmt.all(maxNodes) as Array<Record<string, unknown>>;
+  const edgeRows = edgesStmt.all(maxEdges) as Array<Record<string, unknown>>;
+
+  return {
+    totalNodeCount: countResult.count,
+    nodes: nodeRows.map((row) => ({
+      id: String(row.id),
+      label: String(row.label),
+      type: String(row.type),
+      refId: row.ref_id ? String(row.ref_id) : null,
+      metadata: safeParseJson(String(row.metadata ?? "{}"), {})
+    })),
+    edges: edgeRows.map((row) => ({
+      id: String(row.id),
+      source: String(row.from_node_id),
+      target: String(row.to_node_id),
+      type: String(row.type),
+      weight: Number(row.weight ?? 1)
+    }))
+  };
 }
