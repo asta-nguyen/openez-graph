@@ -1,10 +1,9 @@
 "use client";
-
 import { getNodeColor, getEdgeColor } from "../../lib/utils";
 
 export function GraphLegend({
   nodeTypes,
-  edgeTypes
+  edgeTypes,
 }: {
   nodeTypes: string[];
   edgeTypes: string[];
