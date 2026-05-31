@@ -1,7 +1,5 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, useMatchRoute } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -9,9 +7,15 @@ import {
   Database,
   FileText,
   ScrollText,
-  Brain,
 } from "lucide-react";
-
+import {
+  dashboardQueryOptions,
+  documentsQueryOptions,
+  jobsQueryOptions,
+  settingsEnvQueryOptions,
+  workspacesQueryOptions,
+} from "../lib/queries";
+import { PAGE_SIZE } from "../lib/pagination";
 import {
   Sidebar,
   SidebarContent,
@@ -29,23 +33,44 @@ import {
 import { ThemeToggle } from "./theme-toggle";
 
 const mainNav = [
-  { href: "/" as const, label: "Overview", icon: LayoutDashboard },
-  { href: "/workspaces" as const, label: "Workspaces", icon: FolderKanban },
+  { href: "/", label: "Overview", icon: LayoutDashboard, query: dashboardQueryOptions },
+  { href: "/workspaces", label: "Workspaces", icon: FolderKanban, query: workspacesQueryOptions },
 ];
 
 const debugNav = [
-  { href: "/query" as const, label: "Query", icon: ScrollText },
-  { href: "/documents" as const, label: "Documents", icon: FileText },
-  { href: "/jobs" as const, label: "Jobs", icon: Database },
+  { href: "/query", label: "Query", icon: ScrollText },
+  { href: "/documents", label: "Documents", icon: FileText, query: () => documentsQueryOptions(1, PAGE_SIZE) },
+  { href: "/jobs", label: "Jobs", icon: Database, query: jobsQueryOptions },
 ];
 
 const secondaryNav = [
-  { href: "/settings" as const, label: "Settings", icon: Settings },
+  { href: "/settings", label: "Settings", icon: Settings, query: settingsEnvQueryOptions },
 ];
 
-export function AppSidebar() {
-  const pathname = usePathname();
+function NavLink({ href, label, icon: Icon, query }: { href: string; label: string; icon: React.ComponentType<{ className?: string }>; query?: any }) {
+  const queryClient = useQueryClient();
+  const match = useMatchRoute();
+  const isActive = match({ to: href, fuzzy: href !== "/" });
 
+  const handleMouseEnter = () => {
+    if (!query) return;
+    const options = typeof query === "function" ? query() : query;
+    queryClient.prefetchQuery(options);
+  };
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild isActive={!!isActive} tooltip={label}>
+        <Link to={href} onMouseEnter={handleMouseEnter}>
+          <Icon className="h-4 w-4" />
+          <span>{label}</span>
+        </Link>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -53,10 +78,8 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
               <SidebarMenuButton asChild size="lg" tooltip="OpenEZ Graph">
-                <Link href="/" className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                    <Brain className="h-4 w-4 text-primary" />
-                  </div>
+                <Link to="/" className="flex items-center gap-3">
+                  <img src="/logo.png" alt="OpenEZ Graph" className="h-8 w-8 rounded-lg" />
                   <div className="flex flex-col gap-0 group-data-[collapsible=icon]:hidden">
                     <span className="text-sm font-semibold">OpenEZ Graph</span>
                     <span className="text-xs text-muted-foreground">Local indexing</span>
@@ -75,20 +98,9 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNav.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                      <Link href={item.href}>
-                        <Icon className="h-4 w-4" />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+              {mainNav.map((item) => (
+                <NavLink key={item.href} {...item} />
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -99,20 +111,9 @@ export function AppSidebar() {
           <SidebarGroupLabel>Debug</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {debugNav.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                      <Link href={item.href}>
-                        <Icon className="h-4 w-4" />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+              {debugNav.map((item) => (
+                <NavLink key={item.href} {...item} />
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -122,20 +123,9 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {secondaryNav.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                      <Link href={item.href}>
-                        <Icon className="h-4 w-4" />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+              {secondaryNav.map((item) => (
+                <NavLink key={item.href} {...item} />
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
