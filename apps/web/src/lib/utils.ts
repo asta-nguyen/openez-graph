@@ -1,5 +1,5 @@
 export function formatDate(date: Date | string | null | undefined): string {
-  if (!date) return "—";
+  if (!date) return "\u2014";
   return new Date(date).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
