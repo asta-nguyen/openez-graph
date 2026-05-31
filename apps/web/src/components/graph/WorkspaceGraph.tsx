@@ -4,8 +4,27 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
 import forceAtlas2 from "graphology-layout-forceatlas2";
-import type { GraphNodeData, GraphEdgeData } from "../../app/workspaces/[workspaceId]/graph/actions";
 import { getNodeColor, getEdgeColor } from "../../lib/utils";
+
+export interface GraphNodeData {
+  id: string;
+  label: string;
+  type: string;
+  degree: number;
+  metadata: Record<string, unknown>;
+  path?: string;
+  startLine?: number;
+  endLine?: number;
+  refId?: string | null;
+}
+
+export interface GraphEdgeData {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  weight: number;
+}
 
 export interface WorkspaceGraphProps {
   nodes: GraphNodeData[];
@@ -28,7 +47,7 @@ export function WorkspaceGraph({
   selectedNodeId,
   onNodeClick,
   onNodeHover,
-  className = ""
+  className = "",
 }: WorkspaceGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
@@ -46,7 +65,6 @@ export function WorkspaceGraph({
 
   const datasetKey = `${nodes.length}-${edges.length}`;
 
-  // Build graph once per dataset
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -92,7 +110,7 @@ export function WorkspaceGraph({
       const settings = forceAtlas2.inferSettings(graph);
       forceAtlas2.assign(graph, {
         iterations: 20,
-        settings
+        settings,
       });
     }
 
@@ -113,7 +131,7 @@ export function WorkspaceGraph({
       defaultEdgeColor: "#64748b",
       minCameraRatio: 0.1,
       maxCameraRatio: 10,
-      allowInvalidContainer: true
+      allowInvalidContainer: true,
     });
 
     sigmaRef.current = sigma;
@@ -145,7 +163,6 @@ export function WorkspaceGraph({
     };
   }, [datasetKey, nodes, edges, onNodeClick, onNodeHover]);
 
-  // Update selection styling
   useEffect(() => {
     const graph = graphRef.current;
     const sigma = sigmaRef.current;
@@ -167,7 +184,6 @@ export function WorkspaceGraph({
     sigma.refresh();
   }, [selectedNodeId, nodeTypeById]);
 
-  // Label culling: only show labels on selected, hovered, or high-degree (>= 5) nodes
   useEffect(() => {
     const graph = graphRef.current;
     const sigma = sigmaRef.current;
@@ -193,7 +209,7 @@ export function WorkspaceGraph({
       style={{
         width: "100%",
         height: "100%",
-        background: "#0a0f1a"
+        background: "#0a0f1a",
       }}
     />
   );

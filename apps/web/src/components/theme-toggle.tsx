@@ -1,8 +1,5 @@
-"use client";
-
 import { Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
-
+import { useTheme } from "../lib/theme";
 import { Button } from "@openez-graph/ui";
 
 export function ThemeToggle() {
