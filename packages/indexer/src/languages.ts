@@ -7,7 +7,7 @@ import type { IndexedChunk } from "./types";
 
 // ── Language detection ──
 
-const codeExtensions = new Map<string, string>([
+export const codeExtensions = new Map<string, string>([
   [".ts", "typescript"],
   [".tsx", "tsx"],
   [".js", "javascript"],
@@ -21,14 +21,14 @@ const codeExtensions = new Map<string, string>([
   [".rs", "rust"]
 ]);
 
-const configExtensions = new Map<string, string>([
+export const configExtensions = new Map<string, string>([
   [".yaml", "yaml"],
   [".yml", "yaml"],
   [".json", "json"],
   [".toml", "toml"]
 ]);
 
-const markdownExtensions = new Set([".md", ".mdx"]);
+export const markdownExtensions = new Set([".md", ".mdx"]);
 
 export interface LanguageInfo {
   kind: "markdown" | "code" | "config" | "text";

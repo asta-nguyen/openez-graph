@@ -4,25 +4,12 @@ import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 
 import type { FileToIndex } from "./types";
+import { codeExtensions, configExtensions, markdownExtensions } from "./languages";
 
 const DEFAULT_INCLUDE_PATTERNS = [
-  "**/*.ts",
-  "**/*.tsx",
-  "**/*.js",
-  "**/*.jsx",
-  "**/*.mjs",
-  "**/*.cjs",
-  "**/*.mts",
-  "**/*.cts",
-  "**/*.py",
-  "**/*.go",
-  "**/*.rs",
-  "**/*.yaml",
-  "**/*.yml",
-  "**/*.json",
-  "**/*.toml",
-  "**/*.md",
-  "**/*.mdx"
+  ...Array.from(codeExtensions.keys()).map((ext) => `**/*${ext}`),
+  ...Array.from(configExtensions.keys()).map((ext) => `**/*${ext}`),
+  ...Array.from(markdownExtensions).map((ext) => `**/*${ext}`)
 ];
 
 const DEFAULT_EXCLUDE_PATTERNS = [

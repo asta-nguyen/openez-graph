@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.10.0",
   "scripts": {
     "start": "concurrently --names web,mcp --prefix-colors cyan,green --kill-others \"pnpm dev:web\" \"pnpm mcp\"",
-    "dev:web": "pnpm --filter @openez-graph/web dev",
+    "dev:web": "pnpm --filter @openez-graph/web dev:all",
     "build:web": "pnpm --filter @openez-graph/web build",
     "openez": "pnpm --filter @openez-graph/cli openez",
     "init": "pnpm --filter @openez-graph/cli openez init",
