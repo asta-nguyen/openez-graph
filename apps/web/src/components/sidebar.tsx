@@ -33,21 +33,51 @@ import {
 import { ThemeToggle } from "./theme-toggle";
 
 const mainNav = [
-  { href: "/", label: "Overview", icon: LayoutDashboard, query: dashboardQueryOptions },
-  { href: "/workspaces", label: "Workspaces", icon: FolderKanban, query: workspacesQueryOptions },
+  {
+    href: "/",
+    label: "Overview",
+    icon: LayoutDashboard,
+    query: dashboardQueryOptions,
+  },
+  {
+    href: "/workspaces",
+    label: "Workspaces",
+    icon: FolderKanban,
+    query: workspacesQueryOptions,
+  },
 ];
 
 const debugNav = [
   { href: "/query", label: "Query", icon: ScrollText },
-  { href: "/documents", label: "Documents", icon: FileText, query: () => documentsQueryOptions(1, PAGE_SIZE) },
+  {
+    href: "/documents",
+    label: "Documents",
+    icon: FileText,
+    query: () => documentsQueryOptions(1, PAGE_SIZE),
+  },
   { href: "/jobs", label: "Jobs", icon: Database, query: jobsQueryOptions },
 ];
 
 const secondaryNav = [
-  { href: "/settings", label: "Settings", icon: Settings, query: settingsEnvQueryOptions },
+  {
+    href: "/settings",
+    label: "Settings",
+    icon: Settings,
+    query: settingsEnvQueryOptions,
+  },
 ];
 
-function NavLink({ href, label, icon: Icon, query }: { href: string; label: string; icon: React.ComponentType<{ className?: string }>; query?: any }) {
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  query,
+}: {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  query?: any;
+}) {
   const queryClient = useQueryClient();
   const match = useMatchRoute();
   const isActive = match({ to: href, fuzzy: href !== "/" });
@@ -79,10 +109,18 @@ export function AppSidebar() {
             <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
               <SidebarMenuButton asChild size="lg" tooltip="OpenEZ Graph">
                 <Link to="/" className="flex items-center gap-3">
-                  <img src="/logo.png" alt="OpenEZ Graph" className="h-8 w-8 rounded-lg" />
+                  <img
+                    src="/logo.png"
+                    alt="OpenEZ Graph"
+                    className="h-8 w-8 rounded-lg"
+                  />
                   <div className="flex flex-col gap-0 group-data-[collapsible=icon]:hidden">
-                    <span className="text-sm font-semibold">OpenEZ Graph</span>
-                    <span className="text-xs text-muted-foreground">Local indexing</span>
+                    <span
+                      className="text-sm font-black tracking-tight"
+                      style={{ fontFamily: "'Archivo Black', sans-serif" }}
+                    >
+                      OPEN<span className="text-accent-foreground">EZ</span>
+                    </span>
                   </div>
                 </Link>
               </SidebarMenuButton>
