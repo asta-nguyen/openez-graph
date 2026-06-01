@@ -25,7 +25,7 @@ The current architectural direction in the repo explicitly describes the system 
 
 - `apps/cli`: the `openez` command for initializing, indexing, watching, serving MCP, checking status, and listing workspaces.
 - `apps/mcp`: the standalone MCP server runtime.
-- `apps/web`: the Next.js management UI with workspaces, documents, jobs, query pages, settings, and graph explorer routes.
+- `apps/web`: the Vite + TanStack Router management UI with workspaces, documents, jobs, query pages, settings, and graph explorer routes.
 - `packages/core`: retrieval, graph, memory, tokenizer, and ranking logic.
 - `packages/db`: SQLite registry/workspace repositories and resolution helpers.
 - `packages/indexer`: workspace indexing and language-specific parsing/chunking logic.
@@ -130,7 +130,7 @@ These commands write or update a shared OpenEZ MCP server entry in the respectiv
 
 ## Web UI
 
-The web app is a Next.js management UI with routes for overview, workspaces, documents, jobs, query, settings, and per-workspace graph exploration.
+The web app is a Vite + TanStack Router management UI with routes for overview, workspaces, documents, jobs, query, settings, and per-workspace graph exploration.
 Workspace detail pages expose status, indexing control, graph status, recent runs, and an entrypoint to the graph explorer, while the graph page renders workspace-scoped graph data and empty states when graph data is missing.
 
 ### UI Demo
@@ -196,6 +196,31 @@ Avoid introducing new hard dependencies on Postgres or Redis for the default pat
 Based on the planning docs in the repo, major themes include simpler one-command local setup, stronger multi-language support, SQLite-first indexing, removal of old config assumptions, and better MCP-first workflows.
 
 ## Changelog
+
+### feat/tanstack-migration
+
+**Migration**
+- Migrated from Next.js 15 app router to Vite + TanStack Router
+- Added TanStack Query with `queryOptions` factories in `lib/queries.ts`
+- Wired `queryClient` into router context for typed loader access
+- Replaced Next.js `app/` pages with TanStack Router `routes/` (Vite entrypoint)
+
+**Performance**
+- Route loaders prefetch data on navigation via `queryClient.ensureQueryData`
+- Next-page prefetch for documents pagination via `useEffect`
+- Workspace detail hover prefetch via `onMouseEnter` on workspace cards
+- Graph data deduplication when sidebar and detail page request simultaneously
+- `staleTime: 1 hour` with `refetchOnMount: false` to minimize refetches
+- `placeholderData: (prev) => prev` for instant page transitions
+
+**Pagination Fix**
+- Replaced `<a href>` tags with TanStack Router `<Link search={}>` in `Pagination` component
+- Eliminated full browser page reloads on pagination click
+- Client-side navigation keeps query cache intact across page changes
+
+**Refactors**
+- Consolidated query definitions into `lib/queries.ts`
+- Moved `Pagination` from `components/` to `lib/`
 
 ### feat/graph-page-caching
 
