@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { getNodeColor, getEdgeColor } from "../../lib/utils";
@@ -452,11 +452,92 @@ export function WorkspaceGraph({
     }
   }, [hoveredNode, selectedNodeId]);
 
+  const zoomIn = useCallback(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const pos = controls.object.position;
+    const dir = pos.clone().sub(controls.target).normalize();
+    const dist = pos.distanceTo(controls.target);
+    const newDist = Math.max(controls.minDistance, dist * 0.7);
+    pos.copy(controls.target).add(dir.multiplyScalar(newDist));
+    controls.update();
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const pos = controls.object.position;
+    const dir = pos.clone().sub(controls.target).normalize();
+    const dist = pos.distanceTo(controls.target);
+    const newDist = Math.min(controls.maxDistance, dist * 1.4);
+    pos.copy(controls.target).add(dir.multiplyScalar(newDist));
+    controls.update();
+  }, []);
+
   return (
-    <div
-      ref={containerRef}
-      className={className}
-      style={{ width: "100%", height: "100%", overflow: "hidden" }}
-    />
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div
+        ref={containerRef}
+        className={className}
+        style={{ width: "100%", height: "100%", overflow: "hidden" }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 12,
+          right: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        <button
+          onClick={zoomIn}
+          aria-label="Zoom in"
+          style={{
+            width: 32,
+            height: 32,
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 6,
+            background: "rgba(0,0,0,0.5)",
+            color: "#fff",
+            fontSize: 18,
+            lineHeight: 1,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backdropFilter: "blur(8px)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.5)")}
+        >
+          +
+        </button>
+        <button
+          onClick={zoomOut}
+          aria-label="Zoom out"
+          style={{
+            width: 32,
+            height: 32,
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 6,
+            background: "rgba(0,0,0,0.5)",
+            color: "#fff",
+            fontSize: 18,
+            lineHeight: 1,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backdropFilter: "blur(8px)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.5)")}
+        >
+          −
+        </button>
+      </div>
+    </div>
   );
 }
