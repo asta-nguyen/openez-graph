@@ -168,7 +168,7 @@ export default function LandingPage() {
               }}
             >
               <a
-                href="https://github.com/giogio/openez-graph"
+                href="https://github.com/asta-nguyen/openez-graph"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground px-7 py-3 text-sm font-semibold hover:brightness-110 transition-all active:scale-[0.98]"
@@ -176,7 +176,7 @@ export default function LandingPage() {
                 Get Started <ArrowRight className="h-4 w-4" />
               </a>
               <a
-                href="https://github.com/giogio/openez-graph"
+                href="https://github.com/asta-nguyen/openez-graph"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-lg border px-7 py-3 text-sm font-medium hover:bg-muted transition-colors"
