@@ -1,0 +1,25 @@
+apps/mcp/src/mcp-core.ts
+  s_0b79b24ac3168a::t_ad014af558f0f9 63-65,200-213,215-229,344,387,405,438,447,490-496
+  s_0b79b24ac3168a::t_2919206c809ecd 15
+  s_0b79b24ac3168a::t_9f7b9c24d778fe 478
+  s_0b79b24ac3168a::t_9a05f842f1790b 518-521
+  s_0b79b24ac3168a::t_5ed555d3871c92 214
+apps/cli/src/resolve-cli.ts
+  s_0b79b24ac3168a::t_42192d13285ec8 1,38-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "f0113c201a15638543686992744e05659acb9133",
+  "prompts": {},
+  "sessions": {
+    "s_0b79b24ac3168a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eff9a-7076-7b10-8f4a-37d6e00a7ed2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
