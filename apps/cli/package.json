@@ -1,25 +1,41 @@
 {
   "name": "@openez-graph/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "./src/cli.ts",
   "types": "./src/cli.ts",
+  "bin": {
+    "openez": "./dist/cli.cjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "main": "./dist/cli.cjs",
+    "types": "./dist/cli.d.cts"
+  },
   "scripts": {
     "openez": "tsx src/cli.ts",
+    "build": "tsup",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "better-sqlite3": "^12.10.0"
+  },
+  "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openez-graph/config": "workspace:*",
     "@openez-graph/core": "workspace:*",
     "@openez-graph/db": "workspace:*",
     "@openez-graph/indexer": "workspace:*",
+    "@openez-graph/mcp": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
     "chokidar": "^4.0.3",
     "commander": "^14.0.0",
     "smol-toml": "^1.6.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.0.0",
     "zod": "^3.25.76"
-  },
-  "devDependencies": {
-    "typescript": "^5.0.0"
   }
 }
