@@ -24,6 +24,16 @@ body {
   font-family: "Sora", system-ui, sans-serif;
 }
 
+p code {
+  padding: 0.1rem 0.35rem;
+  border: 1px solid oklch(1 0 0 / 8%);
+  border-radius: 0.35rem;
+  background: oklch(0.08 0 0);
+  color: oklch(0.82 0.14 82);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.86em;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -31,26 +41,6 @@ html {
 .dot-grid {
   background-image: radial-gradient(circle, oklch(1 0 0 / 6%) 1px, transparent 1px);
   background-size: 40px 40px;
-}
-
-.glow-orb {
-  position: absolute;
-  width: 500px;
-  height: 500px;
-  border-radius: 50%;
-  filter: blur(100px);
-  pointer-events: none;
-  background: radial-gradient(circle, oklch(0.78 0.12 195 / 0.1), transparent 70%);
-}
-
-.glow-orb--alt {
-  position: absolute;
-  width: 400px;
-  height: 400px;
-  border-radius: 50%;
-  filter: blur(120px);
-  pointer-events: none;
-  background: radial-gradient(circle, oklch(0.6 0.2 280 / 0.08), transparent 70%);
 }
 
 @keyframes float1 {
@@ -85,24 +75,56 @@ html {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.particle {
-  position: absolute;
-  border-radius: 50%;
-  background: oklch(0.78 0.12 195 / 0.5);
-  pointer-events: none;
-  animation: float1 8s ease-in-out infinite;
-}
-
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, oklch(0.97 0 0), oklch(0.78 0.12 195));
+  background: linear-gradient(135deg, oklch(0.97 0 0), oklch(0.78 0.12 195), oklch(0.82 0.14 82));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.protocol-strip {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0 12%, oklch(0.78 0.12 195 / 0.08) 12% 12.1%, transparent 12.1% 100%),
+    linear-gradient(135deg, oklch(0.78 0.12 195 / 0.08), transparent 32%, oklch(0.82 0.14 82 / 0.05) 70%, transparent);
+  mask-image: linear-gradient(to bottom, black, black 70%, transparent);
+}
+
+.install-hero {
+  width: min(100%, 44rem);
+  margin: 0 auto 2rem;
+  padding: 0.35rem;
+  border: 1px solid oklch(1 0 0 / 8%);
+  border-radius: var(--radius-lg);
+  background: oklch(0.07 0 0 / 0.88);
+  box-shadow: 0 18px 60px oklch(0 0 0 / 0.35);
+  font-family: "JetBrains Mono", monospace;
+  text-align: left;
+}
+
+.command-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.85rem;
+  color: oklch(0.92 0 0);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  border-radius: calc(var(--radius-lg) - 0.25rem);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.command-line + .command-line {
+  border-top: 1px solid oklch(1 0 0 / 5%);
 }
 
 .card-hover {
@@ -208,6 +230,69 @@ html {
     transparent 70%
   );
   pointer-events: none;
+}
+
+.install-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid oklch(1 0 0 / 8%);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, oklch(0.16 0 0), oklch(0.11 0 0));
+}
+
+.install-step code,
+.tool-card code,
+.agent-command {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid oklch(1 0 0 / 8%);
+  border-radius: 0.375rem;
+  background: oklch(0.08 0 0);
+  color: oklch(0.82 0.14 82);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  overflow-x: auto;
+}
+
+.install-step p,
+.tool-card p {
+  margin-top: 0.65rem;
+  color: oklch(0.62 0 0);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.install-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.5rem;
+  background: oklch(0.78 0.12 195 / 0.13);
+  color: oklch(0.78 0.12 195);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.tool-card {
+  padding: 1rem;
+  min-height: 8rem;
+  border: 1px solid oklch(1 0 0 / 8%);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, oklch(0.16 0 0), oklch(0.12 0 0)),
+    radial-gradient(circle at top right, oklch(0.78 0.12 195 / 0.08), transparent 50%);
+}
+
+.agent-command {
+  margin: 0.25rem 0 0.4rem;
+  color: oklch(0.78 0.12 195);
 }
 
 .mcp-block {
