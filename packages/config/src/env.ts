@@ -31,7 +31,6 @@ function loadDotenvFromWorkspaceRoot() {
 loadDotenvFromWorkspaceRoot();
 
 const envSchema = z.object({
-  DATABASE_URL: z.string().url().optional(),
   EMBEDDING_PROVIDER: z.string().default("none"),
   MINIMAX_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().url().optional(),
