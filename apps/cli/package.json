@@ -1,6 +1,36 @@
 {
   "name": "@openez-graph/cli",
   "version": "0.3.0",
+  "description": "Local-first code intelligence engine — index, query, and graph your codebase with zero config. SQLite-only, MCP-first.",
+  "license": "MIT",
+  "author": "Asta Nguyen",
+  "homepage": "https://github.com/asta-nguyen/openez-graph",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asta-nguyen/openez-graph.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/asta-nguyen/openez-graph/issues"
+  },
+  "keywords": [
+    "code-intelligence",
+    "code-graph",
+    "mcp",
+    "model-context-protocol",
+    "code-indexing",
+    "codebase",
+    "retrieval",
+    "sqlite",
+    "local-first",
+    "developer-tools",
+    "ai-coding",
+    "claude-code",
+    "codex"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "./src/cli.ts",
   "types": "./src/cli.ts",
@@ -9,7 +39,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "main": "./dist/cli.cjs",

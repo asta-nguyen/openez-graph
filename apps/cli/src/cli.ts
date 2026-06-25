@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name("openez")
   .description("OpenEZ Graph - Local-first knowledge retrieval system")
-  .version("0.2.0");
+  .version("0.3.0");
 
 // ── openez init [path] ──
 
@@ -81,6 +81,8 @@ program
       console.log(`Auto-registered workspace '${workspace.name}' (${workspace.id})`);
     }
 
+    await writeLocalWorkspaceConfig(workspace);
+
     const summary = await indexWorkspace({ workspaceId: workspace.id });
     console.log(JSON.stringify(summary, null, 2));
   });
@@ -100,6 +102,8 @@ program
       console.error(`Error: no workspace registered at ${resolvedPath}. Run 'openez init' first.`);
       process.exit(1);
     }
+
+    await writeLocalWorkspaceConfig(workspace);
 
     const summary = await indexWorkspace({ workspaceId: workspace.id, mode: "full" });
     console.log(JSON.stringify(summary, null, 2));
@@ -123,8 +127,11 @@ program
       console.log(`Auto-registered workspace '${workspace.name}' (${workspace.id})`);
     }
 
+    await writeLocalWorkspaceConfig(workspace);
+    const workspaceId = workspace.id;
+
     console.log(`Running initial index for ${resolvedPath}...`);
-    await indexWorkspace({ workspaceId: workspace.id });
+    await indexWorkspace({ workspaceId });
 
     const watcher = chokidar.watch(resolvedPath, {
       ignored: [
@@ -141,15 +148,46 @@ program
       persistent: true
     });
 
-    const reindex = async () => {
-      console.log("Change detected, re-indexing...");
-      const summary = await indexWorkspace({ workspaceId: workspace.id });
-      console.log(JSON.stringify(summary, null, 2));
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+    let isIndexing = false;
+    let hasPendingChange = false;
+
+    const runReindex = async () => {
+      if (isIndexing) {
+        hasPendingChange = true;
+        return;
+      }
+
+      isIndexing = true;
+
+      do {
+        hasPendingChange = false;
+        console.log("Change detected, re-indexing...");
+        try {
+          const summary = await indexWorkspace({ workspaceId });
+          console.log(JSON.stringify(summary, null, 2));
+        } catch (error) {
+          console.error("Re-index failed:");
+          console.error(error);
+        }
+      } while (hasPendingChange);
+
+      isIndexing = false;
     };
 
-    watcher.on("add", reindex);
-    watcher.on("change", reindex);
-    watcher.on("unlink", reindex);
+    const scheduleReindex = () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+
+      debounceTimer = setTimeout(() => {
+        void runReindex();
+      }, 250);
+    };
+
+    watcher.on("add", scheduleReindex);
+    watcher.on("change", scheduleReindex);
+    watcher.on("unlink", scheduleReindex);
 
     console.log(`Watching ${resolvedPath} for changes...`);
   });
