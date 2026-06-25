@@ -1,0 +1,26 @@
+landing/src/app/globals.css
+  s_2ef640dc94c7cc::t_8625adbb2f5081 29,34,128-129,235-297
+  s_2ef640dc94c7cc::t_789f61ff91ccd6 84,90-127
+landing/src/app/page.tsx
+  s_2ef640dc94c7cc::t_16a7968aea8633 316-358,651
+  s_2ef640dc94c7cc::t_760be5583d4965 506
+  s_2ef640dc94c7cc::t_886f318406b7ef 14-17,24-25,27,31-48,72,77,82,86-87,90-169,174,176,183-185
+  s_2ef640dc94c7cc::t_d447851d3c9a71 627-629,632-639
+  s_2ef640dc94c7cc::t_873a6273886577 196-197,199,207-208,213,221-223,228,234-237,240-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "7b06e25cb7a05ff4dcf24de35a81f32183061753",
+  "prompts": {},
+  "sessions": {
+    "s_2ef640dc94c7cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019effc8-323c-7e90-afb4-17fbbfeb875c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
