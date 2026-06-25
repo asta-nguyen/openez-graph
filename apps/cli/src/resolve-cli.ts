@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 
 declare const __dirname: string | undefined;
@@ -34,6 +35,15 @@ export function resolveCliInvocation(): CliInvocation {
 
   // Source mode: __dirname is src/ inside monorepo
   const repoRoot = path.resolve(thisDir, "../../..");
+  const builtCliPath = path.resolve(thisDir, "../dist/cli.cjs");
+  if (fs.existsSync(builtCliPath)) {
+    return {
+      command: process.execPath,
+      args: [builtCliPath, "serve", "--mcp"],
+      repoRoot
+    };
+  }
+
   const tsxPath = path.join(repoRoot, "node_modules", ".bin", "tsx");
   const cliPath = path.resolve(thisDir, "./cli.ts");
   return {
