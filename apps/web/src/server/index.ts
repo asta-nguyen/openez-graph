@@ -32,7 +32,7 @@ import { createRegistryRepository, createWorkspaceRepository } from "@openez-gra
 
 const app = new Hono();
 app.use("/*", cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:17881", "http://127.0.0.1:17881"],
   credentials: true,
 }));
 
@@ -453,5 +453,6 @@ app.get("/api/settings/env", (c) => {
   });
 });
 
-const port = Number(process.env.API_PORT ?? 3001);
-serve({ fetch: app.fetch, port });
+export function createWebServer() {
+  return app;
+}

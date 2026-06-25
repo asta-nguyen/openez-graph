@@ -19,6 +19,7 @@ export default defineConfig({
     "@openez-graph/db",
     "@openez-graph/indexer",
     "@openez-graph/mcp",
+    "@openez-graph/web",
     "@modelcontextprotocol/sdk",
     "chokidar",
     "commander",

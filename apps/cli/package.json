@@ -1,6 +1,6 @@
 {
   "name": "@openez-graph/cli",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "main": "./src/cli.ts",
   "types": "./src/cli.ts",
@@ -21,7 +21,9 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.0"
+    "@hono/node-server": "^1.19.14",
+    "better-sqlite3": "^12.10.0",
+    "hono": "^4.12.18"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -30,6 +32,7 @@
     "@openez-graph/db": "workspace:*",
     "@openez-graph/indexer": "workspace:*",
     "@openez-graph/mcp": "workspace:*",
+    "@openez-graph/web": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "chokidar": "^4.0.3",
     "commander": "^14.0.0",
