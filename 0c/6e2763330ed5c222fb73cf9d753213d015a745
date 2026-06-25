@@ -1,0 +1,19 @@
+README.md
+  s_7e5df12d38ffa6::t_540dcdb2a7f145 112-113,128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "0c6e2763330ed5c222fb73cf9d753213d015a745",
+  "prompts": {},
+  "sessions": {
+    "s_7e5df12d38ffa6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "ab79225d-7be3-450d-8959-8610fe91a18a",
+        "model": "GLM-5.2"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
