@@ -5,7 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-const require = createRequire(import.meta.url);
+const require = createRequire(
+  typeof import.meta !== "undefined" && import.meta.url
+    ? import.meta.url
+    : `file://${__filename}`
+);
 
 interface SqliteStatement {
   all(...params: unknown[]): unknown[];
