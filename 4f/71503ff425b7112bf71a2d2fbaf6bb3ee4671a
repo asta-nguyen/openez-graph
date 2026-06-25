@@ -1,0 +1,27 @@
+landing/src/app/globals.css
+  s_2ef640dc94c7cc::t_8625adbb2f5081 118,225-287
+  s_2ef640dc94c7cc::t_789f61ff91ccd6 74,80-117
+landing/src/app/page.tsx
+  s_2ef640dc94c7cc::t_16a7968aea8633 315-358
+  s_2ef640dc94c7cc::t_886f318406b7ef 14-17,24-25,27,31-48,72,77,82,86-87,90-169,174,176,183-185
+  s_2ef640dc94c7cc::t_d447851d3c9a71 617,623,626-628,631-639,650,670,672,677
+  s_2ef640dc94c7cc::t_bd565a081b35ca 705
+  s_2ef640dc94c7cc::t_760be5583d4965 505-506
+  s_2ef640dc94c7cc::t_873a6273886577 196-197,199,207-208,213,221-223,228,234-236,239-258,267,272,288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "4f71503ff425b7112bf71a2d2fbaf6bb3ee4671a",
+  "prompts": {},
+  "sessions": {
+    "s_2ef640dc94c7cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019effc8-323c-7e90-afb4-17fbbfeb875c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
