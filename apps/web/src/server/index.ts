@@ -1,8 +1,10 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { serveStatic } from "@hono/node-server/serve-static";
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -32,7 +34,7 @@ import { createRegistryRepository, createWorkspaceRepository } from "@openez-gra
 
 const app = new Hono();
 app.use("/*", cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:17881", "http://127.0.0.1:17881"],
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:11368", "http://127.0.0.1:11368"],
   credentials: true,
 }));
 
@@ -453,6 +455,32 @@ app.get("/api/settings/env", (c) => {
   });
 });
 
+// ── Static frontend serving ──
+
+function resolveWebDist(): string | null {
+  // When running from source (monorepo)
+  const sourceDist = path.resolve(__dirname, "..", "dist");
+  if (existsSync(path.join(sourceDist, "index.html"))) return sourceDist;
+
+  // When running from CLI bundle (dist/web copied alongside)
+  const cliDist = path.resolve(__dirname, "web");
+  if (existsSync(path.join(cliDist, "index.html"))) return cliDist;
+
+  return null;
+}
+
 export function createWebServer() {
+  const webDist = resolveWebDist();
+
+  if (webDist) {
+    app.use("/*", serveStatic({ root: webDist, rewriteRequestPath: (p) => p }));
+    // SPA fallback — serve index.html for non-API routes
+    app.get("*", (c) => {
+      const indexPath = path.join(webDist, "index.html");
+      const index = readFileSync(indexPath, "utf-8");
+      return c.html(index);
+    });
+  }
+
   return app;
 }
