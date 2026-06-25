@@ -162,21 +162,20 @@ program
   .option("--mcp", "run as MCP server instead of web")
   .option("--web", "start the web dashboard API server")
   .option("-p, --path <path>", "workspace path")
-  .option("--port <port>", "API server port (default: 17881)")
+  .option("--port <port>", "API server port (default: 11368)")
   .action(async (options) => {
     if (options.mcp) {
       const { startMcpServer } = await import("./mcp-bridge");
       await startMcpServer(options.path ? path.resolve(options.path) : undefined);
     } else if (options.web) {
-      const port = options.port ? Number(options.port) : Number(process.env.API_PORT ?? 17881);
+      const port = options.port ? Number(options.port) : Number(process.env.API_PORT ?? 11368);
       process.env.API_PORT = String(port);
       const { serve } = await import("@hono/node-server");
       const { createWebServer } = await import("./web-server");
       const app = createWebServer();
       serve({ fetch: app.fetch, port }, (info) => {
         console.log(`OpenEZ Graph web dashboard:`);
-        console.log(`  API:   http://localhost:${info.port}`);
-        console.log(`  Frontend: http://localhost:5173 (run 'pnpm dev:web' separately)`);
+        console.log(`  http://localhost:${info.port}`);
         console.log(`  Press Ctrl+C to stop`);
       });
     } else {

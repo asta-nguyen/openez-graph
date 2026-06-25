@@ -109,7 +109,7 @@ pnpm openez watch /path/to/project
 pnpm openez status /path/to/project
 pnpm openez list
 pnpm openez serve --mcp
-pnpm openez serve --web                    # API server trên port 17881
+pnpm openez serve --web                    # API server trên port 11368
 pnpm openez serve --web --port 8080        # port tùy chọn
 pnpm openez setup codex /path/to/project
 pnpm openez setup claude /path/to/project
@@ -125,7 +125,7 @@ pnpm openez setup opencode /path/to/project
 - `status`: show workspace indexing and graph counts.
 - `list`: list registered workspaces.
 - `serve --mcp`: start the MCP server (auto-indexes + auto-syncs by default).
-- `serve --web`: start the web dashboard API server (default port 17881, `--port` to customize).
+- `serve --web`: start the web dashboard API server (default port 11368, `--port` to customize).
 - `setup codex`: wire up OpenEZ MCP in Codex config.
 - `setup claude`: wire up OpenEZ MCP in Claude Code settings.
 - `setup opencode`: wire up OpenEZ MCP in OpenCode config.
