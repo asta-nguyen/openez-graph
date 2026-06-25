@@ -1,0 +1,17 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "a6f6f7bc5b3679ebe0975cdee11325217373076f",
+  "prompts": {},
+  "sessions": {
+    "s_2ef640dc94c7cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019effc8-323c-7e90-afb4-17fbbfeb875c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
