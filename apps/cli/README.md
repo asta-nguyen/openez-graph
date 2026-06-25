@@ -17,6 +17,8 @@ openez index [path]          # incremental index
 openez reindex [path]        # full rebuild
 openez watch [path]          # watch + auto-reindex on changes
 openez serve --mcp           # start MCP server (auto-index + auto-sync)
+openez serve --web           # start web dashboard API server (default port 17881)
+openez serve --web --port 8080 # start web dashboard API server on custom port
 openez status [path]         # show workspace status
 openez list                  # list registered workspaces
 openez setup claude          # wire up Claude Code
