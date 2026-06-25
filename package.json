@@ -8,6 +8,7 @@
     "start": "concurrently --names web,mcp --prefix-colors cyan,green --kill-others \"pnpm dev:web\" \"pnpm mcp\"",
     "dev:web": "pnpm --filter @openez-graph/web dev:all",
     "build:web": "pnpm --filter @openez-graph/web build",
+    "build:cli": "pnpm --filter @openez-graph/cli build",
     "openez": "pnpm --filter @openez-graph/cli openez",
     "init": "pnpm --filter @openez-graph/cli openez init",
     "index": "pnpm --filter @openez-graph/cli openez index",

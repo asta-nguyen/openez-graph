@@ -50,27 +50,43 @@ Python, Go, and Rust are supported in a more basic structured form, while YAML, 
 ### Requirements
 
 - Node.js 20+
-- `pnpm` as the package manager
 
-### Zero-config setup
+### For end users
+
+```bash
+npm install -g @openez-graph/cli
+openez setup claude    # or: codex, opencode
+```
+
+Restart your agent. Done. The MCP server will auto-register, auto-index, and auto-sync on file changes.
+
+### For developers (from source)
 
 ```bash
 pnpm install
 pnpm openez setup claude    # wire up Claude Code (or: codex, opencode)
 ```
 
-That's it. When Claude Code starts the MCP server, it will:
-1. Auto-register the current project as a workspace
-2. Auto-index if the workspace has no documents yet
-3. Auto-sync on file changes (2s debounce)
+### Zero-config behavior
+
+When the MCP server starts, it automatically:
+1. Auto-registers the current project as a workspace
+2. Auto-indexes if the workspace has no documents yet
+3. Auto-syncs on file changes (2s debounce)
 
 No config file needed. No Docker. No Postgres. No env vars required.
 
 ### Manual workflow (optional)
 
 ```bash
-pnpm openez init .           # register + index current directory
-pnpm openez serve --mcp      # start MCP server (auto-syncs on file changes)
+openez init .           # register + index current directory
+openez serve --mcp      # start MCP server (auto-syncs on file changes)
+```
+
+### Build the CLI bundle
+
+```bash
+pnpm build:cli          # outputs dist/cli.cjs (single-file bundle)
 ```
 
 ### Run the web dashboard
@@ -79,7 +95,7 @@ pnpm openez serve --mcp      # start MCP server (auto-syncs on file changes)
 pnpm dev:web
 ```
 
-The root scripts also include `start`, `build:web`, `mcp`, `worker`, `typecheck`, `lint`, and `test`.
+The root scripts also include `start`, `build:web`, `build:cli`, `mcp`, `worker`, `typecheck`, `lint`, and `test`.
 
 ## CLI
 
@@ -195,6 +211,7 @@ Queue-backed jobs (BullMQ/Redis) are compatibility-only in the worker app and ar
 ## Development
 
 ```bash
+pnpm build:cli          # build CLI bundle for distribution
 pnpm dev:web          # start web dashboard
 pnpm build:web        # build web dashboard
 pnpm mcp              # start MCP server
@@ -207,6 +224,45 @@ pnpm test             # run vitest tests
 ## Contributing
 
 Contributions are most useful when they reinforce the current architecture: engine/runtime/UI separation, local-first defaults, SQLite as the main path, and MCP-first retrieval flows.
+
+## Publishing
+
+The CLI is published to npm as `@openez-graph/cli`. The package is a single-file CJS bundle (~15MB) with `better-sqlite3` as the only runtime dependency.
+
+### Prerequisites
+
+- npm account with 2FA enabled
+- Member of `openez-graph` organization on npm
+- Node.js 20+
+
+### Steps
+
+```bash
+# 1. Build the bundle
+pnpm build:cli
+
+# 2. Bump version (patch / minor / major)
+cd apps/cli
+npm version patch    # 0.1.1 → 0.1.2
+
+# 3. Publish (will prompt for browser auth if 2FA is enabled)
+npm publish --access public
+```
+
+### Verify
+
+```bash
+npx @openez-graph/cli --help
+npm install -g @openez-graph/cli
+openez setup claude
+```
+
+### Notes
+
+- `dist/cli.cjs` is the only file shipped (plus README.md and package.json)
+- `better-sqlite3` is a native module — installed automatically as a dependency
+- All workspace packages (`@openez-graph/config`, `core`, `db`, `indexer`, `mcp`) are bundled into `dist/cli.cjs` via tsup — not published separately
+- The `files` field in `apps/cli/package.json` controls what gets published
 
 ## Roadmap themes
 

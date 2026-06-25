@@ -2,8 +2,8 @@
   "name": "@openez-graph/mcp",
   "version": "0.1.0",
   "type": "module",
-  "main": "./src/server.ts",
-  "types": "./src/server.ts",
+  "main": "./src/mcp-core.ts",
+  "types": "./src/mcp-core.ts",
   "scripts": {
     "mcp": "tsx src/server.ts",
     "typecheck": "tsc -p tsconfig.json"
