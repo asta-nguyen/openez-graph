@@ -1,5 +1,7 @@
+import fs from "node:fs";
 import path from "node:path";
 
+import chokidar from "chokidar";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -10,7 +12,7 @@ import {
 import { z } from "zod";
 
 import { codeContext, graphNeighbors, memoryQuery, memoryWrite } from "@openez-graph/core";
-import { createRegistryRepository, findLocalWorkspaceConfig } from "@openez-graph/db";
+import { createRegistryRepository, findLocalWorkspaceConfig, writeLocalWorkspaceConfig } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
 const memoryQuerySchema = z.object({
@@ -397,6 +399,78 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
     }
   });
 
+  // ── Auto-index + auto-sync ──
+  const searchRoot = options?.defaultPath ?? process.cwd();
+  await autoIndexAndSync(searchRoot);
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+const WATCH_DEBOUNCE_MS = 2000;
+const WATCH_IGNORE_PATTERNS = [
+  "**/node_modules/**",
+  "**/.git/**",
+  "**/.next/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/coverage/**",
+  "**/.turbo/**",
+  "**/.openez/**"
+];
+
+async function autoIndexAndSync(searchRoot: string): Promise<void> {
+  const resolvedRoot = path.resolve(searchRoot);
+
+  if (!fs.existsSync(resolvedRoot) || !fs.statSync(resolvedRoot).isDirectory()) {
+    return;
+  }
+
+  const registry = createRegistryRepository();
+
+  // Auto-register workspace if not yet registered
+  let workspace = await registry.getWorkspaceByPath(resolvedRoot);
+  if (!workspace) {
+    const localConfig = await findLocalWorkspaceConfig(resolvedRoot);
+    if (localConfig) {
+      workspace = await registry.getWorkspace(localConfig.workspaceId);
+    }
+  }
+
+  if (!workspace) {
+    workspace = await registry.ensureWorkspace({ rootPath: resolvedRoot });
+    await writeLocalWorkspaceConfig(workspace);
+  }
+
+  // Auto-index if workspace has no documents yet
+  if (workspace.indexingStatus === "pending" || workspace.documentCount === 0) {
+    try {
+      await indexWorkspace({ workspaceId: workspace.id, mode: "incremental" });
+    } catch {
+      // Indexing failure is non-fatal — MCP server still starts
+    }
+  }
+
+  // Start file watcher for auto-sync
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const watcher = chokidar.watch(resolvedRoot, {
+    ignored: WATCH_IGNORE_PATTERNS,
+    ignoreInitial: true,
+    persistent: true
+  });
+
+  const triggerReindex = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      try {
+        await indexWorkspace({ workspaceId: workspace!.id, mode: "incremental" });
+      } catch {
+        // Silent failure — watcher keeps running
+      }
+    }, WATCH_DEBOUNCE_MS);
+  };
+
+  watcher.on("add", triggerReindex);
+  watcher.on("change", triggerReindex);
+  watcher.on("unlink", triggerReindex);
 }

@@ -6,7 +6,7 @@ It is designed around a SQLite-first, multi-workspace architecture with the CLI 
 ## Why OpenEZ Graph
 
 LLM coding agents waste tokens repeatedly re-reading the same codebase, configuration, and documentation context. A pre-indexed graph-and-chunk runtime reduces repeated file reads, improves retrieval quality, and makes local agent workflows cheaper and more predictable.
-OpenEZ Graph focuses on the local-first path: simple setup, local SQLite storage, workspace-aware indexing, and MCP access over the same indexed runtime.
+OpenEZ Graph focuses on the local-first path: zero-config setup, local SQLite storage, workspace-aware indexing, auto-sync on file changes, and MCP access over the same indexed runtime.
 
 ## What it does
 
@@ -32,8 +32,13 @@ The current architectural direction in the repo explicitly describes the system 
 
 ## Storage model
 
-The default storage model is local SQLite in WAL mode, with a global registry database for workspace metadata, a per-workspace SQLite database for indexed data, and a project-local workspace hint file used for workspace resolution.
-The repo guidance explicitly says not to assume Postgres, pgvector, Redis, or BullMQ as part of the default local path.
+Local SQLite in WAL mode. No Docker, Postgres, or Redis required.
+
+- Global registry DB at `~/.openez/registry.sqlite` — stores workspace metadata
+- Per-workspace DB at `<project>/.openez/index.sqlite` — stores documents, chunks, embeddings, graph nodes/edges, memories
+- Project-local hint at `<project>/.openez/workspace.json` — used for workspace resolution
+
+Schema is auto-created on first access. No migrations needed.
 
 ## Supported content
 
@@ -44,31 +49,37 @@ Python, Go, and Rust are supported in a more basic structured form, while YAML, 
 
 ### Requirements
 
-- Node.js compatible with the repo toolchain.
-- `pnpm` as the package manager.
+- Node.js 20+
+- `pnpm` as the package manager
 
-### Install
+### Zero-config setup
 
 ```bash
 pnpm install
+pnpm openez setup claude    # wire up Claude Code (or: codex, opencode)
 ```
 
-### Start with the recommended local workflow
+That's it. When Claude Code starts the MCP server, it will:
+1. Auto-register the current project as a workspace
+2. Auto-index if the workspace has no documents yet
+3. Auto-sync on file changes (2s debounce)
+
+No config file needed. No Docker. No Postgres. No env vars required.
+
+### Manual workflow (optional)
 
 ```bash
-pnpm openez init /path/to/project
-pnpm openez serve --mcp
+pnpm openez init .           # register + index current directory
+pnpm openez serve --mcp      # start MCP server (auto-syncs on file changes)
 ```
-
-This preferred flow appears directly in the repo planning and MCP setup notes, and it reflects the intended CLI-first local workflow.
 
 ### Run the web dashboard
 
 ```bash
-pnpm devweb
+pnpm dev:web
 ```
 
-The root scripts also include `start`, `buildweb`, `mcp`, `typecheck`, `lint`, and `test`.
+The root scripts also include `start`, `build:web`, `mcp`, `worker`, `typecheck`, `lint`, and `test`.
 
 ## CLI
 
@@ -89,16 +100,16 @@ pnpm openez setup opencode /path/to/project
 
 ### Command summary
 
-- `init`: register a workspace and optionally run the initial index.
+- `init`: register a workspace and run initial index (`--no-index` to skip).
 - `index`: run incremental indexing for a workspace.
 - `reindex`: run a full rebuild.
 - `watch`: watch files and re-index on changes.
 - `status`: show workspace indexing and graph counts.
 - `list`: list registered workspaces.
-- `serve --mcp`: start the MCP server.
-- `setup codex`: add or update a shared OpenEZ MCP entry in Codex config.
-- `setup claude`: add or update a shared OpenEZ MCP entry in Claude Code settings.
-- `setup opencode`: add or update a shared OpenEZ MCP entry in OpenCode config.
+- `serve --mcp`: start the MCP server (auto-indexes + auto-syncs by default).
+- `setup codex`: wire up OpenEZ MCP in Codex config.
+- `setup claude`: wire up OpenEZ MCP in Claude Code settings.
+- `setup opencode`: wire up OpenEZ MCP in OpenCode config.
 
 ## MCP usage
 
@@ -107,12 +118,22 @@ The MCP resolver supports default workspace resolution, explicit single-workspac
 
 ### Core MCP tools
 
-- `listworkspaces`
-- `memoryquery`
-- `codecontext`
-- `graphneighbors`
-- `memorywrite`
-- `indexworkspace`
+- `list_workspaces` — list registered workspaces and their status
+- `memory_query` — RRF-ranked retrieval (FTS + vector + graph expansion)
+- `code_context` — graph-adjacent context for a symbol or file path
+- `graph_neighbors` — raw graph nodes/edges around a label or node ID
+- `memory_write` — persist a technical decision or learned note
+- `index_workspace` — trigger incremental or full re-index
+
+### Auto-sync
+
+When `serve --mcp` starts, it automatically:
+1. Resolves the workspace from the current directory (or `.openez/workspace.json`)
+2. Registers it if not yet registered
+3. Indexes it if no documents exist yet
+4. Starts a file watcher (2s debounce) that re-indexes on file changes
+
+No manual `watch` command needed when using MCP.
 
 ### Agent MCP setup
 
@@ -168,28 +189,24 @@ This structure reflects the current repo organization captured in the repository
 
 ## Current status and constraints
 
-The repo direction says the project should be treated as SQLite-first, multi-workspace, and local-first.
-It also notes that queue-backed jobs are compatibility-only in parts of the web UI and are not the default runtime path, and that TS/JS remains the richest language path while other languages are intentionally more limited in this round.
+The project is SQLite-first, multi-workspace, and local-first. No external services required.
+Queue-backed jobs (BullMQ/Redis) are compatibility-only in the worker app and are not part of the default runtime path. TS/JS has the richest indexing via `ts-morph`; Python, Go, and Rust have basic symbol extraction.
 
 ## Development
 
-Useful root scripts include:
-
 ```bash
-pnpm devweb
-pnpm buildweb
-pnpm mcp
-pnpm typecheck
-pnpm lint
-pnpm test
+pnpm dev:web          # start web dashboard
+pnpm build:web        # build web dashboard
+pnpm mcp              # start MCP server
+pnpm worker           # start background worker (optional)
+pnpm typecheck        # type check all packages
+pnpm lint             # lint all packages
+pnpm test             # run vitest tests
 ```
-
-These scripts are defined in the root `package.json`.
 
 ## Contributing
 
 Contributions are most useful when they reinforce the current architecture: engine/runtime/UI separation, local-first defaults, SQLite as the main path, and MCP-first retrieval flows.
-Avoid introducing new hard dependencies on Postgres or Redis for the default path unless the architecture is intentionally changing.
 
 ## Roadmap themes
 
