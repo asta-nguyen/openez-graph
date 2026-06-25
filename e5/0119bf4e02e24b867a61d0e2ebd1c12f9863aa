@@ -1,0 +1,36 @@
+apps/cli/tsup.config.ts
+  s_7e5df12d38ffa6::t_d1c1848560a5c2 2-3,41-52
+apps/web/src/server/start.ts
+  s_7e5df12d38ffa6::t_5c6fa2927465e7 4
+README.md
+  s_7e5df12d38ffa6::t_5c6fa2927465e7 112,128
+apps/cli/package.json
+  s_7e5df12d38ffa6::t_75ef5293466954 3
+apps/web/src/server/index.ts
+  s_7e5df12d38ffa6::t_4c3f3ca807abf1 7
+  s_7e5df12d38ffa6::t_a6a3484c43e99d 463,467,480
+  s_7e5df12d38ffa6::t_3484c01821cd54 4
+  s_7e5df12d38ffa6::t_d4ba3176d4168e 458-462,464-466,468-471,473-479,481-484
+  s_7e5df12d38ffa6::t_5c6fa2927465e7 37
+apps/cli/README.md
+  s_7e5df12d38ffa6::t_5c6fa2927465e7 20
+apps/cli/src/cli.ts
+  s_7e5df12d38ffa6::t_5c6fa2927465e7 165,171
+  s_7e5df12d38ffa6::t_ca4cefb46f32bc 178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "e50119bf4e02e24b867a61d0e2ebd1c12f9863aa",
+  "prompts": {},
+  "sessions": {
+    "s_7e5df12d38ffa6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "ab79225d-7be3-450d-8959-8610fe91a18a",
+        "model": "GLM-5.2"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
