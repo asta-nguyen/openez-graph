@@ -12,7 +12,7 @@ import {
 import { z } from "zod";
 
 import { codeContext, graphNeighbors, memoryQuery, memoryWrite } from "@openez-graph/core";
-import { createRegistryRepository, findLocalWorkspaceConfig, writeLocalWorkspaceConfig } from "@openez-graph/db";
+import { createRegistryRepository, findLocalWorkspaceConfig } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
 const memoryQuerySchema = z.object({
@@ -59,6 +59,9 @@ const indexWorkspaceSchema = z.object({
   path: z.string().optional(),
   mode: z.enum(["incremental", "full"]).optional()
 });
+
+const MCP_CATCHUP_INTERVAL_MS = Number(process.env.OPENEZ_MCP_CATCHUP_INTERVAL_MS ?? 5000);
+const catchupState = new Map<string, { lastRunAt: number; inFlight?: Promise<void> }>();
 
 type WorkspaceLike = {
   id: string;
@@ -194,6 +197,36 @@ function jsonResponse(result: unknown) {
   };
 }
 
+async function catchUpWorkspaceIndex(workspaceId: string): Promise<void> {
+  const now = Date.now();
+  const current = catchupState.get(workspaceId);
+
+  if (current?.inFlight) {
+    await current.inFlight;
+    return;
+  }
+
+  if (current && now - current.lastRunAt < MCP_CATCHUP_INTERVAL_MS) {
+    return;
+  }
+
+  const inFlight = indexWorkspace({ workspaceId, mode: "incremental" })
+    .then(() => undefined)
+    .catch((error) => {
+      console.error(`OpenEZ MCP catch-up indexing failed: ${error instanceof Error ? error.message : String(error)}`);
+    })
+    .finally(() => {
+      catchupState.set(workspaceId, { lastRunAt: Date.now() });
+    });
+
+  catchupState.set(workspaceId, { lastRunAt: current?.lastRunAt ?? 0, inFlight });
+  await inFlight;
+}
+
+async function catchUpReadWorkspaces(workspaces: WorkspaceLike[]): Promise<void> {
+  await Promise.all(workspaces.map((workspace) => catchUpWorkspaceIndex(workspace.id)));
+}
+
 export async function createAndStartMcpServer(options?: { defaultPath?: string }) {
   const resolver = createWorkspaceResolver(options);
 
@@ -308,6 +341,7 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
       case "memory_query": {
         const input = memoryQuerySchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
+        await catchUpReadWorkspaces(workspaces);
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspace,
@@ -350,6 +384,7 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
       case "code_context": {
         const input = codeContextSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
+        await catchUpReadWorkspaces(workspaces);
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
@@ -367,6 +402,7 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
       case "graph_neighbors": {
         const input = graphNeighborsSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
+        await catchUpReadWorkspaces(workspaces);
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
@@ -399,7 +435,7 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
     }
   });
 
-  // ── Auto-index + auto-sync ──
+  // ── Auto-index + optional auto-sync watcher ──
   const searchRoot = options?.defaultPath ?? process.cwd();
   await autoIndexAndSync(searchRoot);
 
@@ -408,6 +444,7 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
 }
 
 const WATCH_DEBOUNCE_MS = 2000;
+const WATCH_ENABLED = ["1", "true", "yes"].includes((process.env.OPENEZ_MCP_WATCH ?? "").toLowerCase());
 const WATCH_IGNORE_PATTERNS = [
   "**/node_modules/**",
   "**/.git/**",
@@ -438,8 +475,7 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
   }
 
   if (!workspace) {
-    workspace = await registry.ensureWorkspace({ rootPath: resolvedRoot });
-    await writeLocalWorkspaceConfig(workspace);
+    return;
   }
 
   // Auto-index if workspace has no documents yet
@@ -451,7 +487,13 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
     }
   }
 
-  // Start file watcher for auto-sync
+  // The stdio MCP server must stay cheap to start and robust on large repos.
+  // Read tools run throttled incremental catch-up before querying; live watch is opt-in.
+  if (!WATCH_ENABLED) {
+    return;
+  }
+
+  // Start file watcher for opt-in auto-sync.
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const watcher = chokidar.watch(resolvedRoot, {
     ignored: WATCH_IGNORE_PATTERNS,
@@ -473,4 +515,8 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
   watcher.on("add", triggerReindex);
   watcher.on("change", triggerReindex);
   watcher.on("unlink", triggerReindex);
+  watcher.on("error", (error) => {
+    console.error(`OpenEZ MCP auto-sync watcher disabled: ${error instanceof Error ? error.message : String(error)}`);
+    void watcher.close();
+  });
 }
