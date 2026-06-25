@@ -1,0 +1,57 @@
+README.md
+  s_7e5df12d38ffa6::t_c6b5aa1504c5e0 56-58
+  s_7e5df12d38ffa6::t_ab0ce5f56bf998 214
+  s_7e5df12d38ffa6::t_c6bd0548f029fc 59-63,70-75,82-89,98
+  s_7e5df12d38ffa6::t_e31f791cab86e6 228-266
+  s_7e5df12d38ffa6::t_d2b315b871dd15 54
+apps/cli/src/setup-opencode.ts
+  s_7e5df12d38ffa6::t_8b8a0332dc7bac 5-6,24,51-52
+apps/cli/src/resolve-cli.ts
+  s_7e5df12d38ffa6::t_8cc14fe1a87263 1-44
+apps/cli/tsup.config.ts
+  s_7e5df12d38ffa6::t_67e5748f0fc5bf 1-4,6-39
+  s_7e5df12d38ffa6::t_c8e608192ff05f 5
+apps/cli/package.json
+  s_7e5df12d38ffa6::t_182f743c7965fc 14-17,24-26,33,38
+  s_7e5df12d38ffa6::t_7debc1906ebe2e 32
+  s_7e5df12d38ffa6::t_40bc1fe339e55f 37
+  s_7e5df12d38ffa6::t_03374658d532ce 3
+  s_7e5df12d38ffa6::t_5b46950468ac88 7,9-13,20
+  s_7e5df12d38ffa6::t_55ac46f4e2b3b3 8
+package.json
+  s_7e5df12d38ffa6::t_58c0c5126ae1fb 11
+apps/cli/src/setup-codex.ts
+  s_7e5df12d38ffa6::t_6287784e33bffc 5,25,52-53
+packages/config/src/env.ts
+  s_7e5df12d38ffa6::t_6834083795ff4a 10-15
+install.ps1
+  s_7e5df12d38ffa6::t_61274cd3d133af 1-74
+apps/mcp/package.json
+  s_7e5df12d38ffa6::t_fbf84f99859796 5-6
+install.sh
+  s_7e5df12d38ffa6::t_0300678ad62c25 1-94
+apps/cli/src/setup-claude.ts
+  s_7e5df12d38ffa6::t_f951771e63491f 5-6,24,51-52
+apps/cli/src/mcp-bridge.ts
+  s_7e5df12d38ffa6::t_25d32c719f0ffa 1
+apps/cli/README.md
+  s_7e5df12d38ffa6::t_bc1eb22e5d366d 1-30
+packages/db/src/sqlite/database-loader.ts
+  s_7e5df12d38ffa6::t_8eda7147b93bc1 9-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "75708c174d21ce56823899cc0ad36eed6c69ff35",
+  "prompts": {},
+  "sessions": {
+    "s_7e5df12d38ffa6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "ab79225d-7be3-450d-8959-8610fe91a18a",
+        "model": "GLM-5.2"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
