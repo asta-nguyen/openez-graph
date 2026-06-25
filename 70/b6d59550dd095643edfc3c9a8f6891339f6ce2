@@ -1,0 +1,29 @@
+apps/mcp/src/mcp-core.ts
+  s_7e5df12d38ffa6::t_20f0b2b896a1f3 1,4,15
+  s_7e5df12d38ffa6::t_377d184ea83d50 402-405
+  s_7e5df12d38ffa6::t_65a8eb1caa372b 409-476
+.env.example
+  s_7e5df12d38ffa6::t_fef27a1fb97477 1-2,4,6,9-10
+README.md
+  s_7e5df12d38ffa6::t_69652c12dc176a 9,35-41,52-53,55,59,62-69,72-73,79,82,103,109-112,121-136,192-193,198-204
+apps/mcp/package.json
+  s_7e5df12d38ffa6::t_09b9bd9f8bdfe6 16
+packages/db/package.json
+  s_7e5df12d38ffa6::t_e4264136bdff61 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "70b6d59550dd095643edfc3c9a8f6891339f6ce2",
+  "prompts": {},
+  "sessions": {
+    "s_7e5df12d38ffa6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "ab79225d-7be3-450d-8959-8610fe91a18a",
+        "model": "GLM-5.2"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
