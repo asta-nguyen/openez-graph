@@ -1,0 +1,37 @@
+apps/cli/package.json
+  s_7e5df12d38ffa6::t_3c08cd7bef21e5 4-33
+  s_7e5df12d38ffa6::t_9d88557b429e9a 42-43
+apps/cli/LICENSE
+  s_7e5df12d38ffa6::t_e5563110d12901 1-21
+LICENSE
+  s_7e5df12d38ffa6::t_bf089d8848cfac 1-21
+apps/cli/src/cli.ts
+  s_0b79b24ac3168a::t_c283b5ef59760e 15,84-85,106-107,130,151-166,168-185,188-190
+  s_0b79b24ac3168a::t_7d706decfaecab 131-132,134,167
+apps/cli/README.md
+  s_7e5df12d38ffa6::t_8293a77950d429 3-20,29-44,48-59,62-104,108-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "994c8a91acf4be528926ed23e5dfe0d6764f8a9e",
+  "prompts": {},
+  "sessions": {
+    "s_0b79b24ac3168a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eff9a-7076-7b10-8f4a-37d6e00a7ed2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_7e5df12d38ffa6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "ab79225d-7be3-450d-8959-8610fe91a18a",
+        "model": "GLM-5.2"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
