@@ -1,0 +1,24 @@
+apps/web/src/server/sqlite.ts
+  s_7e5df12d38ffa6::t_681ea941645184 298,303
+apps/web/src/server/index.ts
+  s_7e5df12d38ffa6::t_f9ade4dba8ad7d 99-100,102-105
+  s_7e5df12d38ffa6::t_1f78434386d287 101
+  s_7e5df12d38ffa6::t_80738a7fbeb6a7 106,195-208
+  s_7e5df12d38ffa6::t_7bef13ef1c08c8 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "bdeab6cc242d2359382ed9654f347b0cef70e116",
+  "prompts": {},
+  "sessions": {
+    "s_7e5df12d38ffa6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "ab79225d-7be3-450d-8959-8610fe91a18a",
+        "model": "GLM-5.2"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
