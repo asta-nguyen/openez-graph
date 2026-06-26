@@ -1,0 +1,45 @@
+packages/indexer/src/code.ts
+  s_2ef640dc94c7cc::t_c7986a512addde 20,33,91,147-148
+tests/python-indexer.test.ts
+  s_2ef640dc94c7cc::t_4a113a5c71f310 13,31,60-63,73-74
+  s_2ef640dc94c7cc::t_9899caf4769ece 1-12,14-30,32-59,64-72,75-80
+packages/indexer/src/languages.ts
+  s_7e5df12d38ffa6::t_4987daa6f4bf1f 123,128,163-167,171,173-174
+  s_2ef640dc94c7cc::t_39da83a98b2530 74,79-94,96-118,124,149-151,153-154,168-170,172,177,182,185
+  s_2ef640dc94c7cc::t_1b1c034bb70d5d 95
+  s_2ef640dc94c7cc::t_2ba0f32bdd252f 261,371,633
+  s_2ef640dc94c7cc::t_a02869a384fa12 176
+packages/indexer/src/index-workspace.ts
+  s_2ef640dc94c7cc::t_3cd0810e6bd454 24,70-72,78-105,107,112,568
+  s_7e5df12d38ffa6::t_f8193ca27c9c63 73-74
+  s_2ef640dc94c7cc::t_1e630bc607d2c4 164-165,178-179,193-194,207-208,221-222,235-236,258-259,281-282
+  s_2ef640dc94c7cc::t_eb4778d7d05e1f 383-384,502-503,539,551-567
+  s_7e5df12d38ffa6::t_fa8cbfb3e523f9 508
+  s_7e5df12d38ffa6::t_de5dfcad54fd4e 23,75-77,106,108-109,111,113-121
+  s_2ef640dc94c7cc::t_1baab0d6209e40 31
+  s_2ef640dc94c7cc::t_ad595a9a81e34d 569
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "d97be664751caa3d60eedf0746b84908f2e180df",
+  "prompts": {},
+  "sessions": {
+    "s_2ef640dc94c7cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019effc8-323c-7e90-afb4-17fbbfeb875c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_7e5df12d38ffa6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "ab79225d-7be3-450d-8959-8610fe91a18a",
+        "model": "GLM-5.2"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
