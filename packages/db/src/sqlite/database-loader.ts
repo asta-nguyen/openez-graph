@@ -6,7 +6,11 @@ declare const __non_webpack_require__: typeof require | undefined;
 
 const _require: typeof require = typeof __non_webpack_require__ === "function"
   ? __non_webpack_require__
-  : module.createRequire(new URL("file:" + path.resolve(process.cwd(), "packages/db/package.json")));
+  : module.createRequire(
+      typeof import.meta !== "undefined" && import.meta.url
+        ? import.meta.url
+        : `file://${__filename}`
+    );
 
 let resolvedAddon: string | null | undefined;
 
