@@ -295,6 +295,12 @@ function initializeWorkspaceSchema(db: SqliteDb) {
 
 function getWorkspaceDb(rootPath: string): SqliteDb {
   const normalized = normalizeRootPath(rootPath);
+
+  // Guard: reject invalid root paths (e.g. "/" or non-existent dirs)
+  if (normalized === "/" || normalized === "" || !fs.existsSync(normalized)) {
+    throw new Error(`Workspace root path does not exist: "${rootPath}"`);
+  }
+
   const cached = workspaceDbs.get(normalized);
   if (cached) {
     return cached;

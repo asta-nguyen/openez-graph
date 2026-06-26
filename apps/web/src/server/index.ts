@@ -1,17 +1,14 @@
-import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { serveStatic } from "@hono/node-server/serve-static";
 import crypto from "node:crypto";
-import { promises as fs } from "node:fs";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
-  countGraphNodes,
+  countWorkspaceDocuments,
   deleteRegistryWorkspace,
   ensureRegistryWorkspace,
-  getGraphNodeById,
   getLatestGraphRun,
   getLatestIndexRun,
   getRecentGraphRuns,
@@ -19,14 +16,10 @@ import {
   getRegistryWorkspace,
   getWorkspaceCounts,
   getWorkspaceGraphOptimized,
-  listGraphEdges,
-  listGraphNodesCurated,
   listRegistryWorkspaces,
   listWorkspaceDocuments,
-  countWorkspaceDocuments,
-  searchGraphNodesByLabel,
-  updateRegistryWorkspace,
   resolveRegistryDbPath,
+  updateRegistryWorkspace
 } from "./sqlite";
 
 import { memoryQuery } from "@openez-graph/core";
@@ -103,7 +96,14 @@ function toRunShim(run: {
 app.get("/api/dashboard", (c) => {
   try {
     const all = listRegistryWorkspaces();
-    const target = all[0];
+    // Find first workspace with a valid root path
+    const target = all.find((ws) => {
+      try {
+        return ws.rootPath && ws.rootPath !== "/" && existsSync(ws.rootPath);
+      } catch {
+        return false;
+      }
+    }) ?? all[0];
     if (!target) {
       return c.json({
         workspace: { id: "", name: "No workspace", root: "" },
@@ -192,11 +192,21 @@ app.get("/api/workspaces", (c) => {
   try {
     const dbPath = resolveRegistryDbPath();
     const all = listRegistryWorkspaces();
-    const data = all.map((ws) => ({
-      ...mapWorkspace(ws),
-      latestIndexRun: getLatestIndexRun(ws.rootPath),
-      latestGraphRun: getLatestGraphRun(ws.rootPath),
-    }));
+    const data = all.map((ws) => {
+      let latestIndexRun = null;
+      let latestGraphRun = null;
+      try {
+        latestIndexRun = getLatestIndexRun(ws.rootPath);
+        latestGraphRun = getLatestGraphRun(ws.rootPath);
+      } catch {
+        // Skip workspaces with invalid/inaccessible root paths
+      }
+      return {
+        ...mapWorkspace(ws),
+        latestIndexRun,
+        latestGraphRun,
+      };
+    });
     return c.json({ ok: true, data });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
