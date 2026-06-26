@@ -38,6 +38,7 @@ export function DashboardPreview() {
     >
       {/* ── Sidebar ── */}
       <div
+        className="dashboard-sidebar"
         style={{
           width: "200px",
           minWidth: "200px",

@@ -138,7 +138,7 @@ export default async function LandingPage() {
       <div className="scanline" />
       <div className="min-h-svh bg-background text-foreground dot-grid overflow-hidden">
         {/* ── HERO ── */}
-        <section className="relative flex flex-col items-center justify-center min-h-[110svh] px-6 py-32 text-center overflow-hidden">
+        <section className="relative flex flex-col items-center justify-center min-h-svh px-6 py-20 sm:py-32 text-center overflow-hidden">
           <div className="glow-orb top-1/4 left-1/2 -translate-x-1/2" />
           <div className="glow-orb--alt top-3/4 left-1/4" />
 
@@ -173,7 +173,7 @@ export default async function LandingPage() {
             </div>
           </div>
 
-          <div className="relative max-w-3xl mx-auto">
+          <div className="relative max-w-4xl mx-auto">
             <div
               className="inline-flex items-center gap-2 rounded-full border bg-accent/30 px-4 py-1.5 text-xs font-medium text-accent-foreground mb-8 tracking-wider uppercase font-mono"
               style={{
@@ -202,7 +202,7 @@ export default async function LandingPage() {
             </h1>
 
             <p
-              className="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto mb-8 text-pretty leading-relaxed"
+              className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto mb-8 text-pretty leading-relaxed"
               style={{
                 animation: "fadeUp 0.6s ease 0.7s forwards",
                 opacity: 0,
@@ -251,7 +251,7 @@ export default async function LandingPage() {
 
         {/* ── STATS ── */}
         <Reveal>
-          <section className="px-6 py-16 max-w-4xl mx-auto">
+          <section className="px-6 py-16 max-w-6xl mx-auto">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
               {stats.map((s) => (
                 <div key={s.label} className="text-center">
@@ -275,7 +275,7 @@ export default async function LandingPage() {
 
         {/* ── PROBLEM ── */}
         <Reveal delay={100}>
-          <section className="px-6 py-24 section-full max-w-5xl mx-auto text-center">
+          <section className="px-6 py-24 max-w-5xl mx-auto text-center">
             <p className="font-mono text-xs tracking-widest text-accent-foreground uppercase mb-3">
               The Problem
             </p>
@@ -334,7 +334,7 @@ export default async function LandingPage() {
 
         {/* ── LANGUAGES ── */}
         <Reveal delay={100}>
-          <section className="px-6 py-20 max-w-5xl mx-auto text-center">
+          <section className="px-6 py-20 max-w-4xl mx-auto text-center">
             <p className="font-mono text-xs tracking-widest text-accent-foreground uppercase mb-3">
               Index Anything
             </p>
@@ -379,13 +379,12 @@ export default async function LandingPage() {
               right where you need it — explore symbols, relationships, and
               references by orbiting through your codebase.
             </p>
-            <div className="max-w-5xl mx-auto">
+            <div className="max-w-7xl mx-auto">
               <div
-                className="screenshot-card"
+                className="screenshot-card screenshot-card-responsive"
                 style={{
                   animation: "slideInLeft 0.6s ease 0.1s forwards",
                   opacity: 0,
-                  height: "460px",
                 }}
               >
                 <DashboardPreview />
@@ -460,7 +459,7 @@ export default async function LandingPage() {
             <p className="text-sm text-muted-foreground text-center mb-10 max-w-md mx-auto">
               Seven commands to manage your entire code intelligence workflow.
             </p>
-            <div className="max-w-3xl mx-auto">
+            <div className="max-w-5xl mx-auto">
               <div
                 className="rounded-xl border bg-[oklch(0.07_0_0)]"
                 style={{ fontFamily: "var(--font-mono), monospace" }}
@@ -485,7 +484,7 @@ export default async function LandingPage() {
 
         {/* ── FEATURES ── */}
         <Reveal delay={100}>
-          <section className="px-6 py-20 max-w-5xl mx-auto">
+          <section className="px-6 py-20 max-w-7xl mx-auto">
             <p className="font-mono text-xs tracking-widest text-accent-foreground uppercase mb-3 text-center">
               Capabilities
             </p>
@@ -522,7 +521,7 @@ export default async function LandingPage() {
 
         {/* ── MCP SETUP ── */}
         <Reveal delay={100}>
-          <section className="section-full px-6 py-20 text-center">
+          <section className="px-6 py-20 max-w-5xl mx-auto text-center">
             <p className="font-mono text-xs tracking-widest text-accent-foreground uppercase mb-3">
               AI Integration
             </p>
@@ -603,7 +602,7 @@ export default async function LandingPage() {
 
         {/* ── ECOSYSTEM (flow diagram) ── */}
         <Reveal delay={100}>
-          <section className="px-6 py-20 max-w-5xl mx-auto text-center">
+          <section className="px-6 py-20 max-w-7xl mx-auto text-center">
             <p className="font-mono text-xs tracking-widest text-accent-foreground uppercase mb-3">
               Everywhere you need it
             </p>
@@ -662,7 +661,7 @@ export default async function LandingPage() {
 
         {/* ── FOOTER ── */}
         <footer className="border-t px-6 py-10">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
             <span
               className="text-sm font-black tracking-tight"
               style={{ fontFamily: "var(--font-heading), sans-serif" }}

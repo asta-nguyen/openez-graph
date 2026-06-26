@@ -92,11 +92,13 @@ html {
 
 /* Signal wave — a horizontal animated line */
 .signal-wave {
-  height: 1px;
+  height: 2px;
   width: 100%;
-  max-width: 280px;
-  background: linear-gradient(90deg, transparent, oklch(0.72 0.14 200 / 0.3), transparent);
+  max-width: 480px;
+  margin: 0 auto 2rem;
+  background: linear-gradient(90deg, transparent, oklch(0.72 0.14 200 / 0.4), transparent);
   position: relative;
+  border-radius: 2px;
 }
 .signal-wave::after {
   content: "";
@@ -104,14 +106,17 @@ html {
   left: 0;
   top: -1px;
   width: 30%;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, oklch(0.72 0.14 200 / 0.6), transparent);
-  animation: signalSweep 3s ease-in-out infinite;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, oklch(0.72 0.14 200 / 0.8), transparent);
+  animation: signalSweep 4s ease-in-out infinite;
+  border-radius: 2px;
 }
 
 @keyframes signalSweep {
   0% { left: -10%; }
-  100% { left: 110%; }
+  45% { left: 110%; }
+  55% { left: 110%; }
+  100% { left: -10%; }
 }
 
 .scanline {
@@ -233,9 +238,30 @@ html {
   height: auto;
 }
 
+.screenshot-card-responsive {
+  height: 360px;
+}
+@media (min-width: 640px) {
+  .screenshot-card-responsive {
+    height: 480px;
+  }
+}
+@media (min-width: 1024px) {
+  .screenshot-card-responsive {
+    height: 640px;
+  }
+}
+
+/* Dashboard preview: hide sidebar on very small screens */
+@media (max-width: 480px) {
+  .dashboard-sidebar {
+    display: none !important;
+  }
+}
+
 .problem-block {
   position: relative;
-  padding: 3rem 2rem;
+  padding: 2rem 1.5rem;
   border-radius: var(--radius-lg);
   background: linear-gradient(
     135deg,
@@ -243,6 +269,12 @@ html {
     oklch(0.12 0 0)
   );
   border: 1px solid oklch(1 0 0 / 6%);
+}
+
+@media (min-width: 640px) {
+  .problem-block {
+    padding: 3rem 2rem;
+  }
 }
 
 .problem-block::after {
@@ -456,6 +488,29 @@ html {
   margin-bottom: 0.5rem;
 }
 
+/* Timeline: mobile fallback — left-aligned line, full-width cards */
+@media (max-width: 639px) {
+  .timeline {
+    padding-left: 1.5rem;
+  }
+  .timeline-line {
+    left: 0;
+    transform: none;
+  }
+  .timeline-dot {
+    left: 0;
+    transform: translateX(-50%);
+  }
+  .timeline-body {
+    width: 100%;
+  }
+  .timeline-step:nth-child(odd) .timeline-body,
+  .timeline-step:nth-child(even) .timeline-body {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
 /* ── Connection diagram ── */
 
 .diagram-flow {
@@ -464,6 +519,39 @@ html {
   justify-content: center;
   gap: 0;
   flex-wrap: wrap;
+}
+
+/* Mobile: stack vertically with downward arrows */
+@media (max-width: 767px) {
+  .diagram-flow {
+    flex-direction: column;
+    gap: 0;
+  }
+  .diagram-arrow {
+    flex-direction: row;
+    padding: 0.75rem 0;
+  }
+  .diagram-arrow-line {
+    width: 1px;
+    height: 32px;
+    background: linear-gradient(180deg, oklch(0.72 0.14 200 / 0.4), oklch(0.65 0.18 330 / 0.4));
+  }
+  .diagram-arrow-line::after {
+    right: auto;
+    top: auto;
+    bottom: 0;
+    left: -3px;
+    width: 7px;
+    height: 7px;
+    border-top: none;
+    border-right: none;
+    border-bottom: 1px solid oklch(0.65 0.18 330 / 0.4);
+    border-left: 1px solid oklch(0.65 0.18 330 / 0.4);
+    transform: rotate(-45deg);
+  }
+  .diagram-arrow-label {
+    writing-mode: horizontal-tb;
+  }
 }
 
 .diagram-node {
