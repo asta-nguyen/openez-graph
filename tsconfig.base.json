@@ -21,7 +21,9 @@
       "@openez-graph/indexer": ["packages/indexer/src/index.ts"],
       "@openez-graph/queue": ["packages/queue/src/index.ts"],
       "@openez-graph/ui": ["packages/ui/src/index.ts"],
-      "@openez-graph/ui/*": ["packages/ui/src/*"]
+      "@openez-graph/ui/*": ["packages/ui/src/*"],
+      "@openez-graph/mcp": ["apps/mcp/src/mcp-core.ts"],
+      "@openez-graph/web": ["apps/web/src/server/index.ts"]
     }
   }
 }

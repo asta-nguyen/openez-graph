@@ -8,9 +8,11 @@ import {
   lazy,
   Suspense,
 } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { GraphLegend } from "./GraphLegend";
-import { Badge, Input, Label } from "@openez-graph/ui";
+import { Badge, Input, Label, DualRangeSlider } from "@openez-graph/ui";
 import { Loader2, Search, X } from "lucide-react";
+import { NODE_TYPES, SYMBOL_TYPES } from "../../lib/constants";
 
 const WorkspaceGraph = lazy(() =>
   import("./WorkspaceGraph").then((mod) => ({ default: mod.WorkspaceGraph })),
@@ -52,11 +54,13 @@ interface GraphClientProps {
 }
 
 export function GraphClient({ graphData }: GraphClientProps) {
+  const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(
-    () => new Set(graphData.nodeTypes.includes("file") ? ["file"] : []),
+    () => new Set(graphData.nodeTypes.includes(NODE_TYPES.FILE) ? [NODE_TYPES.FILE] : []),
   );
   const [selectedEdgeTypes, setSelectedEdgeTypes] = useState<Set<string>>(
     () => new Set(graphData.edgeTypes.includes("imports") ? ["imports"] : []),
@@ -66,9 +70,31 @@ export function GraphClient({ graphData }: GraphClientProps) {
     null,
   );
 
+  // Degree filter state
+  const degreeBounds = useMemo(() => {
+    if (graphData.nodes.length === 0) return { min: 0, max: 0 };
+    const degrees = graphData.nodes.map((n) => n.degree);
+    return { min: Math.min(...degrees), max: Math.max(...degrees) };
+  }, [graphData.nodes]);
+
+  const [minDegree, setMinDegree] = useState(0);
+  const [maxDegree, setMaxDegree] = useState(Infinity);
+
+  // Reset degree filter when graph data changes
+  useEffect(() => {
+    setMinDegree(0);
+    setMaxDegree(Infinity);
+  }, [graphData.workspaceId]);
+
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Debounce search input — 250ms delay prevents thrashing nodeVisibility
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const nodeById = useMemo(() => {
     const map = new Map<string, GraphNodeData>();
@@ -106,14 +132,15 @@ export function GraphClient({ graphData }: GraphClientProps) {
   const filteredNodes = useMemo(() => {
     return graphData.nodes.filter((node) => {
       if (
-        searchQuery &&
-        !node.label.toLowerCase().includes(searchQuery.toLowerCase())
+        debouncedSearch &&
+        !node.label.toLowerCase().includes(debouncedSearch.toLowerCase())
       )
         return false;
       if (selectedTypes.size > 0 && !selectedTypes.has(node.type)) return false;
+      if (node.degree < minDegree || node.degree > maxDegree) return false;
       return true;
     });
-  }, [graphData.nodes, searchQuery, selectedTypes]);
+  }, [graphData.nodes, debouncedSearch, selectedTypes, minDegree, maxDegree]);
 
   const filteredEdges = useMemo(() => {
     const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
@@ -145,6 +172,31 @@ export function GraphClient({ graphData }: GraphClientProps) {
   const handleNodeHover = useCallback((nodeId: string | null) => {
     setHoveredNodeId(nodeId);
   }, []);
+
+  const handleNodeDoubleClick = useCallback(
+    (nodeId: string) => {
+      const node = nodeById.get(nodeId);
+      if (!node) return;
+      const workspaceId = graphData.workspaceId;
+      // Symbol-type nodes → navigate to symbol browser with label pre-filled
+      const symbolTypes: string[] = [...SYMBOL_TYPES];
+      if (symbolTypes.includes(node.type) || node.refId) {
+        navigate({
+          to: "/workspaces/$workspaceId/symbols",
+          params: { workspaceId },
+          search: { workspaceId, type: SYMBOL_TYPES[0], page: 1, q: node.label },
+        });
+        return;
+      }
+      // File-type nodes → navigate to workspace detail (fallback)
+      navigate({
+        to: "/workspaces/$workspaceId",
+        params: { workspaceId },
+        search: { workspaceId },
+      });
+    },
+    [nodeById, graphData.workspaceId, navigate],
+  );
 
   const toggleType = (type: string) => {
     const newTypes = new Set(selectedTypes);
@@ -237,6 +289,28 @@ export function GraphClient({ graphData }: GraphClientProps) {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Degree Range</Label>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {minDegree} – {maxDegree === Infinity ? "∞" : maxDegree}
+              </span>
+            </div>
+            <DualRangeSlider
+              min={degreeBounds.min}
+              max={degreeBounds.max}
+              step={1}
+              value={[
+                minDegree === Infinity ? degreeBounds.max : Math.max(minDegree, degreeBounds.min),
+                maxDegree === Infinity ? degreeBounds.max : Math.min(maxDegree, degreeBounds.max),
+              ]}
+              onValueChange={(v) => {
+                setMinDegree(v[0]);
+                setMaxDegree(v[1]);
+              }}
+            />
+          </div>
+
           <div className="pt-2 border-t">
             <p className="text-xs text-muted-foreground">
               Showing {filteredNodes.length} of {graphData.totalNodes} nodes
@@ -267,11 +341,18 @@ export function GraphClient({ graphData }: GraphClientProps) {
           }
         >
           <WorkspaceGraph
-            nodes={filteredNodes}
-            edges={filteredEdges}
+            nodes={graphData.nodes}
+            edges={graphData.edges}
             selectedNodeId={selectedNodeId}
             onNodeClick={handleNodeClick}
             onNodeHover={handleNodeHover}
+            onNodeDoubleClick={handleNodeDoubleClick}
+            filters={{
+              types: selectedTypes,
+              search: debouncedSearch,
+              minDegree,
+              maxDegree,
+            }}
             className="absolute inset-0"
           />
         </Suspense>
