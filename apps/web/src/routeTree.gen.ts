@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkspacesRouteImport } from './routes/workspaces'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as QueryRouteImport } from './routes/query'
+import { Route as MemoriesRouteImport } from './routes/memories'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as IndexRouteImport } from './routes/index'
@@ -19,7 +20,9 @@ import { Route as WorkspacesIndexRouteImport } from './routes/workspaces/index'
 import { Route as WorkspacesNewRouteImport } from './routes/workspaces/new'
 import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces/$workspaceId'
 import { Route as WorkspacesWorkspaceIdIndexRouteImport } from './routes/workspaces/$workspaceId/index'
+import { Route as WorkspacesWorkspaceIdSymbolsRouteImport } from './routes/workspaces/$workspaceId/symbols'
 import { Route as WorkspacesWorkspaceIdGraphRouteImport } from './routes/workspaces/$workspaceId/graph'
+import { Route as WorkspacesWorkspaceIdDocumentsDocumentIdChunksRouteImport } from './routes/workspaces/$workspaceId/documents/$documentId/chunks'
 
 const WorkspacesRoute = WorkspacesRouteImport.update({
   id: '/workspaces',
@@ -34,6 +37,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const QueryRoute = QueryRouteImport.update({
   id: '/query',
   path: '/query',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoriesRoute = MemoriesRouteImport.update({
+  id: '/memories',
+  path: '/memories',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JobsRoute = JobsRouteImport.update({
@@ -72,10 +80,22 @@ const WorkspacesWorkspaceIdIndexRoute =
     path: '/',
     getParentRoute: () => WorkspacesWorkspaceIdRoute,
   } as any)
+const WorkspacesWorkspaceIdSymbolsRoute =
+  WorkspacesWorkspaceIdSymbolsRouteImport.update({
+    id: '/symbols',
+    path: '/symbols',
+    getParentRoute: () => WorkspacesWorkspaceIdRoute,
+  } as any)
 const WorkspacesWorkspaceIdGraphRoute =
   WorkspacesWorkspaceIdGraphRouteImport.update({
     id: '/graph',
     path: '/graph',
+    getParentRoute: () => WorkspacesWorkspaceIdRoute,
+  } as any)
+const WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute =
+  WorkspacesWorkspaceIdDocumentsDocumentIdChunksRouteImport.update({
+    id: '/documents/$documentId/chunks',
+    path: '/documents/$documentId/chunks',
     getParentRoute: () => WorkspacesWorkspaceIdRoute,
   } as any)
 
@@ -83,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
   '/jobs': typeof JobsRoute
+  '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces': typeof WorkspacesRouteWithChildren
@@ -90,24 +111,30 @@ export interface FileRoutesByFullPath {
   '/workspaces/new': typeof WorkspacesNewRoute
   '/workspaces/': typeof WorkspacesIndexRoute
   '/workspaces/$workspaceId/graph': typeof WorkspacesWorkspaceIdGraphRoute
+  '/workspaces/$workspaceId/symbols': typeof WorkspacesWorkspaceIdSymbolsRoute
   '/workspaces/$workspaceId/': typeof WorkspacesWorkspaceIdIndexRoute
+  '/workspaces/$workspaceId/documents/$documentId/chunks': typeof WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
   '/jobs': typeof JobsRoute
+  '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces/new': typeof WorkspacesNewRoute
   '/workspaces': typeof WorkspacesIndexRoute
   '/workspaces/$workspaceId/graph': typeof WorkspacesWorkspaceIdGraphRoute
+  '/workspaces/$workspaceId/symbols': typeof WorkspacesWorkspaceIdSymbolsRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdIndexRoute
+  '/workspaces/$workspaceId/documents/$documentId/chunks': typeof WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
   '/jobs': typeof JobsRoute
+  '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces': typeof WorkspacesRouteWithChildren
@@ -115,7 +142,9 @@ export interface FileRoutesById {
   '/workspaces/new': typeof WorkspacesNewRoute
   '/workspaces/': typeof WorkspacesIndexRoute
   '/workspaces/$workspaceId/graph': typeof WorkspacesWorkspaceIdGraphRoute
+  '/workspaces/$workspaceId/symbols': typeof WorkspacesWorkspaceIdSymbolsRoute
   '/workspaces/$workspaceId/': typeof WorkspacesWorkspaceIdIndexRoute
+  '/workspaces/$workspaceId/documents/$documentId/chunks': typeof WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -123,6 +152,7 @@ export interface FileRouteTypes {
     | '/'
     | '/documents'
     | '/jobs'
+    | '/memories'
     | '/query'
     | '/settings'
     | '/workspaces'
@@ -130,23 +160,29 @@ export interface FileRouteTypes {
     | '/workspaces/new'
     | '/workspaces/'
     | '/workspaces/$workspaceId/graph'
+    | '/workspaces/$workspaceId/symbols'
     | '/workspaces/$workspaceId/'
+    | '/workspaces/$workspaceId/documents/$documentId/chunks'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/documents'
     | '/jobs'
+    | '/memories'
     | '/query'
     | '/settings'
     | '/workspaces/new'
     | '/workspaces'
     | '/workspaces/$workspaceId/graph'
+    | '/workspaces/$workspaceId/symbols'
     | '/workspaces/$workspaceId'
+    | '/workspaces/$workspaceId/documents/$documentId/chunks'
   id:
     | '__root__'
     | '/'
     | '/documents'
     | '/jobs'
+    | '/memories'
     | '/query'
     | '/settings'
     | '/workspaces'
@@ -154,13 +190,16 @@ export interface FileRouteTypes {
     | '/workspaces/new'
     | '/workspaces/'
     | '/workspaces/$workspaceId/graph'
+    | '/workspaces/$workspaceId/symbols'
     | '/workspaces/$workspaceId/'
+    | '/workspaces/$workspaceId/documents/$documentId/chunks'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DocumentsRoute: typeof DocumentsRoute
   JobsRoute: typeof JobsRoute
+  MemoriesRoute: typeof MemoriesRoute
   QueryRoute: typeof QueryRoute
   SettingsRoute: typeof SettingsRoute
   WorkspacesRoute: typeof WorkspacesRouteWithChildren
@@ -187,6 +226,13 @@ declare module '@tanstack/react-router' {
       path: '/query'
       fullPath: '/query'
       preLoaderRoute: typeof QueryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memories': {
+      id: '/memories'
+      path: '/memories'
+      fullPath: '/memories'
+      preLoaderRoute: typeof MemoriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/jobs': {
@@ -238,6 +284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspacesWorkspaceIdIndexRouteImport
       parentRoute: typeof WorkspacesWorkspaceIdRoute
     }
+    '/workspaces/$workspaceId/symbols': {
+      id: '/workspaces/$workspaceId/symbols'
+      path: '/symbols'
+      fullPath: '/workspaces/$workspaceId/symbols'
+      preLoaderRoute: typeof WorkspacesWorkspaceIdSymbolsRouteImport
+      parentRoute: typeof WorkspacesWorkspaceIdRoute
+    }
     '/workspaces/$workspaceId/graph': {
       id: '/workspaces/$workspaceId/graph'
       path: '/graph'
@@ -245,17 +298,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspacesWorkspaceIdGraphRouteImport
       parentRoute: typeof WorkspacesWorkspaceIdRoute
     }
+    '/workspaces/$workspaceId/documents/$documentId/chunks': {
+      id: '/workspaces/$workspaceId/documents/$documentId/chunks'
+      path: '/documents/$documentId/chunks'
+      fullPath: '/workspaces/$workspaceId/documents/$documentId/chunks'
+      preLoaderRoute: typeof WorkspacesWorkspaceIdDocumentsDocumentIdChunksRouteImport
+      parentRoute: typeof WorkspacesWorkspaceIdRoute
+    }
   }
 }
 
 interface WorkspacesWorkspaceIdRouteChildren {
   WorkspacesWorkspaceIdGraphRoute: typeof WorkspacesWorkspaceIdGraphRoute
+  WorkspacesWorkspaceIdSymbolsRoute: typeof WorkspacesWorkspaceIdSymbolsRoute
   WorkspacesWorkspaceIdIndexRoute: typeof WorkspacesWorkspaceIdIndexRoute
+  WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute: typeof WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute
 }
 
 const WorkspacesWorkspaceIdRouteChildren: WorkspacesWorkspaceIdRouteChildren = {
   WorkspacesWorkspaceIdGraphRoute: WorkspacesWorkspaceIdGraphRoute,
+  WorkspacesWorkspaceIdSymbolsRoute: WorkspacesWorkspaceIdSymbolsRoute,
   WorkspacesWorkspaceIdIndexRoute: WorkspacesWorkspaceIdIndexRoute,
+  WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute:
+    WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute,
 }
 
 const WorkspacesWorkspaceIdRouteWithChildren =
@@ -283,6 +348,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DocumentsRoute: DocumentsRoute,
   JobsRoute: JobsRoute,
+  MemoriesRoute: MemoriesRoute,
   QueryRoute: QueryRoute,
   SettingsRoute: SettingsRoute,
   WorkspacesRoute: WorkspacesRouteWithChildren,

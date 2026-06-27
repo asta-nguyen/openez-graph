@@ -21,3 +21,6 @@ openez-wiki/.obsidian
 .ai-memory-graph/
 tsconfig.tsbuildinfo
 repomix-output.xml
+test-results/
+.planning/
+apps/web/.tanstack/tmp/

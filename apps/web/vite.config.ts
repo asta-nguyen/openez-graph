@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import path from "path";
+import { API_PORT, VITE_PORT } from "./src/lib/constants";
 
 export default defineConfig({
   plugins: [TanStackRouterVite(), react()],
@@ -11,10 +12,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: VITE_PORT,
     proxy: {
       "/api": {
-        target: "http://localhost:3001",
+        target: `http://localhost:${process.env.API_PORT ?? API_PORT}`,
         changeOrigin: true,
       },
     },
