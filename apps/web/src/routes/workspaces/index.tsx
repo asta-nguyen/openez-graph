@@ -21,6 +21,7 @@ export const Route = createFileRoute("/workspaces/")({
 function WorkspacesPage() {
   const queryClient = useQueryClient();
   const { page: currentPage } = useSearch({ from: "/workspaces/" });
+  const { workspaceId } = useSearch({ from: "__root__" });
   const { data: result, isLoading, error } = useQuery(workspacesQueryOptions);
 
   if (isLoading) return <div className="page"><p className="muted">Loading...</p></div>;
@@ -65,7 +66,7 @@ function WorkspacesPage() {
           <h1>Workspaces</h1>
           <p className="muted">Manage indexed codebases and projects.</p>
         </div>
-        <Link to="/workspaces/new">
+        <Link to="/workspaces/new" search={{ workspaceId }}>
           <Button>
             <Plus className="h-4 w-4" />
             New Workspace
@@ -81,7 +82,7 @@ function WorkspacesPage() {
             <p className="muted text-center mb-6 max-w-sm">
               Create your first workspace to start indexing a codebase.
             </p>
-            <Link to="/workspaces/new">
+            <Link to="/workspaces/new" search={{ workspaceId }}>
               <Button>
                 <Plus className="h-4 w-4" />
                 Create Workspace
@@ -100,6 +101,7 @@ function WorkspacesPage() {
                 key={workspace.id}
                 to="/workspaces/$workspaceId"
                 params={{ workspaceId: workspace.id }}
+                search={{ workspaceId }}
                 className="block"
                 onMouseEnter={() => queryClient.prefetchQuery(workspaceQueryOptions(workspace.id))}
               >

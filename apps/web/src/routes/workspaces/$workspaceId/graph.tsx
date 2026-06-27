@@ -23,7 +23,7 @@ export const Route = createFileRoute("/workspaces/$workspaceId/graph")({
         workspaceQueryOptions(params.workspaceId),
       ),
       context.queryClient.ensureQueryData(
-        workspaceGraphQueryOptions(params.workspaceId),
+        workspaceGraphQueryOptions(params.workspaceId, undefined),
       ),
     ]);
   },
@@ -35,7 +35,7 @@ function WorkspaceGraphPage() {
   const { data: workspaceResult } = useQuery(
     workspaceQueryOptions(workspaceId),
   );
-  const { data: graphData } = useQuery(workspaceGraphQueryOptions(workspaceId));
+  const { data: graphData } = useQuery(workspaceGraphQueryOptions(workspaceId, undefined));
 
   if (!workspaceResult?.ok) {
     return (
@@ -69,7 +69,7 @@ function WorkspaceGraphPage() {
       <div className="border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="flex items-center justify-between py-3">
           <div className="flex items-center gap-4">
-            <Link to="/workspaces/$workspaceId" params={{ workspaceId }}>
+            <Link to="/workspaces/$workspaceId" params={{ workspaceId }} search={{ workspaceId }}>
               <Button variant="ghost" size="icon">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -105,7 +105,7 @@ function WorkspaceGraphPage() {
               <p className="text-sm text-muted-foreground">
                 No graph data was found for this workspace.
               </p>
-              <Link to="/workspaces/$workspaceId" params={{ workspaceId }}>
+              <Link to="/workspaces/$workspaceId" params={{ workspaceId }} search={{ workspaceId }}>
                 <Button variant="secondary">Go to Workspace</Button>
               </Link>
             </CardContent>

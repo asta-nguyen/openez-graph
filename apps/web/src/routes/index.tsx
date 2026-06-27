@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { formatDate } from "../lib/utils";
@@ -11,14 +11,19 @@ import {
 export const Route = createFileRoute("/")({
   loader: async ({ context }) => {
     // Critical: Dashboard summary
-    await context.queryClient.ensureQueryData(dashboardQueryOptions);
+    await context.queryClient.ensureQueryData(
+      dashboardQueryOptions(context.workspace?.id ?? ""),
+    );
   },
   component: OverviewPage,
 });
 
 
 function OverviewPage() {
-  const { data: snapshot, isLoading, error } = useQuery(dashboardQueryOptions);
+  const { workspaceId } = useSearch({ from: "__root__" });
+  const { data: snapshot, isLoading, error } = useQuery(
+    dashboardQueryOptions(workspaceId),
+  );
 
   if (isLoading) return <div className="page"><p className="muted">Loading...</p></div>;
   if (error) return <div className="page"><p className="text-destructive">{error.message}</p></div>;
@@ -108,22 +113,26 @@ function OverviewPage() {
             <CardTitle>Recent memories</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Source</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {snapshot.recentMemories.map((memory) => (
-                  <TableRow key={memory.id}>
-                    <TableCell>{memory.title}</TableCell>
-                    <TableCell>{memory.source}</TableCell>
+            {snapshot.recentMemories.length === 0 ? (
+              <p className="muted">No memories recorded yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Source</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {snapshot.recentMemories.map((memory) => (
+                    <TableRow key={memory.id}>
+                      <TableCell>{memory.title}</TableCell>
+                      <TableCell>{memory.source}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

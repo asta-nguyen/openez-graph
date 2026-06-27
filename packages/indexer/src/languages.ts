@@ -71,18 +71,61 @@ export interface IndexedCodeResult {
   importPaths: string[];
   definedSymbols: ExtractedSymbol[];
   calledIdentifiers: string[];
+  callExpressions: Array<{ callerName: string; calleeName: string }>;
 }
 
 // ── Python parser ──
+
+function stripPythonAlias(value: string): string {
+  return value.trim().replace(/^\(+|\)+$/g, "").split(/\s+as\s+/i)[0]?.trim() ?? "";
+}
+
+function parsePythonImportLine(line: string): string[] {
+  const trimmed = line.trim().replace(/\s+#.*$/, "");
+  const fromMatch = /^from\s+([.\w]+)\s+import\s+(.+)$/.exec(trimmed);
+  if (fromMatch) {
+    const modulePath = fromMatch[1];
+    const importedNames = fromMatch[2]
+      .split(",")
+      .map(stripPythonAlias)
+      .filter((name) => name && name !== "*");
+
+    return [
+      modulePath,
+      ...importedNames.map((name) => modulePath.endsWith(".") ? `${modulePath}${name}` : `${modulePath}.${name}`)
+    ];
+  }
+
+  const importMatch = /^import\s+(.+)$/.exec(trimmed);
+  if (!importMatch) return [];
+
+  return importMatch[1]
+    .split(",")
+    .map(stripPythonAlias)
+    .filter(Boolean);
+}
+
+function normalizePythonCallName(value: string): string {
+  const parts = value.split(".").filter(Boolean);
+  return parts[parts.length - 1] ?? value;
+}
+
+const PYTHON_CALL_IGNORES = new Set([
+  "if", "for", "while", "with", "return", "yield",
+  "print", "len", "range", "str", "int", "float", "list", "dict", "set", "tuple", "bool",
+  "isinstance", "issubclass", "super", "self", "cls"
+]);
 
 export function parsePython(content: string): IndexedCodeResult {
   const lines = content.split("\n");
   const definedSymbols: ExtractedSymbol[] = [];
   const importPaths: string[] = [];
+  const calledIdentifiers = new Set<string>();
+  const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
 
   const symbolRegex = /^(?:async\s+)?(?:def|class)\s+(\w+)/;
-  const importRegex = /^(?:from\s+(\S+)\s+)?import\s+(\S+)/;
   const moduleDocstring = /^"""/;
+  const callRegex = /(\w+(?:\.\w+)*)\s*\(/g;
 
   let inMultilineString = false;
 
@@ -103,11 +146,12 @@ export function parsePython(content: string): IndexedCodeResult {
       continue;
     }
 
-    const symbolMatch = symbolRegex.exec(line);
-    if (symbolMatch && line.trim().startsWith("def") || symbolMatch && line.trim().startsWith("class") || symbolMatch && line.trim().startsWith("async def") || symbolMatch && line.trim().startsWith("async class")) {
+    const trimmed = line.trim();
+    const symbolMatch = symbolRegex.exec(trimmed);
+    if (symbolMatch) {
       const name = symbolMatch[1];
-      const isAsync = line.trim().startsWith("async");
-      const stripped = isAsync ? line.trim().slice(6) : line.trim();
+      const isAsync = trimmed.startsWith("async");
+      const stripped = isAsync ? trimmed.slice(6) : trimmed;
       const symbolType = stripped.startsWith("def") ? "function" : "class";
       const exported = !name.startsWith("_");
       const startLine = i + 1;
@@ -115,21 +159,30 @@ export function parsePython(content: string): IndexedCodeResult {
       const content = lines.slice(i, endLine).join("\n");
 
       definedSymbols.push({ name, symbolType, type: symbolType, exported, startLine, endLine });
+
+      // Extract function calls within the symbol body
+      const bodyContent = lines.slice(i, endLine).join("\n");
+      let callMatch;
+      const localCallRegex = new RegExp(callRegex);
+      while ((callMatch = localCallRegex.exec(bodyContent)) !== null) {
+        const rawCalledName = callMatch[1];
+        const calledName = normalizePythonCallName(rawCalledName);
+        if (!PYTHON_CALL_IGNORES.has(rawCalledName) && !PYTHON_CALL_IGNORES.has(calledName) && calledName !== name) {
+          calledIdentifiers.add(calledName);
+          callExpressions.push({ callerName: name, calleeName: calledName });
+        }
+      }
     }
 
-    const importMatch = importRegex.exec(line);
-    if (importMatch) {
-      const modulePath = importMatch[1] || importMatch[2];
-      importPaths.push(modulePath);
-    }
+    importPaths.push(...parsePythonImportLine(line));
   }
 
   const chunks = createSymbolChunks(definedSymbols, lines, "python");
   if (chunks.length === 0) {
-    return makeFallbackChunks(content, lines);
+    return { ...makeFallbackChunks(content, lines), callExpressions: [] };
   }
 
-  return { chunks, importPaths, definedSymbols, calledIdentifiers: [] };
+  return { chunks, importPaths: [...new Set(importPaths)], definedSymbols, calledIdentifiers: [...calledIdentifiers], callExpressions };
 }
 
 // ── Go parser ──
@@ -205,7 +258,7 @@ export function parseGo(content: string): IndexedCodeResult {
     return makeFallbackChunks(content, lines);
   }
 
-  return { chunks, importPaths, definedSymbols, calledIdentifiers: [] };
+  return { chunks, importPaths, definedSymbols, calledIdentifiers: [], callExpressions: [] };
 }
 
 // ── Rust parser ──
@@ -315,7 +368,7 @@ export function parseRust(content: string): IndexedCodeResult {
     return makeFallbackChunks(content, lines);
   }
 
-  return { chunks, importPaths, definedSymbols, calledIdentifiers: [] };
+  return { chunks, importPaths, definedSymbols, calledIdentifiers: [], callExpressions: [] };
 }
 
 // ── YAML/JSON/TOML config chunkers ──
@@ -577,5 +630,5 @@ function makeFallbackChunks(content: string, lines: string[]): IndexedCodeResult
     });
   }
 
-  return { chunks, importPaths: [], definedSymbols: [], calledIdentifiers: [] };
+  return { chunks, importPaths: [], definedSymbols: [], calledIdentifiers: [], callExpressions: [] };
 }
