@@ -1,10 +1,9 @@
 import { getBrainSettings } from "@openez-graph/config";
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
-import { getEmbeddingProvider } from "./embeddings";
 import { reciprocalRankFusion } from "./rrf";
 import { countTokens } from "./tokenizer";
-import type { MemoryQueryResult, QuerySource } from "./types";
+import type { MemoryHit, MemoryQueryResult, QuerySource } from "./types";
 
 interface ChunkHit {
   id: string;
@@ -37,41 +36,8 @@ function formatContextBlock(chunk: ChunkHit): string {
   return `[source: ${chunk.path}:${startLine}-${endLine} | score: ${chunk.score.toFixed(3)}]\n${chunk.content}`;
 }
 
-async function vectorSearch(
-  rootPath: string,
-  query: string,
-  limit: number
-): Promise<ChunkHit[]> {
-  const provider = getEmbeddingProvider();
-  if (!provider) return [];
-
-  const [queryEmbedding] = await provider.embed([query]);
-  const queryDimensions = queryEmbedding.length;
-  const embeddingJson = JSON.stringify(queryEmbedding);
-
-  const repo = createWorkspaceRepository(rootPath);
-  const results = await repo.queryRaw(
-    `SELECT
-      chunks.id, chunks.content, chunks.heading, chunks.metadata,
-      documents.path
-    FROM embeddings
-    INNER JOIN chunks ON chunks.id = embeddings.chunk_id
-    INNER JOIN documents ON documents.id = chunks.document_id
-    WHERE embeddings.model = ?
-      AND embeddings.dimensions = ?
-    ORDER BY abs(length(embeddings.embedding) - ?) ASC
-    LIMIT ?`,
-    [provider.model, queryDimensions, embeddingJson.length, limit]
-  );
-
-  return results.map((row) => ({
-    id: String(row.id),
-    path: String(row.path),
-    content: String(row.content),
-    score: 0.5,
-    heading: row.heading ? String(row.heading) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
-  }));
+function formatMemoryBlock(memory: MemoryHit): string {
+  return `[memory: ${memory.title} | source: ${memory.source} | score: ${memory.score.toFixed(3)}]\n${memory.content}`;
 }
 
 async function graphExpand(
@@ -145,14 +111,16 @@ export async function memoryQuery(input: {
 
   const repo = createWorkspaceRepository(workspace.rootPath);
 
-  const [ftsResults, vectorResults] = await Promise.all([
+  const start = Date.now();
+
+  // Search both chunks (code/docs) and memories (agent-written notes)
+  const [ftsResults, memoryResults] = await Promise.all([
     repo.fullTextSearch(input.query, retrieval.textLimit),
-    vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit)
+    repo.searchMemories(input.query, retrieval.textLimit).catch(() => []),
   ]);
 
   let fused = reciprocalRankFusion([
-    ftsResults.map((item) => ({ item, score: item.score })),
-    vectorResults.map((item) => ({ item, score: item.score }))
+    ftsResults.map((item) => ({ item, score: item.score }))
   ]);
 
   if (!input.skipGraphExpand) {
@@ -169,6 +137,7 @@ export async function memoryQuery(input: {
   }
 
   const selected: ChunkHit[] = [];
+  const selectedScores = new Map<string, number>();
   let usedTokens = 0;
 
   for (const entry of fused) {
@@ -178,20 +147,52 @@ export async function memoryQuery(input: {
     if (usedTokens + tokenCount > maxTokens) continue;
 
     selected.push(entry.item);
+    selectedScores.set(entry.item.id, entry.score);
     usedTokens += tokenCount;
   }
 
+  // Include top memories in the context, reserving ~25% of token budget
+  const memoryTokenBudget = Math.floor(maxTokens * 0.25);
+  const selectedMemories: MemoryHit[] = [];
+  let memoryTokens = 0;
+  for (const memory of memoryResults) {
+    if (memoryTokens >= memoryTokenBudget) break;
+    const tc = countTokens(memory.content);
+    if (memoryTokens + tc > memoryTokenBudget) continue;
+    selectedMemories.push(memory);
+    memoryTokens += tc;
+  }
+
+  const latencyMs = Date.now() - start;
+
   const sources = selected.map((chunk) => sourceFromChunk(chunk, "retrieved-context"));
+
+  const retrievedChunks = selected.map((chunk) => ({
+    chunkId: chunk.id,
+    score: selectedScores.get(chunk.id) ?? chunk.score,
+    documentId: (chunk.metadata?.documentId as string) ?? (chunk.metadata?.document_id as string) ?? "",
+    path: chunk.path
+  }));
 
   await repo.insertQueryLog({
     query: input.query,
     mode: "memory_query",
-    resultCount: selected.length
+    resultCount: selected.length + selectedMemories.length,
+    latencyMs,
+    retrievedChunks
   });
 
+  const memoryContext = selectedMemories.length > 0
+    ? selectedMemories.map(formatMemoryBlock).join("\n\n")
+    : "";
+  const chunkContext = selected.map(formatContextBlock).join("\n\n");
+
   return {
-    answerContext: selected.map(formatContextBlock).join("\n\n"),
-    sources
+    answerContext: memoryContext
+      ? `--- Memories ---\n${memoryContext}\n\n--- Code Context ---\n${chunkContext}`
+      : chunkContext,
+    sources,
+    memories: selectedMemories.length > 0 ? selectedMemories : undefined,
   };
 }
 

@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { PAGE_SIZE } from "./constants";
 
-export const PAGE_SIZE = 10;
+export { PAGE_SIZE };
 
 export function paginate<T>(items: T[], currentPage: number): { paged: T[]; totalPages: number } {
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
@@ -16,17 +17,22 @@ interface PaginationProps {
   currentPage: number;
   totalPages: number;
   basePath: string;
+  params?: Record<string, string>;
+  extraSearch?: Record<string, string | number>;
 }
 
-export function Pagination({ currentPage, totalPages, basePath }: PaginationProps) {
+export function Pagination({ currentPage, totalPages, basePath, params, extraSearch }: PaginationProps) {
   if (totalPages <= 1) return null;
+
+  const buildSearch = (page: number) => ({ ...extraSearch, page });
 
   return (
     <div className="flex items-center justify-center gap-2 mt-6">
       {currentPage > 1 ? (
         <Link
           to={basePath}
-          search={{ page: currentPage - 1 }}
+          params={params}
+          search={buildSearch(currentPage - 1)}
           className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border hover:bg-muted transition-colors"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -46,7 +52,8 @@ export function Pagination({ currentPage, totalPages, basePath }: PaginationProp
       {currentPage < totalPages ? (
         <Link
           to={basePath}
-          search={{ page: currentPage + 1 }}
+          params={params}
+          search={buildSearch(currentPage + 1)}
           className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border hover:bg-muted transition-colors"
         >
           Next

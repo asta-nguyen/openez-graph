@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
@@ -30,6 +30,7 @@ coverage/**
 
 function NewWorkspacePage() {
   const navigate = useNavigate();
+  const { workspaceId } = useSearch({ from: "__root__" });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pathValid, setPathValid] = useState<boolean | null>(null);
@@ -72,7 +73,7 @@ function NewWorkspacePage() {
       });
 
       if (result.success && result.workspace) {
-        navigate({ to: "/workspaces/$workspaceId", params: { workspaceId: result.workspace.id } });
+        navigate({ to: "/workspaces/$workspaceId", params: { workspaceId: result.workspace.id }, search: { workspaceId: result.workspace.id } });
       } else {
         setError(result.error ?? "Failed to create workspace");
       }
@@ -86,7 +87,7 @@ function NewWorkspacePage() {
   return (
     <div className="page">
       <div className="flex items-start gap-4 mb-6">
-        <Link to="/workspaces" search={{ page: 1 }}>
+        <Link to="/workspaces" search={{ page: 1, workspaceId }}>
           <Button variant="ghost" size="icon">
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -216,7 +217,7 @@ function NewWorkspacePage() {
             </div>
 
             <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
-              <Link to="/workspaces" search={{ page: 1 }} className="sm:order-1">
+              <Link to="/workspaces" search={{ page: 1, workspaceId }} className="sm:order-1">
                 <Button type="button" variant="secondary" className="w-full sm:w-auto">
                   Cancel
                 </Button>

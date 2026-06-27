@@ -12,7 +12,7 @@ const program = new Command();
 program
   .name("openez")
   .description("OpenEZ Graph - Local-first knowledge retrieval system")
-  .version("0.2.0");
+  .version("0.3.0");
 
 // ── openez init [path] ──
 
@@ -81,6 +81,8 @@ program
       console.log(`Auto-registered workspace '${workspace.name}' (${workspace.id})`);
     }
 
+    await writeLocalWorkspaceConfig(workspace);
+
     const summary = await indexWorkspace({ workspaceId: workspace.id });
     console.log(JSON.stringify(summary, null, 2));
   });
@@ -100,6 +102,8 @@ program
       console.error(`Error: no workspace registered at ${resolvedPath}. Run 'openez init' first.`);
       process.exit(1);
     }
+
+    await writeLocalWorkspaceConfig(workspace);
 
     const summary = await indexWorkspace({ workspaceId: workspace.id, mode: "full" });
     console.log(JSON.stringify(summary, null, 2));
@@ -123,8 +127,11 @@ program
       console.log(`Auto-registered workspace '${workspace.name}' (${workspace.id})`);
     }
 
+    await writeLocalWorkspaceConfig(workspace);
+    const workspaceId = workspace.id;
+
     console.log(`Running initial index for ${resolvedPath}...`);
-    await indexWorkspace({ workspaceId: workspace.id });
+    await indexWorkspace({ workspaceId });
 
     const watcher = chokidar.watch(resolvedPath, {
       ignored: [
@@ -141,15 +148,46 @@ program
       persistent: true
     });
 
-    const reindex = async () => {
-      console.log("Change detected, re-indexing...");
-      const summary = await indexWorkspace({ workspaceId: workspace.id });
-      console.log(JSON.stringify(summary, null, 2));
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+    let isIndexing = false;
+    let hasPendingChange = false;
+
+    const runReindex = async () => {
+      if (isIndexing) {
+        hasPendingChange = true;
+        return;
+      }
+
+      isIndexing = true;
+
+      do {
+        hasPendingChange = false;
+        console.log("Change detected, re-indexing...");
+        try {
+          const summary = await indexWorkspace({ workspaceId });
+          console.log(JSON.stringify(summary, null, 2));
+        } catch (error) {
+          console.error("Re-index failed:");
+          console.error(error);
+        }
+      } while (hasPendingChange);
+
+      isIndexing = false;
     };
 
-    watcher.on("add", reindex);
-    watcher.on("change", reindex);
-    watcher.on("unlink", reindex);
+    const scheduleReindex = () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+
+      debounceTimer = setTimeout(() => {
+        void runReindex();
+      }, 250);
+    };
+
+    watcher.on("add", scheduleReindex);
+    watcher.on("change", scheduleReindex);
+    watcher.on("unlink", scheduleReindex);
 
     console.log(`Watching ${resolvedPath} for changes...`);
   });
@@ -160,18 +198,32 @@ program
   .command("serve")
   .description("Start the web dashboard or MCP server")
   .option("--mcp", "run as MCP server instead of web")
+  .option("--web", "start the web dashboard API server")
   .option("-p, --path <path>", "workspace path")
+  .option("--port <port>", "API server port (default: 11368)")
   .action(async (options) => {
     if (options.mcp) {
       const { startMcpServer } = await import("./mcp-bridge");
       await startMcpServer(options.path ? path.resolve(options.path) : undefined);
+    } else if (options.web) {
+      const port = options.port ? Number(options.port) : Number(process.env.API_PORT ?? 11368);
+      process.env.API_PORT = String(port);
+      const { serve } = await import("@hono/node-server");
+      const { createWebServer } = await import("./web-server");
+      const app = createWebServer();
+      serve({ fetch: app.fetch, port }, (info) => {
+        console.log(`OpenEZ Graph web dashboard:`);
+        console.log(`  http://localhost:${info.port}`);
+        console.log(`  Press Ctrl+C to stop`);
+      });
     } else {
       console.log("Default local workflow:");
       console.log("  1. openez init <path>");
       console.log("  2. openez index <path>");
-      console.log("  3. openez serve --mcp");
+      console.log("  3. openez serve --mcp     # start MCP server");
+      console.log("  4. openez serve --web     # start web dashboard API");
       console.log("");
-      console.log("To run the management UI separately:");
+      console.log("To run the management UI with frontend:");
       console.log("  pnpm dev:web");
     }
   });

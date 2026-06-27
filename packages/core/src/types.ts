@@ -6,9 +6,21 @@ export interface QuerySource {
   reason: string;
 }
 
+export interface MemoryHit {
+  id: string;
+  title: string;
+  content: string;
+  tags: string;
+  source: string;
+  score: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MemoryQueryResult {
   answerContext: string;
   sources: QuerySource[];
+  memories?: MemoryHit[];
 }
 
 export interface CodeContextResult {

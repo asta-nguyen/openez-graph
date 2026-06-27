@@ -8,6 +8,6 @@ export {
   readLocalWorkspaceConfig,
   writeLocalWorkspaceConfig
 } from "./local-workspace";
-export type { RegistryWorkspace, RegistryRepository, WorkspaceRepository, WorkspaceSettings } from "./types";
+export type { RegistryWorkspace, RegistryRepository, WorkspaceRepository, WorkspaceSettings, ChunkRow } from "./types";
 export type { LocalWorkspaceConfig } from "./local-workspace";
 export * as schema from "./schema";

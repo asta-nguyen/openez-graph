@@ -70,7 +70,7 @@ export function indexMarkdown(input: {
     }
 
     sections.push({
-      heading: headingState.path.at(-1),
+      heading: headingState.path[headingState.path.length - 1],
       content,
       startLine: sectionStartLine,
       endLine: lineNumber,

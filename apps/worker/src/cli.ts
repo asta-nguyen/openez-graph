@@ -13,11 +13,8 @@ const program = new Command();
 const DEFAULT_BENCHMARK_QUERIES = [
   "where is workspace indexing implemented?",
   "how does the retrieval pipeline work?",
-  "where are embeddings written?",
   "how does memoryQuery work?",
   "what starts the queue worker?",
-  "where is the embedding provider selected?",
-  "how does vector search run?",
   "where is the MCP server implemented?"
 ] as const;
 
