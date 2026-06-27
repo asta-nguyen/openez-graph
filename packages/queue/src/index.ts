@@ -36,7 +36,6 @@ export type IndexJobStatus = {
     filesScanned: number;
     filesUpdated: number;
     chunksWritten: number;
-    embeddingsWritten: number;
   };
   error?: string;
   cancelRequested: boolean;

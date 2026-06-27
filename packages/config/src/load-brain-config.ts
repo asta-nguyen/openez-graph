@@ -1,6 +1,5 @@
-import fs from "node:fs/promises";
+import fs from "node:fs";
 import path from "node:path";
-import { existsSync } from "node:fs";
 
 import type { BrainConfig, BrainWorkspaceConfig } from "./types";
 import { getDefaultSettings } from "./types";
@@ -13,7 +12,7 @@ function findConfigFile(startDir: string): string | null {
   while (true) {
     for (const fileName of CONFIG_FILE_CANDIDATES) {
       const candidate = path.join(current, fileName);
-      if (existsSync(candidate)) {
+      if (fs.existsSync(candidate)) {
         return candidate;
       }
     }
@@ -34,7 +33,7 @@ function resolveWorkspace(configFile: string, workspace: BrainWorkspaceConfig): 
   };
 }
 
-export async function loadBrainConfig(startDir = process.cwd()): Promise<BrainConfig> {
+async function loadBrainConfig(startDir = process.cwd()): Promise<BrainConfig> {
   const configFile = findConfigFile(startDir);
 
   if (!configFile) {
@@ -45,7 +44,7 @@ export async function loadBrainConfig(startDir = process.cwd()): Promise<BrainCo
     };
   }
 
-  const source = await fs.readFile(configFile, "utf8");
+  const source = await fs.promises.readFile(configFile, "utf8");
   const sanitized = source
     .replace(/^import\s+type\s+.*$/gm, "")
     .replace(/^import\s+.*$/gm, "")
@@ -71,15 +70,6 @@ export async function loadBrainConfig(startDir = process.cwd()): Promise<BrainCo
     chunking: loaded.chunking ?? defaults.chunking,
     retrieval: loaded.retrieval ?? defaults.retrieval
   };
-}
-
-export async function getWorkspaceConfig(workspaceId: string, startDir = process.cwd()): Promise<BrainWorkspaceConfig> {
-  const config = await loadBrainConfig(startDir);
-  const workspace = config.workspaces?.find((entry) => entry.id === workspaceId);
-  if (!workspace) {
-    throw new Error(`Workspace '${workspaceId}' was not found in brain.config.ts`);
-  }
-  return workspace;
 }
 
 export async function getBrainSettings(startDir = process.cwd()): Promise<{

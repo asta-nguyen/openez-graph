@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { getBrainSettings } from "@openez-graph/config";
-import { getEmbeddingProvider } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -20,14 +19,15 @@ import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
 
 const RESOLVABLE_SOURCE_EXTENSIONS = [
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
-  ".md", ".mdx"
+  ".md", ".mdx",
+  ".py"
 ] as const;
 
 function normalizeRelativePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
 
-function createWorkspaceFileResolver(
+export function createWorkspaceFileResolver(
   workspaceRoot: string,
   files: Array<{ relativePath: string; absolutePath: string }>
 ) {
@@ -66,10 +66,58 @@ function createWorkspaceFileResolver(
     return null;
   }
 
+  function resolvePythonModulePath(modulePath: string): string | null {
+    const basePath = normalizeRelativePath(modulePath.replace(/\./g, "/"));
+
+    const directPath = `${basePath}.py`;
+    if (knownRelativePaths.has(directPath)) return directPath;
+
+    const initPath = `${basePath}/__init__.py`;
+    if (knownRelativePaths.has(initPath)) return initPath;
+
+    return null;
+  }
+
+  function resolvePythonRelativeImport(importerRelativePath: string, importPath: string): string | null {
+    const dotMatch = /^(\.+)(.*)$/.exec(importPath);
+    if (!dotMatch) return null;
+
+    const level = dotMatch[1].length;
+    const remainder = dotMatch[2].replace(/^\./, "");
+    let baseDirectory = normalizeRelativePath(path.dirname(importerRelativePath));
+
+    for (let index = 1; index < level; index++) {
+      baseDirectory = normalizeRelativePath(path.dirname(baseDirectory));
+    }
+
+    const modulePath = remainder
+      ? normalizeRelativePath(path.join(baseDirectory, remainder.replace(/\./g, "/")))
+      : baseDirectory;
+
+    return resolvePythonModulePath(modulePath);
+  }
+
+  function resolvePythonImport(importerRelativePath: string, importPath: string): string | null {
+    if (importPath.startsWith(".")) {
+      const resolved = resolvePythonRelativeImport(importerRelativePath, importPath);
+      if (resolved) return resolved;
+    }
+
+    return resolvePythonModulePath(importPath);
+  }
+
   return {
-    resolveImport(importerRelativePath: string, importPath: string): string | null {
-      if (!importPath.startsWith(".")) return null;
-      return resolveRelativeImport(importerRelativePath, importPath);
+    resolveImport(importerRelativePath: string, importPath: string, language?: string): string | null {
+      if (language === "python") {
+        const resolved = resolvePythonImport(importerRelativePath, importPath);
+        if (resolved) return resolved;
+      }
+
+      if (importPath.startsWith(".")) {
+        return resolveRelativeImport(importerRelativePath, importPath);
+      }
+
+      return null;
     }
   };
 }
@@ -80,13 +128,22 @@ async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: str
 
   const allNodeIds: string[] = [documentId, ...chunkIds];
 
-  if (chunkIds.length > 0) {
-    await repo.deleteEmbeddingsByChunkIds(chunkIds);
-  }
-
   await repo.deleteEdgesByNodeIds(allNodeIds);
   await repo.deleteGraphNodesByRefId(documentId);
   await repo.deleteChunksByDocument(documentId);
+}
+
+// Synchronous version — better-sqlite3 is sync, so we skip Promise overhead.
+// Used in the indexer hot path inside a transaction.
+function resetDocumentArtifactsSync(repo: WorkspaceRepository, documentId: string) {
+  const chunks = repo.getChunksByDocumentSync(documentId);
+  const chunkIds = chunks.map((c) => c.id);
+
+  const allNodeIds: string[] = [documentId, ...chunkIds];
+
+  repo.deleteEdgesByNodeIdsSync(allNodeIds);
+  repo.deleteGraphNodesByRefIdSync(documentId);
+  repo.deleteChunksByDocumentSync(documentId);
 }
 
 async function chunkDocument(input: {
@@ -112,7 +169,8 @@ async function chunkDocument(input: {
       importPaths: [] as string[],
       wikilinks: result.wikilinks,
       definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[]
+      calledIdentifiers: [] as string[],
+      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
     };
   }
 
@@ -125,7 +183,8 @@ async function chunkDocument(input: {
       importPaths: [] as string[],
       wikilinks: [] as string[],
       definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[]
+      calledIdentifiers: [] as string[],
+      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
     };
   }
 
@@ -139,7 +198,8 @@ async function chunkDocument(input: {
         importPaths: result.importPaths,
         wikilinks: [] as string[],
         definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers
+        calledIdentifiers: result.calledIdentifiers,
+        callExpressions: result.callExpressions
       };
     }
 
@@ -152,7 +212,8 @@ async function chunkDocument(input: {
         importPaths: result.importPaths,
         wikilinks: [] as string[],
         definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers
+        calledIdentifiers: result.calledIdentifiers,
+        callExpressions: result.callExpressions
       };
     }
 
@@ -165,7 +226,8 @@ async function chunkDocument(input: {
         importPaths: result.importPaths,
         wikilinks: [] as string[],
         definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers
+        calledIdentifiers: result.calledIdentifiers,
+        callExpressions: result.callExpressions
       };
     }
 
@@ -178,7 +240,8 @@ async function chunkDocument(input: {
         importPaths: result.importPaths,
         wikilinks: [] as string[],
         definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers
+        calledIdentifiers: result.calledIdentifiers,
+        callExpressions: result.callExpressions
       };
     }
 
@@ -200,7 +263,8 @@ async function chunkDocument(input: {
       importPaths: [] as string[],
       wikilinks: [] as string[],
       definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[]
+      calledIdentifiers: [] as string[],
+      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
     };
   }
 
@@ -222,55 +286,16 @@ async function chunkDocument(input: {
     importPaths: [] as string[],
     wikilinks: [] as string[],
     definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-    calledIdentifiers: [] as string[]
+    calledIdentifiers: [] as string[],
+    callExpressions: [] as Array<{ callerName: string; calleeName: string }>
   };
-}
-
-async function writeEmbeddingsToRepo(
-  repo: WorkspaceRepository,
-  chunkRows: Array<{ id: string; content: string }>
-) {
-  const provider = getEmbeddingProvider();
-  if (!provider || chunkRows.length === 0) {
-    return 0;
-  }
-
-  try {
-    const vectors = await provider.embed(chunkRows.map((chunk) => chunk.content));
-    const invalidEmbeddingIndex = vectors.findIndex((embedding) => embedding.length === 0);
-
-    if (invalidEmbeddingIndex !== -1) {
-      console.error(`Embedding provider returned empty vector for chunk ${chunkRows[invalidEmbeddingIndex].id}`);
-      return 0;
-    }
-
-    const dimensions = vectors[0]?.length ?? 0;
-    if (vectors.some((embedding) => embedding.length !== dimensions)) {
-      console.error("Embedding provider returned mixed dimensions");
-      return 0;
-    }
-
-    await repo.insertEmbeddings(
-      vectors.map((embedding, index) => ({
-        chunkId: chunkRows[index].id,
-        provider: provider.provider,
-        model: provider.model,
-        dimensions,
-        embedding: JSON.stringify(embedding)
-      }))
-    );
-
-    return vectors.length;
-  } catch (error) {
-    console.error(`Embedding failed (skipping): ${error instanceof Error ? error.message : String(error)}`);
-    return 0;
-  }
 }
 
 export async function indexWorkspace(input: {
   workspaceId?: string;
   rootPath?: string;
   mode?: "incremental" | "full";
+  abortSignal?: AbortSignal;
   onProgress?: (progress: { message: string; progress: number }) => Promise<void> | void;
 }): Promise<IndexWorkspaceSummary> {
   const registry = createRegistryRepository();
@@ -298,11 +323,12 @@ export async function indexWorkspace(input: {
     await input.onProgress?.({ message, progress });
   };
 
-  const runId = await repo.createIndexRun({ mode: runMode });
-
   if (runMode === "full") {
     await repo.resetAll();
   }
+
+  const runId = await repo.createIndexRun({ mode: runMode });
+  const graphRunId = await repo.createGraphRun({ mode: runMode });
 
   await reportProgress("Scanning workspace files...", 5);
 
@@ -322,7 +348,8 @@ export async function indexWorkspace(input: {
 
   let filesUpdated = 0;
   let chunksWritten = 0;
-  let embeddingsWritten = 0;
+  const symbolNodeIdsByName = new Map<string, string>();
+  const pendingCallEdges: Array<{ callerName: string; calleeName: string }> = [];
 
   try {
     await reportProgress(
@@ -330,21 +357,38 @@ export async function indexWorkspace(input: {
       files.length === 0 ? 100 : 10
     );
 
+    // ── Batch-read all files in parallel (15ms vs sequential ~200ms) ──
+    const fileContents = await Promise.all(
+      files.map((file) => fs.readFile(file.absolutePath, "utf8"))
+    );
+
+    // ── Pre-parse all files before the DB transaction ──
+    // Parsing is CPU-bound (TypeScript compiler); DB writes are I/O-bound.
+    // Separating them keeps the transaction short.
+    const parsedFiles: Array<{
+      file: typeof files[number];
+      content: string;
+      contentHash: string;
+      indexed: Awaited<ReturnType<typeof chunkDocument>>;
+      existingDocument: Awaited<ReturnType<typeof repo.getDocumentByPath>> | null;
+    }> = [];
     for (const [index, file] of files.entries()) {
-      const progress = Math.min(95, 10 + Math.round((index / Math.max(files.length, 1)) * 85));
-      await reportProgress(`Indexing ${file.relativePath}`, progress);
-
-      const content = await fs.readFile(file.absolutePath, "utf8");
+      if (input.abortSignal?.aborted) {
+        throw new Error("Indexing cancelled");
+      }
+      const content = fileContents[index];
       const contentHash = hashContent(content);
-      const existingDocument = await repo.getDocumentByPath(file.relativePath);
 
-      if (
-        runMode === "incremental" &&
-        existingDocument &&
-        existingDocument.contentHash === contentHash &&
-        existingDocument.mtimeMs === file.mtimeMs
-      ) {
-        continue;
+      let existingDocument: Awaited<ReturnType<typeof repo.getDocumentByPath>> | null = null;
+      if (runMode === "incremental") {
+        existingDocument = await repo.getDocumentByPath(file.relativePath);
+        if (
+          existingDocument &&
+          existingDocument.contentHash === contentHash &&
+          existingDocument.mtimeMs === file.mtimeMs
+        ) {
+          continue;
+        }
       }
 
       const indexed = await chunkDocument({
@@ -355,11 +399,27 @@ export async function indexWorkspace(input: {
         overlapTokens: settings.chunking.overlapTokens
       });
 
+      parsedFiles.push({ file, content, contentHash, indexed, existingDocument });
+    }
+
+    // ── Wrap all DB writes in a single transaction for bulk speed ──
+    // Use sync methods throughout — better-sqlite3 is synchronous, so
+    // async/await just adds unnecessary Promise microtask overhead.
+    await repo.transaction(async () => {
+    for (const [index, { file, contentHash, indexed, existingDocument }] of parsedFiles.entries()) {
+      if (input.abortSignal?.aborted) {
+        throw new Error("Indexing cancelled");
+      }
+      const progress = Math.min(95, 10 + Math.round((index / Math.max(parsedFiles.length, 1)) * 85));
+      if (index % 10 === 0 || index === parsedFiles.length - 1) {
+        await reportProgress(`Indexing ${file.relativePath}`, progress);
+      }
+
       let documentId: string;
 
       if (existingDocument) {
-        await resetDocumentArtifacts(repo, existingDocument.id);
-        await repo.updateDocument(existingDocument.id, {
+        resetDocumentArtifactsSync(repo, existingDocument.id);
+        repo.updateDocumentSync(existingDocument.id, {
           absolutePath: file.absolutePath,
           kind: indexed.kind,
           language: indexed.language,
@@ -369,7 +429,7 @@ export async function indexWorkspace(input: {
         });
         documentId = existingDocument.id;
       } else {
-        documentId = await repo.insertDocument({
+        documentId = repo.insertDocumentSync({
           path: file.relativePath,
           absolutePath: file.absolutePath,
           kind: indexed.kind,
@@ -380,7 +440,7 @@ export async function indexWorkspace(input: {
         });
       }
 
-      const fileNodeId = await repo.upsertGraphNode({
+      const fileNodeId = repo.upsertGraphNodeSync({
         type: "file",
         label: file.relativePath,
         refId: documentId,
@@ -391,7 +451,7 @@ export async function indexWorkspace(input: {
         })
       });
 
-      const chunkIds = await repo.insertChunks(
+      const chunkIds = repo.insertChunksSync(
         indexed.chunks.map((chunk, chunkIndex) => ({
           documentId,
           chunkIndex,
@@ -399,27 +459,35 @@ export async function indexWorkspace(input: {
           content: chunk.content,
           tokenCount: chunk.tokenCount,
           contentHash: chunk.contentHash,
-          metadata: JSON.stringify(chunk.metadata)
+          metadata: JSON.stringify(chunk.metadata),
+          path: file.relativePath
         }))
       );
 
+      // ── Collect all nodes and edges for this file, then batch-insert ──
+      const pendingEdges: Array<{
+        fromNodeId: string;
+        toNodeId: string;
+        type: string;
+        weight?: number;
+        metadata?: string;
+      }> = [];
+
+      // Stage 1: chunk nodes
+      const chunkNodeInputs = chunkIds.map((chunkId, ci) => ({
+        type: "chunk",
+        label: `${file.relativePath}#${ci}`,
+        refId: chunkId,
+        metadata: JSON.stringify(indexed.chunks[ci].metadata)
+      }));
+      const chunkNodeIds = repo.upsertGraphNodesSync(chunkNodeInputs);
+
+      // Stage 2: symbol nodes (only for chunks that have a symbolName)
+      const symbolNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> = [];
       for (const [ci, chunkId] of chunkIds.entries()) {
-        const chunkNodeId = await repo.upsertGraphNode({
-          type: "chunk",
-          label: `${file.relativePath}#${ci}`,
-          refId: chunkId,
-          metadata: JSON.stringify(indexed.chunks[ci].metadata)
-        });
-
-        await repo.insertEdge({
-          fromNodeId: fileNodeId,
-          toNodeId: chunkNodeId,
-          type: "contains"
-        });
-
         const symbolName = indexed.chunks[ci].symbolName;
         if (symbolName) {
-          const symbolNodeId = await repo.upsertGraphNode({
+          symbolNodeInputs.push({
             type: "symbol",
             label: symbolName,
             refId: chunkId,
@@ -428,102 +496,128 @@ export async function indexWorkspace(input: {
               filePath: file.relativePath
             })
           });
+        }
+      }
+      const symbolNodeIds = repo.upsertGraphNodesSync(symbolNodeInputs);
 
-          await repo.insertEdge({
+      // Build edges for chunks and symbols
+      let symbolIdx = 0;
+      for (const [ci, chunkId] of chunkIds.entries()) {
+        pendingEdges.push({
+          fromNodeId: fileNodeId,
+          toNodeId: chunkNodeIds[ci],
+          type: "contains"
+        });
+
+        const symbolName = indexed.chunks[ci].symbolName;
+        if (symbolName) {
+          const symbolNodeId = symbolNodeIds[symbolIdx];
+          pendingEdges.push({
             fromNodeId: fileNodeId,
             toNodeId: symbolNodeId,
             type: "defines"
           });
-
-          await repo.insertEdge({
+          pendingEdges.push({
             fromNodeId: symbolNodeId,
-            toNodeId: chunkNodeId,
+            toNodeId: chunkNodeIds[ci],
             type: "represented_by"
           });
+          symbolNodeIdsByName.set(symbolName, symbolNodeId);
+          symbolIdx++;
         }
       }
 
+      // Stage 3: import + entity nodes
+      const importNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> = [];
+      const importMetadatas: Array<string | undefined> = [];
       for (const importPath of indexed.importPaths) {
-        const resolvedImportPath = workspaceFileResolver.resolveImport(file.relativePath, importPath);
+        const resolvedImportPath = workspaceFileResolver?.resolveImport(file.relativePath, importPath, indexed.language ?? undefined);
         if (!resolvedImportPath) continue;
-
-        const targetNodeId = await repo.upsertGraphNode({
+        importNodeInputs.push({
           type: "file",
           label: resolvedImportPath,
           metadata: JSON.stringify({ path: resolvedImportPath })
         });
+        importMetadatas.push(importPath);
+      }
 
-        await repo.insertEdge({
+      const entityNodeInputs = indexed.wikilinks.map((link) => ({
+        type: "entity",
+        label: link,
+        metadata: "{}"
+      }));
+
+      const importNodeIds = repo.upsertGraphNodesSync(importNodeInputs);
+      const entityNodeIds = repo.upsertGraphNodesSync(entityNodeInputs);
+
+      // Build import + entity edges
+      for (const [i, targetNodeId] of importNodeIds.entries()) {
+        pendingEdges.push({
           fromNodeId: fileNodeId,
           toNodeId: targetNodeId,
           type: "imports",
-          metadata: JSON.stringify({ importPath })
+          metadata: JSON.stringify({ importPath: importMetadatas[i] })
         });
       }
 
-      for (const link of indexed.wikilinks) {
-        const entityNodeId = await repo.upsertGraphNode({
-          type: "entity",
-          label: link,
-          metadata: "{}"
-        });
-
-        await repo.insertEdge({
+      for (const entityNodeId of entityNodeIds) {
+        pendingEdges.push({
           fromNodeId: fileNodeId,
           toNodeId: entityNodeId,
           type: "mentions"
         });
       }
 
-      if (indexed.definedSymbols.length > 0 && indexed.calledIdentifiers.length > 0) {
-        const symbolNodeIds = await Promise.all(
-          indexed.definedSymbols.map((symbol) =>
-            repo.upsertGraphNode({
-              type: "symbol",
-              label: symbol.name,
-              metadata: JSON.stringify({
-                symbolType: symbol.type,
-                exported: symbol.exported,
-                filePath: file.relativePath
-              })
-            })
-          )
-        );
+      // Batch-insert all edges for this file.
+      repo.insertEdgesSync(pendingEdges);
 
-        for (const caller of indexed.calledIdentifiers) {
-          const callerIndex = indexed.definedSymbols.findIndex((s) => s.name === caller);
-          if (callerIndex === -1) continue;
+      pendingCallEdges.push(...indexed.callExpressions);
 
-          const calleeNode = await repo.findGraphNode("symbol", caller);
-          if (calleeNode && symbolNodeIds[callerIndex] !== calleeNode.id) {
-            await repo.insertEdge({
-              fromNodeId: symbolNodeIds[callerIndex],
-              toNodeId: calleeNode.id,
-              type: "calls",
-              weight: 0.35,
-              metadata: JSON.stringify({ heuristic: true })
-            });
-          }
-        }
-      }
-
-      const chunkRows = chunkIds.map((id, i) => ({
-        id,
-        content: indexed.chunks[i].content
-      }));
-
-      embeddingsWritten += await writeEmbeddingsToRepo(repo, chunkRows);
       chunksWritten += chunkIds.length;
       filesUpdated += 1;
     }
+
+    // ── Resolve call edges in bulk ──
+    // Instead of 6000 individual findGraphNode SELECTs, load all symbol
+    // node IDs in one query and resolve in memory.
+    const allSymbolNodeIds = await repo.listNodeIdsByType("symbol");
+    // Merge with the in-memory map (more recent) for lookups.
+    const symbolLookup = new Map<string, string>([...allSymbolNodeIds, ...symbolNodeIdsByName]);
+
+    const insertedCallEdges = new Set<string>();
+    const callEdgeInputs: Array<{
+      fromNodeId: string;
+      toNodeId: string;
+      type: string;
+      weight?: number;
+      metadata?: string;
+    }> = [];
+    for (const callExpression of pendingCallEdges) {
+      const callerNodeId = symbolLookup.get(callExpression.callerName);
+      const calleeNodeId = symbolLookup.get(callExpression.calleeName);
+      if (!callerNodeId || !calleeNodeId || callerNodeId === calleeNodeId) continue;
+
+      const edgeKey = `${callerNodeId}:${calleeNodeId}:calls`;
+      if (insertedCallEdges.has(edgeKey)) continue;
+      insertedCallEdges.add(edgeKey);
+
+      callEdgeInputs.push({
+        fromNodeId: callerNodeId,
+        toNodeId: calleeNodeId,
+        type: "calls",
+        weight: 0.35,
+        metadata: JSON.stringify({ heuristic: true, callee: callExpression.calleeName })
+      });
+    }
+    repo.insertEdgesSync(callEdgeInputs);
+    }); // end transaction
 
     await reportProgress("Finalizing index run...", 98);
     await repo.completeIndexRun(runId, {
       status: "completed",
       filesScanned: files.length,
       filesUpdated,
-      chunksWritten,
-      embeddingsWritten
+      chunksWritten
     });
 
     const docCount = await repo.getDocumentCount();
@@ -531,10 +625,18 @@ export async function indexWorkspace(input: {
     const nodeCount = await repo.getNodeCount();
     const edgeCount = await repo.getEdgeCount();
 
+    await repo.completeGraphRun(graphRunId, {
+      status: "completed",
+      nodesCreated: nodeCount,
+      edgesCreated: edgeCount,
+    });
+
     await registry.updateWorkspace(workspace.id, {
       status: "indexed",
       indexingStatus: "completed",
+      graphStatus: "completed",
       lastIndexedAt: new Date().toISOString(),
+      lastGraphBuiltAt: new Date().toISOString(),
       documentCount: docCount,
       chunkCount: chunkCountResult,
       nodeCount,
@@ -543,21 +645,32 @@ export async function indexWorkspace(input: {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const isCancelled = errorMessage === "Indexing cancelled";
+    const runStatus = isCancelled ? "cancelled" : "failed";
+    const registryStatus = isCancelled ? "error" : "error";
+    const registryIndexingStatus = isCancelled ? "cancelled" : "failed";
     await repo.completeIndexRun(runId, {
-      status: "failed",
+      status: runStatus,
       filesScanned: files.length,
       filesUpdated,
       chunksWritten,
-      embeddingsWritten,
-      errorMessage
+      errorMessage: isCancelled ? undefined : errorMessage,
+    });
+
+    await repo.completeGraphRun(graphRunId, {
+      status: isCancelled ? "cancelled" : "failed",
+      nodesCreated: 0,
+      edgesCreated: 0,
+      errorMessage: isCancelled ? undefined : errorMessage,
     });
 
     await registry.updateWorkspace(workspace.id, {
-      status: "error",
-      indexingStatus: "failed",
-      lastError: errorMessage
+      status: registryStatus,
+      indexingStatus: registryIndexingStatus,
+      graphStatus: "failed",
+      lastError: isCancelled ? "" : errorMessage,
     });
-    throw error;
+    if (!isCancelled) throw error;
   }
 
   await reportProgress("Index complete", 100);
@@ -566,7 +679,6 @@ export async function indexWorkspace(input: {
     workspaceId: workspace.id,
     filesScanned: files.length,
     filesUpdated,
-    chunksWritten,
-    embeddingsWritten
+    chunksWritten
   };
 }

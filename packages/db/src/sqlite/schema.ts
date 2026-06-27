@@ -78,20 +78,6 @@ export const chunks = sqliteTable("chunks", {
     .default(sql`(datetime('now'))`),
 });
 
-export const embeddings = sqliteTable("embeddings", {
-  id: text("id").primaryKey(),
-  chunkId: text("chunk_id")
-    .notNull()
-    .references(() => chunks.id, { onDelete: "cascade" }),
-  provider: text("provider").notNull(),
-  model: text("model").notNull(),
-  dimensions: integer("dimensions").notNull(),
-  embedding: text("embedding").notNull(),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`(datetime('now'))`),
-});
-
 export const graphNodes = sqliteTable("graph_nodes", {
   id: text("id").primaryKey(),
   type: text("type").notNull(),
@@ -129,7 +115,6 @@ export const indexRuns = sqliteTable("index_runs", {
   filesScanned: integer("files_scanned").notNull().default(0),
   filesUpdated: integer("files_updated").notNull().default(0),
   chunksWritten: integer("chunks_written").notNull().default(0),
-  embeddingsWritten: integer("embeddings_written").notNull().default(0),
   errorMessage: text("error_message"),
   stats: text("stats").default("{}"),
   startedAt: text("started_at")
@@ -157,6 +142,8 @@ export const queryLogs = sqliteTable("query_logs", {
   query: text("query").notNull(),
   mode: text("mode").notNull(),
   resultCount: integer("result_count").notNull().default(0),
+  latencyMs: integer("latency_ms"),
+  retrievedChunks: text("retrieved_chunks").notNull().default("[]"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

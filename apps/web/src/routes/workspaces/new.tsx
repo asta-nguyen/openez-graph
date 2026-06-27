@@ -1,13 +1,11 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   Input, Label, Textarea,
+  ArrowBackIcon, LibraryIcon, RefreshIcon, CheckedIcon, XIcon, GlobeIcon, CodeIcon,
 } from "@openez-graph/ui";
 import { api } from "../../lib/api";
-import {
-  ChevronLeft, FolderOpen, Loader2, CheckCircle2, XCircle, Globe, FileCode2,
-} from "lucide-react";
 
 export const Route = createFileRoute("/workspaces/new")({
   component: NewWorkspacePage,
@@ -30,6 +28,7 @@ coverage/**
 
 function NewWorkspacePage() {
   const navigate = useNavigate();
+  const { workspaceId } = useSearch({ from: "__root__" });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pathValid, setPathValid] = useState<boolean | null>(null);
@@ -72,7 +71,7 @@ function NewWorkspacePage() {
       });
 
       if (result.success && result.workspace) {
-        navigate({ to: "/workspaces/$workspaceId", params: { workspaceId: result.workspace.id } });
+        navigate({ to: "/workspaces/$workspaceId", params: { workspaceId: result.workspace.id }, search: { workspaceId: result.workspace.id } });
       } else {
         setError(result.error ?? "Failed to create workspace");
       }
@@ -86,9 +85,9 @@ function NewWorkspacePage() {
   return (
     <div className="page">
       <div className="flex items-start gap-4 mb-6">
-        <Link to="/workspaces" search={{ page: 1 }}>
+        <Link to="/workspaces" search={{ page: 1, workspaceId }}>
           <Button variant="ghost" size="icon">
-            <ChevronLeft className="h-4 w-4" />
+            <ArrowBackIcon size={16} />
           </Button>
         </Link>
         <div className="min-w-0">
@@ -101,7 +100,7 @@ function NewWorkspacePage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <FolderOpen className="h-5 w-5 text-muted-foreground" />
+              <LibraryIcon size={20} className="text-muted-foreground" />
               <CardTitle>Workspace Configuration</CardTitle>
             </div>
           </CardHeader>
@@ -114,7 +113,7 @@ function NewWorkspacePage() {
               <div>
                 <Label htmlFor="name" className="mb-2 block">
                   <span className="flex items-center gap-1.5">
-                    <Globe className="h-3.5 w-3.5" />
+                    <GlobeIcon size={14} />
                     Workspace Name
                   </span>
                 </Label>
@@ -134,7 +133,7 @@ function NewWorkspacePage() {
               <div>
                 <Label htmlFor="rootPath" className="mb-2 block">
                   <span className="flex items-center gap-1.5">
-                    <FolderOpen className="h-3.5 w-3.5" />
+                    <LibraryIcon size={14} />
                     Root Path
                   </span>
                 </Label>
@@ -149,10 +148,10 @@ function NewWorkspacePage() {
                       className="pr-10"
                     />
                     {pathValid === true && (
-                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
+                      <CheckedIcon size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-primary" />
                     )}
                     {pathValid === false && (
-                      <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive" />
+                      <XIcon size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive" />
                     )}
                   </div>
                   <Button
@@ -178,7 +177,7 @@ function NewWorkspacePage() {
               <div>
                 <Label htmlFor="includeGlobs" className="mb-2 block">
                   <span className="flex items-center gap-1.5">
-                    <FileCode2 className="h-3.5 w-3.5" />
+                    <CodeIcon size={14} />
                     Include Patterns
                   </span>
                 </Label>
@@ -197,7 +196,7 @@ function NewWorkspacePage() {
               <div>
                 <Label htmlFor="excludeGlobs" className="mb-2 block">
                   <span className="flex items-center gap-1.5">
-                    <XCircle className="h-3.5 w-3.5" />
+                    <XIcon size={14} />
                     Exclude Patterns
                   </span>
                   <Badge variant="outline" className="ml-2 text-xs px-1 py-0">optional</Badge>
@@ -216,13 +215,13 @@ function NewWorkspacePage() {
             </div>
 
             <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
-              <Link to="/workspaces" search={{ page: 1 }} className="sm:order-1">
+              <Link to="/workspaces" search={{ page: 1, workspaceId }} className="sm:order-1">
                 <Button type="button" variant="secondary" className="w-full sm:w-auto">
                   Cancel
                 </Button>
               </Link>
               <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-                {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {pending && <RefreshIcon size={16} className="animate-spin" />}
                 Create Workspace
               </Button>
             </div>
