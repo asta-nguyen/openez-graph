@@ -19,6 +19,7 @@ import { AnimatedCounter } from "./components/animated-counter";
 import { GitHubStars } from "./components/github-stars";
 import { HeroGraph } from "./components/graph-loader";
 import { DashboardPreview } from "./components/dashboard-preview";
+import { Footer } from "./components/footer";
 
 
 const cliCommands = [
@@ -661,20 +662,7 @@ export default async function LandingPage() {
         </Reveal>
 
         {/* ── FOOTER ── */}
-        <footer className="border-t px-6 py-10">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <span
-              className="text-sm font-black tracking-tight"
-              style={{ fontFamily: "var(--font-heading), sans-serif" }}
-            >
-              OPEN<span className="text-accent-foreground">EZ</span>
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Open source under the MIT License &mdash; built for developers who
-              care how their code fits together.
-            </span>
-          </div>
-        </footer>
+        <Footer />
       </div>
     </>
   );
