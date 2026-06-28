@@ -206,9 +206,10 @@ program
       const { startMcpServer } = await import("./mcp-bridge");
       await startMcpServer(options.path ? path.resolve(options.path) : undefined);
     } else if (options.web) {
-      const port = options.port ? Number(options.port) : Number(process.env.API_PORT ?? 11368);
+      const portSource = options.port ?? process.env.API_PORT ?? 11368;
+      const port = Number(portSource);
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        console.error(`Invalid port: '${options.port}'. Must be an integer between 1 and 65535.`);
+        console.error(`Invalid port: '${portSource}'. Must be an integer between 1 and 65535.`);
         process.exit(1);
       }
       process.env.API_PORT = String(port);
