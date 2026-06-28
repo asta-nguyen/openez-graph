@@ -19,17 +19,28 @@ import {
   listRegistryWorkspaces,
   listWorkspaceDocuments,
   resolveRegistryDbPath,
-  updateRegistryWorkspace
+  updateRegistryWorkspace,
 } from "./sqlite";
 
 import { memoryQuery } from "@openez-graph/core";
-import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
+import {
+  createRegistryRepository,
+  createWorkspaceRepository,
+} from "@openez-graph/db";
 
 const app = new Hono();
-app.use("/*", cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:11368", "http://127.0.0.1:11368"],
-  credentials: true,
-}));
+app.use(
+  "/*",
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "http://localhost:11368",
+      "http://127.0.0.1:11368",
+    ],
+    credentials: true,
+  })
+);
 
 const DEFAULT_INCLUDE_GLOBS = [
   "src/**/*.{ts,tsx,js,jsx}",
@@ -51,26 +62,41 @@ const DEFAULT_EXCLUDE_GLOBS = [
 ];
 
 function mapWorkspace(ws: {
-  id: string; name: string; rootPath: string;
-  includeGlobs: string; excludeGlobs: string;
-  status: string; indexingStatus: string; graphStatus: string;
-  lastIndexedAt?: string; lastGraphBuiltAt?: string;
-  documentCount: number; chunkCount: number;
-  nodeCount: number; edgeCount: number;
+  id: string;
+  name: string;
+  rootPath: string;
+  includeGlobs: string;
+  excludeGlobs: string;
+  status: string;
+  indexingStatus: string;
+  graphStatus: string;
+  lastIndexedAt?: string;
+  lastGraphBuiltAt?: string;
+  documentCount: number;
+  chunkCount: number;
+  nodeCount: number;
+  edgeCount: number;
   lastError?: string;
-  createdAt: string; updatedAt: string;
+  createdAt: string;
+  updatedAt: string;
 }) {
   return {
     id: ws.id,
     name: ws.name,
     rootPath: ws.rootPath,
-    includeGlobs: ws.includeGlobs ? ws.includeGlobs.split("\n").filter(Boolean) : [],
-    excludeGlobs: ws.excludeGlobs ? ws.excludeGlobs.split("\n").filter(Boolean) : [],
+    includeGlobs: ws.includeGlobs
+      ? ws.includeGlobs.split("\n").filter(Boolean)
+      : [],
+    excludeGlobs: ws.excludeGlobs
+      ? ws.excludeGlobs.split("\n").filter(Boolean)
+      : [],
     status: ws.status,
     indexingStatus: ws.indexingStatus,
     graphStatus: ws.graphStatus,
     lastIndexedAt: ws.lastIndexedAt ? new Date(ws.lastIndexedAt) : null,
-    lastGraphBuiltAt: ws.lastGraphBuiltAt ? new Date(ws.lastGraphBuiltAt) : null,
+    lastGraphBuiltAt: ws.lastGraphBuiltAt
+      ? new Date(ws.lastGraphBuiltAt)
+      : null,
     documentCount: ws.documentCount,
     chunkCount: ws.chunkCount,
     nodeCount: ws.nodeCount,
@@ -82,12 +108,18 @@ function mapWorkspace(ws: {
 }
 
 function toRunShim(run: {
-  id: string; mode: string; status: string;
-  filesScanned: number; filesUpdated: number;
-  chunksWritten: number; embeddingsWritten: number;
-  nodesCreated: number; edgesCreated: number;
+  id: string;
+  mode: string;
+  status: string;
+  filesScanned: number;
+  filesUpdated: number;
+  chunksWritten: number;
+  embeddingsWritten: number;
+  nodesCreated: number;
+  edgesCreated: number;
   errorMessage: string | null;
-  startedAt: string; finishedAt: string | null;
+  startedAt: string;
+  finishedAt: string | null;
 }) {
   return run;
 }
@@ -97,17 +129,24 @@ app.get("/api/dashboard", (c) => {
   try {
     const all = listRegistryWorkspaces();
     // Find first workspace with a valid root path
-    const target = all.find((ws) => {
-      try {
-        return ws.rootPath && ws.rootPath !== "/" && existsSync(ws.rootPath);
-      } catch {
-        return false;
-      }
-    }) ?? all[0];
+    const target =
+      all.find((ws) => {
+        try {
+          return ws.rootPath && ws.rootPath !== "/" && existsSync(ws.rootPath);
+        } catch {
+          return false;
+        }
+      }) ?? all[0];
     if (!target) {
       return c.json({
         workspace: { id: "", name: "No workspace", root: "" },
-        stats: { documents: 0, chunks: 0, graphNodes: 0, graphEdges: 0, memories: 0 },
+        stats: {
+          documents: 0,
+          chunks: 0,
+          graphNodes: 0,
+          graphEdges: 0,
+          memories: 0,
+        },
         recentRuns: [],
         recentDocuments: [],
         recentMemories: [],
@@ -127,14 +166,24 @@ app.get("/api/dashboard", (c) => {
       },
       recentRuns: run ? [run] : [],
       recentDocuments: listWorkspaceDocuments(target.rootPath, 10),
-      recentMemories: [] as Array<{ id: string; title: string; source: string }>,
+      recentMemories: [] as Array<{
+        id: string;
+        title: string;
+        source: string;
+      }>,
       databaseAvailable: true,
     });
   } catch (err) {
     console.error("Dashboard error:", err);
     return c.json({
       workspace: { id: "", name: "No workspace", root: "" },
-      stats: { documents: 0, chunks: 0, graphNodes: 0, graphEdges: 0, memories: 0 },
+      stats: {
+        documents: 0,
+        chunks: 0,
+        graphNodes: 0,
+        graphEdges: 0,
+        memories: 0,
+      },
       recentRuns: [],
       recentDocuments: [],
       recentMemories: [],
@@ -180,10 +229,14 @@ app.post("/api/validate-path", async (c) => {
   if (!rootPath) return c.json({ valid: false, error: "Path is required" });
   try {
     const stats = await fs.stat(rootPath);
-    if (!stats.isDirectory()) return c.json({ valid: false, error: "Path is not a directory" });
+    if (!stats.isDirectory())
+      return c.json({ valid: false, error: "Path is not a directory" });
     return c.json({ valid: true });
   } catch {
-    return c.json({ valid: false, error: "Directory does not exist or is not accessible" });
+    return c.json({
+      valid: false,
+      error: "Directory does not exist or is not accessible",
+    });
   }
 });
 
@@ -210,7 +263,11 @@ app.get("/api/workspaces", (c) => {
     return c.json({ ok: true, data });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return c.json({ ok: false, error: message, dbPath: resolveRegistryDbPath() });
+    return c.json({
+      ok: false,
+      error: message,
+      dbPath: resolveRegistryDbPath(),
+    });
   }
 });
 
@@ -229,7 +286,11 @@ app.get("/api/workspaces/:id", (c) => {
     return c.json({ ok: true, data });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return c.json({ ok: false, error: message, dbPath: resolveRegistryDbPath() });
+    return c.json({
+      ok: false,
+      error: message,
+      dbPath: resolveRegistryDbPath(),
+    });
   }
 });
 
@@ -242,12 +303,17 @@ app.post("/api/workspaces", async (c) => {
       excludeGlobs?: string[];
     }>();
     const rootPath = body.rootPath;
-    if (!rootPath) return c.json({ success: false, error: "rootPath is required" });
+    if (!rootPath)
+      return c.json({ success: false, error: "rootPath is required" });
     try {
       const stats = await fs.stat(rootPath);
-      if (!stats.isDirectory()) return c.json({ success: false, error: "Path is not a directory" });
+      if (!stats.isDirectory())
+        return c.json({ success: false, error: "Path is not a directory" });
     } catch {
-      return c.json({ success: false, error: "Directory does not exist or is not accessible" });
+      return c.json({
+        success: false,
+        error: "Directory does not exist or is not accessible",
+      });
     }
     const ws = ensureRegistryWorkspace({
       name: body.name?.trim() || path.basename(rootPath),
@@ -257,7 +323,11 @@ app.post("/api/workspaces", async (c) => {
     });
     return c.json({
       success: true,
-      workspace: { ...mapWorkspace(ws), latestIndexRun: null, latestGraphRun: null },
+      workspace: {
+        ...mapWorkspace(ws),
+        latestIndexRun: null,
+        latestGraphRun: null,
+      },
     });
   } catch (err) {
     console.error("Failed to create workspace:", err);
@@ -287,8 +357,14 @@ app.get("/api/workspaces/:id/index", (c) => {
 app.post("/api/workspaces/:id/index", async (c) => {
   const id = c.req.param("id");
   const ws = getRegistryWorkspace(id);
-  if (!ws) return c.json({ jobId: null, status: "error", error: "Workspace not found" }, 404);
-  const body = await c.req.json<{ mode?: string }>().catch(() => ({ mode: "incremental" }));
+  if (!ws)
+    return c.json(
+      { jobId: null, status: "error", error: "Workspace not found" },
+      404
+    );
+  const body = await c.req
+    .json<{ mode?: string }>()
+    .catch(() => ({ mode: "incremental" }));
   updateRegistryWorkspace(id, {
     indexingStatus: "running",
     status: "indexing",
@@ -335,9 +411,16 @@ app.get("/api/workspaces/:id/graph", (c) => {
     type: node.type,
     degree: degreeMap.get(node.id) ?? 0,
     metadata: node.metadata,
-    path: typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
-    startLine: typeof node.metadata?.startLine === "number" ? node.metadata.startLine : undefined,
-    endLine: typeof node.metadata?.endLine === "number" ? node.metadata.endLine : undefined,
+    path:
+      typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
+    startLine:
+      typeof node.metadata?.startLine === "number"
+        ? node.metadata.startLine
+        : undefined,
+    endLine:
+      typeof node.metadata?.endLine === "number"
+        ? node.metadata.endLine
+        : undefined,
     refId: node.refId,
   }));
 
@@ -406,8 +489,17 @@ app.post("/api/query", async (c) => {
       })(),
     ]);
 
-    const allGraphNodes: Array<{ id: string; type: string; label: string; metadata: Record<string, unknown> }> = [];
-    const allGraphEdges: Array<{ from_node_id: string; to_node_id: string; type: string }> = [];
+    const allGraphNodes: Array<{
+      id: string;
+      type: string;
+      label: string;
+      metadata: Record<string, unknown>;
+    }> = [];
+    const allGraphEdges: Array<{
+      from_node_id: string;
+      to_node_id: string;
+      type: string;
+    }> = [];
     const visitedNodeIds = new Set<string>();
     const edgeSet = new Set<string>();
 
@@ -420,9 +512,10 @@ app.post("/api/query", async (c) => {
             id: nodeId,
             type: String(node.type),
             label: String(node.label),
-            metadata: typeof node.metadata === "object" && node.metadata !== null
-              ? node.metadata as Record<string, unknown>
-              : {},
+            metadata:
+              typeof node.metadata === "object" && node.metadata !== null
+                ? (node.metadata as Record<string, unknown>)
+                : {},
           });
         }
       }
@@ -460,8 +553,10 @@ app.get("/api/settings/env", (c) => {
   return c.json({
     EMBEDDING_PROVIDER: process.env.EMBEDDING_PROVIDER ?? "ollama",
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? undefined,
-    OPENAI_EMBEDDING_MODEL: process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
-    OLLAMA_EMBEDDING_MODEL: process.env.OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text",
+    OPENAI_EMBEDDING_MODEL:
+      process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
+    OLLAMA_EMBEDDING_MODEL:
+      process.env.OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text",
   });
 });
 
