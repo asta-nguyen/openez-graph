@@ -17,6 +17,7 @@ export function indexCode(content: string, filePath: string): {
   importPaths: string[];
   definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }>;
   calledIdentifiers: string[];
+  callExpressions: Array<{ callerName: string; calleeName: string }>;
 } {
   const project = new Project({
     useInMemoryFileSystem: true,
@@ -29,6 +30,7 @@ export function indexCode(content: string, filePath: string): {
   const chunks: IndexedChunk[] = [];
   const definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }> = [];
   const calledIdentifiers = new Set<string>();
+  const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
 
   sourceFile.getImportDeclarations().forEach((declaration) => {
     declaration.getDescendantsOfKind(SyntaxKind.Identifier).forEach((identifier) => {
@@ -86,6 +88,7 @@ export function indexCode(content: string, filePath: string): {
       const calledName = expression.getText();
       if (calledName) {
         calledIdentifiers.add(calledName);
+        callExpressions.push({ callerName: name, calleeName: calledName.split(".").pop() ?? calledName });
       }
     });
   });
@@ -141,6 +144,7 @@ export function indexCode(content: string, filePath: string): {
     chunks,
     importPaths: sourceFile.getImportDeclarations().map((declaration) => declaration.getModuleSpecifierValue()),
     definedSymbols,
-    calledIdentifiers: [...calledIdentifiers]
+    calledIdentifiers: [...calledIdentifiers],
+    callExpressions
   };
 }

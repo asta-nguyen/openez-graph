@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./src/server/index.ts",
+  "types": "./src/server/index.ts",
   "scripts": {
     "dev": "vite",
-    "dev:api": "tsx src/server/index.ts",
+    "dev:api": "tsx src/server/start.ts",
     "dev:all": "concurrently \"pnpm dev\" \"pnpm dev:api\"",
     "build": "vite build && tsc --noEmit",
     "preview": "vite preview",

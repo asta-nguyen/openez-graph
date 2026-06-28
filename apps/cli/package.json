@@ -1,25 +1,75 @@
 {
   "name": "@openez-graph/cli",
-  "version": "0.1.0",
+  "version": "0.3.2",
+  "description": "Local-first code intelligence engine — index, query, and graph your codebase with zero config. SQLite-only, MCP-first.",
+  "license": "MIT",
+  "author": "Asta Nguyen",
+  "homepage": "https://github.com/asta-nguyen/openez-graph",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asta-nguyen/openez-graph.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/asta-nguyen/openez-graph/issues"
+  },
+  "keywords": [
+    "code-intelligence",
+    "code-graph",
+    "mcp",
+    "model-context-protocol",
+    "code-indexing",
+    "codebase",
+    "retrieval",
+    "sqlite",
+    "local-first",
+    "developer-tools",
+    "ai-coding",
+    "claude-code",
+    "codex"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "./src/cli.ts",
   "types": "./src/cli.ts",
+  "bin": {
+    "openez": "./dist/cli.cjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "main": "./dist/cli.cjs",
+    "types": "./dist/cli.d.cts"
+  },
   "scripts": {
     "openez": "tsx src/cli.ts",
+    "build": "tsup",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.14",
+    "better-sqlite3": "^12.10.0",
+    "hono": "^4.12.18"
+  },
+  "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openez-graph/config": "workspace:*",
     "@openez-graph/core": "workspace:*",
     "@openez-graph/db": "workspace:*",
     "@openez-graph/indexer": "workspace:*",
+    "@openez-graph/mcp": "workspace:*",
+    "@openez-graph/web": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
     "chokidar": "^4.0.3",
     "commander": "^14.0.0",
     "smol-toml": "^1.6.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.0.0",
     "zod": "^3.25.76"
-  },
-  "devDependencies": {
-    "typescript": "^5.0.0"
   }
 }
