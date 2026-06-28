@@ -56,7 +56,6 @@ export async function setupDevin(rootPath: string): Promise<void> {
   mcpServers[label] = {
     command,
     args,
-    startupTimeoutSec: 120
   };
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");

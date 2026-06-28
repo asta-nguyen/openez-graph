@@ -160,8 +160,9 @@ export function parsePython(content: string): IndexedCodeResult {
 
       definedSymbols.push({ name, symbolType, type: symbolType, exported, startLine, endLine });
 
-      // Extract function calls within the symbol body
-      const bodyContent = lines.slice(i, endLine).join("\n");
+      // Extract function calls within the symbol body (skip the def/class
+      // header line — its parenthesized params/base class are not calls)
+      const bodyContent = lines.slice(i + 1, endLine).join("\n");
       let callMatch;
       const localCallRegex = new RegExp(callRegex);
       while ((callMatch = localCallRegex.exec(bodyContent)) !== null) {
