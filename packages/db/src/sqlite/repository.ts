@@ -314,6 +314,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async updateDocument(id, updates) {
       const sets: string[] = ["updated_at = ?"];
       const params: unknown[] = [new Date().toISOString()];
+      if (updates.path !== undefined) { sets.push("path = ?"); params.push(updates.path); }
       if (updates.absolutePath !== undefined) { sets.push("absolute_path = ?"); params.push(updates.absolutePath); }
       if (updates.kind !== undefined) { sets.push("kind = ?"); params.push(updates.kind); }
       if (updates.language !== undefined) { sets.push("language = ?"); params.push(updates.language); }
@@ -322,15 +323,19 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       if (updates.mtimeMs !== undefined) { sets.push("mtime_ms = ?"); params.push(updates.mtimeMs); }
       params.push(id);
       native.prepare(`UPDATE documents SET ${sets.join(", ")} WHERE id = ?`).run(...params);
-      // Keep documents_fts in sync if path changed
-      if (updates.absolutePath !== undefined) {
-        native.prepare("UPDATE documents_fts SET path = ? WHERE content_rowid = (SELECT rowid FROM documents WHERE id = ?)").run(updates.absolutePath, id);
+      // Keep documents_fts in sync if path changed.
+      // NOTE: inserts store the relative `path` in documents_fts.path, so the
+      // update must use the relative path too — not absolutePath — to keep
+      // indexed values consistent.
+      if (updates.path !== undefined) {
+        native.prepare("UPDATE documents_fts SET path = ? WHERE content_rowid = (SELECT rowid FROM documents WHERE id = ?)").run(updates.path, id);
       }
     },
 
     updateDocumentSync(id, updates) {
       const sets: string[] = ["updated_at = ?"];
       const params: unknown[] = [new Date().toISOString()];
+      if (updates.path !== undefined) { sets.push("path = ?"); params.push(updates.path); }
       if (updates.absolutePath !== undefined) { sets.push("absolute_path = ?"); params.push(updates.absolutePath); }
       if (updates.kind !== undefined) { sets.push("kind = ?"); params.push(updates.kind); }
       if (updates.language !== undefined) { sets.push("language = ?"); params.push(updates.language); }
@@ -339,8 +344,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       if (updates.mtimeMs !== undefined) { sets.push("mtime_ms = ?"); params.push(updates.mtimeMs); }
       params.push(id);
       native.prepare(`UPDATE documents SET ${sets.join(", ")} WHERE id = ?`).run(...params);
-      if (updates.absolutePath !== undefined) {
-        native.prepare("UPDATE documents_fts SET path = ? WHERE content_rowid = (SELECT rowid FROM documents WHERE id = ?)").run(updates.absolutePath, id);
+      if (updates.path !== undefined) {
+        native.prepare("UPDATE documents_fts SET path = ? WHERE content_rowid = (SELECT rowid FROM documents WHERE id = ?)").run(updates.path, id);
       }
     },
 

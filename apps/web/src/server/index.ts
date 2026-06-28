@@ -167,7 +167,15 @@ function resolveDefaultWorkspace(): WebRegistryWorkspace | null {
     const bTime = b.lastIndexedAt ? new Date(b.lastIndexedAt).getTime() : -Infinity;
     return bTime - aTime;
   });
-  return sorted[0] ?? null;
+  // Prefer most-recently-indexed, but only among workspaces with a valid root path
+  const valid = sorted.find((ws) => {
+    try {
+      return ws.rootPath && ws.rootPath !== "/" && existsSync(ws.rootPath);
+    } catch {
+      return false;
+    }
+  });
+  return valid ?? sorted[0] ?? null;
 }
 
 // Dashboard
@@ -605,10 +613,18 @@ app.post("/api/workspaces/:id/index", async (c) => {
     },
   });
 
-  // Give indexWorkspace a microtask to create the run row, then capture runId
-  await Promise.resolve();
-  const latestRun = getLatestIndexRun(ws.rootPath);
-  runId = latestRun?.id ?? crypto.randomUUID();
+  // Give indexWorkspace time to create the run row. Poll for up to 500ms
+  // since indexWorkspace is async and may not have created the row after
+  // just one microtask.
+  for (let i = 0; i < 50; i++) {
+    await Promise.resolve();
+    const latestRun = getLatestIndexRun(ws.rootPath);
+    if (latestRun && latestRun.status === "running") {
+      runId = latestRun.id;
+      break;
+    }
+  }
+  if (!runId) runId = crypto.randomUUID();
 
   const initialEvent: IndexProgressEvent = {
     runId,
@@ -868,8 +884,9 @@ app.get("/api/workspaces/:id/symbols", (c) => {
 
   if (q) {
     const searchTypes = type ? [type] : [...SYMBOL_TYPES];
-    nodeRows = searchGraphNodesByLabel(workspace.rootPath, q, searchTypes);
-    totalCount = nodeRows.length;
+    const allMatches = searchGraphNodesByLabel(workspace.rootPath, q, searchTypes);
+    totalCount = allMatches.length;
+    nodeRows = allMatches.slice(offset, offset + limit);
   } else {
     nodeRows = listGraphNodesByType(workspace.rootPath, type, limit, offset);
     totalCount = countGraphNodesByType(workspace.rootPath, type);

@@ -58,6 +58,11 @@ function SymbolBrowserPage() {
   const [searchInput, setSearchInput] = useState(q);
   const deferredQuery = useDeferredValue(searchInput);
 
+  // Sync searchInput when q changes from external navigation (back/forward)
+  useEffect(() => {
+    setSearchInput(q);
+  }, [q]);
+
   useEffect(() => {
     if (deferredQuery === q) return;
     navigate({

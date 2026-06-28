@@ -446,14 +446,14 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
 const WATCH_DEBOUNCE_MS = 2000;
 const WATCH_ENABLED = ["1", "true", "yes"].includes((process.env.OPENEZ_MCP_WATCH ?? "").toLowerCase());
 const WATCH_IGNORE_PATTERNS = [
-  "**/node_modules/**",
-  "**/.git/**",
-  "**/.next/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/coverage/**",
-  "**/.turbo/**",
-  "**/.openez/**"
+  /(^|[/\\])node_modules[/\\]/,
+  /(^|[/\\])\.git[/\\]/,
+  /(^|[/\\])\.next[/\\]/,
+  /(^|[/\\])dist[/\\]/,
+  /(^|[/\\])build[/\\]/,
+  /(^|[/\\])coverage[/\\]/,
+  /(^|[/\\])\.turbo[/\\]/,
+  /(^|[/\\])\.openez[/\\]/,
 ];
 
 async function autoIndexAndSync(searchRoot: string): Promise<void> {
@@ -474,8 +474,14 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
     }
   }
 
+  // Zero-config: auto-register the workspace if none found
   if (!workspace) {
-    return;
+    try {
+      workspace = await registry.ensureWorkspace({ rootPath: resolvedRoot });
+    } catch {
+      // Registration failure is non-fatal — MCP server still starts
+      return;
+    }
   }
 
   // Auto-index if workspace has no documents yet

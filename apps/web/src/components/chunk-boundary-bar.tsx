@@ -66,6 +66,12 @@ export function ChunkBoundaryBar({ chunks }: ChunkBoundaryBarProps) {
   const maxEnd = Math.max(...withLines.map((c) => c.metadata.endLine!));
   const totalSpan = Math.max(1, maxEnd - minStart + 1);
 
+  // If any chunks lack line info, fall back to equal width for ALL chunks so
+  // the bar stays visually consistent instead of mixing proportional and
+  // flat widths.
+  const hasMissingLineInfo = withLines.length !== chunks.length;
+  const equalWidthPct = `${100 / chunks.length}%`;
+
   return (
     <div className="w-full overflow-x-auto">
       <div className="flex h-6 min-w-full gap-px rounded-md overflow-hidden border border-border">
@@ -85,9 +91,10 @@ export function ChunkBoundaryBar({ chunks }: ChunkBoundaryBarProps) {
             }
           }
 
-          const widthPct = hasLines
-            ? `${((end! - start! + 1) / totalSpan) * 100}%`
-            : `${100 / chunks.length}%`;
+          const widthPct =
+            hasLines && !hasMissingLineInfo
+              ? `${((end! - start! + 1) / totalSpan) * 100}%`
+              : equalWidthPct;
 
           const tooltip = hasLines
             ? `Chunk #${chunk.chunkIndex}: lines ${start}\u2013${end}`

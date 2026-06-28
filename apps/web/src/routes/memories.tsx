@@ -33,7 +33,8 @@ export const Route = createFileRoute("/memories")({
 function MemoriesPage() {
   const queryClient = useQueryClient();
   const { workspaceId } = useSearch({ from: "__root__" });
-  const { page: currentPage } = useSearch({ from: "/memories" });
+  const { page: rawPage } = useSearch({ from: "/memories" });
+  const currentPage = Math.max(1, rawPage);
   const [selectedMemory, setSelectedMemory] = useState<MemoryRow | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const { data, isLoading } = useQuery({

@@ -59,14 +59,12 @@ OpenEZ Graph is a local-first code intelligence system: a SQLite-backed indexing
 
 - better-sqlite3 12.10.x - Primary SQLite driver, WAL mode, native addon (`packages/db/src/sqlite/database-loader.ts`, `packages/db/src/sqlite/registry-db.ts`, `packages/db/src/sqlite/workspace-db.ts`)
 - drizzle-orm 0.44.x - ORM for both SQLite (default) and PostgreSQL (optional) (`packages/db/src/client.ts`, `packages/db/src/sqlite/`)
-- ts-morph 25.x - TypeScript/JavaScript AST parsing for rich code indexing (`packages/indexer/src/code.ts`)
+- typescript 6.x - Native TypeScript compiler API for AST parsing in code indexing (`packages/indexer/src/code.ts`)
 - @modelcontextprotocol/sdk 1.29.x - MCP server protocol implementation (`apps/mcp/src/mcp-core.ts`)
 - zod 3.25.x - Schema validation for env config and MCP tool inputs (`packages/config/src/env.ts`, `apps/mcp/src/mcp-core.ts`)
 - bullmq 5.56.x - Background job queue (optional, worker path) (`packages/queue/src/index.ts`, `apps/worker/src/index.ts`)
 - ioredis 5.5.x - Redis client for BullMQ (`packages/queue/src/index.ts`)
 - pg 8.14.x - PostgreSQL client (optional, non-default) (`packages/db/src/client.ts`)
-- openai 5.0.x - OpenAI embeddings API client (optional) (`packages/core/src/embeddings.ts`)
-- ollama 0.5.x - Ollama local embeddings client (optional) (`packages/core/src/embeddings.ts`)
 - chokidar 4.0.x - File watcher for incremental re-indexing (`apps/cli/src/cli.ts`)
 - fast-glob 3.3.x - File scanning for indexer (`packages/indexer/src/scanner.ts`)
 - unified/remark-parse/remark-gfm - Markdown parsing pipeline (`packages/indexer/src/markdown.ts`)
@@ -80,7 +78,7 @@ OpenEZ Graph is a local-first code intelligence system: a SQLite-backed indexing
 
 - `.env.example` - Documents optional env vars (all optional, SQLite is default)
 - Env loading via dotenv with workspace-root traversal (`packages/config/src/env.ts`)
-- Zod-validated env schema (`packages/config/src/env.ts`): `DATABASE_URL`, `EMBEDDING_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_EMBEDDING_MODEL`, `OLLAMA_BASE_URL`, `OLLAMA_EMBEDDING_MODEL`, `MINIMAX_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, `REDIS_URL`, `AI_MEMORY_REGISTRY_DB_PATH`
+- Zod-validated env schema (`packages/config/src/env.ts`): `MINIMAX_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_API_KEY`
 - Project config via `brain.config.ts/js/mjs` (optional, searched up from cwd) (`packages/config/src/load-brain-config.ts`)
 - `tsconfig.base.json` - Shared TS config (ES2022, Bundler resolution, strict, path aliases for all workspace packages)
 - `turbo.json` - Task pipeline (typecheck, lint, build with `^` dependencies)
@@ -118,9 +116,9 @@ OpenEZ Graph is a local-first code intelligence system: a SQLite-backed indexing
 - Handlers: `handleEventName` (`handleSubmit`, `handleValidatePath` in `apps/web/src/routes/workspaces/new.tsx`)
 - Factory functions: `createX` returning object literals (`createRegistryRepository`, `createWorkspaceRepository`, `createWorkspaceResolver`, `createWorkspaceFileResolver`)
 - camelCase for variables and parameters
-- UPPER_SNAKE_CASE for module-level constants (`DEFAULT_INCLUDE_PATTERNS`, `WORKSPACE_DB_DIR_NAME`, `OLLAMA_EMBED_MAX_TOKENS`, `RESOLVABLE_SOURCE_EXTENSIONS`, `DEFAULT_INCLUDE_GLOBS`)
-- No underscore prefix for private members; use TypeScript `private` keyword (see `OpenAIEmbeddingProvider` in `packages/core/src/embeddings.ts`)
-- Interfaces: PascalCase, no `I` prefix (`RegistryWorkspace`, `WorkspaceRepository`, `IndexedChunk`, `EmbeddingProvider`)
+- UPPER_SNAKE_CASE for module-level constants (`DEFAULT_INCLUDE_PATTERNS`, `WORKSPACE_DB_DIR_NAME`, `RESOLVABLE_SOURCE_EXTENSIONS`, `DEFAULT_INCLUDE_GLOBS`)
+- No underscore prefix for private members; use TypeScript `private` keyword
+- Interfaces: PascalCase, no `I` prefix (`RegistryWorkspace`, `WorkspaceRepository`, `IndexedChunk`)
 - Type aliases: PascalCase (`BrainEnv`, `WorkspaceLike`)
 - No enums; use string literal unions (`status: "pending" | "indexing" | "indexed" | "error"` in `packages/db/src/sqlite/types.ts`)
 - `as const` for literal-typed arrays/objects (`RESOLVABLE_SOURCE_EXTENSIONS`)
@@ -160,7 +158,7 @@ OpenEZ Graph is a local-first code intelligence system: a SQLite-backed indexing
 - Throw on missing workspace, invalid input, invariant violations (`throw new Error("Workspace '${id}' not found")` in `packages/core/src/retrieval.ts`, `packages/core/src/graph.ts`)
 - Return `null` for optional lookups (`getWorkspace` returns `RegistryWorkspace | null`)
 - Hono handlers return JSON error shapes `{ ok: false, error: message }` or `{ success: false, error }` instead of throwing to the client
-- Non-fatal failures logged and skipped (embeddings in `index-workspace.ts` catches and returns `0`)
+- Non-fatal failures logged and skipped
 
 ## Logging
 
@@ -202,7 +200,6 @@ OpenEZ Graph is a local-first code intelligence system: a SQLite-backed indexing
 - `packages/ui` exposes `"."`, `"./styles.css"`, `"./components/*"`, `"./lib/*"`
 - Avoid circular deps by importing from specific files when needed (`packages/core/src/retrieval.ts` imports `./rrf`, `./tokenizer` directly)
 - Repository pattern: factory returns object literal implementing an interface (`createRegistryRepository`, `createWorkspaceRepository` in `packages/db/src/sqlite/repository.ts`)
-- Provider pattern with strategy selection (`getEmbeddingProvider` in `packages/core/src/embeddings.ts`)
 - Zod schemas for runtime validation of env (`packages/config/src/env.ts`) and MCP tool args (`apps/mcp/src/mcp-core.ts`)
 - Drizzle ORM + raw SQL with `?` placeholders; `safeParseJson` helper for JSON columns
 
@@ -228,15 +225,15 @@ OpenEZ Graph is a local-first code intelligence system: a SQLite-backed indexing
 - Location: `apps/cli/src/cli.ts`, `apps/mcp/src/mcp-core.ts`, `apps/web/src/server/index.ts`, `apps/web/src/routes/`, `apps/worker/src/index.ts`
 - Depends on: `packages/core`, `packages/db`, `packages/indexer`, `packages/config`, `packages/queue`, `packages/ui`
 - Used by: End users (CLI), MCP clients (Codex/Claude/OpenCode), browser (web), operators (worker)
-- Purpose: Retrieval, graph traversal, memory persistence, tokenization, ranking, and optional embeddings
-- Contains: `memoryQuery`, `codeContext`, `graphNeighbors`, `memoryWrite`, `reciprocalRankFusion`, `countTokens`, embedding providers
-- Location: `packages/core/src/retrieval.ts`, `packages/core/src/graph.ts`, `packages/core/src/memory.ts`, `packages/core/src/rrf.ts`, `packages/core/src/tokenizer.ts`, `packages/core/src/embeddings.ts`
+- Purpose: Retrieval, graph traversal, memory persistence, tokenization, ranking
+- Contains: `memoryQuery`, `codeContext`, `graphNeighbors`, `memoryWrite`, `reciprocalRankFusion`, `countTokens`
+- Location: `packages/core/src/retrieval.ts`, `packages/core/src/graph.ts`, `packages/core/src/memory.ts`, `packages/core/src/rrf.ts`, `packages/core/src/tokenizer.ts`
 - Depends on: `packages/db` (registry + workspace repositories), `packages/config` (settings)
 - Used by: MCP server, web API server, worker CLI (benchmark)
 - Purpose: Persist workspace metadata and indexed artifacts; scan, parse, chunk, and graph-build file content
 - Contains: SQLite registry/workspace DB loaders, repository factories, schema definitions, file scanner, language parsers, chunkers, graph construction
 - Location: `packages/db/src/sqlite/repository.ts`, `packages/db/src/sqlite/registry-db.ts`, `packages/db/src/sqlite/workspace-db.ts`, `packages/indexer/src/index-workspace.ts`, `packages/indexer/src/code.ts`, `packages/indexer/src/languages.ts`, `packages/indexer/src/markdown.ts`
-- Depends on: `packages/config` (settings), `packages/core` (tokenizer, embeddings), `better-sqlite3`, `drizzle-orm`, `ts-morph`, `fast-glob`
+- Depends on: `packages/config` (settings), `packages/core` (tokenizer), `better-sqlite3`, `drizzle-orm`, `typescript`, `fast-glob`
 - Used by: Engine layer (repositories), CLI (indexing), MCP (index_workspace tool), web server (direct SQLite reads), worker
 - Purpose: Environment loading, brain.config.* parsing, default chunking/retrieval settings
 - Contains: Zod env schema, config file discovery/evaluator, default settings
@@ -277,16 +274,12 @@ OpenEZ Graph is a local-first code intelligence system: a SQLite-backed indexing
 - Pattern: Orchestrator function with progress callbacks; dispatches to language-specific parsers via `chunkDocument()`
 - Incremental via content hash + mtime skip; full mode via `repo.resetAll()`
 - Purpose: Extract symbols, imports, chunks, and call identifiers from source files
-- Examples: `indexCode()` (ts-morph, TS/JS), `parsePython()`, `parseGo()`, `parseRust()`, `indexMarkdown()`, `indexConfig()`
+- Examples: `indexCode()` (native TypeScript compiler API, TS/JS), `parsePython()`, `parseGo()`, `parseRust()`, `indexMarkdown()`, `indexConfig()`
 - Pattern: Function returning `IndexedCodeResult` or chunk arrays; regex-based for Python/Go/Rust, AST-based for TS/JS
 - Location: `packages/indexer/src/code.ts`, `packages/indexer/src/languages.ts`, `packages/indexer/src/markdown.ts`
 - Purpose: Rank and fuse multi-source context for a query
 - Examples: `memoryQuery()` in `packages/core/src/retrieval.ts`
-- Pattern: FTS + optional vector search → RRF fusion → graph expansion → second RRF → token-budget selection
-- Purpose: Optional vector embeddings for semantic search
-- Examples: `OpenAIEmbeddingProvider`, `OllamaEmbeddingProvider`, `getEmbeddingProvider()` factory
-- Pattern: Strategy pattern; `null` when `EMBEDDING_PROVIDER=none` (default)
-- Location: `packages/core/src/embeddings.ts`
+- Pattern: FTS → RRF fusion → graph expansion → second RRF → token-budget selection
 - Purpose: Expose engine operations as MCP tools over stdio transport
 - Examples: `list_workspaces`, `memory_query`, `code_context`, `graph_neighbors`, `memory_write`, `index_workspace`
 - Pattern: Zod schema validation → resolver → core function → JSON response; defined in `apps/mcp/src/mcp-core.ts`
@@ -319,13 +312,12 @@ OpenEZ Graph is a local-first code intelligence system: a SQLite-backed indexing
 - MCP: Zod `.parse()` throws on invalid tool args; resolver throws on workspace not found / ambiguity; errors bubble to MCP SDK
 - Indexer: try/catch around indexing loop — on failure, `completeIndexRun` with `status: "failed"` + `errorMessage`, registry updated to `status: "error"`, error re-thrown
 - Web API: try/catch per route, returns `{ ok: false, error: message }` or fallback empty JSON; dashboard returns `databaseAvailable: false` on DB error
-- Embeddings: failure caught and logged, returns 0 (non-fatal — indexing continues without embeddings)
 - Repository: `safeParseJson()` helper with fallback for malformed JSON metadata
 
 ## Cross-Cutting Concerns
 
 - `console.log` for normal output (JSON summaries, status messages)
-- `console.error` for errors and warnings (embedding failures, catch blocks)
+- `console.error` for errors and warnings (catch blocks)
 - No structured logger; output is human-readable text or JSON
 - Zod schemas at MCP tool boundary (`apps/mcp/src/mcp-core.ts`: `memoryQuerySchema`, `codeContextSchema`, etc.)
 - Zod env schema in `packages/config/src/env.ts` (`envSchema` with defaults)

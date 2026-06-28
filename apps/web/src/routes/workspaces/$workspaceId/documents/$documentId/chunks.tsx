@@ -29,12 +29,15 @@ export const Route = createFileRoute(
   validateSearch: (search: Record<string, string | undefined>) => ({
     page: Math.max(1, parseInt(search.page ?? "", 10) || 1),
   }),
-  loader: ({ context, params }) =>
+  loaderDeps: ({ search }) => ({
+    page: search.page,
+  }),
+  loader: ({ context, params, deps }) =>
     context.queryClient.ensureQueryData(
       documentChunksQueryOptions(
         params.workspaceId,
         params.documentId,
-        1,
+        deps.page,
         CHUNK_PAGE_SIZE,
       ),
     ),

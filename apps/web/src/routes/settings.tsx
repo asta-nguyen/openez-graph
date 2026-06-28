@@ -85,11 +85,11 @@ function McpProviderCard({
 
 function SettingsPage() {
   return (
-    <div className="page container mx-auto">
+    <div className="page container mx-auto px-4 sm:px-6">
       <div>
         <h1>Settings</h1>
         <p className="text-muted-foreground text-sm">
-          Environment-backed provider configuration.
+          MCP server configuration for AI coding agents.
         </p>
       </div>
 

@@ -1286,20 +1286,30 @@ export function getWorkspaceGraphFiltered(
     metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
   }));
 
-  // Edges: fetch up to maxEdges, then filter to valid node ids
+  // Edges: only select edges whose endpoints are in the filtered node set.
+  // Selecting from the whole table before applying node filters can drop valid
+  // edges (LIMIT cuts off before reaching them) and produce incorrect
+  // graph/minDegree results, so we filter edges AFTER node filtering.
   const validIds = new Set(nodes.map((n) => n.id));
-  const edgeRows = db
-    .prepare("SELECT * FROM graph_edges LIMIT ?")
-    .all(maxEdges) as Array<Record<string, unknown>>;
-  const edges = edgeRows
-    .map((row) => ({
+  const validIdArr = [...validIds];
+  let edges: WebGraphEdge[];
+  if (validIdArr.length === 0) {
+    edges = [];
+  } else {
+    const placeholders = validIdArr.map(() => "?").join(",");
+    const edgeRows = db
+      .prepare(
+        `SELECT * FROM graph_edges WHERE from_node_id IN (${placeholders}) AND to_node_id IN (${placeholders}) LIMIT ?`,
+      )
+      .all(...validIdArr, ...validIdArr, maxEdges) as Array<Record<string, unknown>>;
+    edges = edgeRows.map((row) => ({
       id: String(row.id),
       source: String(row.from_node_id),
       target: String(row.to_node_id),
       type: String(row.type),
       weight: Number(row.weight ?? 1),
-    }))
-    .filter((e) => validIds.has(e.source) && validIds.has(e.target));
+    }));
+  }
 
   // ── minDegree: filter in JS after degree computation ──
   if (opts.minDegree !== undefined && opts.minDegree > 0) {

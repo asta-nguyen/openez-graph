@@ -101,7 +101,7 @@ function WorkspacesPage() {
                 key={workspace.id}
                 to="/workspaces/$workspaceId"
                 params={{ workspaceId: workspace.id }}
-                search={{ workspaceId }}
+                search={{ workspaceId: workspace.id }}
                 className="block"
                 onMouseEnter={() => queryClient.prefetchQuery(workspaceQueryOptions(workspace.id))}
               >

@@ -180,10 +180,21 @@ export function GraphClient({ graphData }: GraphClientProps) {
       // Symbol-type nodes → navigate to symbol browser with label pre-filled
       const symbolTypes: string[] = [...SYMBOL_TYPES];
       if (symbolTypes.includes(node.type) || node.refId) {
+        // Use the node's actual type for the symbol filter so the selected
+        // symbol isn't hidden by a mismatched type filter. Fall back to "all"
+        // when the node type isn't a known symbol type.
+        const symbolType = symbolTypes.includes(node.type)
+          ? node.type
+          : undefined;
         navigate({
           to: "/workspaces/$workspaceId/symbols",
           params: { workspaceId },
-          search: { workspaceId, type: SYMBOL_TYPES[0], page: 1, q: node.label },
+          search: {
+            workspaceId,
+            type: symbolType ?? "all",
+            page: 1,
+            q: node.label,
+          },
         });
         return;
       }
@@ -340,8 +351,8 @@ export function GraphClient({ graphData }: GraphClientProps) {
           }
         >
           <WorkspaceGraph
-            nodes={graphData.nodes}
-            edges={graphData.edges}
+            nodes={filteredNodes}
+            edges={filteredEdges}
             selectedNodeId={selectedNodeId}
             onNodeClick={handleNodeClick}
             onNodeHover={handleNodeHover}

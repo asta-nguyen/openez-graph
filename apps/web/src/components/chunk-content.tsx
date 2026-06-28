@@ -1,5 +1,6 @@
 import { useEffect, useDeferredValue, useState } from "react";
 import type { Highlighter } from "shiki";
+import { useTheme } from "../lib/theme";
 
 let highlighterPromise: Promise<Highlighter> | null = null;
 
@@ -80,6 +81,8 @@ export function ChunkContent({ content, language, kind }: ChunkContentProps) {
   const deferredContent = useDeferredValue(content);
   const shikiLang = resolveShikiLang(language, kind, deferredContent);
   const [html, setHtml] = useState<string | null>(null);
+  const { resolvedTheme } = useTheme();
+  const shikiTheme = resolvedTheme === "light" ? "github-light" : "github-dark";
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +91,7 @@ export function ChunkContent({ content, language, kind }: ChunkContentProps) {
       .then((highlighter) =>
         highlighter.codeToHtml(deferredContent, {
           lang: shikiLang,
-          theme: "github-dark",
+          theme: shikiTheme,
         }),
       )
       .then((highlighted) => {
@@ -100,7 +103,7 @@ export function ChunkContent({ content, language, kind }: ChunkContentProps) {
     return () => {
       cancelled = true;
     };
-  }, [deferredContent, shikiLang]);
+  }, [deferredContent, shikiLang, shikiTheme]);
 
   if (html) {
     return (

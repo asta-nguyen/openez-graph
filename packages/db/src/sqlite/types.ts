@@ -119,6 +119,7 @@ export interface WorkspaceRepository {
   updateDocument(
     id: string,
     updates: Partial<{
+      path: string;
       absolutePath: string;
       kind: string;
       language: string | null;
@@ -131,6 +132,7 @@ export interface WorkspaceRepository {
   updateDocumentSync(
     id: string,
     updates: Partial<{
+      path: string;
       absolutePath: string;
       kind: string;
       language: string | null;

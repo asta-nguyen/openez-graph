@@ -95,7 +95,6 @@ function CancelIndexingButton({
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["workspace-jobs", workspaceId] }),
-        queryClient.invalidateQueries({ queryKey: ["jobs"] }),
       ]);
     },
   });
@@ -218,7 +217,6 @@ function WorkspaceDetailPage() {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["workspace-jobs", workspaceId] }),
-        queryClient.invalidateQueries({ queryKey: ["jobs"] }),
       ]);
     },
   });

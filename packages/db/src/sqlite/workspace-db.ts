@@ -187,7 +187,13 @@ function getWorkspaceTableDefinitions(): string[] {
     `CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
       INSERT INTO memories_fts(memories_fts, rowid, title, content, tags) VALUES ('delete', old.rowid, old.title, old.content, old.tags);
       INSERT INTO memories_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
-    END`
+    END`,
+    // One-time backfill: index existing memories that were created before the
+    // FTS table/triggers existed. Idempotent — only inserts rows not already
+    // present in memories_fts, so re-running on an already-indexed DB is a no-op.
+    `INSERT INTO memories_fts(rowid, title, content, tags)
+      SELECT rowid, title, content, tags FROM memories
+      WHERE rowid NOT IN (SELECT rowid FROM memories_fts)`
   ];
 }
 

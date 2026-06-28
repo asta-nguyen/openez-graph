@@ -130,6 +130,8 @@ export function useSSE({
             if (pollingRef.current) clearInterval(pollingRef.current);
             pollingRef.current = null;
             const prev = progressRef.current;
+            // Null/undefined result means the server returned no data —
+            // treat as error, not "complete", to avoid masking server issues
             const phase: IndexProgressEvent["phase"] =
               result?.status === "completed"
                 ? "complete"
@@ -137,7 +139,7 @@ export function useSSE({
                   ? "error"
                   : result?.status === "cancelled"
                     ? "cancelled"
-                    : "complete";
+                    : "error";
             const terminal: IndexProgressEvent = {
               runId: prev?.runId ?? "",
               phase,
@@ -146,14 +148,16 @@ export function useSSE({
                 phase === "complete"
                   ? "Index complete"
                   : phase === "error"
-                    ? "Indexing failed"
+                    ? result
+                      ? "Indexing failed"
+                      : "Indexing status unavailable — the server may have restarted"
                     : "Cancelled",
               filesDone: prev?.filesDone ?? 0,
               filesTotal: prev?.filesTotal ?? 0,
               chunksWritten: prev?.chunksWritten ?? 0,
               currentPath: null,
               done: true,
-              error: phase === "error" ? "Indexing failed" : null,
+              error: phase === "error" ? (result ? "Indexing failed" : "Indexing status unavailable") : null,
             };
             progressRef.current = terminal;
             setProgress(terminal);
