@@ -167,7 +167,15 @@ function resolveDefaultWorkspace(): WebRegistryWorkspace | null {
     const bTime = b.lastIndexedAt ? new Date(b.lastIndexedAt).getTime() : -Infinity;
     return bTime - aTime;
   });
-  return sorted[0] ?? null;
+  // Prefer most-recently-indexed, but only among workspaces with a valid root path
+  const valid = sorted.find((ws) => {
+    try {
+      return ws.rootPath && ws.rootPath !== "/" && existsSync(ws.rootPath);
+    } catch {
+      return false;
+    }
+  });
+  return valid ?? sorted[0] ?? null;
 }
 
 // Dashboard
