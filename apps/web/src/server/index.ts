@@ -550,7 +550,7 @@ app.post("/api/workspaces/:id/index", async (c) => {
   if (!ws)
     return c.json(
       { jobId: null, status: "error", error: "Workspace not found" },
-      404,
+      404
     );
   const body = await c.req
     .json<{ mode?: string }>()
