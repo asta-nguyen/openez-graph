@@ -34,7 +34,7 @@ echo "Installing @openez-graph/cli globally..."
 if command -v npm >/dev/null 2>&1; then
   npm install -g @openez-graph/cli
 elif command -v pnpm >/dev/null 2>&1; then
-  pnpm install -g @openez-graph/cli
+  pnpm add -g @openez-graph/cli
 else
   error "Neither npm nor pnpm found. Install Node.js from https://nodejs.org/"
   exit 1
@@ -42,11 +42,16 @@ fi
 
 # ── Verify install ──
 if ! command -v openez >/dev/null 2>&1; then
-  # npm global bin might not be in PATH
-  NPM_BIN=$(npm config get prefix 2>/dev/null)/bin
-  if [ -f "$NPM_BIN/openez" ]; then
-    warn "openez installed at $NPM_BIN/openez but not in PATH"
-    echo "  Add to PATH: export PATH=\"$NPM_BIN:\$PATH\""
+  # Global bin might not be in PATH — check npm and pnpm
+  GLOBAL_BIN=""
+  if command -v npm >/dev/null 2>&1; then
+    GLOBAL_BIN=$(npm config get prefix 2>/dev/null)/bin
+  elif command -v pnpm >/dev/null 2>&1; then
+    GLOBAL_BIN=$(pnpm bin -g 2>/dev/null)
+  fi
+  if [ -n "$GLOBAL_BIN" ] && [ -f "$GLOBAL_BIN/openez" ]; then
+    warn "openez installed at $GLOBAL_BIN/openez but not in PATH"
+    echo "  Add to PATH: export PATH=\"$GLOBAL_BIN:\$PATH\""
   else
     error "Installation failed — openez command not found"
     exit 1

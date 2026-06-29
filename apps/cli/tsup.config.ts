@@ -29,12 +29,9 @@ export default defineConfig({
     "zod",
     "fast-glob",
     "github-slugger",
-    "ts-morph",
     "gpt-tokenizer",
     "drizzle-orm",
-    "dotenv",
-    "openai",
-    "ollama"
+    "dotenv"
   ],
   banner: {
     js: "#!/usr/bin/env node"

@@ -1,61 +1,41 @@
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@openez-graph/ui";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import {
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle2,
-  ChevronLeft,
-  Clock,
-  Database,
-  FileText,
-  GitBranch,
-  Layers,
-  Loader2,
-  MessageSquare,
-} from "lucide-react";
-import { StatusBadge } from "../../../components/status-badge";
-import {
-  workspaceGraphQueryOptions,
-  workspaceQueryOptions,
-} from "../../../lib/queries";
+import { createFileRoute, Link, useParams, useNavigate, useSearch } from "@tanstack/react-router";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+import { api } from "../../../lib/api";
 import { formatDate } from "../../../lib/utils";
+import { workspaceQueryOptions, workspaceGraphQueryOptions, workspaceJobsQueryOptions } from "../../../lib/queries";
+import { StatusBadge } from "../../../components/status-badge";
+import { IndexingProgress } from "../../../components/indexing-progress";
+import {
+  Button, Card, CardContent, CardHeader, CardTitle, Input,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
+  AlertDialogFooter, AlertDialogTitle, AlertDialogDescription,
+  AlertDialogAction, AlertDialogCancel,
+  ArrowBackIcon, LayersIcon, FileDescriptionIcon, BugIcon, ShieldCheckIcon, RefreshIcon,
+  BrainCircuitIcon, SendIcon, XIcon, ClockIcon, TrashIcon,
+} from "@openez-graph/ui";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/")({
   loader: async ({ context, params }) => {
     // Critical: Workspace detail (blocks render)
-    await context.queryClient.ensureQueryData(
-      workspaceQueryOptions(params.workspaceId)
-    );
+    await context.queryClient.ensureQueryData(workspaceQueryOptions(params.workspaceId));
 
-    // Secondary: Pre-warm Graph data in background
-    context.queryClient.prefetchQuery(
-      workspaceGraphQueryOptions(params.workspaceId)
-    );
+    // Secondary: Pre-warm Graph and Jobs data in background
+    context.queryClient.prefetchQuery(workspaceGraphQueryOptions(params.workspaceId));
+    context.queryClient.prefetchQuery(workspaceJobsQueryOptions(params.workspaceId));
   },
   component: WorkspaceDetailPage,
 });
 
 function RunStatusIcon({ status }: { status: string }) {
   if (status === "running")
-    return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+    return <RefreshIcon size={16} className="animate-spin text-muted-foreground" />;
   if (status === "completed")
-    return <CheckCircle2 className="h-4 w-4 text-primary" />;
+    return <ShieldCheckIcon size={16} className="text-primary" />;
   if (status === "failed")
-    return <AlertCircle className="h-4 w-4 text-destructive" />;
-  return <Clock className="h-4 w-4 text-muted-foreground" />;
+    return <BugIcon size={16} className="text-destructive" />;
+  return <ClockIcon size={16} className="text-muted-foreground" />;
 }
 
 function formatDuration(
@@ -69,12 +49,185 @@ function formatDuration(
   return `${Math.round(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 }
 
+function ReindexButton({
+  workspaceId,
+  indexingStatus,
+  mode = "incremental",
+  mutation,
+}: {
+  workspaceId: string;
+  indexingStatus: string;
+  mode?: "incremental" | "full";
+  mutation: ReturnType<typeof useMutation<{ jobId: string; status: string }, Error, string | undefined>>;
+}) {
+  const isRunning = indexingStatus === "running";
+  const isLoading = mutation.isPending;
+  const disabled = isRunning || isLoading;
+
+  return (
+    <Button
+      variant={mode === "full" ? "outline" : "default"}
+      disabled={disabled}
+      onClick={() => mutation.mutate(mode)}
+      aria-label="Reindex workspace"
+    >
+      {isLoading ? (
+        <RefreshIcon size={16} className="animate-spin" />
+      ) : (
+        <RefreshIcon size={16} />
+      )}
+      {isLoading ? "Indexing..." : mode === "full" ? "Full Reindex" : "Reindex"}
+    </Button>
+  );
+}
+
+function CancelIndexingButton({
+  workspaceId,
+  jobId,
+}: {
+  workspaceId: string;
+  jobId: string;
+}) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () => api.cancelJob(workspaceId, jobId),
+    onSuccess: () => {
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["workspace-jobs", workspaceId] }),
+      ]);
+    },
+  });
+
+  return (
+    <div className="space-y-2">
+      <Button
+        variant="destructive"
+        disabled={mutation.isPending}
+        onClick={() => mutation.mutate()}
+        aria-label="Cancel indexing"
+      >
+        {mutation.isPending ? (
+          <RefreshIcon size={16} className="animate-spin" />
+        ) : (
+          <XIcon size={16} />
+        )}
+        {mutation.isPending ? "Cancelling..." : "Cancel Indexing"}
+      </Button>
+      {mutation.isError && (
+        <p className="text-sm text-destructive">
+          Failed to cancel: {mutation.error?.message ?? "Unknown error"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DeleteWorkspaceButton({
+  workspaceId,
+  workspaceName,
+  indexingStatus,
+  onDeleted,
+}: {
+  workspaceId: string;
+  workspaceName: string;
+  indexingStatus: string;
+  onDeleted: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [confirmText, setConfirmText] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: () => api.deleteWorkspace(workspaceId),
+    onSuccess: () => {
+      return queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+    },
+  });
+
+  const isConfirmed = confirmText === workspaceName;
+  const isRunning = indexingStatus === "running";
+
+  const handleConfirm = () => {
+    mutation.mutate(undefined, {
+      onSuccess: () => {
+        setOpen(false);
+        onDeleted();
+      },
+    });
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button variant="destructive" disabled={isRunning} aria-label="Delete workspace">
+          <TrashIcon size={16} />
+          Delete Workspace
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Workspace</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will permanently remove <strong>{workspaceName}</strong> from the registry
+            and delete its database. This action cannot be undone.
+            <br /><br />
+            Type the workspace name to confirm:
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <Input
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={workspaceName}
+          aria-label="Type workspace name to confirm deletion"
+        />
+        {mutation.isError && (
+          <p className="text-sm text-destructive">
+            {mutation.error?.message ?? "Failed to delete workspace"}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!isConfirmed || mutation.isPending}
+            onClick={handleConfirm}
+          >
+            {mutation.isPending ? (
+              <RefreshIcon size={16} className="animate-spin" />
+            ) : (
+              "Delete Permanently"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function WorkspaceDetailPage() {
   const { workspaceId } = useParams({ from: "/workspaces/$workspaceId" });
   const queryClient = useQueryClient();
-  const { data: result, isLoading } = useQuery(
-    workspaceQueryOptions(workspaceId)
-  );
+  const navigate = useNavigate();
+  const { workspaceId: selectedWorkspaceId } = useSearch({ from: "__root__" });
+  const { data: result, isLoading } = useQuery(workspaceQueryOptions(workspaceId));
+
+  const reindexMutation = useMutation({
+    mutationFn: (mode?: string) => api.startIndexRun(workspaceId, mode),
+    onSuccess: () => {
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["workspace-jobs", workspaceId] }),
+      ]);
+    },
+  });
+
+  // Poll for status updates while indexing is running (temporary until SSE in Phase 3)
+  useQuery({
+    ...workspaceQueryOptions(workspaceId),
+    enabled: result?.ok === true && result.data?.indexingStatus === "running",
+    refetchInterval: 5000,
+    staleTime: 0,
+  });
 
   const handlePrefetchQuery = () => {
     // Prefetching a POST request is not possible via standard GET prefetch,
@@ -98,7 +251,7 @@ function WorkspaceDetailPage() {
       <div className="page">
         <Card className="border-destructive">
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+            <BugIcon size={48} className="text-destructive mb-4" />
             <h2 className="text-lg font-medium mb-2">Registry unavailable</h2>
             <p className="muted text-center mb-4 max-w-md">
               Could not open the registry database.
@@ -122,11 +275,7 @@ function WorkspaceDetailPage() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <h2 className="text-lg font-medium mb-2">Not Found</h2>
             <p className="muted">Workspace not found.</p>
-            <Link to="/workspaces" search={{ page: 1 }}>
-              <Button variant="secondary" className="mt-4">
-                Back to workspaces
-              </Button>
-            </Link>
+            <Link to="/workspaces" search={{ page: 1, workspaceId }}><Button variant="secondary" className="mt-4">Back to workspaces</Button></Link>
           </CardContent>
         </Card>
       </div>
@@ -138,9 +287,9 @@ function WorkspaceDetailPage() {
   return (
     <div className="page">
       <div className="flex items-center gap-4 mb-6">
-        <Link to="/workspaces" search={{ page: 1 }}>
+        <Link to="/workspaces" search={{ page: 1, workspaceId }}>
           <Button variant="ghost" size="icon">
-            <ChevronLeft className="h-4 w-4" />
+            <ArrowBackIcon size={16} />
           </Button>
         </Link>
         <div className="flex-1">
@@ -150,13 +299,27 @@ function WorkspaceDetailPage() {
           </div>
           <p className="muted text-sm">{workspace.rootPath}</p>
         </div>
+        <DeleteWorkspaceButton
+          workspaceId={workspaceId}
+          workspaceName={workspace.name}
+          indexingStatus={workspace.indexingStatus}
+          onDeleted={() => {
+            navigate({
+              to: "/workspaces",
+              search: {
+                page: 1,
+                workspaceId: selectedWorkspaceId === workspaceId ? "" : selectedWorkspaceId,
+              },
+            });
+          }}
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <FileText className="h-5 w-5 text-muted-foreground" />
+              <FileDescriptionIcon size={20} className="text-muted-foreground" />
               <div>
                 <p className="text-2xl font-semibold">
                   {workspace.documentCount}
@@ -169,7 +332,7 @@ function WorkspaceDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <Layers className="h-5 w-5 text-muted-foreground" />
+              <LayersIcon size={20} className="text-muted-foreground" />
               <div>
                 <p className="text-2xl font-semibold">{workspace.chunkCount}</p>
                 <p className="text-xs text-muted-foreground">Chunks</p>
@@ -180,7 +343,7 @@ function WorkspaceDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <GitBranch className="h-5 w-5 text-muted-foreground" />
+              <BrainCircuitIcon size={20} className="text-muted-foreground" />
               <div>
                 <p className="text-2xl font-semibold">{workspace.nodeCount}</p>
                 <p className="text-xs text-muted-foreground">Graph Nodes</p>
@@ -191,7 +354,7 @@ function WorkspaceDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <Database className="h-5 w-5 text-muted-foreground" />
+              <LayersIcon size={20} className="text-muted-foreground" />
               <div>
                 <p className="text-2xl font-semibold">{workspace.edgeCount}</p>
                 <p className="text-xs text-muted-foreground">Graph Edges</p>
@@ -201,24 +364,17 @@ function WorkspaceDetailPage() {
         </Card>
       </div>
 
-      <div className="flex flex-wrap gap-4 mb-6">
-        <Link
-          to="/query"
-          search={{ workspaceId }}
-          onMouseEnter={handlePrefetchQuery}>
-          <Button variant="outline">
-            <MessageSquare className="h-4 w-4" /> Try Query
-          </Button>
-        </Link>
-        {hasGraphData && (
-          <Link
-            to="/workspaces/$workspaceId/graph"
-            params={{ workspaceId }}
-            onMouseEnter={handlePrefetchGraph}>
-            <Button variant="secondary">Open Graph Explorer</Button>
-          </Link>
-        )}
-      </div>
+       <div className="flex flex-wrap gap-4 mb-6">
+         <Link to="/query" search={{ workspaceId }} onMouseEnter={handlePrefetchQuery}>
+           <Button variant="outline"><SendIcon size={16} /> Try Query</Button>
+         </Link>
+         {hasGraphData && (
+           <Link to="/workspaces/$workspaceId/graph" params={{ workspaceId }} search={{ workspaceId }} onMouseEnter={handlePrefetchGraph}>
+             <Button variant="secondary">Open Graph Explorer</Button>
+           </Link>
+         )}
+       </div>
+
 
       <Card className="mb-6">
         <CardHeader className="pb-3">
@@ -232,8 +388,31 @@ function WorkspaceDetailPage() {
             <div>openez index {workspace.rootPath}</div>
             <div>openez status {workspace.rootPath}</div>
           </div>
+          <div className="flex items-center gap-2 pt-2">
+            <ReindexButton workspaceId={workspaceId} indexingStatus={workspace.indexingStatus} mode="incremental" mutation={reindexMutation} />
+            <ReindexButton workspaceId={workspaceId} indexingStatus={workspace.indexingStatus} mode="full" mutation={reindexMutation} />
+            {workspace.indexingStatus === "running" && (
+              <span className="text-sm text-muted-foreground">Indexing in progress...</span>
+            )}
+          </div>
+          {reindexMutation.isError && (
+            <p className="text-sm text-destructive">
+              Failed to start indexing: {reindexMutation.error?.message ?? "Unknown error"}
+            </p>
+          )}
         </CardContent>
       </Card>
+
+      <div className="mb-6">
+        <IndexingProgress
+          workspaceId={workspaceId}
+          indexingStatus={workspace.indexingStatus}
+          onComplete={() => {
+            void queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
+            void queryClient.invalidateQueries({ queryKey: ["workspace-jobs", workspaceId] });
+          }}
+        />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2 mb-6">
         <Card>
@@ -278,12 +457,6 @@ function WorkspaceDetailPage() {
                       {workspace.latestIndexRun.chunksWritten ?? 0}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Embeddings:</span>{" "}
-                    <span className="font-medium">
-                      {workspace.latestIndexRun.embeddingsWritten ?? 0}
-                    </span>
-                  </div>
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Started: {formatDate(workspace.latestIndexRun.startedAt)}
@@ -302,6 +475,14 @@ function WorkspaceDetailPage() {
                   <p className="text-xs text-destructive">
                     {workspace.latestIndexRun.errorMessage}
                   </p>
+                )}
+                {workspace.indexingStatus === "running" && (
+                  <div className="pt-3 border-t">
+                    <CancelIndexingButton
+                      workspaceId={workspaceId}
+                      jobId={workspace.latestIndexRun.id}
+                    />
+                  </div>
                 )}
               </div>
             ) : (
@@ -457,7 +638,7 @@ function WorkspaceDetailPage() {
         <Card className="mt-4 border-destructive">
           <CardContent className="p-4">
             <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-destructive mt-0.5" />
+              <BugIcon size={16} className="text-destructive mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-destructive">
                   Last Error

@@ -1,21 +1,17 @@
-import { Link, useMatchRoute } from "@tanstack/react-router";
+import { Link, useMatchRoute, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard,
-  FolderKanban,
-  Settings,
-  Database,
-  FileText,
-  ScrollText,
-} from "lucide-react";
+  LayoutDashboardIcon,
+  LibraryIcon,
+  GearIcon,
+  FileDescriptionIcon,
+  BookIcon,
+  CodeXmlIcon,
+  BrainCircuitIcon,
+} from "@openez-graph/ui";
 import {
-  dashboardQueryOptions,
-  documentsQueryOptions,
-  jobsQueryOptions,
-  settingsEnvQueryOptions,
   workspacesQueryOptions,
 } from "../lib/queries";
-import { PAGE_SIZE } from "../lib/pagination";
 import {
   Sidebar,
   SidebarContent,
@@ -36,34 +32,40 @@ const mainNav = [
   {
     href: "/",
     label: "Overview",
-    icon: LayoutDashboard,
-    query: dashboardQueryOptions,
+    icon: LayoutDashboardIcon,
   },
   {
     href: "/workspaces",
     label: "Workspaces",
-    icon: FolderKanban,
+    icon: LibraryIcon,
     query: workspacesQueryOptions,
   },
 ];
 
 const debugNav = [
-  { href: "/query", label: "Query", icon: ScrollText },
+  { href: "/query", label: "Query", icon: BookIcon },
   {
     href: "/documents",
     label: "Documents",
-    icon: FileText,
-    query: () => documentsQueryOptions(1, PAGE_SIZE),
+    icon: FileDescriptionIcon,
   },
-  { href: "/jobs", label: "Jobs", icon: Database, query: jobsQueryOptions },
+  {
+    href: "/memories",
+    label: "Memories",
+    icon: BrainCircuitIcon,
+  },
+  {
+    href: "/workspaces/$workspaceId/symbols",
+    label: "Symbols",
+    icon: CodeXmlIcon,
+  },
 ];
 
 const secondaryNav = [
   {
     href: "/settings",
     label: "Settings",
-    icon: Settings,
-    query: settingsEnvQueryOptions,
+    icon: GearIcon,
   },
 ];
 
@@ -75,12 +77,15 @@ function NavLink({
 }: {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; size?: number }>;
   query?: any;
 }) {
   const queryClient = useQueryClient();
   const match = useMatchRoute();
-  const isActive = match({ to: href, fuzzy: href !== "/" });
+  const { workspaceId } = useSearch({ from: "__root__" });
+  const isWorkspaceScoped = href.includes("$workspaceId");
+  const matchParams = isWorkspaceScoped ? { workspaceId } : undefined;
+  const isActive = match({ to: href, fuzzy: href !== "/", ...(matchParams ? { params: matchParams } : {}) });
 
   const handleMouseEnter = () => {
     if (!query) return;
@@ -91,8 +96,13 @@ function NavLink({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={!!isActive} tooltip={label}>
-        <Link to={href} onMouseEnter={handleMouseEnter}>
-          <Icon className="h-4 w-4" />
+        <Link
+          to={href}
+          onMouseEnter={handleMouseEnter}
+          search={{ workspaceId }}
+          {...(isWorkspaceScoped ? { params: { workspaceId } } : {})}
+        >
+          <Icon size={16} />
           <span>{label}</span>
         </Link>
       </SidebarMenuButton>
@@ -101,6 +111,7 @@ function NavLink({
 }
 
 export function AppSidebar() {
+  const { workspaceId } = useSearch({ from: "__root__" });
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -108,7 +119,7 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
               <SidebarMenuButton asChild size="lg" tooltip="OpenEZ Graph">
-                <Link to="/" className="flex items-center gap-3">
+                <Link to="/" search={{ workspaceId }} className="flex items-center gap-3">
                   <img
                     src="/logo.png"
                     alt="OpenEZ Graph"

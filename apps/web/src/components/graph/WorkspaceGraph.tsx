@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { getNodeColor, getEdgeColor } from "../../lib/utils";
+import { GRAPH } from "../../lib/constants";
 
 export interface GraphNodeData {
   id: string;
@@ -25,27 +26,36 @@ export interface GraphEdgeData {
   weight: number;
 }
 
+export interface GraphFilters {
+  types: Set<string>;
+  search: string;
+  minDegree: number;
+  maxDegree: number;
+}
+
 export interface WorkspaceGraphProps {
   nodes: GraphNodeData[];
   edges: GraphEdgeData[];
   selectedNodeId?: string | null;
   onNodeClick?: (nodeId: string) => void;
   onNodeHover?: (nodeId: string | null) => void;
+  onNodeDoubleClick?: (nodeId: string) => void;
+  filters?: GraphFilters;
   className?: string;
 }
 
 function getNodeSize(degree: number): number {
-  return 5 + Math.min(degree * 0.5, 15);
+  return GRAPH.NODE_BASE_SIZE + Math.min(degree * GRAPH.NODE_SIZE_PER_DEGREE, GRAPH.NODE_MAX_SIZE_BONUS);
 }
 
 // ── Canvas texture helpers ──────────────────────────────────────────
 
 function makeNodeCanvas(color: string): HTMLCanvasElement {
   const c = document.createElement("canvas");
-  c.width = 64;
-  c.height = 64;
+  c.width = GRAPH.NODE_TEX_SIZE;
+  c.height = GRAPH.NODE_TEX_SIZE;
   const ctx = c.getContext("2d")!;
-  const cx = 32, cy = 32, r = 28;
+  const cx = GRAPH.NODE_TEX_SIZE / 2, cy = GRAPH.NODE_TEX_SIZE / 2, r = GRAPH.NODE_TEX_RADIUS;
 
   const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   g.addColorStop(0, "#ffffff");
@@ -61,10 +71,10 @@ function makeNodeCanvas(color: string): HTMLCanvasElement {
 
 function makeLabelCanvas(text: string): { canvas: HTMLCanvasElement; scale: number } {
   const ctx = document.createElement("canvas").getContext("2d")!;
-  const fontSize = 13;
+  const fontSize = GRAPH.LABEL_FONT_SIZE;
   ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
   const textWidth = ctx.measureText(text).width;
-  const px = 8, py = 4;
+  const px = GRAPH.LABEL_PADDING_X, py = GRAPH.LABEL_PADDING_Y;
   const w = textWidth + px * 2;
   const h = fontSize + py * 2;
 
@@ -73,7 +83,7 @@ function makeLabelCanvas(text: string): { canvas: HTMLCanvasElement; scale: numb
   ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
 
   ctx.fillStyle = "rgba(0,0,0,0.75)";
-  const rr = 4;
+  const rr = GRAPH.LABEL_RADIUS;
   ctx.beginPath();
   ctx.moveTo(rr, 0);
   ctx.lineTo(w - rr, 0);
@@ -92,30 +102,50 @@ function makeLabelCanvas(text: string): { canvas: HTMLCanvasElement; scale: numb
   ctx.textBaseline = "middle";
   ctx.fillText(text, w / 2, h / 2);
 
-  return { canvas: ctx.canvas, scale: 0.25 };
+  return { canvas: ctx.canvas, scale: GRAPH.LABEL_SCALE };
 }
 
-// ── Circular layout ──────────────────────────────────────────────────
+// Module-level texture caches — persist across scene rebuilds.
+const nodeTextureCache = new Map<string, THREE.CanvasTexture>();
+const labelTextureCache = new Map<string, THREE.CanvasTexture>();
 
-function computeLayout(
-  nodes: GraphNodeData[],
-  _edges: GraphEdgeData[],
-  _cache: Map<string, { x: number; y: number }>,
-): Float64Array {
+function getNodeTexture(color: string): THREE.CanvasTexture {
+  let tex = nodeTextureCache.get(color);
+  if (!tex) {
+    tex = new THREE.CanvasTexture(makeNodeCanvas(color));
+    tex.needsUpdate = true;
+    nodeTextureCache.set(color, tex);
+  }
+  return tex;
+}
+
+function getLabelTexture(text: string): THREE.CanvasTexture {
+  let tex = labelTextureCache.get(text);
+  if (!tex) {
+    const { canvas } = makeLabelCanvas(text);
+    tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    labelTextureCache.set(text, tex);
+  }
+  return tex;
+}
+
+// ── Fibonacci sphere layout ─────────────────────────────────────────
+
+function computeLayout(nodes: GraphNodeData[]): Float64Array {
   const n = nodes.length;
   const pos = new Float64Array(n * 3);
   if (n === 0) return pos;
 
-  const radius = Math.max(25, Math.min(n * 2.5, 100));
+  const radius = Math.max(GRAPH.SPHERE_RADIUS_MIN, Math.min(n * GRAPH.SPHERE_RADIUS_FACTOR, GRAPH.SPHERE_RADIUS_MAX));
   const maxDeg = Math.max(1, ...nodes.map((x) => x.degree));
 
-  // Fibonacci sphere — evenly distributes points on a sphere surface
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < n; i++) {
     const y = 1 - (i / (n - 1)) * 2;
     const r = Math.sqrt(1 - y * y);
     const theta = goldenAngle * i;
-    const lift = (nodes[i].degree / maxDeg) * radius * 0.15;
+    const lift = (nodes[i].degree / maxDeg) * radius * GRAPH.SPHERE_LIFT_FACTOR;
     const sr = radius + lift;
     pos[i * 3]     = sr * r * Math.cos(theta);
     pos[i * 3 + 1] = sr * y;
@@ -133,6 +163,8 @@ export function WorkspaceGraph({
   selectedNodeId,
   onNodeClick,
   onNodeHover,
+  onNodeDoubleClick,
+  filters,
   className = "",
 }: WorkspaceGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -140,9 +172,9 @@ export function WorkspaceGraph({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const posCacheRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const nodeSpritesRef = useRef<Map<string, THREE.Sprite>>(new Map());
   const labelSpritesRef = useRef<Map<string, THREE.Sprite>>(new Map());
+  const edgeLinesRef = useRef<THREE.LineSegments | null>(null);
   const raycasterRef = useRef(new THREE.Raycaster());
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
@@ -153,19 +185,17 @@ export function WorkspaceGraph({
   onClickRef.current = onNodeClick;
   const onHoverRef = useRef(onNodeHover);
   onHoverRef.current = onNodeHover;
+  const onDoubleClickRef = useRef(onNodeDoubleClick);
+  onDoubleClickRef.current = onNodeDoubleClick;
 
-  const nodeTypeById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const n of nodes) m.set(n.id, n.type);
-    return m;
-  }, [nodes]);
-
-  const dataKey =
+  const dataKey = useMemo(() =>
     nodes.length > 0
       ? nodes.map((n) => `${n.id}:${n.degree}`).join("|") +
         "||" +
         edges.map((e) => `${e.source}>${e.target}:${e.type}`).join("|")
-      : "empty";
+      : "empty",
+    [nodes, edges],
+  );
 
   // ─── Init scene ───────────────────────────────────────────────────
 
@@ -173,28 +203,28 @@ export function WorkspaceGraph({
     const container = containerRef.current;
     if (!container) return;
 
-    const w = container.clientWidth || 800;
-    const h = container.clientHeight || 600;
+    const w = container.clientWidth || GRAPH.FALLBACK_WIDTH;
+    const h = container.clientHeight || GRAPH.FALLBACK_HEIGHT;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0f1a);
+    scene.background = new THREE.Color(GRAPH.BG_COLOR);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
-    camera.position.set(60, 40, 80);
+    const camera = new THREE.PerspectiveCamera(GRAPH.CAMERA_FOV, w / h, GRAPH.CAMERA_NEAR, GRAPH.CAMERA_FAR);
+    camera.position.set(...GRAPH.CAMERA_DEFAULT_POS);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(devicePixelRatio, GRAPH.MAX_PIXEL_RATIO));
     renderer.setSize(w, h);
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.1;
-    controls.minDistance = 10;
-    controls.maxDistance = 500;
+    controls.dampingFactor = GRAPH.CONTROLS_DAMPING;
+    controls.minDistance = GRAPH.CONTROLS_MIN_DISTANCE;
+    controls.maxDistance = GRAPH.CONTROLS_MAX_DISTANCE;
     controlsRef.current = controls;
 
     const ro = new ResizeObserver((entries) => {
@@ -226,13 +256,13 @@ export function WorkspaceGraph({
     };
   }, []);
 
-  // ─── Build graph ──────────────────────────────────────────────────
+  // ─── Build graph (only when data changes, NOT when filters change) ──
 
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
 
-    // Remove all children (keep scene itself)
+    // Remove all children
     while (scene.children.length > 0) {
       const child = scene.children[0];
       scene.remove(child);
@@ -247,10 +277,11 @@ export function WorkspaceGraph({
     }
     nodeSpritesRef.current.clear();
     labelSpritesRef.current.clear();
+    edgeLinesRef.current = null;
 
     if (nodes.length === 0) return;
 
-    const positions = computeLayout(nodes, edges, posCacheRef.current);
+    const positions = computeLayout(nodes);
 
     // ── Edge lines ──
     if (edges.length > 0) {
@@ -275,12 +306,13 @@ export function WorkspaceGraph({
       geo.setAttribute("position", new THREE.Float32BufferAttribute(edgePositions, 3));
       geo.setAttribute("color", new THREE.Float32BufferAttribute(edgeColors, 3));
 
-      const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.35 });
-      scene.add(new THREE.LineSegments(geo, mat));
+      const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: GRAPH.EDGE_OPACITY });
+      const lines = new THREE.LineSegments(geo, mat);
+      scene.add(lines);
+      edgeLinesRef.current = lines;
     }
 
     // ── Node sprites ──
-    const nodeTexCache = new Map<string, THREE.CanvasTexture>();
     const nodeSprites = new Map<string, THREE.Sprite>();
 
     for (let i = 0; i < nodes.length; i++) {
@@ -289,16 +321,10 @@ export function WorkspaceGraph({
       const color = getNodeColor(node.type);
       const size = getNodeSize(node.degree);
 
-      let tex = nodeTexCache.get(color);
-      if (!tex) {
-        tex = new THREE.CanvasTexture(makeNodeCanvas(color));
-        tex.needsUpdate = true;
-        nodeTexCache.set(color, tex);
-      }
-
+      const tex = getNodeTexture(color);
       const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, sizeAttenuation: true });
       const sprite = new THREE.Sprite(mat);
-      const s = size * 0.7;
+      const s = size * GRAPH.NODE_SPRITE_SCALE;
       sprite.scale.set(s, s, 1);
       sprite.position.set(x, y, z);
       sprite.userData.nodeId = node.id;
@@ -315,22 +341,59 @@ export function WorkspaceGraph({
       const x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2];
       const size = getNodeSize(node.degree);
 
-      const { canvas, scale: labelScale } = makeLabelCanvas(node.label);
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.needsUpdate = true;
-
+      const tex = getLabelTexture(node.label);
       const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, sizeAttenuation: true });
       const sprite = new THREE.Sprite(mat);
+      const canvas = tex.image as HTMLCanvasElement;
+      const labelScale = GRAPH.LABEL_SCALE;
       sprite.scale.set(canvas.width * labelScale, canvas.height * labelScale, 1);
-      sprite.position.set(x, y - size * 0.5 - 4, z);
+      sprite.position.set(x, y - size * 0.5 - GRAPH.LABEL_OFFSET, z);
       sprite.userData.nodeId = node.id;
       sprite.userData.isLabel = true;
-      sprite.visible = node.degree >= 5;
+      sprite.visible = node.degree >= GRAPH.LABEL_HUB_DEGREE;
       scene.add(sprite);
       labelSprites.set(node.id, sprite);
     }
     labelSpritesRef.current = labelSprites;
   }, [dataKey, nodes, edges]);
+
+  // ─── Filter visibility (toggles sprite.visible, no rebuild) ────────
+
+  useEffect(() => {
+    if (!filters) return;
+
+    const searchLower = filters.search.toLowerCase();
+    const nodeSprites = nodeSpritesRef.current;
+    const labelSprites = labelSpritesRef.current;
+    const edgeLines = edgeLinesRef.current;
+
+    const nodeVisible = new Set<string>();
+
+    for (const [id, sprite] of nodeSprites) {
+      const node = nodes.find((n) => n.id === id);
+      if (!node) continue;
+
+      const typeOk = filters.types.size === 0 || filters.types.has(node.type);
+      const degreeOk = node.degree >= filters.minDegree && node.degree <= filters.maxDegree;
+      const searchOk = !searchLower || node.label.toLowerCase().includes(searchLower);
+
+      const visible = typeOk && degreeOk && searchOk;
+      sprite.visible = visible;
+      if (visible) nodeVisible.add(id);
+
+      // Show label for visible high-degree nodes or matching search
+      const label = labelSprites.get(id);
+      if (label) {
+        label.visible = visible && (node.degree >= GRAPH.LABEL_HUB_DEGREE || !!searchLower);
+      }
+    }
+
+    // Toggle edge visibility based on endpoint visibility
+    if (edgeLines) {
+      const mat = edgeLines.material as THREE.LineBasicMaterial;
+      mat.opacity = nodeVisible.size > 0 ? GRAPH.EDGE_OPACITY : 0;
+    }
+  }, [filters, nodes]);
 
   // ─── Selection / highlight updates ────────────────────────────────
 
@@ -341,51 +404,18 @@ export function WorkspaceGraph({
     for (const [id, sprite] of nodeSprites) {
       const isSel = id === selectedNodeId;
       const deg = sprite.userData.degree ?? 0;
-      const base = getNodeSize(deg) * 0.7;
-      sprite.scale.set(isSel ? base * 1.4 : base, isSel ? base * 1.4 : base, 1);
+      const base = getNodeSize(deg) * GRAPH.NODE_SPRITE_SCALE;
+      sprite.scale.set(isSel ? base * GRAPH.NODE_SELECTED_SCALE : base, isSel ? base * GRAPH.NODE_SELECTED_SCALE : base, 1);
     }
 
     for (const [id, sprite] of labelSprites) {
       const isSel = id === selectedNodeId;
-      const isHub = (nodeSprites.get(id)?.userData.degree ?? 0) >= 5;
+      const isHub = (nodeSprites.get(id)?.userData.degree ?? 0) >= GRAPH.LABEL_HUB_DEGREE;
       sprite.visible = isSel || isHub;
     }
+  }, [selectedNodeId]);
 
-    // Ephemeral label for selected low-degree node
-    if (selectedNodeId && !labelSprites.has(selectedNodeId)) {
-      const node = nodes.find((n) => n.id === selectedNodeId);
-      const nodeSprite = nodeSprites.get(selectedNodeId);
-      if (node && nodeSprite && sceneRef.current) {
-        const { canvas, scale } = makeLabelCanvas(node.label);
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.needsUpdate = true;
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, sizeAttenuation: true });
-        const sprite = new THREE.Sprite(mat);
-        sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
-        sprite.position.copy(nodeSprite.position);
-        sprite.position.y -= nodeSprite.scale.y * 0.5 + 4;
-        sprite.userData.nodeId = node.id;
-        sprite.userData.isLabel = true;
-        sprite.userData.ephemeral = true;
-        sceneRef.current.add(sprite);
-        labelSprites.set(node.id, sprite);
-        labelSpritesRef.current = new Map(labelSprites);
-      }
-    }
-
-    // Cleanup ephemeral labels for deselected nodes
-    for (const [id, sprite] of labelSprites) {
-      if (sprite.userData.ephemeral && id !== selectedNodeId) {
-        sceneRef.current?.remove(sprite);
-        sprite.material.dispose();
-        sprite.material.map?.dispose();
-        labelSprites.delete(id);
-        labelSpritesRef.current = new Map(labelSprites);
-      }
-    }
-  }, [selectedNodeId, nodes]);
-
-  // ─── Hover interactions ───────────────────────────────────────────
+  // ─── Pointer interactions ─────────────────────────────────────────
 
   useEffect(() => {
     const renderer = rendererRef.current;
@@ -402,7 +432,7 @@ export function WorkspaceGraph({
 
       const sprites: THREE.Sprite[] = [];
       scene!.children.forEach((child: THREE.Object3D) => {
-        if (child instanceof THREE.Sprite && !child.userData.isLabel) {
+        if (child instanceof THREE.Sprite && !child.userData.isLabel && child.visible) {
           sprites.push(child);
         }
       });
@@ -420,7 +450,7 @@ export function WorkspaceGraph({
       const labels = labelSpritesRef.current;
       for (const [lid, sprite] of labels) {
         if (sprite.userData.ephemeral) continue;
-        const isHub = (nodeSpritesRef.current.get(lid)?.userData.degree ?? 0) >= 5;
+        const isHub = (nodeSpritesRef.current.get(lid)?.userData.degree ?? 0) >= GRAPH.LABEL_HUB_DEGREE;
         const isSel = lid === selectedRef.current;
         sprite.visible = isSel || isHub || lid === id;
       }
@@ -431,11 +461,18 @@ export function WorkspaceGraph({
       onClickRef.current?.(id ?? "");
     }
 
+    function onDoubleClick(e: MouseEvent) {
+      const id = intersect(e.clientX, e.clientY);
+      if (id) onDoubleClickRef.current?.(id);
+    }
+
     renderer.domElement.addEventListener("pointermove", onPointerMove);
     renderer.domElement.addEventListener("click", onClick);
+    renderer.domElement.addEventListener("dblclick", onDoubleClick);
     return () => {
       renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("click", onClick);
+      renderer.domElement.removeEventListener("dblclick", onDoubleClick);
     };
   }, []);
 
@@ -446,11 +483,41 @@ export function WorkspaceGraph({
       const isHov = id === hoveredNode;
       const isSel = id === selectedNodeId;
       const deg = sprite.userData.degree ?? 0;
-      const base = getNodeSize(deg) * 0.7;
-      const s = isSel ? base * 1.4 : isHov ? base * 1.2 : base;
+      const base = getNodeSize(deg) * GRAPH.NODE_SPRITE_SCALE;
+      const s = isSel ? base * GRAPH.NODE_SELECTED_SCALE : isHov ? base * GRAPH.NODE_HOVER_SCALE : base;
       sprite.scale.set(s, s, 1);
     }
   }, [hoveredNode, selectedNodeId]);
+
+  // ─── Zoom controls ────────────────────────────────────────────────
+
+  const zoomToFit = useCallback(() => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
+    // Compute bounding box of all visible node sprites
+    const nodeSprites = nodeSpritesRef.current;
+    if (nodeSprites.size === 0) return;
+
+    const bbox = new THREE.Box3();
+    for (const [, sprite] of nodeSprites) {
+      if (sprite.visible) bbox.expandByPoint(sprite.position);
+    }
+    if (bbox.isEmpty()) return;
+
+    const center = bbox.getCenter(new THREE.Vector3());
+    const size = bbox.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z, 1);
+    const dist = maxDim * GRAPH.ZOOM_FIT_FACTOR + GRAPH.ZOOM_FIT_PADDING;
+
+    controls.target.copy(center);
+    camera.position.set(center.x + dist * 0.5, center.y + dist * 0.4, center.z + dist);
+    camera.near = dist / GRAPH.ZOOM_NEAR_FACTOR;
+    camera.far = dist * GRAPH.ZOOM_FAR_FACTOR;
+    camera.updateProjectionMatrix();
+    controls.update();
+  }, []);
 
   const zoomIn = useCallback(() => {
     const controls = controlsRef.current;
@@ -458,7 +525,7 @@ export function WorkspaceGraph({
     const pos = controls.object.position;
     const dir = pos.clone().sub(controls.target).normalize();
     const dist = pos.distanceTo(controls.target);
-    const newDist = Math.max(controls.minDistance, dist * 0.7);
+    const newDist = Math.max(controls.minDistance, dist * GRAPH.ZOOM_IN_FACTOR);
     pos.copy(controls.target).add(dir.multiplyScalar(newDist));
     controls.update();
   }, []);
@@ -469,7 +536,7 @@ export function WorkspaceGraph({
     const pos = controls.object.position;
     const dir = pos.clone().sub(controls.target).normalize();
     const dist = pos.distanceTo(controls.target);
-    const newDist = Math.min(controls.maxDistance, dist * 1.4);
+    const newDist = Math.min(controls.maxDistance, dist * GRAPH.ZOOM_OUT_FACTOR);
     pos.copy(controls.target).add(dir.multiplyScalar(newDist));
     controls.update();
   }, []);
@@ -484,33 +551,30 @@ export function WorkspaceGraph({
       <div
         style={{
           position: "absolute",
-          bottom: 12,
-          right: 12,
+          bottom: GRAPH.ZOOM_BTN_POSITION,
+          right: GRAPH.ZOOM_BTN_POSITION,
           display: "flex",
           flexDirection: "column",
-          gap: 2,
+          gap: GRAPH.ZOOM_BTN_GAP,
         }}
       >
         <button
           onClick={zoomIn}
           aria-label="Zoom in"
           style={{
-            width: 32,
-            height: 32,
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 6,
-            background: "rgba(0,0,0,0.5)",
-            color: "#fff",
-            fontSize: 18,
+            width: GRAPH.ZOOM_BTN_SIZE,
+            height: GRAPH.ZOOM_BTN_SIZE,
+            border: GRAPH.ZOOM_BTN_BORDER,
+            borderRadius: GRAPH.ZOOM_BTN_RADIUS,
+            background: GRAPH.ZOOM_BTN_BG,
+            color: GRAPH.ZOOM_BTN_COLOR,
+            fontSize: GRAPH.ZOOM_BTN_ICON_SIZE,
             lineHeight: 1,
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            backdropFilter: "blur(8px)",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.5)")}
         >
           +
         </button>
@@ -518,24 +582,40 @@ export function WorkspaceGraph({
           onClick={zoomOut}
           aria-label="Zoom out"
           style={{
-            width: 32,
-            height: 32,
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 6,
-            background: "rgba(0,0,0,0.5)",
-            color: "#fff",
-            fontSize: 18,
+            width: GRAPH.ZOOM_BTN_SIZE,
+            height: GRAPH.ZOOM_BTN_SIZE,
+            border: GRAPH.ZOOM_BTN_BORDER,
+            borderRadius: GRAPH.ZOOM_BTN_RADIUS,
+            background: GRAPH.ZOOM_BTN_BG,
+            color: GRAPH.ZOOM_BTN_COLOR,
+            fontSize: GRAPH.ZOOM_BTN_ICON_SIZE,
             lineHeight: 1,
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            backdropFilter: "blur(8px)",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.5)")}
         >
-          −
+          &minus;
+        </button>
+        <button
+          onClick={zoomToFit}
+          aria-label="Fit to view"
+          style={{
+            width: GRAPH.ZOOM_BTN_SIZE,
+            height: GRAPH.ZOOM_BTN_SIZE,
+            border: GRAPH.ZOOM_BTN_BORDER,
+            borderRadius: GRAPH.ZOOM_BTN_RADIUS,
+            background: GRAPH.ZOOM_BTN_BG,
+            color: GRAPH.ZOOM_BTN_COLOR,
+            fontSize: GRAPH.ZOOM_BTN_FIT_FONT,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          Fit
         </button>
       </div>
     </div>

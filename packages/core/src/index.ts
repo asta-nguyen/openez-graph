@@ -1,4 +1,3 @@
-export * from "./embeddings";
 export * from "./graph";
 export * from "./memory";
 export * from "./retrieval";

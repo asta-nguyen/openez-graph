@@ -1,7 +1,8 @@
 import { serve } from "@hono/node-server";
 import { createWebServer } from "./index";
+import { API_PORT } from "../lib/constants";
 
-const port = Number(process.env.API_PORT ?? 11368);
+const port = Number(process.env.API_PORT ?? API_PORT);
 const app = createWebServer();
 
 serve({ fetch: app.fetch, port }, (info) => {

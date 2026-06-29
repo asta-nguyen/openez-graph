@@ -8,14 +8,6 @@ export interface IndexedChunk {
   symbolType?: string;
 }
 
-export interface IndexedDocument {
-  kind: "markdown" | "code" | "text" | "session";
-  language: string | null;
-  chunks: IndexedChunk[];
-  importPaths: string[];
-  wikilinks: string[];
-}
-
 export interface FileToIndex {
   relativePath: string;
   absolutePath: string;
@@ -28,5 +20,5 @@ export interface IndexWorkspaceSummary {
   filesScanned: number;
   filesUpdated: number;
   chunksWritten: number;
-  embeddingsWritten: number;
+  cancelled?: boolean;
 }
