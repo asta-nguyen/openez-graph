@@ -52,8 +52,15 @@ if (Test-Path "$env:USERPROFILE\.claude") {
 }
 
 if ($setupAgent) {
-    openez setup $setupAgent
-    if ($LASTEXITCODE -ne 0) { Warn "Setup for $setupAgent failed — run 'openez setup $setupAgent' manually later" }
+    Write-Host ""
+    $confirm = Read-Host "Configure $setupAgent automatically? (Y/n)"
+    if ($confirm -eq "" -or $confirm -match "^[Yy]") {
+        openez setup $setupAgent
+        if ($LASTEXITCODE -ne 0) { Warn "Setup for $setupAgent failed — run 'openez setup $setupAgent' manually later" }
+    } else {
+        Write-Host "Skipped. Run manually later:"
+        Write-Host "  openez setup $setupAgent"
+    }
 } else {
     Write-Host "No agent detected. Run manually when ready:"
     Write-Host "  openez setup claude    # for Claude Code"

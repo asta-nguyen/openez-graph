@@ -13,7 +13,7 @@ export * from "./components/ui/sidebar";
 export * from "./components/ui/sheet";
 export * from "./components/ui/separator";
 export * from "./components/ui/skeleton";
-export * from "./components/ui/dual-range-slider";
+export * from "./components/ui/slider";
 export * from "./hooks/use-mobile";
 export * from "./lib/utils";
 export * from "./icons";

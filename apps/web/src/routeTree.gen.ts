@@ -13,6 +13,7 @@ import { Route as WorkspacesRouteImport } from './routes/workspaces'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as QueryRouteImport } from './routes/query'
 import { Route as MemoriesRouteImport } from './routes/memories'
+import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkspacesIndexRouteImport } from './routes/workspaces/index'
@@ -41,6 +42,11 @@ const QueryRoute = QueryRouteImport.update({
 const MemoriesRoute = MemoriesRouteImport.update({
   id: '/memories',
   path: '/memories',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JobsRoute = JobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocumentsRoute = DocumentsRouteImport.update({
@@ -96,6 +102,7 @@ const WorkspacesWorkspaceIdDocumentsDocumentIdChunksRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
+  '/jobs': typeof JobsRoute
   '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
+  '/jobs': typeof JobsRoute
   '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/documents': typeof DocumentsRoute
+  '/jobs': typeof JobsRoute
   '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/documents'
+    | '/jobs'
     | '/memories'
     | '/query'
     | '/settings'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/documents'
+    | '/jobs'
     | '/memories'
     | '/query'
     | '/settings'
@@ -170,6 +181,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/documents'
+    | '/jobs'
     | '/memories'
     | '/query'
     | '/settings'
@@ -186,6 +198,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DocumentsRoute: typeof DocumentsRoute
+  JobsRoute: typeof JobsRoute
   MemoriesRoute: typeof MemoriesRoute
   QueryRoute: typeof QueryRoute
   SettingsRoute: typeof SettingsRoute
@@ -220,6 +233,13 @@ declare module '@tanstack/react-router' {
       path: '/memories'
       fullPath: '/memories'
       preLoaderRoute: typeof MemoriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jobs': {
+      id: '/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof JobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents': {
@@ -327,6 +347,7 @@ const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DocumentsRoute: DocumentsRoute,
+  JobsRoute: JobsRoute,
   MemoriesRoute: MemoriesRoute,
   QueryRoute: QueryRoute,
   SettingsRoute: SettingsRoute,

@@ -351,8 +351,8 @@ export function GraphClient({ graphData }: GraphClientProps) {
           }
         >
           <WorkspaceGraph
-            nodes={filteredNodes}
-            edges={filteredEdges}
+            nodes={graphData.nodes}
+            edges={graphData.edges}
             selectedNodeId={selectedNodeId}
             onNodeClick={handleNodeClick}
             onNodeHover={handleNodeHover}

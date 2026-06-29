@@ -49,7 +49,7 @@ export const Route = createRootRouteWithContext<{
     if (!workspaceId && foundWorkspace) {
       throw redirect({
         to: location.pathname,
-        search: (prev) => ({ ...prev, workspaceId: foundWorkspace.id }),
+        search: (prev: Record<string, string | undefined>) => ({ ...prev, workspaceId: foundWorkspace.id }),
         replace: true,
       });
     }

@@ -85,7 +85,7 @@ function McpProviderCard({
 
 function SettingsPage() {
   return (
-    <div className="page container mx-auto px-4 sm:px-6">
+    <div className="page container mx-auto">
       <div>
         <h1>Settings</h1>
         <p className="text-muted-foreground text-sm">
