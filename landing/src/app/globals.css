@@ -591,3 +591,211 @@ html {
     gap: 0;
   }
 }
+
+/* ── Premium footer — full-bleed particle wordmark ──────── */
+
+.openez-footer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    oklch(0.07 0.015 260),
+    oklch(0.05 0.012 260)
+  );
+  border-top: 1px solid oklch(1 0 0 / 6%);
+  isolation: isolate;
+}
+
+/* Full-footer particle canvas — fills everything, hover anywhere */
+.openez-footer__particles-full {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: default;
+}
+.openez-footer__particles-full canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.openez-footer__topline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(0.72 0.14 200 / 0.5),
+    transparent
+  );
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Content overlaid on top of the particle field */
+.openez-footer__content {
+  position: relative;
+  z-index: 3;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  pointer-events: none; /* let particles receive hover by default */
+}
+.openez-footer__content > * {
+  pointer-events: auto; /* but links/icons remain clickable */
+}
+
+/* Spacer for the wordmark visual area */
+.openez-footer__wordmark-space {
+  height: 90px;
+  pointer-events: none;
+}
+
+/* ── Mid row: nav + socials ── */
+
+.openez-footer__mid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+@media (min-width: 640px) {
+  .openez-footer__mid {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+}
+
+.openez-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  justify-content: center;
+}
+
+.openez-footer__navlink {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: oklch(0.7 0.01 260);
+  text-decoration: none;
+  position: relative;
+  transition: color 0.2s ease;
+  font-family: var(--font-mono), monospace;
+}
+
+.openez-footer__navlink::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 0;
+  height: 1px;
+  background: oklch(0.72 0.14 200);
+  transition: width 0.25s ease;
+}
+
+.openez-footer__navlink:hover {
+  color: oklch(0.97 0.005 260);
+}
+
+.openez-footer__navlink:hover::after {
+  width: 100%;
+}
+
+.openez-footer__social {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.openez-footer__social-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  border: 1px solid oklch(1 0 0 / 8%);
+  background: oklch(0.1 0.01 260);
+  color: oklch(0.6 0.01 260);
+  transition: all 0.2s ease;
+}
+
+.openez-footer__social-icon:hover {
+  color: oklch(0.78 0.12 195);
+  border-color: oklch(0.72 0.14 200 / 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px oklch(0.72 0.14 200 / 0.2);
+}
+
+/* ── Bottom row ── */
+
+.openez-footer__bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid oklch(1 0 0 / 5%);
+}
+
+@media (min-width: 640px) {
+  .openez-footer__bottom {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.openez-footer__tagline {
+  font-size: 0.75rem;
+  color: oklch(0.52 0.02 260);
+  line-height: 1.5;
+  font-family: var(--font-mono), monospace;
+}
+
+.openez-footer__copy {
+  font-size: 0.6875rem;
+  color: oklch(0.45 0.01 260);
+  font-family: var(--font-mono), monospace;
+  white-space: nowrap;
+}
+
+.openez-footer__link {
+  color: oklch(0.6 0.08 200);
+  text-decoration: none;
+  transition: color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.openez-footer__link:hover {
+  color: oklch(0.78 0.12 195);
+}
+
+.openez-footer__unikorn-social {
+  width: 1rem;
+  height: 1rem;
+  display: inline-block;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+.openez-footer__social-icon:hover .openez-footer__unikorn-social {
+  opacity: 1;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .openez-footer__particles-full {
+    display: none;
+  }
+}
