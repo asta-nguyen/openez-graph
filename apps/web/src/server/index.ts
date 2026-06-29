@@ -308,7 +308,7 @@ app.get("/api/jobs", (c) => {
     runs.push(...workspaceRuns);
   }
   runs.sort(
-    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
   );
   return c.json(runs);
 });
@@ -564,7 +564,7 @@ app.post("/api/workspaces/:id/index", async (c) => {
   if (!ws)
     return c.json(
       { jobId: null, status: "error", error: "Workspace not found" },
-      404,
+      404
     );
   const body = await c.req
     .json<{ mode?: string }>()
