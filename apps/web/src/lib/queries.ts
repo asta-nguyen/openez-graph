@@ -112,11 +112,6 @@ export const memoriesQueryOptions = (
       }),
   });
 
-export const jobsQueryOptions = queryOptions({
-  queryKey: ["jobs"],
-  queryFn: () => api.getAllJobs(),
-});
-
 export const workspaceJobsQueryOptions = (workspaceId: string) =>
   queryOptions({
     queryKey: ["workspace-jobs", workspaceId],

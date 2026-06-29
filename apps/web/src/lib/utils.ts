@@ -10,6 +10,9 @@ export function formatDate(date: Date | string | null | undefined): string {
 
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  // Guard fractional values (0 < bytes < 1): Math.log of a fraction is
+  // negative → floor → -1 → units[-1] is undefined. Round up to 1 B.
+  if (bytes < 1) return "1 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
   const value = bytes / Math.pow(1024, i);

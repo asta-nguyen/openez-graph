@@ -285,7 +285,6 @@ export const api = {
     if (params.toTime) qs.set("toTime", params.toTime);
     return request<QueryLogsResponse>(`/workspaces/${id}/query-logs?${qs}`);
   },
-  getAllJobs: () => request<RunRow[]>("/jobs"),
   runQuery: (input: { workspaceId: string; query: string }) =>
     request<QueryResult>("/query", {
       method: "POST",

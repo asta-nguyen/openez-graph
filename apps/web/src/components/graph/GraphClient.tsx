@@ -10,8 +10,7 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { GraphLegend } from "./GraphLegend";
-import { Badge, Input, Label, DualRangeSlider } from "@openez-graph/ui";
-import { Loader2, Search, X } from "lucide-react";
+import { Badge, Input, Label, DualRangeSlider, RefreshIcon, MagnifierIcon, XIcon } from "@openez-graph/ui";
 import { NODE_TYPES, SYMBOL_TYPES } from "../../lib/constants";
 
 const WorkspaceGraph = lazy(() =>
@@ -181,10 +180,21 @@ export function GraphClient({ graphData }: GraphClientProps) {
       // Symbol-type nodes → navigate to symbol browser with label pre-filled
       const symbolTypes: string[] = [...SYMBOL_TYPES];
       if (symbolTypes.includes(node.type) || node.refId) {
+        // Use the node's actual type for the symbol filter so the selected
+        // symbol isn't hidden by a mismatched type filter. Fall back to "all"
+        // when the node type isn't a known symbol type.
+        const symbolType = symbolTypes.includes(node.type)
+          ? node.type
+          : undefined;
         navigate({
           to: "/workspaces/$workspaceId/symbols",
           params: { workspaceId },
-          search: { workspaceId, type: SYMBOL_TYPES[0], page: 1, q: node.label },
+          search: {
+            workspaceId,
+            type: symbolType ?? "all",
+            page: 1,
+            q: node.label,
+          },
         });
         return;
       }
@@ -216,7 +226,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
     return (
       <div className="flex flex-1 items-center justify-center bg-background">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <RefreshIcon size={16} className="animate-spin" />
           <span>Loading graph interface...</span>
         </div>
       </div>
@@ -232,7 +242,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
               Search
             </Label>
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <MagnifierIcon size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="search"
                 placeholder="Node label..."
@@ -245,7 +255,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
                   onClick={() => setSearchQuery("")}
                   className="absolute right-2 top-1/2 -translate-y-1/2"
                 >
-                  <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                  <XIcon size={14} className="text-muted-foreground hover:text-foreground" />
                 </button>
               )}
             </div>
@@ -334,7 +344,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
           fallback={
             <div className="absolute inset-0 flex items-center justify-center bg-[#0a0f1a]">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <RefreshIcon size={16} className="animate-spin" />
                 <span>Loading graph renderer...</span>
               </div>
             </div>
@@ -382,7 +392,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
               }}
               className="text-muted-foreground hover:text-foreground"
             >
-              <X className="h-4 w-4" />
+              <XIcon size={16} />
             </button>
           </div>
           <div className="p-4 space-y-4">

@@ -20,6 +20,10 @@ export const Route = createFileRoute("/documents")({
     search: search.search,
     kind: search.kind,
     language: search.language,
+    sortBy: search.sortBy,
+    sortDir: (search.sortDir === "asc" || search.sortDir === "desc"
+      ? search.sortDir
+      : "") as "asc" | "desc" | "",
   }),
   loader: ({ context, deps }) =>
     context.queryClient.ensureQueryData(
@@ -30,6 +34,8 @@ export const Route = createFileRoute("/documents")({
         deps.search ?? "",
         deps.kind ?? "",
         deps.language ?? "",
+        deps.sortBy ?? "",
+        deps.sortDir,
       ),
     ),
   component: DocumentsPage,
@@ -108,7 +114,7 @@ function DocumentsPage() {
     });
   };
 
-  const handleSortChange = (next: { sortBy: string; sortDir: "asc" | "desc" }) => {
+  const handleSortChange = (next: { sortBy: string; sortDir: "asc" | "desc" | "" }) => {
     navigate({
       search: (prev) => ({
         ...prev,

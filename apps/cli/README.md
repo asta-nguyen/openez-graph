@@ -50,7 +50,7 @@ openez index [path]             # incremental index
 openez reindex [path]           # full rebuild
 openez watch [path]             # watch + auto-reindex on changes
 openez serve --mcp              # start MCP server (auto-index + auto-sync)
-openez serve --web              # start web dashboard (default port 17881)
+openez serve --web              # start web dashboard (default port 11368)
 openez serve --web --port 8080  # start web dashboard on custom port
 openez status [path]            # show workspace status
 openez list                     # list registered workspaces
@@ -96,7 +96,7 @@ openez setup opencode           # wire up OpenCode
 openez serve --web
 ```
 
-Opens a full web dashboard at `http://localhost:17881` with:
+Opens a full web dashboard at `http://localhost:11368` with:
 - Workspace overview (documents, chunks, nodes, edges)
 - Graph explorer with force-directed layout
 - Query interface for memory retrieval

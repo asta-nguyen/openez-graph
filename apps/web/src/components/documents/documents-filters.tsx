@@ -28,8 +28,13 @@ export function DocumentsFilters({
   }, [currentSearch]);
 
   // Debounce: push the deferred search value to the URL once it settles.
+  // Guard: only push when the deferred value has settled to the local input
+  // (deferredSearch === searchInput). During external navigation (back/forward),
+  // the sync effect updates searchInput to currentSearch, but deferredSearch
+  // still holds the stale user-typed value transiently. Skipping when they
+  // differ prevents pushing that stale value back to the parent.
   useEffect(() => {
-    if (deferredSearch !== currentSearch) {
+    if (deferredSearch !== currentSearch && deferredSearch === searchInput) {
       onFilterChange({ search: deferredSearch });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

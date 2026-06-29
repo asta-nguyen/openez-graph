@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useParams, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useDeferredValue, useEffect, useState, Fragment } from "react";
+import { useDeferredValue, useEffect, useState, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { documentChunksQueryOptions } from "../../../../../lib/queries";
 import type { ChunkRow } from "../../../../../lib/api";
 import { Pagination } from "../../../../../lib/pagination";
@@ -14,13 +15,11 @@ import {
   CardHeader,
   CardTitle,
   Table,
-  TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
+  ArrowBackIcon,
 } from "@openez-graph/ui";
-import { ChevronLeft } from "lucide-react";
 
 export const CHUNK_PAGE_SIZE = 50;
 
@@ -30,12 +29,15 @@ export const Route = createFileRoute(
   validateSearch: (search: Record<string, string | undefined>) => ({
     page: Math.max(1, parseInt(search.page ?? "", 10) || 1),
   }),
-  loader: ({ context, params }) =>
+  loaderDeps: ({ search }) => ({
+    page: search.page,
+  }),
+  loader: ({ context, params, deps }) =>
     context.queryClient.ensureQueryData(
       documentChunksQueryOptions(
         params.workspaceId,
         params.documentId,
-        1,
+        deps.page,
         CHUNK_PAGE_SIZE,
       ),
     ),
@@ -110,13 +112,23 @@ function ChunkViewerPage() {
     Math.ceil((data?.totalCount ?? 0) / CHUNK_PAGE_SIZE),
   );
 
-  // Deferred rendering for large chunk lists — keeps the list responsive
-  // while content/highlights load (plan 05-04). @tanstack/react-virtual is
-  // not a dependency; use useDeferredValue + CSS content-visibility instead.
+  // Deferred rendering for large chunk lists.
   const deferredItems = useDeferredValue(data?.items ?? []);
 
   // Track which chunk row is expanded (single-expand for MVP).
   const [expandedChunkId, setExpandedChunkId] = useState<string | null>(null);
+
+  // Virtual scrolling for the chunk table — only renders visible rows.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: deferredItems.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => {
+      // Expanded rows are much taller
+      return deferredItems[i]?.id === expandedChunkId ? 400 : 44;
+    },
+    overscan: 8,
+  });
 
   // Reset expanded state when the page or document changes (plan 05-06).
   useEffect(() => {
@@ -157,9 +169,9 @@ function ChunkViewerPage() {
           <button
             type="button"
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border hover:bg-muted transition-colors"
+            title="Back to Documents"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Back to Documents
+            <ArrowBackIcon size={14} />
           </button>
         </Link>
         <div className="flex-1">
@@ -216,44 +228,48 @@ function ChunkViewerPage() {
                     <TableHead className="w-24">Overlap</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {chunks.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No chunks found for this document.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    chunks.map((chunk, idx) => {
+              </Table>
+
+              {chunks.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No chunks found for this document.
+                </p>
+              ) : (
+                <div ref={scrollRef} className="max-h-[600px] overflow-y-auto border rounded-md">
+                  <div
+                    style={{
+                      height: `${rowVirtualizer.getTotalSize()}px`,
+                      width: "100%",
+                      position: "relative",
+                    }}
+                  >
+                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const chunk = chunks[virtualRow.index];
                       const meta = readMeta(chunk);
-                      const prevMeta = idx > 0 ? readMeta(chunks[idx - 1]) : null;
+                      const prevMeta = virtualRow.index > 0 ? readMeta(chunks[virtualRow.index - 1]) : null;
                       const overlap = computeOverlap(meta, prevMeta);
                       const isExpanded = expandedChunkId === chunk.id;
+
                       return (
-                        <Fragment key={chunk.id}>
-                          <TableRow
-                            className="cursor-pointer"
-                            onClick={() =>
-                              setExpandedChunkId(isExpanded ? null : chunk.id)
-                            }
-                            style={{
-                              contentVisibility: "auto",
-                              containIntrinsicSize: "60px",
-                            }}
+                        <div
+                          key={chunk.id}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                        >
+                          <div
+                            className="grid grid-cols-[64px_1fr_96px_96px_96px] items-center gap-2 px-4 py-2 border-b cursor-pointer hover:bg-muted/30 text-xs font-mono"
+                            onClick={() => setExpandedChunkId(isExpanded ? null : chunk.id)}
                           >
-                            <TableCell className="font-mono text-xs">
-                              {chunk.chunkIndex}
-                            </TableCell>
-                            <TableCell className="font-mono text-xs">
-                              {formatLineRange(meta)}
-                            </TableCell>
-                            <TableCell className="font-mono text-xs">
-                              {chunk.tokenCount}
-                            </TableCell>
-                            <TableCell className="font-mono text-xs">
-                              {chunk.content.length}
-                            </TableCell>
-                            <TableCell className="font-mono text-xs">
+                            <span>{chunk.chunkIndex}</span>
+                            <span>{formatLineRange(meta)}</span>
+                            <span>{chunk.tokenCount}</span>
+                            <span>{chunk.content.length}</span>
+                            <span>
                               {overlap === "—" ? (
                                 <span className="text-muted-foreground">—</span>
                               ) : (
@@ -261,35 +277,33 @@ function ChunkViewerPage() {
                                   {overlap}
                                 </span>
                               )}
-                            </TableCell>
-                          </TableRow>
+                            </span>
+                          </div>
                           {isExpanded && (
-                            <TableRow>
-                              <TableCell colSpan={5} className="bg-muted/20">
-                                <div className="max-h-96 overflow-y-auto">
-                                  {isStructuredChunk(chunk) ? (
-                                    <StructuredContentViewer
-                                      content={chunk.content}
-                                      kind={meta.kind ?? "code"}
-                                      language={meta.language ?? null}
-                                    />
-                                  ) : (
-                                    <ChunkContent
-                                      content={chunk.content}
-                                      language={meta.language ?? null}
-                                      kind={meta.kind ?? "code"}
-                                    />
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
+                            <div className="px-4 py-3 bg-muted/20 border-b">
+                              <div className="max-h-96 overflow-y-auto">
+                                {isStructuredChunk(chunk) ? (
+                                  <StructuredContentViewer
+                                    content={chunk.content}
+                                    kind={meta.kind ?? "code"}
+                                    language={meta.language ?? null}
+                                  />
+                                ) : (
+                                  <ChunkContent
+                                    content={chunk.content}
+                                    language={meta.language ?? null}
+                                    kind={meta.kind ?? "code"}
+                                  />
+                                )}
+                              </div>
+                            </div>
                           )}
-                        </Fragment>
+                        </div>
                       );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                    })}
+                  </div>
+                </div>
+              )}
 
               <Pagination
                 currentPage={page}

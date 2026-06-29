@@ -89,7 +89,7 @@ function SettingsPage() {
       <div>
         <h1>Settings</h1>
         <p className="text-muted-foreground text-sm">
-          Environment-backed provider configuration.
+          MCP server configuration for AI coding agents.
         </p>
       </div>
 

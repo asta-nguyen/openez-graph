@@ -12,11 +12,9 @@ import {
   AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader,
   AlertDialogFooter, AlertDialogTitle, AlertDialogDescription,
   AlertDialogAction, AlertDialogCancel,
+  ArrowBackIcon, LayersIcon, FileDescriptionIcon, BugIcon, ShieldCheckIcon, RefreshIcon,
+  BrainCircuitIcon, SendIcon, XIcon, ClockIcon, TrashIcon,
 } from "@openez-graph/ui";
-import {
-  ChevronLeft, Layers, Database, FileText, GitBranch, MessageSquare, Clock,
-  AlertCircle, AlertTriangle, CheckCircle2, Loader2, RefreshCw, XCircle, Trash2,
-} from "lucide-react";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/")({
   loader: async ({ context, params }) => {
@@ -32,12 +30,12 @@ export const Route = createFileRoute("/workspaces/$workspaceId/")({
 
 function RunStatusIcon({ status }: { status: string }) {
   if (status === "running")
-    return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+    return <RefreshIcon size={16} className="animate-spin text-muted-foreground" />;
   if (status === "completed")
-    return <CheckCircle2 className="h-4 w-4 text-primary" />;
+    return <ShieldCheckIcon size={16} className="text-primary" />;
   if (status === "failed")
-    return <AlertCircle className="h-4 w-4 text-destructive" />;
-  return <Clock className="h-4 w-4 text-muted-foreground" />;
+    return <BugIcon size={16} className="text-destructive" />;
+  return <ClockIcon size={16} className="text-muted-foreground" />;
 }
 
 function formatDuration(
@@ -74,9 +72,9 @@ function ReindexButton({
       aria-label="Reindex workspace"
     >
       {isLoading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <RefreshIcon size={16} className="animate-spin" />
       ) : (
-        <RefreshCw className="h-4 w-4" />
+        <RefreshIcon size={16} />
       )}
       {isLoading ? "Indexing..." : mode === "full" ? "Full Reindex" : "Reindex"}
     </Button>
@@ -97,7 +95,6 @@ function CancelIndexingButton({
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["workspace-jobs", workspaceId] }),
-        queryClient.invalidateQueries({ queryKey: ["jobs"] }),
       ]);
     },
   });
@@ -111,9 +108,9 @@ function CancelIndexingButton({
         aria-label="Cancel indexing"
       >
         {mutation.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <RefreshIcon size={16} className="animate-spin" />
         ) : (
-          <XCircle className="h-4 w-4" />
+          <XIcon size={16} />
         )}
         {mutation.isPending ? "Cancelling..." : "Cancel Indexing"}
       </Button>
@@ -164,7 +161,7 @@ function DeleteWorkspaceButton({
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
         <Button variant="destructive" disabled={isRunning} aria-label="Delete workspace">
-          <Trash2 className="h-4 w-4" />
+          <TrashIcon size={16} />
           Delete Workspace
         </Button>
       </AlertDialogTrigger>
@@ -196,7 +193,7 @@ function DeleteWorkspaceButton({
             onClick={handleConfirm}
           >
             {mutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <RefreshIcon size={16} className="animate-spin" />
             ) : (
               "Delete Permanently"
             )}
@@ -220,7 +217,6 @@ function WorkspaceDetailPage() {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["workspace-jobs", workspaceId] }),
-        queryClient.invalidateQueries({ queryKey: ["jobs"] }),
       ]);
     },
   });
@@ -255,7 +251,7 @@ function WorkspaceDetailPage() {
       <div className="page">
         <Card className="border-destructive">
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+            <BugIcon size={48} className="text-destructive mb-4" />
             <h2 className="text-lg font-medium mb-2">Registry unavailable</h2>
             <p className="muted text-center mb-4 max-w-md">
               Could not open the registry database.
@@ -293,7 +289,7 @@ function WorkspaceDetailPage() {
       <div className="flex items-center gap-4 mb-6">
         <Link to="/workspaces" search={{ page: 1, workspaceId }}>
           <Button variant="ghost" size="icon">
-            <ChevronLeft className="h-4 w-4" />
+            <ArrowBackIcon size={16} />
           </Button>
         </Link>
         <div className="flex-1">
@@ -323,7 +319,7 @@ function WorkspaceDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <FileText className="h-5 w-5 text-muted-foreground" />
+              <FileDescriptionIcon size={20} className="text-muted-foreground" />
               <div>
                 <p className="text-2xl font-semibold">
                   {workspace.documentCount}
@@ -336,7 +332,7 @@ function WorkspaceDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <Layers className="h-5 w-5 text-muted-foreground" />
+              <LayersIcon size={20} className="text-muted-foreground" />
               <div>
                 <p className="text-2xl font-semibold">{workspace.chunkCount}</p>
                 <p className="text-xs text-muted-foreground">Chunks</p>
@@ -347,7 +343,7 @@ function WorkspaceDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <GitBranch className="h-5 w-5 text-muted-foreground" />
+              <BrainCircuitIcon size={20} className="text-muted-foreground" />
               <div>
                 <p className="text-2xl font-semibold">{workspace.nodeCount}</p>
                 <p className="text-xs text-muted-foreground">Graph Nodes</p>
@@ -358,7 +354,7 @@ function WorkspaceDetailPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <Database className="h-5 w-5 text-muted-foreground" />
+              <LayersIcon size={20} className="text-muted-foreground" />
               <div>
                 <p className="text-2xl font-semibold">{workspace.edgeCount}</p>
                 <p className="text-xs text-muted-foreground">Graph Edges</p>
@@ -370,7 +366,7 @@ function WorkspaceDetailPage() {
 
        <div className="flex flex-wrap gap-4 mb-6">
          <Link to="/query" search={{ workspaceId }} onMouseEnter={handlePrefetchQuery}>
-           <Button variant="outline"><MessageSquare className="h-4 w-4" /> Try Query</Button>
+           <Button variant="outline"><SendIcon size={16} /> Try Query</Button>
          </Link>
          {hasGraphData && (
            <Link to="/workspaces/$workspaceId/graph" params={{ workspaceId }} search={{ workspaceId }} onMouseEnter={handlePrefetchGraph}>
@@ -642,7 +638,7 @@ function WorkspaceDetailPage() {
         <Card className="mt-4 border-destructive">
           <CardContent className="p-4">
             <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-destructive mt-0.5" />
+              <BugIcon size={16} className="text-destructive mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-destructive">
                   Last Error

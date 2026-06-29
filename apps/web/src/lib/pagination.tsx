@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowBackIcon, RightChevronIcon } from "@openez-graph/ui";
 import { PAGE_SIZE } from "./constants";
 
 export { PAGE_SIZE };
@@ -35,12 +35,12 @@ export function Pagination({ currentPage, totalPages, basePath, params, extraSea
           search={buildSearch(currentPage - 1)}
           className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border hover:bg-muted transition-colors"
         >
-          <ChevronLeft className="h-3.5 w-3.5" />
+          <ArrowBackIcon size={14} />
           Previous
         </Link>
       ) : (
         <span className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border text-muted-foreground opacity-50 cursor-not-allowed">
-          <ChevronLeft className="h-3.5 w-3.5" />
+          <ArrowBackIcon size={14} />
           Previous
         </span>
       )}
@@ -57,12 +57,12 @@ export function Pagination({ currentPage, totalPages, basePath, params, extraSea
           className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border hover:bg-muted transition-colors"
         >
           Next
-          <ChevronRight className="h-3.5 w-3.5" />
+          <RightChevronIcon size={14} />
         </Link>
       ) : (
         <span className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border text-muted-foreground opacity-50 cursor-not-allowed">
           Next
-          <ChevronRight className="h-3.5 w-3.5" />
+          <RightChevronIcon size={14} />
         </span>
       )}
     </div>

@@ -8,7 +8,7 @@ import { StatusBadge } from "../../components/status-badge";
 import {
   Button, Card, CardContent, CardHeader, CardTitle,
 } from "@openez-graph/ui";
-import { Plus, FolderOpen, Search, Layers, AlertTriangle } from "lucide-react";
+import { PlusIcon, LibraryIcon, MagnifierIcon, LayersIcon, BugIcon } from "@openez-graph/ui";
 
 export const Route = createFileRoute("/workspaces/")({
   loader: ({ context }) => context.queryClient.ensureQueryData(workspacesQueryOptions),
@@ -38,7 +38,7 @@ function WorkspacesPage() {
         </div>
         <Card className="border-destructive">
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+            <BugIcon size={48} className="text-destructive mb-4" />
             <h2 className="text-lg font-medium mb-2">Registry unavailable</h2>
             <p className="muted text-center mb-4 max-w-md">
               Could not open the registry database.
@@ -68,7 +68,7 @@ function WorkspacesPage() {
         </div>
         <Link to="/workspaces/new" search={{ workspaceId }}>
           <Button>
-            <Plus className="h-4 w-4" />
+            <PlusIcon size={16} />
             New Workspace
           </Button>
         </Link>
@@ -77,14 +77,14 @@ function WorkspacesPage() {
       {allWorkspaces.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
+            <LibraryIcon size={48} className="text-muted-foreground mb-4" />
             <h2 className="text-lg font-medium mb-2">No workspaces yet</h2>
             <p className="muted text-center mb-6 max-w-sm">
               Create your first workspace to start indexing a codebase.
             </p>
             <Link to="/workspaces/new" search={{ workspaceId }}>
               <Button>
-                <Plus className="h-4 w-4" />
+                <PlusIcon size={16} />
                 Create Workspace
               </Button>
             </Link>
@@ -101,7 +101,7 @@ function WorkspacesPage() {
                 key={workspace.id}
                 to="/workspaces/$workspaceId"
                 params={{ workspaceId: workspace.id }}
-                search={{ workspaceId }}
+                search={{ workspaceId: workspace.id }}
                 className="block"
                 onMouseEnter={() => queryClient.prefetchQuery(workspaceQueryOptions(workspace.id))}
               >
@@ -116,11 +116,11 @@ function WorkspacesPage() {
                         <p className="muted text-sm truncate mb-3">{workspace.rootPath}</p>
                         <div className="flex flex-wrap gap-4 text-sm">
                           <div className="flex items-center gap-1.5">
-                            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                            <LayersIcon size={14} className="text-muted-foreground" />
                             <span className="text-muted-foreground">{workspace.documentCount ?? 0} docs</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                            <MagnifierIcon size={14} className="text-muted-foreground" />
                             <span className="text-muted-foreground">{workspace.chunkCount ?? 0} chunks</span>
                           </div>
                           {(workspace.nodeCount ?? 0) > 0 && (

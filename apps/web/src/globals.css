@@ -30,7 +30,10 @@
 .panel {
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: rgba(17, 24, 39, 0.92);
+  background:
+    repeating-conic-gradient(rgba(30, 41, 59, 0.5) 0% 25%, rgba(17, 24, 39, 0.92) 0% 50%),
+    rgba(17, 24, 39, 0.92);
+  background-size: 4px 4px, auto;
   padding: 16px;
 }
 
@@ -304,6 +307,273 @@
   html {
     @apply font-sans;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DITHER TEXTURES — applied to all surfaces for a retro aesthetic
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Base dither pattern variables */
+:root {
+  --dither-size: 4px;
+  --dither-light: oklch(0.5 0 0 / 0.07);
+  --dither-light-strong: oklch(0.5 0 0 / 0.12);
+  --dither-dark: oklch(0.7 0 0 / 0.1);
+  --dither-dark-strong: oklch(0.7 0 0 / 0.18);
+}
+
+.dark {
+  --dither-light: oklch(0.7 0 0 / 0.08);
+  --dither-light-strong: oklch(0.7 0 0 / 0.15);
+  --dither-dark: oklch(0.8 0 0 / 0.12);
+  --dither-dark-strong: oklch(0.8 0 0 / 0.22);
+}
+
+/* Page background — fine grain */
+body {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: 3px 3px;
+}
+
+/* Cards — medium dither */
+.bg-card,
+.dark .bg-card {
+  background-image:
+    repeating-conic-gradient(var(--dither-light-strong) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Sidebar */
+.dark [data-slot="sidebar"],
+[data-slot="sidebar"] {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Sidebar — fallback for class-based */
+.bg-sidebar,
+.dark .bg-sidebar {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Muted backgrounds (used by hover states, table rows, etc.) */
+.bg-muted,
+.dark .bg-muted {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Secondary backgrounds */
+.bg-secondary,
+.dark .bg-secondary {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Accent backgrounds */
+.bg-accent,
+.dark .bg-accent {
+  background-image:
+    repeating-conic-gradient(var(--dither-light-strong) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Popover / dropdown backgrounds */
+.bg-popover,
+.dark .bg-popover {
+  background-image:
+    repeating-conic-gradient(var(--dither-light-strong) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Primary buttons — stronger dither */
+.bg-primary,
+.dark .bg-primary {
+  background-image:
+    repeating-conic-gradient(var(--dither-dark-strong) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Destructive buttons */
+.bg-destructive,
+.dark .bg-destructive {
+  background-image:
+    repeating-conic-gradient(oklch(0.8 0.2 25 / 0.2) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Table header rows */
+thead [data-slot="table-row"],
+thead tr {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Panels (custom class) */
+.panel {
+  background-image:
+    repeating-conic-gradient(rgba(50, 60, 80, 0.3) 0% 25%, transparent 0% 50%),
+    rgba(17, 24, 39, 0.92);
+  background-size: var(--dither-size) var(--dither-size), auto;
+}
+
+/* Code blocks */
+.code {
+  background-image:
+    repeating-conic-gradient(rgba(40, 50, 70, 0.3) 0% 25%, transparent 0% 50%),
+    rgba(5, 10, 19, 0.92);
+  background-size: var(--dither-size) var(--dither-size), auto;
+}
+
+/* Badges */
+[data-slot="badge"],
+.badge {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: 3px 3px;
+}
+
+/* Input fields */
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: 3px 3px;
+}
+
+/* Nexus canvas (graph background) */
+.nexus-canvas {
+  background-image:
+    repeating-conic-gradient(rgba(60, 70, 90, 0.15) 0% 25%, transparent 0% 50%),
+    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+    rgba(5, 10, 19, 0.92);
+  background-size: var(--dither-size) var(--dither-size), 24px 24px, 24px 24px, auto;
+}
+
+/* ── Remaining surfaces ── */
+
+/* Sidebar accent (hover/active in sidebar) */
+.bg-sidebar-accent,
+.dark .bg-sidebar-accent {
+  background-image:
+    repeating-conic-gradient(var(--dither-light-strong) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Foreground (rare — used for inverted elements) */
+.bg-foreground,
+.dark .bg-foreground {
+  background-image:
+    repeating-conic-gradient(oklch(0.3 0 0 / 0.15) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Card with opacity variants */
+.bg-card\/50,
+.dark .bg-card\/50 {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Background with opacity (sticky headers, overlays) */
+.bg-background\/60,
+.bg-background\/95,
+.dark .bg-background\/60,
+.dark .bg-background\/95 {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: 3px 3px;
+}
+
+/* Muted with opacity variants */
+.bg-muted\/20,
+.bg-muted\/30,
+.bg-muted\/50,
+.dark .bg-muted\/20,
+.dark .bg-muted\/30,
+.dark .bg-muted\/50 {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Destructive with opacity (error backgrounds) */
+.bg-destructive\/10,
+.bg-destructive\/80,
+.bg-destructive\/90,
+.dark .bg-destructive\/10,
+.dark .bg-destructive\/80,
+.dark .bg-destructive\/90 {
+  background-image:
+    repeating-conic-gradient(oklch(0.8 0.2 25 / 0.15) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Chart colors (graph node backgrounds) */
+.bg-chart-1\/15,
+.dark .bg-chart-1\/15 {
+  background-image:
+    repeating-conic-gradient(oklch(0.62 0.17 255 / 0.12) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+.bg-chart-2\/15,
+.dark .bg-chart-2\/15 {
+  background-image:
+    repeating-conic-gradient(oklch(0.7 0.15 145 / 0.12) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+.bg-chart-3\/15,
+.dark .bg-chart-3\/15 {
+  background-image:
+    repeating-conic-gradient(oklch(0.75 0.18 70 / 0.12) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+.bg-chart-4\/15,
+.dark .bg-chart-4\/15 {
+  background-image:
+    repeating-conic-gradient(oklch(0.65 0.2 305 / 0.12) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Primary with opacity */
+.bg-primary\/80,
+.bg-primary\/90,
+.dark .bg-primary\/80,
+.dark .bg-primary\/90 {
+  background-image:
+    repeating-conic-gradient(var(--dither-dark-strong) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Secondary with opacity */
+.bg-secondary\/80,
+.dark .bg-secondary\/80 {
+  background-image:
+    repeating-conic-gradient(var(--dither-light) 0% 25%, transparent 0% 50%);
+  background-size: var(--dither-size) var(--dither-size);
+}
+
+/* Black overlays (modals, tooltips) */
+.bg-black\/10,
+.bg-black\/50,
+.dark .bg-black\/10,
+.dark .bg-black\/50 {
+  background-image:
+    repeating-conic-gradient(oklch(0.3 0 0 / 0.1) 0% 25%, transparent 0% 50%);
+  background-size: 3px 3px;
 }
 
 ::-webkit-scrollbar {

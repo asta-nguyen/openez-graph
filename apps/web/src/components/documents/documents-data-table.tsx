@@ -25,7 +25,7 @@ interface DocumentsDataTableProps {
   workspaceId?: string;
   sortBy?: string;
   sortDir?: "asc" | "desc" | "";
-  onSortChange?: (next: { sortBy: string; sortDir: "asc" | "desc" }) => void;
+  onSortChange?: (next: { sortBy: string; sortDir: "asc" | "desc" | "" }) => void;
 }
 
 export function DocumentsDataTable({
@@ -68,7 +68,7 @@ export function DocumentsDataTable({
       if (sortDir === "asc") {
         onSortChange({ sortBy: columnId, sortDir: "desc" });
       } else if (sortDir === "desc") {
-        onSortChange({ sortBy: "", sortDir: "desc" });
+        onSortChange({ sortBy: "", sortDir: "" });
       } else {
         onSortChange({ sortBy: columnId, sortDir: "asc" });
       }

@@ -16,3 +16,4 @@ export * from "./components/ui/skeleton";
 export * from "./components/ui/slider";
 export * from "./hooks/use-mobile";
 export * from "./lib/utils";
+export * from "./icons";

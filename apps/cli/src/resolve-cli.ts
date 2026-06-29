@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 declare const __dirname: string | undefined;
 
@@ -9,6 +10,10 @@ function getThisDir(): string {
   }
   if (typeof import.meta !== "undefined" && import.meta.dirname) {
     return import.meta.dirname;
+  }
+  // Fallback for Node 20.0–20.10 (no import.meta.dirname): derive from URL
+  if (typeof import.meta !== "undefined" && import.meta.url) {
+    return path.dirname(fileURLToPath(import.meta.url));
   }
   return process.cwd();
 }

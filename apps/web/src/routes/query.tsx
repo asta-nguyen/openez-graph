@@ -1,12 +1,12 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Network, FileText, ArrowRight, Search, Loader2, Sparkles, Code2, History, ChevronDown, ChevronRight } from "lucide-react";
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   Label, Textarea,
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  BrainCircuitIcon, FileDescriptionIcon, ArrowNarrowRightIcon, MagnifierIcon, RefreshIcon, SparklesIcon, CodeIcon, HistoryCircleIcon, DownChevronIcon, RightChevronIcon,
 } from "@openez-graph/ui";
 import { api } from "../lib/api";
 import type { QueryResult, QueryLogRow } from "../lib/api";
@@ -47,8 +47,8 @@ function nodeTypeColor(type: string): string {
 
 function nodeTypeIcon(type: string) {
   switch (type) {
-    case NODE_TYPES.FILE: return <FileText className="h-3 w-3 mr-1" />;
-    case NODE_TYPES.SYMBOL: return <Code2 className="h-3 w-3 mr-1" />;
+    case NODE_TYPES.FILE: return <FileDescriptionIcon size={12} className="mr-1" />;
+    case NODE_TYPES.SYMBOL: return <CodeIcon size={12} className="mr-1" />;
     default: return null;
   }
 }
@@ -144,7 +144,7 @@ function QueryPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Search className="h-4 w-4" /> Ask a question
+            <MagnifierIcon size={16} /> Ask a question
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -176,9 +176,9 @@ function QueryPage() {
 
             <Button type="submit" disabled={pending} className="mt-2">
               {pending ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Searching...</>
+                <><RefreshIcon size={16} className="mr-2 animate-spin" /> Searching...</>
               ) : (
-                <><Search className="h-4 w-4 mr-2" /> Run query</>
+                <><MagnifierIcon size={16} className="mr-2" /> Run query</>
               )}
             </Button>
             {state.error && <p className="text-destructive text-sm mt-2">{state.error}</p>}
@@ -190,7 +190,7 @@ function QueryPage() {
       {hasQueried && !hasResults && !state.error && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <Search className="h-8 w-8 text-muted-foreground mb-3" />
+            <MagnifierIcon size={32} className="text-muted-foreground mb-3" />
             <p className="text-muted-foreground">No results found. Try a different query or make sure the workspace is indexed.</p>
           </CardContent>
         </Card>
@@ -200,7 +200,7 @@ function QueryPage() {
       {pending && (
         <Card>
           <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin mr-2 text-muted-foreground" />
+            <RefreshIcon size={20} className="animate-spin mr-2 text-muted-foreground" />
             <span className="text-muted-foreground">Searching the codebase...</span>
           </CardContent>
         </Card>
@@ -214,7 +214,7 @@ function QueryPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Sparkles className="h-4 w-4" /> Retrieved context
+                  <SparklesIcon size={16} /> Retrieved context
                   <Badge variant="secondary" className="text-xs">{contextBlocks.length} chunks</Badge>
                 </CardTitle>
               </CardHeader>
@@ -222,7 +222,7 @@ function QueryPage() {
                 {contextBlocks.map((block, i) => (
                   <div key={i} className="border-l-2 border-primary/20 pl-4">
                     <div className="flex items-center gap-2 mb-1.5 text-xs text-muted-foreground">
-                      <FileText className="h-3 w-3" />
+                      <FileDescriptionIcon size={12} />
                       <span className="font-mono">{block.path}</span>
                       {block.lines && <span>:{block.lines}</span>}
                       {block.score && <Badge variant="outline" className="text-xs h-4 px-1">score {block.score}</Badge>}
@@ -239,7 +239,7 @@ function QueryPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-4 w-4" /> Sources
+                  <FileDescriptionIcon size={16} /> Sources
                   <Badge variant="secondary" className="text-xs">{state.sources.length}</Badge>
                 </CardTitle>
               </CardHeader>
@@ -247,7 +247,7 @@ function QueryPage() {
                 <div className="space-y-1.5">
                   {state.sources.map((source, i) => (
                     <div key={i} className="flex items-center gap-3 text-sm py-1.5 px-2 rounded hover:bg-muted/50 transition-colors">
-                      <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <FileDescriptionIcon size={14} className="text-muted-foreground shrink-0" />
                       <span className="font-mono text-xs truncate">{source.path}</span>
                       {source.startLine != null && (
                         <span className="text-xs text-muted-foreground shrink-0">:{source.startLine}{source.endLine != null ? `-${source.endLine}` : ""}</span>
@@ -265,7 +265,7 @@ function QueryPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Network className="h-4 w-4" /> Related graph nodes
+                  <BrainCircuitIcon size={16} /> Related graph nodes
                   <Badge variant="secondary" className="text-xs">{state.graphNodes.length} nodes</Badge>
                 </CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">Files, symbols, and chunks connected to your query results.</p>
@@ -318,9 +318,9 @@ function QueryPage() {
                         return (
                           <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span className="truncate max-w-50 font-mono">{fromNode?.label ?? edge.from_node_id.slice(0, 8)}</span>
-                            <ArrowRight className="h-3 w-3 shrink-0" />
+                            <ArrowNarrowRightIcon size={12} className="shrink-0" />
                             <Badge variant="outline" className="text-xs px-1 py-0 h-4">{edge.type}</Badge>
-                            <ArrowRight className="h-3 w-3 shrink-0" />
+                            <ArrowNarrowRightIcon size={12} className="shrink-0" />
                             <span className="truncate max-w-50 font-mono">{toNode?.label ?? edge.to_node_id.slice(0, 8)}</span>
                           </div>
                         );
@@ -341,8 +341,8 @@ function QueryPage() {
             onClick={() => setShowHistory(!showHistory)}
             className="flex items-center gap-2 w-full text-left"
           >
-            {showHistory ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            <History className="h-4 w-4" />
+            {showHistory ? <DownChevronIcon size={16} /> : <RightChevronIcon size={16} />}
+            <HistoryCircleIcon size={16} />
             <CardTitle className="text-base">Query History</CardTitle>
             {historyData && (
               <Badge variant="secondary" className="text-xs">{historyData.totalCount} queries</Badge>
@@ -428,9 +428,9 @@ function QueryLogRowItem({
       >
         <TableCell className="w-8">
           {isExpanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            <DownChevronIcon size={16} className="text-muted-foreground" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            <RightChevronIcon size={16} className="text-muted-foreground" />
           )}
         </TableCell>
         <TableCell className="font-mono text-sm max-w-md truncate">

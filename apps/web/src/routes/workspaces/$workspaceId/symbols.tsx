@@ -15,8 +15,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  ArrowBackIcon,
+  MagnifierIcon,
 } from "@openez-graph/ui";
-import { ChevronLeft, Search } from "lucide-react";
 import { PAGE_SIZE, Pagination } from "../../../lib/pagination";
 import {
   workspaceQueryOptions,
@@ -57,6 +58,11 @@ function SymbolBrowserPage() {
   const [searchInput, setSearchInput] = useState(q);
   const deferredQuery = useDeferredValue(searchInput);
 
+  // Sync searchInput when q changes from external navigation (back/forward)
+  useEffect(() => {
+    setSearchInput(q);
+  }, [q]);
+
   useEffect(() => {
     if (deferredQuery === q) return;
     navigate({
@@ -85,7 +91,7 @@ function SymbolBrowserPage() {
       <div className="flex items-center gap-4 mb-4">
         <Link to="/workspaces/$workspaceId" params={{ workspaceId }} search={{ workspaceId }}>
           <Button variant="ghost" size="icon">
-            <ChevronLeft className="h-4 w-4" />
+            <ArrowBackIcon size={16} />
           </Button>
         </Link>
         <div>
@@ -115,7 +121,7 @@ function SymbolBrowserPage() {
       </div>
 
       <div className="relative mb-4 max-w-sm">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <MagnifierIcon size={16} className="absolute left-2.5 top-2.5 text-muted-foreground" />
         <Input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}

@@ -299,20 +299,6 @@ app.get("/api/workspaces/:id/memories", (c) => {
   }
 });
 
-// Jobs
-app.get("/api/jobs", (c) => {
-  const workspaces = listRegistryWorkspaces();
-  const runs: Array<ReturnType<typeof toRunShim>> = [];
-  for (const ws of workspaces) {
-    const workspaceRuns = getRecentIndexRuns(ws.rootPath, 100);
-    runs.push(...workspaceRuns);
-  }
-  runs.sort(
-    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-  );
-  return c.json(runs);
-});
-
 // Validate path
 app.post("/api/validate-path", async (c) => {
   const body = await c.req.json<{ rootPath?: string }>();
@@ -627,10 +613,18 @@ app.post("/api/workspaces/:id/index", async (c) => {
     },
   });
 
-  // Give indexWorkspace a microtask to create the run row, then capture runId
-  await Promise.resolve();
-  const latestRun = getLatestIndexRun(ws.rootPath);
-  runId = latestRun?.id ?? crypto.randomUUID();
+  // Give indexWorkspace time to create the run row. Poll for up to 500ms
+  // since indexWorkspace is async and may not have created the row after
+  // just one microtask.
+  for (let i = 0; i < 50; i++) {
+    await Promise.resolve();
+    const latestRun = getLatestIndexRun(ws.rootPath);
+    if (latestRun && latestRun.status === "running") {
+      runId = latestRun.id;
+      break;
+    }
+  }
+  if (!runId) runId = crypto.randomUUID();
 
   const initialEvent: IndexProgressEvent = {
     runId,
@@ -890,8 +884,9 @@ app.get("/api/workspaces/:id/symbols", (c) => {
 
   if (q) {
     const searchTypes = type ? [type] : [...SYMBOL_TYPES];
-    nodeRows = searchGraphNodesByLabel(workspace.rootPath, q, searchTypes);
-    totalCount = nodeRows.length;
+    const allMatches = searchGraphNodesByLabel(workspace.rootPath, q, searchTypes);
+    totalCount = allMatches.length;
+    nodeRows = allMatches.slice(offset, offset + limit);
   } else {
     nodeRows = listGraphNodesByType(workspace.rootPath, type, limit, offset);
     totalCount = countGraphNodesByType(workspace.rootPath, type);

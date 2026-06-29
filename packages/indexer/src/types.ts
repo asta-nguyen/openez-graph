@@ -20,4 +20,5 @@ export interface IndexWorkspaceSummary {
   filesScanned: number;
   filesUpdated: number;
   chunksWritten: number;
+  cancelled?: boolean;
 }

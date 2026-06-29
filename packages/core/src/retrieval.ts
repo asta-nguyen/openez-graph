@@ -140,11 +140,16 @@ export async function memoryQuery(input: {
   const selectedScores = new Map<string, number>();
   let usedTokens = 0;
 
+  // Reserve ~25% of the token budget for memories so the total (chunks +
+  // memories) does not exceed maxTokens. Chunks therefore get ~80% of the
+  // budget; the small gap avoids off-by-one overruns from token counting.
+  const chunkTokenBudget = Math.floor(maxTokens * 0.8);
+
   for (const entry of fused) {
     if (selected.length >= finalLimit) break;
 
     const tokenCount = countTokens(entry.item.content);
-    if (usedTokens + tokenCount > maxTokens) continue;
+    if (usedTokens + tokenCount > chunkTokenBudget) continue;
 
     selected.push(entry.item);
     selectedScores.set(entry.item.id, entry.score);

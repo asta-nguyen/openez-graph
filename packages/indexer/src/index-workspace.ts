@@ -23,6 +23,12 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
   ".py"
 ] as const;
 
+// JS/TS-only extensions for relative import resolution — excludes .py and .md
+// which have dedicated resolver functions (resolvePythonModulePath, etc.)
+const JS_IMPORT_EXTENSIONS = [
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
+] as const;
+
 function normalizeRelativePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
@@ -53,12 +59,12 @@ export function createWorkspaceFileResolver(
     const directMatch = toWorkspaceRelative(baseCandidate);
     if (directMatch) return directMatch;
 
-    for (const extension of RESOLVABLE_SOURCE_EXTENSIONS) {
+    for (const extension of JS_IMPORT_EXTENSIONS) {
       const withExtension = toWorkspaceRelative(`${baseCandidate}${extension}`);
       if (withExtension) return withExtension;
     }
 
-    for (const extension of RESOLVABLE_SOURCE_EXTENSIONS) {
+    for (const extension of JS_IMPORT_EXTENSIONS) {
       const asIndexFile = toWorkspaceRelative(path.join(baseCandidate, `index${extension}`));
       if (asIndexFile) return asIndexFile;
     }
@@ -670,7 +676,19 @@ export async function indexWorkspace(input: {
       graphStatus: "failed",
       lastError: isCancelled ? "" : errorMessage,
     });
-    if (!isCancelled) throw error;
+    if (isCancelled) {
+      // Cancellation is not an error — but callers need to know the run was
+      // aborted, not completed. Return a cancelled result instead of throwing
+      // so the caller can distinguish cancelled from successful completion.
+      return {
+        workspaceId: workspace.id,
+        filesScanned: files.length,
+        filesUpdated,
+        chunksWritten,
+        cancelled: true,
+      };
+    }
+    throw error;
   }
 
   await reportProgress("Index complete", 100);

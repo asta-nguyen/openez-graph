@@ -13,8 +13,8 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  ArrowBackIcon,
 } from "@openez-graph/ui";
-import { ChevronLeft } from "lucide-react";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/graph")({
   loader: async ({ context, params }) => {
@@ -71,7 +71,7 @@ function WorkspaceGraphPage() {
           <div className="flex items-center gap-4">
             <Link to="/workspaces/$workspaceId" params={{ workspaceId }} search={{ workspaceId }}>
               <Button variant="ghost" size="icon">
-                <ChevronLeft className="h-4 w-4" />
+                <ArrowBackIcon size={16} />
               </Button>
             </Link>
             <div>

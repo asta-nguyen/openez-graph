@@ -1,14 +1,14 @@
 import { Link, useMatchRoute, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard,
-  FolderKanban,
-  Settings,
-  FileText,
-  ScrollText,
-  Braces,
-  Brain,
-} from "lucide-react";
+  LayoutDashboardIcon,
+  LibraryIcon,
+  GearIcon,
+  FileDescriptionIcon,
+  BookIcon,
+  CodeXmlIcon,
+  BrainCircuitIcon,
+} from "@openez-graph/ui";
 import {
   workspacesQueryOptions,
 } from "../lib/queries";
@@ -32,32 +32,32 @@ const mainNav = [
   {
     href: "/",
     label: "Overview",
-    icon: LayoutDashboard,
+    icon: LayoutDashboardIcon,
   },
   {
     href: "/workspaces",
     label: "Workspaces",
-    icon: FolderKanban,
+    icon: LibraryIcon,
     query: workspacesQueryOptions,
   },
 ];
 
 const debugNav = [
-  { href: "/query", label: "Query", icon: ScrollText },
+  { href: "/query", label: "Query", icon: BookIcon },
   {
     href: "/documents",
     label: "Documents",
-    icon: FileText,
+    icon: FileDescriptionIcon,
   },
   {
     href: "/memories",
     label: "Memories",
-    icon: Brain,
+    icon: BrainCircuitIcon,
   },
   {
     href: "/workspaces/$workspaceId/symbols",
     label: "Symbols",
-    icon: Braces,
+    icon: CodeXmlIcon,
   },
 ];
 
@@ -65,7 +65,7 @@ const secondaryNav = [
   {
     href: "/settings",
     label: "Settings",
-    icon: Settings,
+    icon: GearIcon,
   },
 ];
 
@@ -77,7 +77,7 @@ function NavLink({
 }: {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; size?: number }>;
   query?: any;
 }) {
   const queryClient = useQueryClient();
@@ -102,7 +102,7 @@ function NavLink({
           search={{ workspaceId }}
           {...(isWorkspaceScoped ? { params: { workspaceId } } : {})}
         >
-          <Icon className="h-4 w-4" />
+          <Icon size={16} />
           <span>{label}</span>
         </Link>
       </SidebarMenuButton>

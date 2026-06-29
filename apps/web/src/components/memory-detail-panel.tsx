@@ -77,6 +77,7 @@ export function MemoryDetailPanel({ memory, open, onOpenChange }: MemoryDetailPa
                 <div className="flex gap-1">
                   <button
                     type="button"
+                    aria-pressed={viewMode === "tree"}
                     onClick={() => setViewMode("tree")}
                     className={`px-2 py-1 text-xs rounded-md border transition-colors ${
                       viewMode === "tree"
@@ -88,6 +89,7 @@ export function MemoryDetailPanel({ memory, open, onOpenChange }: MemoryDetailPa
                   </button>
                   <button
                     type="button"
+                    aria-pressed={viewMode === "text"}
                     onClick={() => setViewMode("text")}
                     className={`px-2 py-1 text-xs rounded-md border transition-colors ${
                       viewMode === "text"

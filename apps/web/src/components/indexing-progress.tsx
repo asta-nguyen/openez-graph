@@ -1,13 +1,5 @@
 import { useEffect } from "react";
-import {
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  FileText,
-  Layers,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@openez-graph/ui";
+import { Card, CardContent, CardHeader, CardTitle, RefreshIcon, ShieldCheckIcon, FileDescriptionIcon, LayersIcon, BugIcon, ClockIcon } from "@openez-graph/ui";
 import { useSSE, type IndexProgressEvent } from "../lib/use-sse";
 
 const PHASE_LABELS: Record<IndexProgressEvent["phase"], string> = {
@@ -36,12 +28,12 @@ const PHASE_COLORS: Record<IndexProgressEvent["phase"], { bar: string; icon: str
 function PhaseIcon({ phase }: { phase: IndexProgressEvent["phase"] }) {
   const color = PHASE_COLORS[phase].icon;
   if (phase === "complete")
-    return <CheckCircle2 className="h-4 w-4" style={{ color }} />;
+    return <ShieldCheckIcon size={16} style={{ color }} />;
   if (phase === "error")
-    return <AlertCircle className="h-4 w-4" style={{ color }} />;
+    return <BugIcon size={16} style={{ color }} />;
   if (phase === "cancelled")
-    return <Clock className="h-4 w-4" style={{ color }} />;
-  return <Loader2 className="h-4 w-4 animate-spin" style={{ color }} />;
+    return <ClockIcon size={16} style={{ color }} />;
+  return <RefreshIcon size={16} className="animate-spin" style={{ color }} />;
 }
 
 export function IndexingProgress({
@@ -99,14 +91,14 @@ export function IndexingProgress({
         </div>
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <FileDescriptionIcon size={16} className="text-muted-foreground" />
             <span>
               <span className="font-medium">{progress.filesDone}</span> /{" "}
               {progress.filesTotal} files
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4 text-muted-foreground" />
+            <LayersIcon size={16} className="text-muted-foreground" />
             <span>
               <span className="font-medium">{progress.chunksWritten}</span>{" "}
               chunks
@@ -124,7 +116,7 @@ export function IndexingProgress({
         <p className="text-xs text-muted-foreground">{progress.message}</p>
         {(progress.phase === "error" || error) && (
           <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-2">
-            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            <BugIcon size={16} className="text-destructive mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-medium text-destructive">
                 Indexing failed
