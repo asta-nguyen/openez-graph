@@ -293,9 +293,10 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
       if (existing) {
         const nextMetadata = input.metadata ?? String(existing.metadata ?? "{}");
-        const nextRefId = input.refId ?? (existing.refId as string | null) ?? null;
+        const existingRefId = (existing.ref_id as string | null) ?? null;
+        const nextRefId = input.refId ?? existingRefId;
 
-        if (nextRefId !== existing.refId || nextMetadata !== existing.metadata) {
+        if (nextRefId !== existingRefId || nextMetadata !== existing.metadata) {
           native
             .prepare("UPDATE graph_nodes SET ref_id = ?, metadata = ?, updated_at = ? WHERE id = ?")
             .run(nextRefId, nextMetadata, new Date().toISOString(), existing.id);
@@ -374,7 +375,12 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           `SELECT
             chunks.id, chunks.content, chunks.heading, chunks.metadata,
             documents.path,
-            bm25(chunks_fts, 0, 4, 2, 1) AS bm25_score
+            bm25(chunks_fts, 0, 4, 3, 1.5, 2, 1)
+              * CASE
+                  WHEN documents.path LIKE 'tests/%' OR documents.path LIKE '%/__tests__/%' OR documents.path GLOB '*.test.*' THEN 0.8
+                  WHEN documents.kind = 'code' THEN 1.35
+                  ELSE 1
+                END AS bm25_score
            FROM chunks_fts
            INNER JOIN chunks ON chunks.id = chunks_fts.chunk_id
            INNER JOIN documents ON documents.id = chunks.document_id
@@ -382,8 +388,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
            ORDER BY bm25_score ASC
            LIMIT ?`
         )
-        .all(ftsQuery, limit) as Array<Record<string, unknown>>;
+        .all(ftsQuery, limit * 5) as Array<Record<string, unknown>>;
 
+      const seenPaths = new Set<string>();
       return rows.map((row) => {
         const bm25 = Number(row.bm25_score ?? 0);
         // Convert bm25 (lower = better) to a 0-1 score (higher = better)
@@ -396,7 +403,11 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           heading: row.heading ? String(row.heading) : null,
           metadata: safeParseJson(String(row.metadata ?? ""), {}) as Record<string, unknown>
         };
-      });
+      }).filter((row) => {
+        if (seenPaths.has(row.path)) return false;
+        seenPaths.add(row.path);
+        return true;
+      }).slice(0, limit);
     },
 
     // ── Graph Traversal ──
@@ -589,11 +600,14 @@ function safeParseJson(value: string | undefined, fallback: Record<string, unkno
  * Falls back to prefix matching for partial words.
  */
 function sanitizeFtsQuery(query: string): string {
-  const stopwords = new Set(["a", "an", "are", "does", "how", "in", "is", "of", "the", "to", "what", "where"]);
+  const stopwords = new Set([
+    "a", "an", "are", "does", "extracted", "how", "implement", "implementation", "implemented",
+    "in", "is", "of", "the", "to", "what", "where", "work"
+  ]);
   const codeVerbs: Record<string, string> = {
     created: "create",
     generated: "generate",
-    implemented: "implement",
+    indexing: "index",
     selected: "select",
     stored: "store",
     written: "write"

@@ -115,6 +115,7 @@ async function vectorSearch(
 async function graphExpand(
   rootPath: string,
   seedIds: string[],
+  depth: number,
   limit: number
 ): Promise<ChunkHit[]> {
   if (seedIds.length === 0) return [];
@@ -123,44 +124,60 @@ async function graphExpand(
   const placeholders = seedIds.map(() => "?").join(",");
 
   const results = await repo.queryRaw(
-    `WITH seed_nodes AS (
-      SELECT id, ref_id
+    `WITH RECURSIVE walk(node_id, depth) AS (
+      SELECT id, 0
       FROM graph_nodes
       WHERE type = 'chunk'
         AND ref_id IN (${placeholders})
-    ),
-    neighbor_nodes AS (
-      SELECT DISTINCT
+      UNION
+      SELECT
         CASE
-          WHEN graph_edges.from_node_id = seed_nodes.id THEN graph_edges.to_node_id
+          WHEN graph_edges.from_node_id = walk.node_id THEN graph_edges.to_node_id
           ELSE graph_edges.from_node_id
-        END AS node_id
-      FROM graph_edges
-      INNER JOIN seed_nodes
-        ON graph_edges.from_node_id = seed_nodes.id
-        OR graph_edges.to_node_id = seed_nodes.id
+        END,
+        walk.depth + 1
+      FROM walk
+      INNER JOIN graph_edges
+        ON graph_edges.from_node_id = walk.node_id
+        OR graph_edges.to_node_id = walk.node_id
+      WHERE walk.depth < ?
+    ),
+    candidate_chunks AS (
+      SELECT chunks.id, MIN(walk.depth) AS distance
+      FROM walk
+      INNER JOIN graph_nodes ON graph_nodes.id = walk.node_id
+      INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+      WHERE graph_nodes.type = 'chunk'
+        AND walk.depth > 0
+        AND chunks.id NOT IN (${placeholders})
+      GROUP BY chunks.id
+      ORDER BY distance
       LIMIT ?
     )
     SELECT
       chunks.id, chunks.content, chunks.heading, chunks.metadata,
       documents.path,
-      0.15 AS score
-    FROM graph_nodes
-    INNER JOIN neighbor_nodes ON neighbor_nodes.node_id = graph_nodes.id
-    INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+      1.0 / (candidate_chunks.distance + 1) AS score
+    FROM candidate_chunks
+    INNER JOIN chunks ON chunks.id = candidate_chunks.id
     INNER JOIN documents ON documents.id = chunks.document_id
-    WHERE graph_nodes.type = 'chunk'`,
-    [...seedIds, limit]
+    ORDER BY candidate_chunks.distance, documents.path`,
+    [...seedIds, depth, ...seedIds, limit * 5]
   );
 
+  const seenPaths = new Set<string>();
   return results.map((row) => ({
     id: String(row.id),
     path: String(row.path),
     content: String(row.content),
-    score: Number(row.score ?? 0.15),
+    score: Number(row.score ?? 0),
     heading: row.heading ? String(row.heading) : null,
     metadata: safeParseJson(String(row.metadata ?? "{}"), {})
-  }));
+  })).filter((row) => {
+    if (seenPaths.has(row.path)) return false;
+    seenPaths.add(row.path);
+    return true;
+  }).slice(0, limit);
 }
 
 export async function memoryQuery(input: {
@@ -188,21 +205,23 @@ export async function memoryQuery(input: {
     vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit)
   ]);
 
+  const primaryResults = ftsResults.length > 0 ? ftsResults : vectorResults;
   let fused = reciprocalRankFusion([
-    ftsResults.map((item) => ({ item, score: item.score })),
-    vectorResults.map((item) => ({ item, score: item.score }))
-  ], 60, [1, ftsResults.length === 0 ? 1 : 0]);
+    primaryResults.map((item) => ({ item, score: item.score }))
+  ]);
 
   if (!input.skipGraphExpand) {
     const graphResults = await graphExpand(
       workspace.rootPath,
-      fused.slice(0, finalLimit).map((entry) => entry.item.id),
+      fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),
+      retrieval.graphHops,
       retrieval.maxGraphNeighbors
     );
+    const fusedItemsByPath = new Map(fused.map((entry) => [entry.item.path, entry.item]));
 
     fused = reciprocalRankFusion([
       fused,
-      graphResults.map((item) => ({ item, score: item.score }))
+      graphResults.map((item) => ({ item: fusedItemsByPath.get(item.path) ?? item, score: item.score }))
     ], 60, [1, 0.25]);
   }
 

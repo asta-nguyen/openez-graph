@@ -103,6 +103,9 @@ describe("createWorkspaceRepository", () => {
 
     const updated = await repo.findGraphNode("function", "myFunc");
     expect(updated?.refId).toBe("chunk-2");
+
+    await repo.upsertGraphNode({ type: "function", label: "myFunc" });
+    expect((await repo.findGraphNode("function", "myFunc"))?.refId).toBe("chunk-2");
   });
 
   it("inserts edges and traverses neighbors", async () => {

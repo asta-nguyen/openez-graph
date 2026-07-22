@@ -12,6 +12,17 @@ function getLineRange(node: { getStartLineNumber(): number; getEndLineNumber(): 
   };
 }
 
+function codeSearchText(text: string): string {
+  const identifiers = text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? [];
+  return [...new Set(identifiers.flatMap((identifier) => identifier
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(" ")
+    .filter((term) => term.length > 1)))]
+    .slice(0, 256)
+    .join(" ");
+}
+
 export function indexCode(content: string, filePath: string): {
   chunks: IndexedChunk[];
   importPaths: string[];
@@ -76,6 +87,7 @@ export function indexCode(content: string, filePath: string): {
       symbolType,
       metadata: {
         kind: "code",
+        searchText: codeSearchText(text),
         symbolName: name,
         symbolType,
         exported,
@@ -111,6 +123,7 @@ export function indexCode(content: string, filePath: string): {
       symbolType: "variable",
       metadata: {
         kind: "code",
+        searchText: codeSearchText(text),
         symbolName: name,
         symbolType: "variable",
         exported,
@@ -132,6 +145,7 @@ export function indexCode(content: string, filePath: string): {
         contentHash: hashContent(slice),
         metadata: {
           kind: "code",
+          searchText: codeSearchText(slice),
           fallback: true,
           startLine: index + 1,
           endLine: Math.min(index + 80, lines.length)

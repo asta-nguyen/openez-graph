@@ -64,13 +64,15 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
       chunk_id UNINDEXED,
       path,
       heading,
+      language,
+      search_text,
       content,
       tokenize = 'porter unicode61'
     );
   `);
 
   const ftsColumns = sqlite.prepare("PRAGMA table_info(chunks_fts)").all() as Array<{ name: string }>;
-  if (!ftsColumns.some((column) => column.name === "path")) {
+  if (!ftsColumns.some((column) => column.name === "search_text")) {
     sqlite.exec(`
       DROP TRIGGER IF EXISTS chunks_fts_insert;
       DROP TRIGGER IF EXISTS chunks_fts_delete;
@@ -80,6 +82,8 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
         chunk_id UNINDEXED,
         path,
         heading,
+        language,
+        search_text,
         content,
         tokenize = 'porter unicode61'
       );
@@ -90,8 +94,9 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
   sqlite.exec(`
     CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
     BEGIN
-      INSERT INTO chunks_fts (chunk_id, path, heading, content)
-      SELECT new.id, documents.path, coalesce(new.heading, ''), new.content
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''),
+        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
       FROM documents WHERE documents.id = new.document_id;
     END;
 
@@ -103,15 +108,17 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
     BEGIN
       DELETE FROM chunks_fts WHERE chunk_id = old.id;
-      INSERT INTO chunks_fts (chunk_id, path, heading, content)
-      SELECT new.id, documents.path, coalesce(new.heading, ''), new.content
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''),
+        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
       FROM documents WHERE documents.id = new.document_id;
     END;
   `);
 
   sqlite.exec(`
-    INSERT INTO chunks_fts (chunk_id, path, heading, content)
-    SELECT chunks.id, documents.path, coalesce(chunks.heading, ''), chunks.content
+    INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+    SELECT chunks.id, documents.path, coalesce(chunks.heading, ''),
+      coalesce(documents.language, ''), coalesce(json_extract(chunks.metadata, '$.searchText'), ''), chunks.content
     FROM chunks
     INNER JOIN documents ON documents.id = chunks.document_id
     WHERE NOT EXISTS (
