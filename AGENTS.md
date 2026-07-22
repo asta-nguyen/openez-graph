@@ -17,7 +17,7 @@ Treat the repo as SQLite-first, multi-workspace, and CLI/MCP-first, with the web
 
 Use SQLite in WAL mode as the default storage model.
 
-- global registry DB under `~/.ai-memory-graph/`
+- global registry DB under `~/.openez/`
 - per-workspace DB under `<root>/.openez/`
 - project-local workspace hint under `<root>/.openez/workspace.json`
 

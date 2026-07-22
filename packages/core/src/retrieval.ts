@@ -2,6 +2,7 @@ import { getBrainSettings } from "@openez-graph/config";
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
 import { getEmbeddingProvider } from "./embeddings";
+import type { EmbeddingProvider } from "./embeddings";
 import { reciprocalRankFusion } from "./rrf";
 import { countTokens } from "./tokenizer";
 import type { MemoryQueryResult, QuerySource } from "./types";
@@ -37,6 +38,66 @@ function formatContextBlock(chunk: ChunkHit): string {
   return `[source: ${chunk.path}:${startLine}-${endLine} | score: ${chunk.score.toFixed(3)}]\n${chunk.content}`;
 }
 
+export function cosineSimilarity(left: number[], right: number[]): number {
+  if (left.length === 0 || left.length !== right.length) return 0;
+
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    dot += left[index] * right[index];
+    leftNorm += left[index] * left[index];
+    rightNorm += right[index] * right[index];
+  }
+
+  return leftNorm === 0 || rightNorm === 0 ? 0 : dot / Math.sqrt(leftNorm * rightNorm);
+}
+
+function parseEmbedding(value: unknown): number[] {
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "number") ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function rankStoredEmbeddings(
+  rootPath: string,
+  provider: Pick<EmbeddingProvider, "provider" | "model">,
+  queryEmbedding: number[],
+  limit: number
+): Promise<ChunkHit[]> {
+  if (queryEmbedding.length === 0) return [];
+
+  const repo = createWorkspaceRepository(rootPath);
+  const results = await repo.queryRaw(
+    `SELECT
+      chunks.id, chunks.content, chunks.heading, chunks.metadata,
+      documents.path, embeddings.embedding
+    FROM embeddings
+    INNER JOIN chunks ON chunks.id = embeddings.chunk_id
+    INNER JOIN documents ON documents.id = chunks.document_id
+    WHERE embeddings.provider = ?
+      AND embeddings.model = ?
+      AND embeddings.dimensions = ?`,
+    [provider.provider, provider.model, queryEmbedding.length]
+  );
+
+  // ponytail: linear scan is enough for local SQLite; use sqlite-vec after profiling proves otherwise.
+  return results
+    .map((row) => ({
+      id: String(row.id),
+      path: String(row.path),
+      content: String(row.content),
+      score: cosineSimilarity(queryEmbedding, parseEmbedding(row.embedding)),
+      heading: row.heading ? String(row.heading) : null,
+      metadata: safeParseJson(String(row.metadata ?? "{}"), {})
+    }))
+    .sort((left, right) => right.score - left.score)
+    .slice(0, limit);
+}
+
 async function vectorSearch(
   rootPath: string,
   query: string,
@@ -46,32 +107,7 @@ async function vectorSearch(
   if (!provider) return [];
 
   const [queryEmbedding] = await provider.embed([query]);
-  const queryDimensions = queryEmbedding.length;
-  const embeddingJson = JSON.stringify(queryEmbedding);
-
-  const repo = createWorkspaceRepository(rootPath);
-  const results = await repo.queryRaw(
-    `SELECT
-      chunks.id, chunks.content, chunks.heading, chunks.metadata,
-      documents.path
-    FROM embeddings
-    INNER JOIN chunks ON chunks.id = embeddings.chunk_id
-    INNER JOIN documents ON documents.id = chunks.document_id
-    WHERE embeddings.model = ?
-      AND embeddings.dimensions = ?
-    ORDER BY abs(length(embeddings.embedding) - ?) ASC
-    LIMIT ?`,
-    [provider.model, queryDimensions, embeddingJson.length, limit]
-  );
-
-  return results.map((row) => ({
-    id: String(row.id),
-    path: String(row.path),
-    content: String(row.content),
-    score: 0.5,
-    heading: row.heading ? String(row.heading) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
-  }));
+  return rankStoredEmbeddings(rootPath, provider, queryEmbedding ?? [], limit);
 }
 
 async function graphExpand(
@@ -170,15 +206,18 @@ export async function memoryQuery(input: {
 
   const selected: ChunkHit[] = [];
   let usedTokens = 0;
+  const chunksPerPath = new Map<string, number>();
 
   for (const entry of fused) {
     if (selected.length >= finalLimit) break;
 
     const tokenCount = countTokens(entry.item.content);
     if (usedTokens + tokenCount > maxTokens) continue;
+    if ((chunksPerPath.get(entry.item.path) ?? 0) >= 3) continue;
 
-    selected.push(entry.item);
+    selected.push({ ...entry.item, score: entry.score });
     usedTokens += tokenCount;
+    chunksPerPath.set(entry.item.path, (chunksPerPath.get(entry.item.path) ?? 0) + 1);
   }
 
   const sources = selected.map((chunk) => sourceFromChunk(chunk, "retrieved-context"));
