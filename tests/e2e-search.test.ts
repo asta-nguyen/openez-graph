@@ -166,6 +166,14 @@ describe("end-to-end search pipeline", () => {
     expect(results.length).toBeGreaterThan(0);
   });
 
+  it("FTS5 ranks unique file paths before applying the limit", async () => {
+    await setupWorkspaceWithContent();
+    const repo = createWorkspaceRepository(tempRoot);
+
+    const results = await repo.fullTextSearch("function", 10);
+    expect(new Set(results.map((result) => result.path)).size).toBe(results.length);
+  });
+
   it("memoryQuery returns ranked results with sources", async () => {
     await setupWorkspaceWithContent();
 
