@@ -1,0 +1,77 @@
+tests/workspace-db.test.ts
+  s_d21dfcb6dd8a15::t_c6b52065212acc 119-121
+  s_9b6a95f2375a3e::t_1c50ee8eb5e615 1-118,122-152,196-227
+  s_d21dfcb6dd8a15::t_de71e1ee6f41ce 168
+  s_d21dfcb6dd8a15::t_ff10cde8d330e2 153-167,169-170
+  s_d21dfcb6dd8a15::t_2b537715a145ca 171-195
+packages/db/src/sqlite/repository.ts
+  s_d21dfcb6dd8a15::t_8fc48470ca3041 390,592,602
+  s_d21dfcb6dd8a15::t_4cbc3cb3d06e6e 601
+  s_9b6a95f2375a3e::t_6c8e24c130a5cd 369-371,374-379,381-382,385-389,391-399
+  s_d21dfcb6dd8a15::t_dd53fb09d605f0 404,406-407,415-417,419,423,435-441
+  s_9b6a95f2375a3e::t_537145359943ed 584-591,603-606,610
+  s_d21dfcb6dd8a15::t_d725c8466421dc 593-600,607-609
+packages/indexer/src/index-workspace.ts
+  s_d21dfcb6dd8a15::t_354c9976ee67c3 5-7,139-153,301-302,308-316,318,326,338,378-384,401-402,405-414,443-444,448-455,466,597
+  s_d21dfcb6dd8a15::t_06fbb3bab3d045 319-322,395
+  s_d21dfcb6dd8a15::t_19a5c4a915e225 396
+tests/index-workspace.test.ts
+  s_d21dfcb6dd8a15::t_de89b5e5141d7f 50-52
+  s_d21dfcb6dd8a15::t_c6b52065212acc 1-8,10-34,36-43,49,53-59
+  s_d21dfcb6dd8a15::t_2b537715a145ca 9,35,44-48
+packages/core/src/retrieval.ts
+  s_d21dfcb6dd8a15::t_8fc48470ca3041 5,41-65,67-68,71,77,81-84,87-110,209,216,218,220
+AGENTS.md
+  s_9b6a95f2375a3e::t_d54acb8182fed0 20
+tsconfig.base.json
+  s_d21dfcb6dd8a15::t_9ea2076d1c1b59 7
+packages/core/src/graph.ts
+  s_d21dfcb6dd8a15::t_dd53fb09d605f0 58,60,65-66
+tests/chunking.test.ts
+  s_d21dfcb6dd8a15::t_c6b52065212acc 4,19-25
+  s_d21dfcb6dd8a15::t_7be2ebc22dc8db 26-27
+tests/vector-search.test.ts
+  s_d21dfcb6dd8a15::t_c6b52065212acc 1-3,5,7-8,10,12-14,17-52
+  s_9b6a95f2375a3e::t_d84485fbf3a5a3 4,6,9,11,15-16,53-54
+packages/core/src/tokenizer.ts
+  s_d21dfcb6dd8a15::t_354c9976ee67c3 32-56
+apps/web/package.json
+  s_9b6a95f2375a3e::t_57004719f09d14 42-43
+tests/e2e-search.test.ts
+  s_9b6a95f2375a3e::t_2bb0cf7c5017bd 1-189
+packages/indexer/src/scanner.ts
+  s_d21dfcb6dd8a15::t_354c9976ee67c3 23-26
+tests/registry.test.ts
+  s_9b6a95f2375a3e::t_46e4f4dd023b60 1-130
+package.json
+  s_9b6a95f2375a3e::t_849a796093c378 29-30
+packages/db/src/sqlite/workspace-db.ts
+  s_d21dfcb6dd8a15::t_8fc48470ca3041 90-98
+  s_9b6a95f2375a3e::t_1e10ca703f5eb6 60-89
+pnpm-lock.yaml
+  s_9b6a95f2375a3e::t_96deb158d827a0 1-9493
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a3ead9130c0d0097d56db11e4b72b3ffaca548b1",
+  "prompts": {},
+  "sessions": {
+    "s_9b6a95f2375a3e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "three-thumb",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_d21dfcb6dd8a15": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f87e6-3241-7522-ac53-60c3a9ebca39",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
