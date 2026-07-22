@@ -1,0 +1,48 @@
+package.json
+  s_d21dfcb6dd8a15::t_6ccda24d398669 23
+tests/fixtures/retrieval-eval.json
+  s_d21dfcb6dd8a15::t_6ccda24d398669 1-20
+tests/vector-search.test.ts
+  s_d21dfcb6dd8a15::t_22ba804c20be96 7,9,20-21,48-49,53,58-72
+  s_d21dfcb6dd8a15::t_0ec6339619f851 73
+apps/worker/package.json
+  s_d21dfcb6dd8a15::t_6ccda24d398669 12
+tests/e2e-search.test.ts
+  s_d21dfcb6dd8a15::t_22ba804c20be96 142-149
+tests/retrieval-eval.test.ts
+  s_d21dfcb6dd8a15::t_6ccda24d398669 1-22
+packages/core/src/rrf.ts
+  s_d21dfcb6dd8a15::t_3bae174dfd325b 8-9,13,16
+packages/core/src/embeddings.ts
+  s_d21dfcb6dd8a15::t_3bae174dfd325b 15-34
+packages/indexer/src/index-workspace.ts
+  s_d21dfcb6dd8a15::t_83e755d3bd88aa 6-12,307,317,324-326,348,461-466,607-609
+packages/core/src/retrieval.ts
+  s_d21dfcb6dd8a15::t_4434fd07dfca86 194
+  s_d21dfcb6dd8a15::t_3bae174dfd325b 4,84,109-111,206,218
+apps/worker/src/retrieval-eval.ts
+  s_d21dfcb6dd8a15::t_6ccda24d398669 1-66
+packages/db/src/sqlite/repository.ts
+  s_d21dfcb6dd8a15::t_dd701431584a1d 377
+packages/db/src/sqlite/workspace-db.ts
+  s_d21dfcb6dd8a15::t_dd701431584a1d 61,65-66,72-88,93-95,106-108,113-114,116
+apps/worker/src/cli.ts
+  s_d21dfcb6dd8a15::t_ff7ab63fe889f8 24
+  s_d21dfcb6dd8a15::t_6ccda24d398669 11-12,15-23,32-33,57-58,61,102-103,108,129,133,135,137,140,144-146,154,158,183-187,198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "97308c8e4fc16a43fea55c3d6adbb7f5c963d1b7",
+  "prompts": {},
+  "sessions": {
+    "s_d21dfcb6dd8a15": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f87e6-3241-7522-ac53-60c3a9ebca39",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
