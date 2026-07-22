@@ -366,33 +366,45 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Full-Text Search ──
 
     async fullTextSearch(query: string, limit: number) {
-      const likePattern = `%${query}%`;
+      const ftsQuery = sanitizeFtsQuery(query);
+      if (!ftsQuery) return [];
+
       const rows = native
         .prepare(
-          `SELECT chunks.id, chunks.content, chunks.heading, chunks.metadata, documents.path
-           FROM chunks
+          `SELECT
+            chunks.id, chunks.content, chunks.heading, chunks.metadata,
+            documents.path,
+            bm25(chunks_fts) AS bm25_score
+           FROM chunks_fts
+           INNER JOIN chunks ON chunks.id = chunks_fts.chunk_id
            INNER JOIN documents ON documents.id = chunks.document_id
-           WHERE chunks.content LIKE ?
+           WHERE chunks_fts MATCH ?
+           ORDER BY bm25_score ASC
            LIMIT ?`
         )
-        .all(likePattern, limit) as Array<Record<string, unknown>>;
+        .all(ftsQuery, limit) as Array<Record<string, unknown>>;
 
-      return rows.map((row) => ({
-        id: String(row.id),
-        path: String(row.path),
-        content: String(row.content),
-        score: 0.1,
-        heading: row.heading ? String(row.heading) : null,
-        metadata: safeParseJson(String(row.metadata ?? ""), {}) as Record<string, unknown>
-      }));
+      return rows.map((row) => {
+        const bm25 = Number(row.bm25_score ?? 0);
+        // Convert bm25 (lower = better) to a 0-1 score (higher = better)
+        const score = -bm25;
+        return {
+          id: String(row.id),
+          path: String(row.path),
+          content: String(row.content),
+          score,
+          heading: row.heading ? String(row.heading) : null,
+          metadata: safeParseJson(String(row.metadata ?? ""), {}) as Record<string, unknown>
+        };
+      });
     },
 
     // ── Graph Traversal ──
 
-    async graphNeighbors(label: string, depth: number) {
+    async graphNeighbors(labelOrId: string, depth: number) {
       const seedNodes = native
-        .prepare("SELECT * FROM graph_nodes WHERE label = ? LIMIT 1")
-        .all(label) as Array<Record<string, unknown>>;
+        .prepare("SELECT * FROM graph_nodes WHERE id = ? OR label = ? ORDER BY id = ? DESC LIMIT 1")
+        .all(labelOrId, labelOrId, labelOrId) as Array<Record<string, unknown>>;
 
       if (seedNodes.length === 0) {
         return { nodes: [], edges: [] };
@@ -400,12 +412,15 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
       const seedId = String(seedNodes[0].id);
       const visited = new Set<string>();
-      const resultNodes: Array<Record<string, unknown>> = [];
+      const resultNodes: Array<Record<string, unknown>> = [
+        { ...seedNodes[0], metadata: safeParseJson(String(seedNodes[0].metadata ?? ""), {}) }
+      ];
       const resultEdges: Array<Record<string, unknown>> = [];
+      const resultEdgeIds = new Set<string>();
       let currentBatch = [seedId];
       visited.add(seedId);
 
-      for (let hop = 0; hop <= depth; hop++) {
+      for (let hop = 0; hop < Math.max(0, depth); hop++) {
         if (currentBatch.length === 0) break;
 
         const placeholders = currentBatch.map(() => "?").join(",");
@@ -417,9 +432,13 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         for (const edge of edges) {
           const fromId = String(edge.from_node_id);
           const toId = String(edge.to_node_id);
-          if (!visited.has(fromId)) { nextBatch.push(fromId); visited.add(fromId); }
-          if (!visited.has(toId)) { nextBatch.push(toId); visited.add(toId); }
-          resultEdges.push(edge);
+          if (!visited.has(fromId) && visited.size < 200) { nextBatch.push(fromId); visited.add(fromId); }
+          if (!visited.has(toId) && visited.size < 200) { nextBatch.push(toId); visited.add(toId); }
+          const edgeId = String(edge.id);
+          if (!resultEdgeIds.has(edgeId)) {
+            resultEdgeIds.add(edgeId);
+            resultEdges.push(edge);
+          }
         }
 
         for (const nodeId of nextBatch) {
@@ -430,10 +449,6 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         }
 
         currentBatch = nextBatch;
-      }
-
-      if (seedNodes[0]) {
-        resultNodes.push({ ...seedNodes[0], metadata: safeParseJson(String(seedNodes[0].metadata ?? ""), {}) });
       }
 
       return { nodes: resultNodes, edges: resultEdges };
@@ -565,4 +580,31 @@ function safeParseJson(value: string | undefined, fallback: Record<string, unkno
   } catch {
     return fallback;
   }
+}
+
+/**
+ * Sanitize a user query for FTS5 MATCH.
+ * Splits into terms, strips FTS5 special characters, and joins with OR
+ * so multi-word queries match any term (broader recall for code search).
+ * Falls back to prefix matching for partial words.
+ */
+function sanitizeFtsQuery(query: string): string {
+  const stopwords = new Set(["a", "an", "are", "does", "how", "in", "is", "of", "the", "to", "what", "where"]);
+  const codeVerbs: Record<string, string> = {
+    created: "create",
+    generated: "generate",
+    implemented: "implement",
+    selected: "select",
+    stored: "store",
+    written: "write"
+  };
+  const terms = (query.match(/[\p{L}\p{N}$]+/gu) ?? [])
+    .filter((t) => t.length > 1 && !stopwords.has(t.toLowerCase()));
+
+  if (terms.length === 0) return "";
+
+  // Use prefix matching (*) for each term, joined with OR
+  return [...new Set(terms.map((term) => codeVerbs[term.toLowerCase()] ?? term))]
+    .map((term) => `"${term}"*`)
+    .join(" OR ");
 }

@@ -57,6 +57,45 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
   `);
+
+  // FTS5 virtual table for full-text search over chunk content
+  sqlite.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+      chunk_id UNINDEXED,
+      content,
+      tokenize = 'porter unicode61'
+    );
+  `);
+
+  // Triggers to keep FTS table in sync with chunks
+  sqlite.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
+    BEGIN
+      INSERT INTO chunks_fts (chunk_id, content)
+      VALUES (new.id, new.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
+    BEGIN
+      DELETE FROM chunks_fts WHERE chunk_id = old.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
+    BEGIN
+      DELETE FROM chunks_fts WHERE chunk_id = old.id;
+      INSERT INTO chunks_fts (chunk_id, content)
+      VALUES (new.id, new.content);
+    END;
+  `);
+
+  sqlite.exec(`
+    INSERT INTO chunks_fts (chunk_id, content)
+    SELECT chunks.id, chunks.content
+    FROM chunks
+    WHERE NOT EXISTS (
+      SELECT 1 FROM chunks_fts WHERE chunks_fts.chunk_id = chunks.id
+    );
+  `);
 }
 
 function getWorkspaceTableDefinitions(): string[] {

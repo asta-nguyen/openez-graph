@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { getBrainSettings } from "@openez-graph/config";
-import { getEmbeddingProvider } from "@openez-graph/core";
+import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
+import { countTokens, getEmbeddingProvider, splitToTokenLimit } from "@openez-graph/core";
+import type { EmbeddingProvider } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -127,15 +128,27 @@ async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: str
   const chunks = await repo.getChunksByDocument(documentId);
   const chunkIds = chunks.map((c) => c.id);
 
-  const allNodeIds: string[] = [documentId, ...chunkIds];
-
   if (chunkIds.length > 0) {
     await repo.deleteEmbeddingsByChunkIds(chunkIds);
   }
 
-  await repo.deleteEdgesByNodeIds(allNodeIds);
   await repo.deleteGraphNodesByRefId(documentId);
   await repo.deleteChunksByDocument(documentId);
+}
+
+function boundChunks(chunks: IndexedChunk[], targetTokens: number, overlapTokens: number): IndexedChunk[] {
+  return chunks.flatMap((chunk) => {
+    const parts = splitToTokenLimit(chunk.content, targetTokens, overlapTokens);
+    if (parts.length <= 1) return chunk;
+
+    return parts.map((content, splitIndex) => ({
+      ...chunk,
+      content,
+      tokenCount: countTokens(content),
+      contentHash: hashContent(content),
+      metadata: { ...chunk.metadata, splitIndex, splitCount: parts.length }
+    }));
+  });
 }
 
 async function chunkDocument(input: {
@@ -285,19 +298,32 @@ async function chunkDocument(input: {
 
 async function writeEmbeddingsToRepo(
   repo: WorkspaceRepository,
-  chunkRows: Array<{ id: string; content: string }>
+  chunkRows: Array<{ id: string; content: string }>,
+  provider: EmbeddingProvider | null
 ) {
-  const provider = getEmbeddingProvider();
   if (!provider || chunkRows.length === 0) {
     return 0;
   }
 
+  const existing = await repo.queryRaw(
+    `SELECT chunk_id FROM embeddings
+     WHERE provider = ? AND model = ? AND chunk_id IN (${chunkRows.map(() => "?").join(",")})`,
+    [provider.provider, provider.model, ...chunkRows.map((chunk) => chunk.id)]
+  );
+  const existingIds = new Set(existing.map((row) => String(row.chunk_id)));
+  const missingRows = chunkRows.filter((chunk) => !existingIds.has(chunk.id));
+  if (missingRows.length === 0) return 0;
+
   try {
-    const vectors = await provider.embed(chunkRows.map((chunk) => chunk.content));
+    const vectors = await provider.embed(missingRows.map((chunk) => chunk.content));
+    if (vectors.length !== missingRows.length) {
+      console.error(`Embedding provider returned ${vectors.length} vectors for ${missingRows.length} chunks`);
+      return 0;
+    }
     const invalidEmbeddingIndex = vectors.findIndex((embedding) => embedding.length === 0);
 
     if (invalidEmbeddingIndex !== -1) {
-      console.error(`Embedding provider returned empty vector for chunk ${chunkRows[invalidEmbeddingIndex].id}`);
+      console.error(`Embedding provider returned empty vector for chunk ${missingRows[invalidEmbeddingIndex].id}`);
       return 0;
     }
 
@@ -309,7 +335,7 @@ async function writeEmbeddingsToRepo(
 
     await repo.insertEmbeddings(
       vectors.map((embedding, index) => ({
-        chunkId: chunkRows[index].id,
+        chunkId: missingRows[index].id,
         provider: provider.provider,
         model: provider.model,
         dimensions,
@@ -349,25 +375,42 @@ export async function indexWorkspace(input: {
 
   const repo = createWorkspaceRepository(workspace.rootPath);
   const settings = await getBrainSettings();
+  const config = await loadBrainConfig(workspace.rootPath);
+  const configuredWorkspace = config.workspaces?.find(
+    (candidate) => candidate.id === workspace.id || path.resolve(candidate.root) === path.resolve(workspace.rootPath)
+  );
+  const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
+  const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
+  const embeddingProvider = getEmbeddingProvider();
   const runMode = input.mode ?? "incremental";
 
   const reportProgress = async (message: string, progress: number) => {
     await input.onProgress?.({ message, progress });
   };
 
-  const runId = await repo.createIndexRun({ mode: runMode });
-
   if (runMode === "full") {
     await repo.resetAll();
   }
+
+  const runId = await repo.createIndexRun({ mode: runMode });
 
   await reportProgress("Scanning workspace files...", 5);
 
   const files = await scanWorkspaceFiles({
     rootPath: workspace.rootPath,
-    include: workspace.includeGlobs || "",
-    exclude: workspace.excludeGlobs || ""
+    include: includeGlobs,
+    exclude: excludeGlobs
   });
+
+  if (runMode === "incremental") {
+    const scannedPaths = new Set(files.map((file) => file.relativePath));
+    for (const document of await repo.listDocuments()) {
+      if (!scannedPaths.has(document.path)) {
+        await resetDocumentArtifacts(repo, document.id);
+        await repo.deleteDocument(document.id);
+      }
+    }
+  }
 
   const workspaceFileResolver = createWorkspaceFileResolver(
     workspace.rootPath,
@@ -397,12 +440,19 @@ export async function indexWorkspace(input: {
       const contentHash = hashContent(content);
       const existingDocument = await repo.getDocumentByPath(file.relativePath);
 
-      if (
+      const existingChunks = existingDocument ? await repo.getChunksByDocument(existingDocument.id) : [];
+      const unchanged =
         runMode === "incremental" &&
         existingDocument &&
         existingDocument.contentHash === contentHash &&
-        existingDocument.mtimeMs === file.mtimeMs
-      ) {
+        existingDocument.mtimeMs === file.mtimeMs;
+
+      if (unchanged) {
+        embeddingsWritten += await writeEmbeddingsToRepo(
+          repo,
+          existingChunks.map((chunk) => ({ id: chunk.id, content: chunk.content })),
+          embeddingProvider
+        );
         continue;
       }
 
@@ -413,6 +463,7 @@ export async function indexWorkspace(input: {
         targetTokens: settings.chunking.targetTokens,
         overlapTokens: settings.chunking.overlapTokens
       });
+      indexed.chunks = boundChunks(indexed.chunks, settings.chunking.targetTokens, settings.chunking.overlapTokens);
 
       let documentId: string;
 
@@ -543,7 +594,7 @@ export async function indexWorkspace(input: {
         content: indexed.chunks[i].content
       }));
 
-      embeddingsWritten += await writeEmbeddingsToRepo(repo, chunkRows);
+      embeddingsWritten += await writeEmbeddingsToRepo(repo, chunkRows, embeddingProvider);
       chunksWritten += chunkIds.length;
       filesUpdated += 1;
     }
