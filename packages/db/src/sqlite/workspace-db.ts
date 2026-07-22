@@ -58,21 +58,41 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
   `);
 
-  // FTS5 virtual table for full-text search over chunk content
+  // FTS5 includes file and symbol context because code queries often name either one.
   sqlite.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
       chunk_id UNINDEXED,
+      path,
+      heading,
       content,
       tokenize = 'porter unicode61'
     );
   `);
 
+  const ftsColumns = sqlite.prepare("PRAGMA table_info(chunks_fts)").all() as Array<{ name: string }>;
+  if (!ftsColumns.some((column) => column.name === "path")) {
+    sqlite.exec(`
+      DROP TRIGGER IF EXISTS chunks_fts_insert;
+      DROP TRIGGER IF EXISTS chunks_fts_delete;
+      DROP TRIGGER IF EXISTS chunks_fts_update;
+      DROP TABLE chunks_fts;
+      CREATE VIRTUAL TABLE chunks_fts USING fts5(
+        chunk_id UNINDEXED,
+        path,
+        heading,
+        content,
+        tokenize = 'porter unicode61'
+      );
+    `);
+  }
+
   // Triggers to keep FTS table in sync with chunks
   sqlite.exec(`
     CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
     BEGIN
-      INSERT INTO chunks_fts (chunk_id, content)
-      VALUES (new.id, new.content);
+      INSERT INTO chunks_fts (chunk_id, path, heading, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''), new.content
+      FROM documents WHERE documents.id = new.document_id;
     END;
 
     CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
@@ -83,15 +103,17 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
     BEGIN
       DELETE FROM chunks_fts WHERE chunk_id = old.id;
-      INSERT INTO chunks_fts (chunk_id, content)
-      VALUES (new.id, new.content);
+      INSERT INTO chunks_fts (chunk_id, path, heading, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''), new.content
+      FROM documents WHERE documents.id = new.document_id;
     END;
   `);
 
   sqlite.exec(`
-    INSERT INTO chunks_fts (chunk_id, content)
-    SELECT chunks.id, chunks.content
+    INSERT INTO chunks_fts (chunk_id, path, heading, content)
+    SELECT chunks.id, documents.path, coalesce(chunks.heading, ''), chunks.content
     FROM chunks
+    INNER JOIN documents ON documents.id = chunks.document_id
     WHERE NOT EXISTS (
       SELECT 1 FROM chunks_fts WHERE chunks_fts.chunk_id = chunks.id
     );

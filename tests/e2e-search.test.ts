@@ -139,6 +139,14 @@ describe("end-to-end search pipeline", () => {
     expect(results[0]?.score).not.toBe(0.1);
   });
 
+  it("FTS5 searches file paths and headings", async () => {
+    await setupWorkspaceWithContent();
+    const repo = createWorkspaceRepository(tempRoot);
+
+    expect((await repo.fullTextSearch("auth.ts", 10))[0]?.path).toBe("src/auth.ts");
+    expect((await repo.fullTextSearch("Authentication Module", 10))[0]?.path).toBe("README.md");
+  });
+
   it("FTS5 ranks relevant results higher", async () => {
     await setupWorkspaceWithContent();
     const repo = createWorkspaceRepository(tempRoot);

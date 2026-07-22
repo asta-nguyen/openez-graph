@@ -8,18 +8,20 @@ import { getBrainSettings } from "@openez-graph/config";
 import { countTokens, memoryQuery } from "@openez-graph/core";
 import { createRegistryRepository } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
+import { evaluateRetrieval, parseRetrievalCases, summarizeQuality } from "./retrieval-eval";
+import type { RetrievalCase, RetrievalQuality } from "./retrieval-eval";
 
 const program = new Command();
-const DEFAULT_BENCHMARK_QUERIES = [
-  "where is workspace indexing implemented?",
-  "how does the retrieval pipeline work?",
-  "where are embeddings written?",
-  "how does memoryQuery work?",
-  "what starts the queue worker?",
-  "where is the embedding provider selected?",
-  "how does vector search run?",
-  "where is the MCP server implemented?"
-] as const;
+const DEFAULT_BENCHMARK_CASES: RetrievalCase[] = [
+  { query: "where is workspace indexing implemented?" },
+  { query: "how does the retrieval pipeline work?" },
+  { query: "where are embeddings written?" },
+  { query: "how does memoryQuery work?" },
+  { query: "what starts the queue worker?" },
+  { query: "where is the embedding provider selected?" },
+  { query: "how does vector search run?" },
+  { query: "where is the MCP server implemented?" }
+];
 
 interface BenchmarkRun {
   query: string;
@@ -27,6 +29,8 @@ interface BenchmarkRun {
   contextTokens: number;
   sourceCount: number;
   sourcePaths: string[];
+  expectedPaths?: string[];
+  quality: RetrievalQuality;
 }
 
 async function resolveWorkspaceByPath(targetPath?: string): Promise<string> {
@@ -50,17 +54,11 @@ function percentile(values: number[], fraction: number): number {
   return sorted[index] ?? 0;
 }
 
-async function loadBenchmarkQueries(inputPath?: string): Promise<string[]> {
-  if (!inputPath) return [...DEFAULT_BENCHMARK_QUERIES];
+async function loadBenchmarkCases(inputPath?: string): Promise<RetrievalCase[]> {
+  if (!inputPath) return [...DEFAULT_BENCHMARK_CASES];
 
   const content = await fs.readFile(inputPath, "utf8");
-  const parsed = JSON.parse(content) as unknown;
-
-  if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === "string" && item.trim().length > 0)) {
-    throw new Error("Benchmark input file must be a JSON array of non-empty strings.");
-  }
-
-  return parsed;
+  return parseRetrievalCases(JSON.parse(content) as unknown);
 }
 
 program
@@ -101,12 +99,13 @@ program
 
 program
   .command("benchmark-query")
-  .description("Benchmark retrieval latency, context size, and source counts for memory_query")
-  .option("-i, --input <path>", "path to a JSON file containing an array of query strings")
+  .description("Benchmark memory_query latency and retrieval quality")
+  .option("-i, --input <path>", "JSON array of strings or { query, expectedPaths }")
   .option("-o, --output <path>", "write the benchmark report to a JSON file")
   .option("--iterations <count>", "run each query multiple times", "1")
   .option("--limit <count>", "override memory_query final result limit")
   .option("--max-tokens <count>", "override memory_query max context tokens")
+  .option("--fail-on-quality", "exit non-zero unless Recall@5 >= 0.8, MRR >= 0.6, duplicates <= 0.2")
   .action(async (options, command) => {
     const opts = command.parent?.opts() ?? {};
     const workspaceId = opts.workspace || await resolveWorkspaceByPath(opts.path);
@@ -127,21 +126,24 @@ program
     }
 
     try {
-      const queries = await loadBenchmarkQueries(options.input);
+      const cases = await loadBenchmarkCases(options.input);
       const runs: BenchmarkRun[] = [];
 
       for (let iteration = 0; iteration < iterations; iteration += 1) {
-        for (const query of queries) {
+        for (const benchmarkCase of cases) {
           const startedAt = performance.now();
-          const result = await memoryQuery({ workspaceId, query, limit, maxTokens });
+          const result = await memoryQuery({ workspaceId, query: benchmarkCase.query, limit, maxTokens });
           const latencyMs = performance.now() - startedAt;
+          const sourcePaths = result.sources.map((source) => source.path);
 
           runs.push({
-            query,
+            query: benchmarkCase.query,
             latencyMs,
             contextTokens: countTokens(result.answerContext),
             sourceCount: result.sources.length,
-            sourcePaths: result.sources.map((source) => source.path)
+            sourcePaths,
+            expectedPaths: benchmarkCase.expectedPaths,
+            quality: evaluateRetrieval(sourcePaths, benchmarkCase.expectedPaths)
           });
         }
       }
@@ -149,10 +151,11 @@ program
       const latencyValues = runs.map((run) => run.latencyMs);
       const tokenValues = runs.map((run) => run.contextTokens);
       const sourceCountValues = runs.map((run) => run.sourceCount);
+      const quality = summarizeQuality(runs.map((run) => run.quality));
 
       const report = {
         workspaceId,
-        queryCount: queries.length,
+        queryCount: cases.length,
         iterations,
         totalRuns: runs.length,
         options: { limit: limit ?? null, maxTokens: maxTokens ?? null, input: options.input ?? null },
@@ -177,6 +180,11 @@ program
             p50: percentile(sourceCountValues, 0.5),
             p95: percentile(sourceCountValues, 0.95),
             max: sourceCountValues.length === 0 ? 0 : Math.max(...sourceCountValues)
+          },
+          quality: {
+            ...quality,
+            thresholds: { recallAt5: 0.8, mrr: 0.6, duplicatePathRate: 0.2 },
+            passed: quality.evaluatedRuns > 0 && quality.recallAt5 >= 0.8 && quality.mrr >= 0.6 && quality.duplicatePathRate <= 0.2
           }
         },
         runs
@@ -187,6 +195,7 @@ program
       }
 
       console.log(JSON.stringify(report, null, 2));
+      if (options.failOnQuality && !report.summary.quality.passed) process.exitCode = 1;
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);

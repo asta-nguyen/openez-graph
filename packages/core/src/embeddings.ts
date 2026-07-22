@@ -12,6 +12,26 @@ export interface EmbeddingProvider {
   provider: "openai" | "ollama";
 }
 
+export function embeddingStorageModel(provider: Pick<EmbeddingProvider, "model">): string {
+  return `${provider.model}:openez-code-v1`;
+}
+
+export function formatEmbeddingInput(
+  provider: Pick<EmbeddingProvider, "provider" | "model">,
+  input: { content: string; path?: string; heading?: string | null },
+  task: "document" | "query"
+): string {
+  const text = task === "query"
+    ? input.content
+    : [`path: ${input.path ?? ""}`, input.heading ? `heading: ${input.heading}` : "", input.content]
+        .filter(Boolean)
+        .join("\n");
+  const nomicPrefix = provider.provider === "ollama" && provider.model.includes("nomic-embed-text")
+    ? task === "query" ? "search_query: " : "search_document: "
+    : "";
+  return `${nomicPrefix}${text}`;
+}
+
 export class OpenAIEmbeddingProvider implements EmbeddingProvider {
   readonly provider = "openai" as const;
 

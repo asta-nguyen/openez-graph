@@ -3,7 +3,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
-import { countTokens, getEmbeddingProvider, splitToTokenLimit } from "@openez-graph/core";
+import {
+  countTokens,
+  embeddingStorageModel,
+  formatEmbeddingInput,
+  getEmbeddingProvider,
+  splitToTokenLimit
+} from "@openez-graph/core";
 import type { EmbeddingProvider } from "@openez-graph/core";
 import {
   createRegistryRepository,
@@ -298,7 +304,7 @@ async function chunkDocument(input: {
 
 async function writeEmbeddingsToRepo(
   repo: WorkspaceRepository,
-  chunkRows: Array<{ id: string; content: string }>,
+  chunkRows: Array<{ id: string; content: string; path: string; heading?: string | null }>,
   provider: EmbeddingProvider | null
 ) {
   if (!provider || chunkRows.length === 0) {
@@ -308,14 +314,16 @@ async function writeEmbeddingsToRepo(
   const existing = await repo.queryRaw(
     `SELECT chunk_id FROM embeddings
      WHERE provider = ? AND model = ? AND chunk_id IN (${chunkRows.map(() => "?").join(",")})`,
-    [provider.provider, provider.model, ...chunkRows.map((chunk) => chunk.id)]
+    [provider.provider, embeddingStorageModel(provider), ...chunkRows.map((chunk) => chunk.id)]
   );
   const existingIds = new Set(existing.map((row) => String(row.chunk_id)));
   const missingRows = chunkRows.filter((chunk) => !existingIds.has(chunk.id));
   if (missingRows.length === 0) return 0;
 
   try {
-    const vectors = await provider.embed(missingRows.map((chunk) => chunk.content));
+    const vectors = await provider.embed(
+      missingRows.map((chunk) => formatEmbeddingInput(provider, chunk, "document"))
+    );
     if (vectors.length !== missingRows.length) {
       console.error(`Embedding provider returned ${vectors.length} vectors for ${missingRows.length} chunks`);
       return 0;
@@ -337,7 +345,7 @@ async function writeEmbeddingsToRepo(
       vectors.map((embedding, index) => ({
         chunkId: missingRows[index].id,
         provider: provider.provider,
-        model: provider.model,
+        model: embeddingStorageModel(provider),
         dimensions,
         embedding: JSON.stringify(embedding)
       }))
@@ -450,7 +458,12 @@ export async function indexWorkspace(input: {
       if (unchanged) {
         embeddingsWritten += await writeEmbeddingsToRepo(
           repo,
-          existingChunks.map((chunk) => ({ id: chunk.id, content: chunk.content })),
+          existingChunks.map((chunk) => ({
+            id: chunk.id,
+            content: chunk.content,
+            path: existingDocument.path,
+            heading: chunk.heading
+          })),
           embeddingProvider
         );
         continue;
@@ -591,7 +604,9 @@ export async function indexWorkspace(input: {
 
       const chunkRows = chunkIds.map((id, i) => ({
         id,
-        content: indexed.chunks[i].content
+        content: indexed.chunks[i].content,
+        path: file.relativePath,
+        heading: indexed.chunks[i].heading
       }));
 
       embeddingsWritten += await writeEmbeddingsToRepo(repo, chunkRows, embeddingProvider);

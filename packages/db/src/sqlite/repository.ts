@@ -374,7 +374,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           `SELECT
             chunks.id, chunks.content, chunks.heading, chunks.metadata,
             documents.path,
-            bm25(chunks_fts) AS bm25_score
+            bm25(chunks_fts, 0, 4, 2, 1) AS bm25_score
            FROM chunks_fts
            INNER JOIN chunks ON chunks.id = chunks_fts.chunk_id
            INNER JOIN documents ON documents.id = chunks.document_id
