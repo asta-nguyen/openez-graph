@@ -20,6 +20,7 @@
     "mcp": "pnpm --filter @openez-graph/cli openez serve --mcp",
     "worker": "pnpm --filter @openez-graph/worker worker",
     "benchmark:query": "pnpm --filter @openez-graph/worker benchmark:query",
+    "benchmark:retrieval": "pnpm --filter @openez-graph/worker benchmark:retrieval",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "vitest run"

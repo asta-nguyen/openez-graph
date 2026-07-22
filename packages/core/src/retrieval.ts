@@ -1,7 +1,7 @@
 import { getBrainSettings } from "@openez-graph/config";
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
-import { getEmbeddingProvider } from "./embeddings";
+import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
 import type { EmbeddingProvider } from "./embeddings";
 import { reciprocalRankFusion } from "./rrf";
 import { countTokens } from "./tokenizer";
@@ -81,7 +81,7 @@ export async function rankStoredEmbeddings(
     WHERE embeddings.provider = ?
       AND embeddings.model = ?
       AND embeddings.dimensions = ?`,
-    [provider.provider, provider.model, queryEmbedding.length]
+    [provider.provider, embeddingStorageModel(provider), queryEmbedding.length]
   );
 
   // ponytail: linear scan is enough for local SQLite; use sqlite-vec after profiling proves otherwise.
@@ -106,7 +106,9 @@ async function vectorSearch(
   const provider = getEmbeddingProvider();
   if (!provider) return [];
 
-  const [queryEmbedding] = await provider.embed([query]);
+  const [queryEmbedding] = await provider.embed([
+    formatEmbeddingInput(provider, { content: query }, "query")
+  ]);
   return rankStoredEmbeddings(rootPath, provider, queryEmbedding ?? [], limit);
 }
 
@@ -189,7 +191,7 @@ export async function memoryQuery(input: {
   let fused = reciprocalRankFusion([
     ftsResults.map((item) => ({ item, score: item.score })),
     vectorResults.map((item) => ({ item, score: item.score }))
-  ]);
+  ], 60, [1, ftsResults.length === 0 ? 1 : 0]);
 
   if (!input.skipGraphExpand) {
     const graphResults = await graphExpand(
@@ -201,7 +203,7 @@ export async function memoryQuery(input: {
     fused = reciprocalRankFusion([
       fused,
       graphResults.map((item) => ({ item, score: item.score }))
-    ]);
+    ], 60, [1, 0.25]);
   }
 
   const selected: ChunkHit[] = [];
@@ -213,7 +215,7 @@ export async function memoryQuery(input: {
 
     const tokenCount = countTokens(entry.item.content);
     if (usedTokens + tokenCount > maxTokens) continue;
-    if ((chunksPerPath.get(entry.item.path) ?? 0) >= 3) continue;
+    if (chunksPerPath.has(entry.item.path)) continue;
 
     selected.push({ ...entry.item, score: entry.score });
     usedTokens += tokenCount;
