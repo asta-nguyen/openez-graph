@@ -1,0 +1,26 @@
+apps/cli/src/setup-devin.ts
+  s_a2d4a4a6422bc6::t_0b1c81cddf99bd 1-64
+apps/cli/src/cli.ts
+  s_a2d4a4a6422bc6::t_0778027422cc53 324-341
+  s_a2d4a4a6422bc6::t_f3747dec973661 295
+apps/cli/package.json
+  s_a2d4a4a6422bc6::t_3161401016e63c 3
+apps/cli/src/setup-windsurf.ts
+  s_a2d4a4a6422bc6::t_d505527665b589 1-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "a20c68152f54309008b67417fa7a119fcc01b842",
+  "prompts": {},
+  "sessions": {
+    "s_a2d4a4a6422bc6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "c4c0259e-4f1f-4e4f-91a2-bfec831a5214",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
