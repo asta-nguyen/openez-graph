@@ -9,6 +9,7 @@
     "index": "tsx src/cli.ts index",
     "reindex": "tsx src/cli.ts reindex",
     "benchmark:query": "tsx src/cli.ts benchmark-query",
+    "benchmark:retrieval": "tsx src/cli.ts --path ../.. benchmark-query --input ../../tests/fixtures/retrieval-eval.json",
     "watch": "tsx src/cli.ts watch",
     "typecheck": "tsc -p tsconfig.json"
   },

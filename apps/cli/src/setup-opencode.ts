@@ -2,6 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { resolveCliInvocation } from "./resolve-cli";
+
 function getOpenCodeConfigPath(): string {
   return path.join(os.homedir(), ".config", "opencode", "opencode.json");
 }
@@ -19,10 +21,8 @@ export async function setupOpenCode(rootPath: string): Promise<void> {
     process.exit(1);
   }
 
-  const repoRoot = path.resolve(import.meta.dirname, "../../..");
+  const { command, args, repoRoot } = resolveCliInvocation();
   const label = "openez";
-  const tsxPath = path.join(repoRoot, "node_modules", ".bin", "tsx");
-  const cliPath = path.resolve(import.meta.dirname, "./cli.ts");
 
   const configPath = getOpenCodeConfigPath();
   const configDir = path.dirname(configPath);
@@ -48,8 +48,8 @@ export async function setupOpenCode(rootPath: string): Promise<void> {
   const mcp = config.mcp as Record<string, unknown>;
 
   mcp[label] = {
-    command: tsxPath,
-    args: [cliPath, "serve", "--mcp"]
+    command,
+    args
   };
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");

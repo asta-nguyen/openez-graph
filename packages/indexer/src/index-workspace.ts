@@ -2,8 +2,15 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { getBrainSettings } from "@openez-graph/config";
-import { getEmbeddingProvider } from "@openez-graph/core";
+import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
+import {
+  countTokens,
+  embeddingStorageModel,
+  formatEmbeddingInput,
+  getEmbeddingProvider,
+  splitToTokenLimit
+} from "@openez-graph/core";
+import type { EmbeddingProvider } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -20,14 +27,15 @@ import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
 
 const RESOLVABLE_SOURCE_EXTENSIONS = [
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
-  ".md", ".mdx"
+  ".md", ".mdx",
+  ".py"
 ] as const;
 
 function normalizeRelativePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
 
-function createWorkspaceFileResolver(
+export function createWorkspaceFileResolver(
   workspaceRoot: string,
   files: Array<{ relativePath: string; absolutePath: string }>
 ) {
@@ -66,10 +74,58 @@ function createWorkspaceFileResolver(
     return null;
   }
 
+  function resolvePythonModulePath(modulePath: string): string | null {
+    const basePath = normalizeRelativePath(modulePath.replace(/\./g, "/"));
+
+    const directPath = `${basePath}.py`;
+    if (knownRelativePaths.has(directPath)) return directPath;
+
+    const initPath = `${basePath}/__init__.py`;
+    if (knownRelativePaths.has(initPath)) return initPath;
+
+    return null;
+  }
+
+  function resolvePythonRelativeImport(importerRelativePath: string, importPath: string): string | null {
+    const dotMatch = /^(\.+)(.*)$/.exec(importPath);
+    if (!dotMatch) return null;
+
+    const level = dotMatch[1].length;
+    const remainder = dotMatch[2].replace(/^\./, "");
+    let baseDirectory = normalizeRelativePath(path.dirname(importerRelativePath));
+
+    for (let index = 1; index < level; index++) {
+      baseDirectory = normalizeRelativePath(path.dirname(baseDirectory));
+    }
+
+    const modulePath = remainder
+      ? normalizeRelativePath(path.join(baseDirectory, remainder.replace(/\./g, "/")))
+      : baseDirectory;
+
+    return resolvePythonModulePath(modulePath);
+  }
+
+  function resolvePythonImport(importerRelativePath: string, importPath: string): string | null {
+    if (importPath.startsWith(".")) {
+      const resolved = resolvePythonRelativeImport(importerRelativePath, importPath);
+      if (resolved) return resolved;
+    }
+
+    return resolvePythonModulePath(importPath);
+  }
+
   return {
-    resolveImport(importerRelativePath: string, importPath: string): string | null {
-      if (!importPath.startsWith(".")) return null;
-      return resolveRelativeImport(importerRelativePath, importPath);
+    resolveImport(importerRelativePath: string, importPath: string, language?: string): string | null {
+      if (language === "python") {
+        const resolved = resolvePythonImport(importerRelativePath, importPath);
+        if (resolved) return resolved;
+      }
+
+      if (importPath.startsWith(".")) {
+        return resolveRelativeImport(importerRelativePath, importPath);
+      }
+
+      return null;
     }
   };
 }
@@ -78,15 +134,27 @@ async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: str
   const chunks = await repo.getChunksByDocument(documentId);
   const chunkIds = chunks.map((c) => c.id);
 
-  const allNodeIds: string[] = [documentId, ...chunkIds];
-
   if (chunkIds.length > 0) {
     await repo.deleteEmbeddingsByChunkIds(chunkIds);
   }
 
-  await repo.deleteEdgesByNodeIds(allNodeIds);
   await repo.deleteGraphNodesByRefId(documentId);
   await repo.deleteChunksByDocument(documentId);
+}
+
+function boundChunks(chunks: IndexedChunk[], targetTokens: number, overlapTokens: number): IndexedChunk[] {
+  return chunks.flatMap((chunk) => {
+    const parts = splitToTokenLimit(chunk.content, targetTokens, overlapTokens);
+    if (parts.length <= 1) return chunk;
+
+    return parts.map((content, splitIndex) => ({
+      ...chunk,
+      content,
+      tokenCount: countTokens(content),
+      contentHash: hashContent(content),
+      metadata: { ...chunk.metadata, splitIndex, splitCount: parts.length }
+    }));
+  });
 }
 
 async function chunkDocument(input: {
@@ -112,7 +180,8 @@ async function chunkDocument(input: {
       importPaths: [] as string[],
       wikilinks: result.wikilinks,
       definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[]
+      calledIdentifiers: [] as string[],
+      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
     };
   }
 
@@ -125,7 +194,8 @@ async function chunkDocument(input: {
       importPaths: [] as string[],
       wikilinks: [] as string[],
       definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[]
+      calledIdentifiers: [] as string[],
+      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
     };
   }
 
@@ -139,7 +209,8 @@ async function chunkDocument(input: {
         importPaths: result.importPaths,
         wikilinks: [] as string[],
         definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers
+        calledIdentifiers: result.calledIdentifiers,
+        callExpressions: result.callExpressions
       };
     }
 
@@ -152,7 +223,8 @@ async function chunkDocument(input: {
         importPaths: result.importPaths,
         wikilinks: [] as string[],
         definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers
+        calledIdentifiers: result.calledIdentifiers,
+        callExpressions: result.callExpressions
       };
     }
 
@@ -165,7 +237,8 @@ async function chunkDocument(input: {
         importPaths: result.importPaths,
         wikilinks: [] as string[],
         definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers
+        calledIdentifiers: result.calledIdentifiers,
+        callExpressions: result.callExpressions
       };
     }
 
@@ -178,7 +251,8 @@ async function chunkDocument(input: {
         importPaths: result.importPaths,
         wikilinks: [] as string[],
         definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers
+        calledIdentifiers: result.calledIdentifiers,
+        callExpressions: result.callExpressions
       };
     }
 
@@ -200,7 +274,8 @@ async function chunkDocument(input: {
       importPaths: [] as string[],
       wikilinks: [] as string[],
       definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[]
+      calledIdentifiers: [] as string[],
+      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
     };
   }
 
@@ -222,25 +297,41 @@ async function chunkDocument(input: {
     importPaths: [] as string[],
     wikilinks: [] as string[],
     definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-    calledIdentifiers: [] as string[]
+    calledIdentifiers: [] as string[],
+    callExpressions: [] as Array<{ callerName: string; calleeName: string }>
   };
 }
 
 async function writeEmbeddingsToRepo(
   repo: WorkspaceRepository,
-  chunkRows: Array<{ id: string; content: string }>
+  chunkRows: Array<{ id: string; content: string; path: string; heading?: string | null }>,
+  provider: EmbeddingProvider | null
 ) {
-  const provider = getEmbeddingProvider();
   if (!provider || chunkRows.length === 0) {
     return 0;
   }
 
+  const existing = await repo.queryRaw(
+    `SELECT chunk_id FROM embeddings
+     WHERE provider = ? AND model = ? AND chunk_id IN (${chunkRows.map(() => "?").join(",")})`,
+    [provider.provider, embeddingStorageModel(provider), ...chunkRows.map((chunk) => chunk.id)]
+  );
+  const existingIds = new Set(existing.map((row) => String(row.chunk_id)));
+  const missingRows = chunkRows.filter((chunk) => !existingIds.has(chunk.id));
+  if (missingRows.length === 0) return 0;
+
   try {
-    const vectors = await provider.embed(chunkRows.map((chunk) => chunk.content));
+    const vectors = await provider.embed(
+      missingRows.map((chunk) => formatEmbeddingInput(provider, chunk, "document"))
+    );
+    if (vectors.length !== missingRows.length) {
+      console.error(`Embedding provider returned ${vectors.length} vectors for ${missingRows.length} chunks`);
+      return 0;
+    }
     const invalidEmbeddingIndex = vectors.findIndex((embedding) => embedding.length === 0);
 
     if (invalidEmbeddingIndex !== -1) {
-      console.error(`Embedding provider returned empty vector for chunk ${chunkRows[invalidEmbeddingIndex].id}`);
+      console.error(`Embedding provider returned empty vector for chunk ${missingRows[invalidEmbeddingIndex].id}`);
       return 0;
     }
 
@@ -252,9 +343,9 @@ async function writeEmbeddingsToRepo(
 
     await repo.insertEmbeddings(
       vectors.map((embedding, index) => ({
-        chunkId: chunkRows[index].id,
+        chunkId: missingRows[index].id,
         provider: provider.provider,
-        model: provider.model,
+        model: embeddingStorageModel(provider),
         dimensions,
         embedding: JSON.stringify(embedding)
       }))
@@ -292,25 +383,42 @@ export async function indexWorkspace(input: {
 
   const repo = createWorkspaceRepository(workspace.rootPath);
   const settings = await getBrainSettings();
+  const config = await loadBrainConfig(workspace.rootPath);
+  const configuredWorkspace = config.workspaces?.find(
+    (candidate) => candidate.id === workspace.id || path.resolve(candidate.root) === path.resolve(workspace.rootPath)
+  );
+  const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
+  const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
+  const embeddingProvider = getEmbeddingProvider();
   const runMode = input.mode ?? "incremental";
 
   const reportProgress = async (message: string, progress: number) => {
     await input.onProgress?.({ message, progress });
   };
 
-  const runId = await repo.createIndexRun({ mode: runMode });
-
   if (runMode === "full") {
     await repo.resetAll();
   }
+
+  const runId = await repo.createIndexRun({ mode: runMode });
 
   await reportProgress("Scanning workspace files...", 5);
 
   const files = await scanWorkspaceFiles({
     rootPath: workspace.rootPath,
-    include: workspace.includeGlobs || "",
-    exclude: workspace.excludeGlobs || ""
+    include: includeGlobs,
+    exclude: excludeGlobs
   });
+
+  if (runMode === "incremental") {
+    const scannedPaths = new Set(files.map((file) => file.relativePath));
+    for (const document of await repo.listDocuments()) {
+      if (!scannedPaths.has(document.path)) {
+        await resetDocumentArtifacts(repo, document.id);
+        await repo.deleteDocument(document.id);
+      }
+    }
+  }
 
   const workspaceFileResolver = createWorkspaceFileResolver(
     workspace.rootPath,
@@ -323,6 +431,8 @@ export async function indexWorkspace(input: {
   let filesUpdated = 0;
   let chunksWritten = 0;
   let embeddingsWritten = 0;
+  const symbolNodeIdsByName = new Map<string, string>();
+  const pendingCallEdges: Array<{ callerName: string; calleeName: string }> = [];
 
   try {
     await reportProgress(
@@ -338,12 +448,24 @@ export async function indexWorkspace(input: {
       const contentHash = hashContent(content);
       const existingDocument = await repo.getDocumentByPath(file.relativePath);
 
-      if (
+      const existingChunks = existingDocument ? await repo.getChunksByDocument(existingDocument.id) : [];
+      const unchanged =
         runMode === "incremental" &&
         existingDocument &&
         existingDocument.contentHash === contentHash &&
-        existingDocument.mtimeMs === file.mtimeMs
-      ) {
+        existingDocument.mtimeMs === file.mtimeMs;
+
+      if (unchanged) {
+        embeddingsWritten += await writeEmbeddingsToRepo(
+          repo,
+          existingChunks.map((chunk) => ({
+            id: chunk.id,
+            content: chunk.content,
+            path: existingDocument.path,
+            heading: chunk.heading
+          })),
+          embeddingProvider
+        );
         continue;
       }
 
@@ -354,6 +476,7 @@ export async function indexWorkspace(input: {
         targetTokens: settings.chunking.targetTokens,
         overlapTokens: settings.chunking.overlapTokens
       });
+      indexed.chunks = boundChunks(indexed.chunks, settings.chunking.targetTokens, settings.chunking.overlapTokens);
 
       let documentId: string;
 
@@ -440,11 +563,13 @@ export async function indexWorkspace(input: {
             toNodeId: chunkNodeId,
             type: "represented_by"
           });
+
+          symbolNodeIdsByName.set(symbolName, symbolNodeId);
         }
       }
 
       for (const importPath of indexed.importPaths) {
-        const resolvedImportPath = workspaceFileResolver.resolveImport(file.relativePath, importPath);
+        const resolvedImportPath = workspaceFileResolver?.resolveImport(file.relativePath, importPath, indexed.language ?? undefined);
         if (!resolvedImportPath) continue;
 
         const targetNodeId = await repo.upsertGraphNode({
@@ -475,46 +600,37 @@ export async function indexWorkspace(input: {
         });
       }
 
-      if (indexed.definedSymbols.length > 0 && indexed.calledIdentifiers.length > 0) {
-        const symbolNodeIds = await Promise.all(
-          indexed.definedSymbols.map((symbol) =>
-            repo.upsertGraphNode({
-              type: "symbol",
-              label: symbol.name,
-              metadata: JSON.stringify({
-                symbolType: symbol.type,
-                exported: symbol.exported,
-                filePath: file.relativePath
-              })
-            })
-          )
-        );
-
-        for (const caller of indexed.calledIdentifiers) {
-          const callerIndex = indexed.definedSymbols.findIndex((s) => s.name === caller);
-          if (callerIndex === -1) continue;
-
-          const calleeNode = await repo.findGraphNode("symbol", caller);
-          if (calleeNode && symbolNodeIds[callerIndex] !== calleeNode.id) {
-            await repo.insertEdge({
-              fromNodeId: symbolNodeIds[callerIndex],
-              toNodeId: calleeNode.id,
-              type: "calls",
-              weight: 0.35,
-              metadata: JSON.stringify({ heuristic: true })
-            });
-          }
-        }
-      }
+      pendingCallEdges.push(...indexed.callExpressions);
 
       const chunkRows = chunkIds.map((id, i) => ({
         id,
-        content: indexed.chunks[i].content
+        content: indexed.chunks[i].content,
+        path: file.relativePath,
+        heading: indexed.chunks[i].heading
       }));
 
-      embeddingsWritten += await writeEmbeddingsToRepo(repo, chunkRows);
+      embeddingsWritten += await writeEmbeddingsToRepo(repo, chunkRows, embeddingProvider);
       chunksWritten += chunkIds.length;
       filesUpdated += 1;
+    }
+
+    const insertedCallEdges = new Set<string>();
+    for (const callExpression of pendingCallEdges) {
+      const callerNodeId = symbolNodeIdsByName.get(callExpression.callerName) ?? (await repo.findGraphNode("symbol", callExpression.callerName))?.id;
+      const calleeNodeId = symbolNodeIdsByName.get(callExpression.calleeName) ?? (await repo.findGraphNode("symbol", callExpression.calleeName))?.id;
+      if (!callerNodeId || !calleeNodeId || callerNodeId === calleeNodeId) continue;
+
+      const edgeKey = `${callerNodeId}:${calleeNodeId}:calls`;
+      if (insertedCallEdges.has(edgeKey)) continue;
+      insertedCallEdges.add(edgeKey);
+
+      await repo.insertEdge({
+        fromNodeId: callerNodeId,
+        toNodeId: calleeNodeId,
+        type: "calls",
+        weight: 0.35,
+        metadata: JSON.stringify({ heuristic: true, callee: callExpression.calleeName })
+      });
     }
 
     await reportProgress("Finalizing index run...", 98);

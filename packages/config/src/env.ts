@@ -7,7 +7,12 @@ import dotenv from "dotenv";
 import { z } from "zod";
 
 function loadDotenvFromWorkspaceRoot() {
-  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  let currentDir: string;
+  try {
+    currentDir = path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
+  }
   let searchDir = currentDir;
 
   while (true) {
@@ -31,7 +36,6 @@ function loadDotenvFromWorkspaceRoot() {
 loadDotenvFromWorkspaceRoot();
 
 const envSchema = z.object({
-  DATABASE_URL: z.string().url().optional(),
   EMBEDDING_PROVIDER: z.string().default("none"),
   MINIMAX_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().url().optional(),

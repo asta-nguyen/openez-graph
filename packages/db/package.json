@@ -14,8 +14,7 @@
   "dependencies": {
     "@openez-graph/config": "workspace:*",
     "better-sqlite3": "^12.10.0",
-    "drizzle-orm": "^0.44.0",
-    "pg": "^8.14.0"
+    "drizzle-orm": "^0.44.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13"

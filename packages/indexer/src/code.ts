@@ -12,11 +12,23 @@ function getLineRange(node: { getStartLineNumber(): number; getEndLineNumber(): 
   };
 }
 
+function codeSearchText(text: string): string {
+  const identifiers = text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? [];
+  return [...new Set(identifiers.flatMap((identifier) => identifier
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(" ")
+    .filter((term) => term.length > 1)))]
+    .slice(0, 256)
+    .join(" ");
+}
+
 export function indexCode(content: string, filePath: string): {
   chunks: IndexedChunk[];
   importPaths: string[];
   definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }>;
   calledIdentifiers: string[];
+  callExpressions: Array<{ callerName: string; calleeName: string }>;
 } {
   const project = new Project({
     useInMemoryFileSystem: true,
@@ -29,6 +41,7 @@ export function indexCode(content: string, filePath: string): {
   const chunks: IndexedChunk[] = [];
   const definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }> = [];
   const calledIdentifiers = new Set<string>();
+  const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
 
   sourceFile.getImportDeclarations().forEach((declaration) => {
     declaration.getDescendantsOfKind(SyntaxKind.Identifier).forEach((identifier) => {
@@ -74,6 +87,7 @@ export function indexCode(content: string, filePath: string): {
       symbolType,
       metadata: {
         kind: "code",
+        searchText: codeSearchText(text),
         symbolName: name,
         symbolType,
         exported,
@@ -86,6 +100,7 @@ export function indexCode(content: string, filePath: string): {
       const calledName = expression.getText();
       if (calledName) {
         calledIdentifiers.add(calledName);
+        callExpressions.push({ callerName: name, calleeName: calledName.split(".").pop() ?? calledName });
       }
     });
   });
@@ -108,6 +123,7 @@ export function indexCode(content: string, filePath: string): {
       symbolType: "variable",
       metadata: {
         kind: "code",
+        searchText: codeSearchText(text),
         symbolName: name,
         symbolType: "variable",
         exported,
@@ -129,6 +145,7 @@ export function indexCode(content: string, filePath: string): {
         contentHash: hashContent(slice),
         metadata: {
           kind: "code",
+          searchText: codeSearchText(slice),
           fallback: true,
           startLine: index + 1,
           endLine: Math.min(index + 80, lines.length)
@@ -141,6 +158,7 @@ export function indexCode(content: string, filePath: string): {
     chunks,
     importPaths: sourceFile.getImportDeclarations().map((declaration) => declaration.getModuleSpecifierValue()),
     definedSymbols,
-    calledIdentifiers: [...calledIdentifiers]
+    calledIdentifiers: [...calledIdentifiers],
+    callExpressions
   };
 }
