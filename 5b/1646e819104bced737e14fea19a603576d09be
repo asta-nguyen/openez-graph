@@ -1,0 +1,29 @@
+apps/web/src/server/index.ts
+  s_5a9490014178d0::t_3aa5d0b6283d35 5,588-591
+apps/cli/src/setup-opencode.ts
+  s_45277c66136b97::t_f61fc70e965421 51-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "5b1646e819104bced737e14fea19a603576d09be",
+  "prompts": {},
+  "sessions": {
+    "s_45277c66136b97": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "6ff7c421-e20e-41d3-904d-de0f60070508",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_5a9490014178d0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8cbc-389b-7132-9d9e-5a86061f3f1d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
