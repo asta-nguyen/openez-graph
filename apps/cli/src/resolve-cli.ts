@@ -7,8 +7,12 @@ function getThisDir(): string {
   if (typeof __dirname !== "undefined") {
     return __dirname;
   }
-  if (typeof import.meta !== "undefined" && import.meta.dirname) {
-    return import.meta.dirname;
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.dirname) {
+      return import.meta.dirname;
+    }
+  } catch {
+    // import.meta not available (CJS)
   }
   return process.cwd();
 }

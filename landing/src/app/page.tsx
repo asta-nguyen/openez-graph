@@ -110,7 +110,7 @@ const mcpConfig = `{
 ▸ "mcpServers": {
 ▸▸ "openez": {
 ▸▸▸ "command": "npx",
-▸▸▸ "args": ["-y", "openez", "serve", "--mcp"],
+▸▸▸ "args": ["-y", "@openez-graph/cli", "serve", "--mcp"],
 ▸▸▸ "env": {
 ▸▸▸▸ "HOME": "/Users/you"
 ▸▸▸ }

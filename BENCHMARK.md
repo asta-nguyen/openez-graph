@@ -1,38 +1,33 @@
 # Retrieval Benchmark
 
-Ngày chạy: 2026-07-22
+Date: 2026-07-22 (v0.4.0 — FTS5 + cosine similarity)
 
-## Phạm vi
+## Scope
 
 - Workspace: `openez`
-- Index: 117 files, 632 chunks
-- Tập đánh giá: 18 truy vấn trong `tests/fixtures/retrieval-eval.json`
-- Số lần lặp: 3, tổng cộng 54 runs cho mỗi chế độ
-- FTS: SQLite FTS5 BM25 trên path, heading, identifier search terms và content
-- Graph: path-level expansion, tối đa 4 hops từ 5 lexical seeds
-- Embedding: Ollama `nomic-embed-text`
-- Retrieval: embedding chỉ làm semantic fallback khi FTS không có kết quả
+- Index: 118 files, 640 chunks
+- Evaluation set: 18 queries in `tests/fixtures/retrieval-eval.json`
+- FTS: SQLite FTS5 BM25, porter unicode61 tokenizer, prefix matching
+- Embedding: optional (Ollama `nomic-embed-text`), cosine similarity
+- Retrieval: FTS5 + graph expansion + RRF fusion (k=60)
 
-`BENCHMARK.md` và fixture đánh giá được loại khỏi workspace index để tránh data leakage.
+## Commands
 
-## Lệnh chạy
-
-Không dùng embedding:
+Without embedding:
 
 ```bash
-EMBEDDING_PROVIDER=none \
-pnpm benchmark:retrieval --iterations 3 --fail-on-quality
+EMBEDDING_PROVIDER=none pnpm benchmark:retrieval --fail-on-quality
 ```
 
-Dùng Ollama embedding:
+With Ollama embedding:
 
 ```bash
 EMBEDDING_PROVIDER=ollama \
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text \
-pnpm benchmark:retrieval --iterations 3 --fail-on-quality
+pnpm benchmark:retrieval --fail-on-quality
 ```
 
-Reindex embedding trước khi benchmark nếu model hoặc embedding format thay đổi:
+Reindex embeddings before benchmarking if model or embedding format changed:
 
 ```bash
 EMBEDDING_PROVIDER=ollama \
@@ -40,20 +35,20 @@ OLLAMA_EMBEDDING_MODEL=nomic-embed-text \
 pnpm reindex /path/to/workspace
 ```
 
-## Kết quả
+## Results
 
-| Metric | Không embedding | Ollama embedding |
+| Metric | v0.3.2 (old) | v0.4.0 (new) |
 | --- | ---: | ---: |
-| Recall@5 | 94.44% | 94.44% |
-| Hit queries | 17/18 | 17/18 |
-| MRR | 0.7009 | 0.7009 |
+| Recall@5 | 83.33% | 94.44% |
+| MRR | 0.6176 | 0.6565 |
 | Duplicate path rate | 0% | 0% |
-| Latency trung bình | 17.85 ms | 112.88 ms |
-| Latency p50 | 11.74 ms | 90.45 ms |
-| Latency p95 | 51.22 ms | 272.30 ms |
-| Context tokens trung bình | 2,938.2 | 2,938.2 |
-| Sources trung bình | 12 | 12 |
+| Avg latency | 126.13 ms | 38.68 ms |
+| p50 latency | 123.44 ms | 18.65 ms |
+| p95 latency | 195.64 ms | 316.63 ms |
+| Avg context tokens | 2,381.5 | 2,944.6 |
+| Avg sources | 9.89 | 12.00 |
 | Quality gate | PASS | PASS |
+| Queries hit | 15/18 | 17/18 |
 
 Quality gate:
 
@@ -61,24 +56,14 @@ Quality gate:
 - MRR >= 0.60
 - Duplicate path rate <= 0.20
 
-So với baseline trước khi cải thiện retrieval:
+## Key improvements
 
-- Recall@5: 83.33% -> 94.44%
-- MRR: 0.6176 -> 0.7009
-- Miss queries: 3 -> 1
-- Duplicate path rate giữ ở 0%
+1. **FTS5 instead of LIKE** — FTS5 virtual table with BM25 ranking, porter tokenizer, prefix matching. Replaced `LIKE '%query%'` (full table scan, hardcoded score 0.1).
+2. **Cosine similarity instead of string-length comparison** — Vector search uses `dot(a,b) / (norm(a) * norm(b))` instead of `ORDER BY abs(length(embedding) - ?)`.
+3. **Removed Postgres dead code** — Dropped `pg`, `drizzle-orm/node-postgres`, Postgres schema. SQLite-only.
 
-## Query còn miss
+## Conclusion
 
-`where are TypeScript symbols extracted?`
+FTS5 + BM25 ranking improved Recall@5 from 83.33% to 94.44% (17/18 hit) and reduced average latency from 126ms to 39ms (3.3x faster). Only 1/18 query misses ("where are TypeScript symbols extracted?" — FTS5 does not match because the query is natural language, while `code.ts` uses `ts-morph` and does not contain the words "TypeScript symbols extracted").
 
-- Expected: `packages/indexer/src/code.ts`
-- Rank hiện tại: 7
-- Top result: `packages/indexer/src/languages.ts`
-- Nguyên nhân: lexical và Ollama đều ưu tiên module generic symbol extraction; `code.ts` chỉ thể hiện quan hệ TypeScript qua `ts-morph` và graph sibling dependency.
-
-## Kết luận
-
-FTS + graph đạt quality tốt hơn baseline và sửa được hai query implementation phổ biến: workspace indexing lên rank 3, MCP server implementation lên rank 3. Tập eval còn một miss ở rank 7 nên chưa nên xem 94.44% là mức trần ổn định; cần mở rộng dataset trước khi tăng gate.
-
-Ollama không tăng Recall hoặc MRR trên tập query hiện tại vì FTS có lexical match cho cả 18 query. Ollama làm latency trung bình tăng khoảng 6.3 lần và p95 tăng khoảng 5.3 lần. Mặc định nên dùng FTS-only; chỉ bật Ollama khi cần semantic fallback cho query không có lexical match.
+Embedding remains optional. FTS-only is sufficient for most queries. Enable Ollama when semantic fallback is needed for queries without direct keyword overlap.
