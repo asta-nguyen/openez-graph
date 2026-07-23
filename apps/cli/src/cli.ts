@@ -292,7 +292,7 @@ program
 
 // ── openez setup codex|claude|opencode [path] ──
 
-const setup = program.command("setup").description("Configure editor/agent integrations (codex, claude, opencode)");
+const setup = program.command("setup").description("Configure editor/agent integrations (codex, claude, opencode, windsurf, devin)");
 
 setup
   .command("codex")
@@ -319,6 +319,24 @@ setup
   .action(async (targetPath) => {
     const { setupOpenCode } = await import("./setup-opencode");
     await setupOpenCode(targetPath);
+  });
+
+setup
+  .command("windsurf")
+  .description("Add or update the shared OpenEZ MCP server entry in ~/.codeium/windsurf/mcp_config.json")
+  .argument("[path]", "path to the project directory", process.cwd())
+  .action(async (targetPath) => {
+    const { setupWindsurf } = await import("./setup-windsurf");
+    await setupWindsurf(targetPath);
+  });
+
+setup
+  .command("devin")
+  .description("Add or update the shared OpenEZ MCP server entry in ~/.config/devin/config.json")
+  .argument("[path]", "path to the project directory", process.cwd())
+  .action(async (targetPath) => {
+    const { setupDevin } = await import("./setup-devin");
+    await setupDevin(targetPath);
   });
 
 program.parseAsync(process.argv).catch((error) => {
