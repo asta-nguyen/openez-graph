@@ -65,9 +65,9 @@ function WorkspaceGraphPage() {
   const hasGraphData = !!graphData && graphData.nodes.length > 0;
 
   return (
-    <div className="h-screen flex flex-col">
-      <div className="border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-        <div className="flex items-center justify-between py-3">
+    <div className="-m-6 flex h-svh flex-col overflow-hidden bg-[#171717]">
+      <div className="z-20 border-b border-white/10 bg-[#202020]/95 backdrop-blur-xl">
+        <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-4">
             <Link to="/workspaces/$workspaceId" params={{ workspaceId }}>
               <Button variant="ghost" size="icon">
@@ -76,7 +76,7 @@ function WorkspaceGraphPage() {
             </Link>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold">Graph Explorer</h1>
+                <h1 className="text-sm font-semibold">Graph view</h1>
                 <Badge variant="outline">{workspace.name}</Badge>
               </div>
               <p className="text-xs text-muted-foreground">

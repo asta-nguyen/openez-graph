@@ -109,6 +109,8 @@ export interface WorkspaceGraphData {
   edgeTypes: string[];
   totalNodes: number;
   totalEdges: number;
+  displayedNodes: number;
+  displayedEdges: number;
 }
 
 export interface QueryResult {
