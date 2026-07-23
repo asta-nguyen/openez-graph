@@ -2,7 +2,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import crypto from "node:crypto";
-import { existsSync, promises as fs, readFileSync } from "node:fs";
+import { existsSync, promises as fs, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 function getDirname(): string {
@@ -585,8 +585,10 @@ function resolveWebDist(): string | null {
   if (existsSync(path.join(sourceDist, "index.html"))) return sourceDist;
 
   // When running from CLI bundle (dist/web copied alongside)
-  const cliDist = path.resolve(serverDir, "web");
-  if (existsSync(path.join(cliDist, "index.html"))) return cliDist;
+  if (process.env.OPENEZ_CLI_BUNDLE === "true" && process.argv[1]) {
+    const cliDist = path.resolve(path.dirname(realpathSync(process.argv[1])), "web");
+    if (existsSync(path.join(cliDist, "index.html"))) return cliDist;
+  }
 
   return null;
 }
