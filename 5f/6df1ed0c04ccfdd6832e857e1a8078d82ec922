@@ -1,0 +1,21 @@
+apps/cli/README.md
+  s_a2d4a4a6422bc6::t_162e7cd197d3b8 8,28,34,49-50,70-71,87
+apps/cli/package.json
+  s_a2d4a4a6422bc6::t_c154cb794c554d 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "5f6df1ed0c04ccfdd6832e857e1a8078d82ec922",
+  "prompts": {},
+  "sessions": {
+    "s_a2d4a4a6422bc6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "c4c0259e-4f1f-4e4f-91a2-bfec831a5214",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
