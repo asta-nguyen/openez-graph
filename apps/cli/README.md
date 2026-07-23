@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/@openez-graph/cli.svg)](https://www.npmjs.com/package/@openez-graph/cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-OpenEZ Graph indexes your codebase into a local SQLite database, builds a code graph (symbols, files, chunks, edges), and exposes it through MCP tools for AI coding agents like Claude Code, Codex, and OpenCode.
+OpenEZ Graph indexes your codebase into a local SQLite database, builds a code graph (symbols, files, chunks, edges), and exposes it through MCP tools for AI coding agents like Claude Code, Codex, OpenCode, Windsurf, and Devin.
 
 **Zero config. No Docker. No Postgres. No Redis. Just install and go.**
 
@@ -25,13 +25,13 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 
 ```bash
 npm install -g @openez-graph/cli
-openez setup claude    # or: codex, opencode
+openez setup claude    # or: codex, opencode, windsurf, devin
 ```
 
 Or run without installing:
 
 ```bash
-npx @openez-graph/cli setup claude
+npx @openez-graph/cli setup claude    # or: codex, opencode, windsurf, devin
 ```
 
 Restart your agent. Done.
@@ -46,6 +46,8 @@ npm install -g @openez-graph/cli
 openez setup claude       # Claude Code
 openez setup codex        # Codex
 openez setup opencode     # OpenCode
+openez setup windsurf     # Windsurf / Devin Desktop
+openez setup devin        # Devin CLI
 
 # 3. Restart your agent — it will auto-index and auto-sync
 ```
@@ -65,6 +67,8 @@ openez list                     # list registered workspaces
 openez setup claude             # wire up Claude Code
 openez setup codex              # wire up Codex
 openez setup opencode           # wire up OpenCode
+openez setup windsurf           # wire up Windsurf / Devin Desktop
+openez setup devin              # wire up Devin CLI
 ```
 
 ## MCP Tools
@@ -80,7 +84,7 @@ openez setup opencode           # wire up OpenCode
 
 ## How it works
 
-1. **`openez setup claude`** writes MCP server config to `~/.claude/settings.json`
+1. **`openez setup <agent>`** writes MCP server config to the agent's config file (e.g. `~/.claude/settings.json`, `~/.codeium/windsurf/mcp_config.json`, `~/.config/devin/config.json`)
 2. When Claude Code starts, it launches the MCP server via `openez serve --mcp`
 3. The MCP server auto-registers the current project as a workspace
 4. It auto-indexes if the workspace has no documents yet
