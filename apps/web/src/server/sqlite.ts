@@ -622,11 +622,12 @@ export function getWorkspaceGraphOptimized(
   rootPath: string,
   maxNodes: number,
   maxEdges: number
-): { nodes: WebGraphNode[]; edges: WebGraphEdge[]; totalNodeCount: number } {
+): { nodes: WebGraphNode[]; edges: WebGraphEdge[]; totalNodeCount: number; totalEdgeCount: number } {
   const db = getWorkspaceDb(rootPath);
 
   // Use prepared statements for better performance
   const countStmt = db.prepare("SELECT COUNT(*) AS count FROM graph_nodes");
+  const edgeCountStmt = db.prepare("SELECT COUNT(*) AS count FROM graph_edges");
   const nodesStmt = db.prepare(`
     SELECT * FROM graph_nodes
     ORDER BY
@@ -634,15 +635,34 @@ export function getWorkspaceGraphOptimized(
       created_at DESC
     LIMIT ?
   `);
-  const edgesStmt = db.prepare("SELECT * FROM graph_edges LIMIT ?");
+  const edgesStmt = db.prepare(`
+    SELECT ge.* FROM graph_edges ge
+    WHERE ge.from_node_id IN (
+      SELECT id FROM graph_nodes
+      ORDER BY
+        CASE type ${typeOrderCase} ELSE 999 END,
+        created_at DESC
+      LIMIT ?
+    )
+    AND ge.to_node_id IN (
+      SELECT id FROM graph_nodes
+      ORDER BY
+        CASE type ${typeOrderCase} ELSE 999 END,
+        created_at DESC
+      LIMIT ?
+    )
+    LIMIT ?
+  `);
 
   // Execute all queries
   const countResult = countStmt.get() as { count: number };
+  const edgeCountResult = edgeCountStmt.get() as { count: number };
   const nodeRows = nodesStmt.all(maxNodes) as Array<Record<string, unknown>>;
-  const edgeRows = edgesStmt.all(maxEdges) as Array<Record<string, unknown>>;
+  const edgeRows = edgesStmt.all(maxNodes, maxNodes, maxEdges) as Array<Record<string, unknown>>;
 
   return {
     totalNodeCount: countResult.count,
+    totalEdgeCount: edgeCountResult.count,
     nodes: nodeRows.map((row) => ({
       id: String(row.id),
       label: String(row.label),

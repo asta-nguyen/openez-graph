@@ -408,10 +408,14 @@ app.get("/api/workspaces/:id/graph", (c) => {
   const workspace = getRegistryWorkspace(id);
   if (!workspace) return c.json(null);
 
-  const { nodes: nodeRows, edges: edgeRows } = getWorkspaceGraphOptimized(
+  // ponytail: canvas-first ceiling; move to WebGL/streaming for larger full graphs.
+  const maxNodes = Math.min(parseInt(c.req.query("limit") ?? "25000", 10) || 25000, 25000);
+  const maxEdges = Math.min(parseInt(c.req.query("edgeLimit") ?? "75000", 10) || 75000, 75000);
+
+  const { nodes: nodeRows, edges: edgeRows, totalNodeCount, totalEdgeCount } = getWorkspaceGraphOptimized(
     workspace.rootPath,
-    300,
-    1000
+    maxNodes,
+    maxEdges
   );
 
   const degreeMap = new Map<string, number>();
@@ -461,8 +465,10 @@ app.get("/api/workspaces/:id/graph", (c) => {
     edges,
     nodeTypes,
     edgeTypes,
-    totalNodes: nodes.length,
-    totalEdges: edges.length,
+    totalNodes: totalNodeCount,
+    totalEdges: totalEdgeCount,
+    displayedNodes: nodes.length,
+    displayedEdges: edges.length,
   });
 });
 
