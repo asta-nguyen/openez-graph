@@ -7,7 +7,6 @@ dist
 .env.*
 !.env.example
 coverage
-pnpm-lock.yaml
 *.log
 *.sqlite
 *.sqlite-*
@@ -18,6 +17,5 @@ pnpm-lock.yaml
 *.key
 openez-wiki/.obsidian
 .openez/
-.ai-memory-graph/
 tsconfig.tsbuildinfo
 repomix-output.xml

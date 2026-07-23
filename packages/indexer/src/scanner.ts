@@ -20,7 +20,10 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   "**/build/**",
   "**/coverage/**",
   "**/.turbo/**",
-  "**/.openez/**"
+  "**/.openez/**",
+  "**/pnpm-lock.yaml",
+  "**/package-lock.json",
+  "**/yarn.lock"
 ];
 
 function loadGitignore(rootPath: string): string[] {

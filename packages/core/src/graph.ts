@@ -55,14 +55,15 @@ export async function codeContext(input: {
   const edges = neighbors.edges.filter((edge) => edge.type === "calls");
   const relatedChunks = neighbors.nodes.filter((node) => node.type === "chunk");
   const symbol = neighbors.nodes.find(
-    (node) => node.type === "symbol" || node.label === input.symbolOrPath
+    (node) => node.type === "symbol" && (node.label === input.symbolOrPath || node.id === input.symbolOrPath)
   );
+  const symbolId = symbol ? String(symbol.id) : "";
 
   return {
     symbol,
     files,
-    callers: edges,
-    callees: edges,
+    callers: edges.filter((edge) => String(edge.to_node_id) === symbolId),
+    callees: edges.filter((edge) => String(edge.from_node_id) === symbolId),
     relatedChunks
   };
 }

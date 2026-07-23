@@ -61,7 +61,10 @@ const config: BrainConfig = {
         // Cache directories
         ".cache/**",
         "__pycache__/**",
-        "*.pyc"
+        "*.pyc",
+        // Benchmark inputs/results must not leak answers into retrieval evaluation.
+        "BENCHMARK.md",
+        "tests/fixtures/retrieval-eval.json"
       ]
     }
   ],
@@ -72,7 +75,7 @@ const config: BrainConfig = {
   retrieval: {
     vectorLimit: 20,
     textLimit: 20,
-    graphHops: 1,
+    graphHops: 4,
     maxGraphNeighbors: 20,
     finalLimit: 12,
     maxContextTokens: 8000

@@ -7,6 +7,7 @@ import {
   Database,
   FileText,
   ScrollText,
+  Gauge,
 } from "lucide-react";
 import {
   dashboardQueryOptions,
@@ -44,6 +45,11 @@ const mainNav = [
     label: "Workspaces",
     icon: FolderKanban,
     query: workspacesQueryOptions,
+  },
+  {
+    href: "/benchmark",
+    label: "Benchmark",
+    icon: Gauge,
   },
 ];
 

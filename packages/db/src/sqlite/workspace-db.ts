@@ -57,6 +57,74 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
   `);
+
+  // FTS5 includes file and symbol context because code queries often name either one.
+  sqlite.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+      chunk_id UNINDEXED,
+      path,
+      heading,
+      language,
+      search_text,
+      content,
+      tokenize = 'porter unicode61'
+    );
+  `);
+
+  const ftsColumns = sqlite.prepare("PRAGMA table_info(chunks_fts)").all() as Array<{ name: string }>;
+  if (!ftsColumns.some((column) => column.name === "search_text")) {
+    sqlite.exec(`
+      DROP TRIGGER IF EXISTS chunks_fts_insert;
+      DROP TRIGGER IF EXISTS chunks_fts_delete;
+      DROP TRIGGER IF EXISTS chunks_fts_update;
+      DROP TABLE chunks_fts;
+      CREATE VIRTUAL TABLE chunks_fts USING fts5(
+        chunk_id UNINDEXED,
+        path,
+        heading,
+        language,
+        search_text,
+        content,
+        tokenize = 'porter unicode61'
+      );
+    `);
+  }
+
+  // Triggers to keep FTS table in sync with chunks
+  sqlite.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
+    BEGIN
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''),
+        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
+      FROM documents WHERE documents.id = new.document_id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
+    BEGIN
+      DELETE FROM chunks_fts WHERE chunk_id = old.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
+    BEGIN
+      DELETE FROM chunks_fts WHERE chunk_id = old.id;
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''),
+        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
+      FROM documents WHERE documents.id = new.document_id;
+    END;
+  `);
+
+  sqlite.exec(`
+    INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+    SELECT chunks.id, documents.path, coalesce(chunks.heading, ''),
+      coalesce(documents.language, ''), coalesce(json_extract(chunks.metadata, '$.searchText'), ''), chunks.content
+    FROM chunks
+    INNER JOIN documents ON documents.id = chunks.document_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM chunks_fts WHERE chunks_fts.chunk_id = chunks.id
+    );
+  `);
 }
 
 function getWorkspaceTableDefinitions(): string[] {
