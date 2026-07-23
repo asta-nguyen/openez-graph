@@ -1,0 +1,53 @@
+apps/web/src/server/index.ts
+  s_9b6a95f2375a3e::t_ca9d1aa427d736 14,16-20,23
+  s_9b6a95f2375a3e::t_6a7f39bbc785c7 584,588
+  s_9b6a95f2375a3e::t_d54ac197ae71a1 8-13,15,21-22
+apps/cli/src/resolve-cli.ts
+  s_9b6a95f2375a3e::t_78d4b3d1d614b9 10-15
+apps/web/src/routes/index.tsx
+  s_9b6a95f2375a3e::t_2adbe4d4ee6dc1 52,60
+apps/cli/package.json
+  s_9b6a95f2375a3e::t_8937b682640c2d 3
+apps/cli/src/cli.ts
+  s_9b6a95f2375a3e::t_96a5acf0077fb4 15
+BENCHMARK.md
+  s_9b6a95f2375a3e::t_cb238323277ded 3,5,9,14,16,22,30,38,40,45-49,59,61-63,65,67,69
+  s_9b6a95f2375a3e::t_868bd16b276d82 8,10-12,19,27,42-43,51
+apps/web/src/server/sqlite.ts
+  s_9b6a95f2375a3e::t_87f94f21fc4999 8-19
+apps/cli/README.md
+  s_9b6a95f2375a3e::t_4069cacadca402 31-36
+  s_9b6a95f2375a3e::t_11d85b8545b14d 15-17
+  s_9b6a95f2375a3e::t_03355f4610d0e4 22
+  s_9b6a95f2375a3e::t_b42ed25a46cd79 87
+  s_9b6a95f2375a3e::t_4073c60949d372 101-106,108-115
+  s_abfea8c9eba5ad::t_5bd09ba2b65a06 107
+packages/db/src/sqlite/database-loader.ts
+  s_9b6a95f2375a3e::t_fc70dfc00adb21 7-18,21
+landing/src/app/page.tsx
+  s_9b6a95f2375a3e::t_fb83fca952d260 113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f1c015e4962d18d5808b117dc51b1d81f19612d8",
+  "prompts": {},
+  "sessions": {
+    "s_9b6a95f2375a3e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "three-thumb",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_abfea8c9eba5ad": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "37ff7b56-c270-44f4-bfd2-0973922ac7e4",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
