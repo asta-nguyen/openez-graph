@@ -4,10 +4,23 @@ import { cors } from "hono/cors";
 import crypto from "node:crypto";
 import { existsSync, promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+function getDirname(): string {
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.url) {
+      return path.dirname(new URL(import.meta.url).pathname);
+    }
+  } catch {
+    // import.meta not available (CJS)
+  }
+  // CJS: __dirname is a global, use it directly
+  if (typeof __dirname !== "undefined") {
+    return __dirname;
+  }
+  return process.cwd();
+}
+
+const serverDir = getDirname();
 
 import {
   countWorkspaceDocuments,
@@ -568,11 +581,11 @@ app.get("/api/settings/env", (c) => {
 
 function resolveWebDist(): string | null {
   // When running from source (monorepo)
-  const sourceDist = path.resolve(__dirname, "..", "dist");
+  const sourceDist = path.resolve(serverDir, "..", "dist");
   if (existsSync(path.join(sourceDist, "index.html"))) return sourceDist;
 
   // When running from CLI bundle (dist/web copied alongside)
-  const cliDist = path.resolve(__dirname, "web");
+  const cliDist = path.resolve(serverDir, "web");
   if (existsSync(path.join(cliDist, "index.html"))) return cliDist;
 
   return null;

@@ -12,18 +12,26 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 ## Features
 
 - **Zero-config** — auto-registers workspace, auto-indexes, auto-syncs on file changes
-- **SQLite-first** — all data stored locally in `.openez/` per workspace
+- **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
+- **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
+- **Vector search** — optional OpenAI/Ollama embeddings with cosine similarity
 - **MCP-first** — exposes `memory_query`, `code_context`, `graph_neighbors`, `memory_write`, `index_workspace`, `list_workspaces` tools
 - **Multi-workspace** — register and query across multiple codebases
 - **Code graph** — symbols, files, chunks, and edges (calls, imports, contains)
 - **Web dashboard** — built-in graph explorer and workspace management UI
-- **Auto-sync** — file watcher re-indexes on changes (2s debounce)
+- **Auto-sync** — file watcher re-indexes on changes (250ms debounce)
 
 ## Install
 
 ```bash
 npm install -g @openez-graph/cli
 openez setup claude    # or: codex, opencode
+```
+
+Or run without installing:
+
+```bash
+npx @openez-graph/cli setup claude
 ```
 
 Restart your agent. Done.
@@ -76,7 +84,7 @@ openez setup opencode           # wire up OpenCode
 2. When Claude Code starts, it launches the MCP server via `openez serve --mcp`
 3. The MCP server auto-registers the current project as a workspace
 4. It auto-indexes if the workspace has no documents yet
-5. It watches for file changes and re-indexes automatically (2s debounce)
+5. It watches for file changes and re-indexes automatically (250ms debounce)
 6. All data is stored in `<project>/.openez/index.sqlite` — local, portable, gitignored
 
 ## Supported languages
@@ -89,6 +97,21 @@ openez setup opencode           # wire up OpenCode
 | Rust | Basic top-level symbol extraction |
 | YAML / JSON / TOML | Structure-aware chunking |
 | Markdown | Section-oriented chunking |
+
+## Retrieval quality
+
+Benchmarked on 18 real queries against the openez codebase itself (118 files, 640 chunks):
+
+| Metric | Value |
+|--------|-------|
+| Recall@5 | 94.44% |
+| MRR | 0.6565 |
+| Avg latency | 38.68 ms |
+| p50 latency | 18.65 ms |
+| Duplicate path rate | 0% |
+| Quality gate | PASS |
+
+FTS5 with BM25 ranking handles 94% of queries in under 40ms — no embeddings needed for the default path. Embeddings (OpenAI/Ollama) are optional semantic fallback for queries without direct keyword overlap.
 
 ## Web dashboard
 

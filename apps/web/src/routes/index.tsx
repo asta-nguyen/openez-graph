@@ -49,7 +49,7 @@ function OverviewPage() {
             </div>
             <div>
               <div className="text-xs text-muted-foreground">MRR</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">0.7009</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">0.6565</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Queries hit</div>
@@ -57,7 +57,7 @@ function OverviewPage() {
             </div>
             <div>
               <div className="text-xs text-muted-foreground">FTS average</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">17.85 ms</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">38.68 ms</div>
             </div>
           </div>
 

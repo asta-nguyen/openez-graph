@@ -4,13 +4,21 @@ import module from "node:module";
 
 declare const __non_webpack_require__: typeof require | undefined;
 
+function getRequireUrl(): string {
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.url) {
+      return import.meta.url;
+    }
+  } catch {
+    // import.meta not available (CJS)
+  }
+  // CJS fallback
+  return `file://${__filename}`;
+}
+
 const _require: typeof require = typeof __non_webpack_require__ === "function"
   ? __non_webpack_require__
-  : module.createRequire(
-      typeof import.meta !== "undefined" && import.meta.url
-        ? import.meta.url
-        : `file://${__filename}`
-    );
+  : module.createRequire(getRequireUrl());
 
 let resolvedAddon: string | null | undefined;
 
