@@ -108,6 +108,15 @@ describe("createWorkspaceRepository", () => {
     expect((await repo.findGraphNode("function", "myFunc"))?.refId).toBe("chunk-2");
   });
 
+  it("keeps same-named symbols from different chunks separate", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const first = await repo.upsertGraphNode({ type: "symbol", label: "main", refId: "chunk-1" });
+    const second = await repo.upsertGraphNode({ type: "symbol", label: "main", refId: "chunk-2" });
+
+    expect(second).not.toBe(first);
+    expect(await repo.getNodeCount()).toBe(2);
+  });
+
   it("inserts edges and traverses neighbors", async () => {
     const repo = createWorkspaceRepository(tempRoot);
 

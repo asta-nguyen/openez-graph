@@ -287,9 +287,13 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Graph Node Operations ──
 
     async upsertGraphNode(input) {
-      const existing = native
-        .prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ?")
-        .get(input.type, input.label) as Record<string, unknown> | undefined;
+      const existing = input.type === "symbol" && input.refId
+        ? native
+            .prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ? AND ref_id = ?")
+            .get(input.type, input.label, input.refId) as Record<string, unknown> | undefined
+        : native
+            .prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ?")
+            .get(input.type, input.label) as Record<string, unknown> | undefined;
 
       if (existing) {
         const nextMetadata = input.metadata ?? String(existing.metadata ?? "{}");

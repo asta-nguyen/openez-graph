@@ -56,4 +56,18 @@ describe("indexWorkspace", () => {
     expect(await repo.getChunkCount()).toBe(0);
     expect(await repo.getNodeCount()).toBe(0);
   });
+
+  it("rebuilds calls to an unchanged unique symbol during incremental indexing", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "helper.ts"), "export function helper() { return 1; }\n");
+    const callerPath = path.join(workspaceRoot, "caller.ts");
+    fs.writeFileSync(callerPath, "export function caller() { return helper(); }\n");
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    fs.writeFileSync(callerPath, "export function caller() { return helper() + 1; }\n");
+    await indexWorkspace({ workspaceId: workspace.id });
+
+    const context = await codeContext({ workspaceId: workspace.id, symbolOrPath: "helper", hops: 1 });
+    expect(context.callers).toHaveLength(1);
+  });
 });
