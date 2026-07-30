@@ -431,8 +431,8 @@ export async function indexWorkspace(input: {
   let filesUpdated = 0;
   let chunksWritten = 0;
   let embeddingsWritten = 0;
-  const symbolNodeIdsByName = new Map<string, string>();
-  const pendingCallEdges: Array<{ callerName: string; calleeName: string }> = [];
+  const symbolNodeIdsByFileAndName = new Map<string, string>();
+  const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
 
   try {
     await reportProgress(
@@ -542,7 +542,8 @@ export async function indexWorkspace(input: {
 
         const symbolName = indexed.chunks[ci].symbolName;
         if (symbolName) {
-          const symbolNodeId = await repo.upsertGraphNode({
+          const fileSymbolKey = `${file.relativePath}\0${symbolName}`;
+          const symbolNodeId = symbolNodeIdsByFileAndName.get(fileSymbolKey) ?? await repo.upsertGraphNode({
             type: "symbol",
             label: symbolName,
             refId: chunkId,
@@ -564,7 +565,7 @@ export async function indexWorkspace(input: {
             type: "represented_by"
           });
 
-          symbolNodeIdsByName.set(symbolName, symbolNodeId);
+          symbolNodeIdsByFileAndName.set(fileSymbolKey, symbolNodeId);
         }
       }
 
@@ -600,7 +601,7 @@ export async function indexWorkspace(input: {
         });
       }
 
-      pendingCallEdges.push(...indexed.callExpressions);
+      pendingCallEdges.push(...indexed.callExpressions.map((call) => ({ ...call, filePath: file.relativePath })));
 
       const chunkRows = chunkIds.map((id, i) => ({
         id,
@@ -616,8 +617,13 @@ export async function indexWorkspace(input: {
 
     const insertedCallEdges = new Set<string>();
     for (const callExpression of pendingCallEdges) {
-      const callerNodeId = symbolNodeIdsByName.get(callExpression.callerName) ?? (await repo.findGraphNode("symbol", callExpression.callerName))?.id;
-      const calleeNodeId = symbolNodeIdsByName.get(callExpression.calleeName) ?? (await repo.findGraphNode("symbol", callExpression.calleeName))?.id;
+      const callerNodeId = symbolNodeIdsByFileAndName.get(`${callExpression.filePath}\0${callExpression.callerName}`);
+      const sameFileCallee = symbolNodeIdsByFileAndName.get(`${callExpression.filePath}\0${callExpression.calleeName}`);
+      const globalCallees = sameFileCallee ? [] : await repo.queryRaw(
+        "SELECT id FROM graph_nodes WHERE type = ? AND label = ? LIMIT 2",
+        ["symbol", callExpression.calleeName]
+      );
+      const calleeNodeId = sameFileCallee ?? (globalCallees.length === 1 ? String(globalCallees[0].id) : undefined);
       if (!callerNodeId || !calleeNodeId || callerNodeId === calleeNodeId) continue;
 
       const edgeKey = `${callerNodeId}:${calleeNodeId}:calls`;

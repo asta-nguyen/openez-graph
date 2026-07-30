@@ -1,7 +1,16 @@
 # OpenEZ Graph
 
+[![npm version](https://img.shields.io/npm/v/@openez-graph/cli?label=npm%20%40openez-graph%2Fcli&logo=npm)](https://www.npmjs.com/package/@openez-graph/cli)
+[![npm downloads](https://img.shields.io/npm/dm/@openez-graph/cli?label=downloads&logo=npm)](https://www.npmjs.com/package/@openez-graph/cli)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/website-openez.astalife.co-black?logo=vercel)](https://openez.astalife.co)
+
 OpenEZ Graph is a local-first code intelligence engine for indexing codebases and docs into a reusable retrieval runtime for CLI tools, MCP clients, and a management UI.
 It is designed around a SQLite-first, multi-workspace architecture with the CLI and MCP server as the primary workflow, while the web app acts as an operational layer for inspection and management.
+
+- Website: <https://openez.astalife.co>
+- npm package: <https://www.npmjs.com/package/@openez-graph/cli>
+- GitHub: <https://github.com/asta-nguyen/openez-graph>
 
 ## Why OpenEZ Graph
 
@@ -53,12 +62,16 @@ Python, Go, and Rust are supported in a more basic structured form, while YAML, 
 
 ### For end users
 
+Install the published CLI from npm — [`@openez-graph/cli`](https://www.npmjs.com/package/@openez-graph/cli):
+
 ```bash
 npm install -g @openez-graph/cli
 openez setup claude    # or: codex, opencode
 ```
 
 Restart your agent. Done. The MCP server will auto-register, auto-index, and auto-sync on file changes.
+
+> Try it without installing globally: `npx @openez-graph/cli setup claude`
 
 ### For developers (from source)
 
