@@ -1,0 +1,82 @@
+packages/indexer/src/languages.ts
+  s_afc454ee4796f6::t_4844a5ba88f103 256
+  s_693cc7733b3126::t_a7460574f89b58 683,706-709,711-726,731,733
+  s_afc454ee4796f6::t_13fcd5bc56d1b7 312,448,655
+  s_afc454ee4796f6::t_331f495aa96828 99,159-160,470
+  s_693cc7733b3126::t_e491b0923179e9 320-332,335-360,365-366,368,371-373,380-381,390,394-395,397,399-403,410-411,451
+  s_693cc7733b3126::t_f58a68cab59510 904-912
+  s_693cc7733b3126::t_e4711abd7422ca 227,232-233,251,255,257-259,277,304
+  s_693cc7733b3126::t_08010831f880bb 80
+  s_693cc7733b3126::t_60d5008f404dec 456-467,473-474,476,480,486-489,495-496,498-500,510-518,520-527,529-536,538-545,547-549,562-563,565-574,599,658
+  s_afc454ee4796f6::t_f56b69be7481f9 333-334
+  s_afc454ee4796f6::t_3e9550a3f04cc1 91-96,138
+  s_afc454ee4796f6::t_fc39722506e28e 97-98,100-137,139-158,161-171,216,236,271,290,363,376,382-384,387-388,398,404-409,420,485,490-491,494,497,501-509,519,528,537,546,556-561,564,583,593,603,605-607,636,643,649
+  s_693cc7733b3126::t_56a54a04743d27 481
+  s_b872c3705b182c::t_f2ecb8a4e26abf 284-289,296
+  s_693cc7733b3126::t_892866c556dea3 786,801,810-818,820,825-834
+  s_b872c3705b182c::t_4923f8527b724d 8-19,79,224,226,237-244,261-265,267-269,282-283,291-295,297-303,938,944-945,963
+  s_afc454ee4796f6::t_1e1a0886269a50 270
+tests/go-rust-indexer.test.ts
+  s_693cc7733b3126::t_dc34fec6cc9202 1-33,49-87,89-91,93-94,113-205,236-251
+  s_afc454ee4796f6::t_331f495aa96828 34-48,88,92,95-112,206-235
+packages/db/src/sqlite/repository.ts
+  s_afc454ee4796f6::t_f56b69be7481f9 290-296
+tests/workspace-db.test.ts
+  s_afc454ee4796f6::t_331f495aa96828 111-119
+tests/index-workspace.test.ts
+  s_afc454ee4796f6::t_447fd73cc2c9e9 59-72
+packages/indexer/src/index-workspace.ts
+  s_afc454ee4796f6::t_f56b69be7481f9 434-435,604,620-621
+  s_afc454ee4796f6::t_13fcd5bc56d1b7 545-546,568
+  s_afc454ee4796f6::t_447fd73cc2c9e9 622-626
+tests/config-indexer.test.ts
+  s_afc454ee4796f6::t_3e9550a3f04cc1 1-24
+README.md
+  s_ba35dea98d179d::t_8fb4cfebe214b4 65-66,74
+  s_ba35dea98d179d::t_c849854af0b872 3-7,11-13
+  s_ba35dea98d179d::t_24a2a7c95355e0 14
+  s_ba35dea98d179d::t_0d0ed9fca0fc43 75
+tests/python-indexer.test.ts
+  s_b872c3705b182c::t_373b39d7ea5e33 44-74,90-117
+  s_afc454ee4796f6::t_331f495aa96828 75-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2c34df3a6cb12781dc3471b20affdc091b4ab5c6",
+  "prompts": {},
+  "sessions": {
+    "s_693cc7733b3126": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "3af71bc2-a602-4dab-8688-8aa36f06450f",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_afc454ee4796f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8fb0-c22c-7581-9223-0553176ce3b6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_b872c3705b182c": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "27e2e5e8-321c-4622-9371-d97fe1f245f3",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_ba35dea98d179d": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "standing-straw",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
