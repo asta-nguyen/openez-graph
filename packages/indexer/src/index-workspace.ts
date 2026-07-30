@@ -570,6 +570,8 @@ export async function indexWorkspace(input: {
       }
 
       for (const importPath of indexed.importPaths) {
+        if (typeof importPath !== "string" || importPath.length === 0) continue;
+
         const resolvedImportPath = workspaceFileResolver?.resolveImport(file.relativePath, importPath, indexed.language ?? undefined);
         if (!resolvedImportPath) continue;
 
