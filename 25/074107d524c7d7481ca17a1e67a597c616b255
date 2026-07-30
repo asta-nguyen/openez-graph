@@ -1,0 +1,21 @@
+packages/indexer/src/index-workspace.ts
+  s_1d7685fe01d8df::t_a7d2fba262af6f 573-574
+packages/indexer/src/code.ts
+  s_1d7685fe01d8df::t_39100e239357f9 159-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "25074107d524c7d7481ca17a1e67a597c616b255",
+  "prompts": {},
+  "sessions": {
+    "s_1d7685fe01d8df": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fd25778d-e2fc-4e7c-ad10-b4ddb5c88b8c",
+        "model": "Kimi K3 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
