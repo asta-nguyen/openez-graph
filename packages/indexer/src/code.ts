@@ -156,7 +156,14 @@ export function indexCode(content: string, filePath: string): {
 
   return {
     chunks,
-    importPaths: sourceFile.getImportDeclarations().map((declaration) => declaration.getModuleSpecifierValue()),
+    importPaths: sourceFile.getImportDeclarations().flatMap((declaration) => {
+      try {
+        const value = declaration.getModuleSpecifierValue();
+        return typeof value === "string" && value.length > 0 ? [value] : [];
+      } catch {
+        return [];
+      }
+    }),
     definedSymbols,
     calledIdentifiers: [...calledIdentifiers],
     callExpressions
