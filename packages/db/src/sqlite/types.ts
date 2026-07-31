@@ -150,6 +150,13 @@ export interface WorkspaceRepository {
     metadata?: string;
   }): Promise<string>;
 
+  insertGraphNodesBatch(inputs: Array<{
+    type: string;
+    label: string;
+    refId?: string;
+    metadata?: string;
+  }>): Promise<string[]>;
+
   getGraphNode(id: string): Promise<{
     id: string;
     type: string;
@@ -179,6 +186,14 @@ export interface WorkspaceRepository {
     weight?: number;
     metadata?: string;
   }): Promise<string>;
+
+  insertEdges(inputs: Array<{
+    fromNodeId: string;
+    toNodeId: string;
+    type: string;
+    weight?: number;
+    metadata?: string;
+  }>): Promise<void>;
 
   deleteEdgesByNodeIds(nodeIds: string[]): Promise<void>;
 
@@ -231,6 +246,20 @@ export interface WorkspaceRepository {
 
   executeRaw(sqlQuery: string, params?: unknown[]): Promise<unknown>;
   queryRaw(sqlQuery: string, params?: unknown[]): Promise<Array<Record<string, unknown>>>;
+
+  /** Run a function inside a single SQLite transaction (batch commit). */
+  transaction<T>(fn: () => T | Promise<T>): Promise<T>;
+
+  /** Toggle fast-write pragmas (synchronous=OFF, big cache, mmap). Call before/after bulk indexing. */
+  setOptimizedWriteMode(enabled: boolean): void;
+
+  /** Drop FTS triggers so chunk INSERTs don't fire per-row trigger subqueries. */
+  dropFtsTriggers(): void;
+  /** Recreate FTS triggers and backfill any missing FTS rows. */
+  restoreFtsTriggers(): void;
+
+  /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
+  loadAllSymbolNodes(): Promise<Map<string, string>>;
 
   resetAll(): Promise<void>;
 }

@@ -6,15 +6,13 @@ import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
 
 function codeSearchText(text: string): string {
-  const identifiers = text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? [];
-  return [...new Set(identifiers.flatMap((identifier) => identifier
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-    .replace(/_/g, " ")
-    .split(" ")
-    .filter((term) => term.length > 1)))]
-    .slice(0, 256)
-    .join(" ");
+  const terms = text.match(/[A-Z]?[a-z0-9]+|[A-Z]+(?=[A-Z][a-z]|\b)/g) ?? [];
+  const unique = new Set<string>();
+  for (let i = 0; i < terms.length && unique.size < 256; i++) {
+    const term = terms[i].toLowerCase();
+    if (term.length > 1) unique.add(term);
+  }
+  return Array.from(unique).join(" ");
 }
 
 // ── Language detection ──
@@ -96,76 +94,28 @@ function isEscaped(text: string, index: number): boolean {
 
 function stripNonCode(
   content: string,
-  options: { hashComments?: boolean; backtickStrings?: boolean; tripleStrings?: boolean; rustLifetimes?: boolean } = {}
+  options: { hashComments?: boolean; backtickStrings?: boolean; tripleStrings?: boolean; rawStrings?: boolean; byteStrings?: boolean } = {}
 ): string {
-  let result = "";
-  let quote = "";
-  let blockComment = false;
-  let lineComment = false;
-
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i];
-    const next = content[i + 1];
-    const triple = content.slice(i, i + 3);
-
-    if (char === "\n") {
-      result += "\n";
-      lineComment = false;
-      continue;
-    }
-
-    if (lineComment) {
-      result += " ";
-      continue;
-    }
-
-    if (blockComment) {
-      result += " ";
-      if (char === "*" && next === "/") {
-        result += " ";
-        blockComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (quote) {
-      result += " ";
-      if (quote.length === 3 && triple === quote) {
-        result += "  ";
-        quote = "";
-        i += 2;
-      } else if (quote.length === 1 && char === quote && !isEscaped(content, i)) {
-        quote = "";
-      }
-      continue;
-    }
-
-    if (options.hashComments && char === "#") {
-      result += " ";
-      lineComment = true;
-    } else if (!options.hashComments && char === "/" && next === "/") {
-      result += "  ";
-      lineComment = true;
-      i++;
-    } else if (!options.hashComments && char === "/" && next === "*") {
-      result += "  ";
-      blockComment = true;
-      i++;
-    } else if (options.tripleStrings && (triple === "\"\"\"" || triple === "'''")) {
-      result += "   ";
-      quote = triple;
-      i += 2;
-    } else if (options.rustLifetimes && char === "'" && /[A-Za-z_]/.test(next ?? "") && content[i + 2] !== "'") {
-      result += char;
-    } else if (char === "\"" || char === "'" || (options.backtickStrings && char === "`")) {
-      result += " ";
-      quote = char;
-    } else {
-      result += char;
-    }
+  let result = content;
+  if (options.tripleStrings) {
+    result = result.replace(/"""[\s\S]*?"""|'''[\s\S]*?'''/g, (m) => m.replace(/[^\n]/g, " "));
   }
-
+  if (options.hashComments) {
+    result = result.replace(/#[^\n]*/g, (m) => " ".repeat(m.length));
+  } else {
+    result = result
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+      .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
+  }
+  if (options.backtickStrings) {
+    result = result.replace(/`[\s\S]*?`/g, (m) => m.replace(/[^\n]/g, " "));
+  }
+  if (options.rawStrings) {
+    result = result.replace(/r(#*)"[\s\S]*?"\1/g, (m) => m.replace(/[^\n]/g, " "));
+  }
+  result = result
+    .replace(/"(?:\\.|[^"\\])*"/g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/'(?:\\.|[^'\\])*'/g, (m) => m.replace(/[^\n]/g, " "));
   return result;
 }
 
@@ -268,15 +218,17 @@ export function parsePython(content: string): IndexedCodeResult {
 
       definedSymbols.push({ name, symbolType, type: symbolType, exported, startLine, endLine, decorators: decoratorNames });
 
-      const bodyContent = codeLines.slice(i, endLine).join("\n");
-      let callMatch;
-      const localCallRegex = new RegExp(callRegex);
-      while ((callMatch = localCallRegex.exec(bodyContent)) !== null) {
-        const rawCalledName = callMatch[1];
-        const calledName = normalizePythonCallName(rawCalledName);
-        if (!PYTHON_CALL_IGNORES.has(rawCalledName) && !PYTHON_CALL_IGNORES.has(calledName) && calledName !== rawName && calledName !== name) {
-          calledIdentifiers.add(calledName);
-          callExpressions.push({ callerName: name, calleeName: calledName });
+      for (let lineIdx = i; lineIdx < endLine; lineIdx++) {
+        const lineStr = codeLines[lineIdx];
+        callRegex.lastIndex = 0;
+        let callMatch: RegExpExecArray | null;
+        while ((callMatch = callRegex.exec(lineStr)) !== null) {
+          const rawCalledName = callMatch[1];
+          const calledName = normalizePythonCallName(rawCalledName);
+          if (!PYTHON_CALL_IGNORES.has(rawCalledName) && !PYTHON_CALL_IGNORES.has(calledName) && calledName !== rawName && calledName !== name) {
+            calledIdentifiers.add(calledName);
+            callExpressions.push({ callerName: name, calleeName: calledName });
+          }
         }
       }
 
@@ -371,9 +323,16 @@ export function parseGo(content: string): IndexedCodeResult {
   const callRegex = /(\w+(?:\.\w+)*)\s*\(/g;
 
   const importPaths = parseGoImports(lines);
+  const activeFunctions: Array<{ name: string; symbolName: string; receiverName?: string; receiverType?: string; endLine: number }> = [];
 
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = codeLines[i].trim();
+  for (let i = 0; i < codeLines.length; i++) {
+    const currentLineNum = i + 1;
+    const lineStr = codeLines[i];
+    const trimmed = lineStr.trim();
+
+    while (activeFunctions.length > 0 && activeFunctions[activeFunctions.length - 1].endLine < currentLineNum) {
+      activeFunctions.pop();
+    }
 
     const funcMatch = funcRegex.exec(trimmed);
     if (funcMatch) {
@@ -383,7 +342,7 @@ export function parseGo(content: string): IndexedCodeResult {
       const receiverName = receiverParts[0];
       const receiverType = receiverParts[receiverParts.length - 1];
       const exported = name[0] >= "A" && name[0] <= "Z";
-      const startLine = i + 1;
+      const startLine = currentLineNum;
       const endLine = findBraceBlockEnd(codeLines, i);
       const symbolName = receiverType ? `${receiverType}::${name}` : name;
       definedSymbols.push({
@@ -394,29 +353,16 @@ export function parseGo(content: string): IndexedCodeResult {
         endLine,
         ...(receiver ? { receiver: receiver.trim() } : {})
       });
-
-      const bodyContent = codeLines.slice(i, endLine).join("\n");
-      let callMatch;
-      const localCallRegex = new RegExp(callRegex);
-      while ((callMatch = localCallRegex.exec(bodyContent)) !== null) {
-        const rawCalledName = callMatch[1];
-        const calledName = normalizeGoCallName(rawCalledName);
-        const calleeName = receiverName && rawCalledName.startsWith(`${receiverName}.`) && receiverType
-          ? `${receiverType}::${calledName}`
-          : calledName;
-        if (!GO_CALL_IGNORES.has(rawCalledName) && !GO_CALL_IGNORES.has(calledName) && calleeName !== symbolName) {
-          calledIdentifiers.add(calleeName);
-          callExpressions.push({ callerName: symbolName, calleeName });
-        }
+      if (endLine > currentLineNum) {
+        activeFunctions.push({ name, symbolName, receiverName, receiverType, endLine });
       }
-      continue;
     }
 
     const typeMatch = typeRegex.exec(trimmed);
     if (typeMatch) {
       const name = typeMatch[1];
       const exported = name[0] >= "A" && name[0] <= "Z";
-      const startLine = i + 1;
+      const startLine = currentLineNum;
       const endLine = findBraceBlockEnd(codeLines, i);
       definedSymbols.push({
         name,
@@ -425,7 +371,6 @@ export function parseGo(content: string): IndexedCodeResult {
         startLine,
         endLine
       });
-      continue;
     }
 
     const cvMatch = constVarRegex.exec(trimmed);
@@ -437,9 +382,26 @@ export function parseGo(content: string): IndexedCodeResult {
         symbolType: trimmed.startsWith("const") ? "const" : "var",
         type: trimmed.startsWith("const") ? "const" : "var",
         exported,
-        startLine: i + 1,
-        endLine: i + 1
+        startLine: currentLineNum,
+        endLine: currentLineNum
       });
+    }
+
+    if (activeFunctions.length > 0) {
+      const active = activeFunctions[activeFunctions.length - 1];
+      callRegex.lastIndex = 0;
+      let callMatch: RegExpExecArray | null;
+      while ((callMatch = callRegex.exec(lineStr)) !== null) {
+        const rawCalledName = callMatch[1];
+        const calledName = normalizeGoCallName(rawCalledName);
+        const calleeName = active.receiverName && rawCalledName.startsWith(`${active.receiverName}.`) && active.receiverType
+          ? `${active.receiverType}::${calledName}`
+          : calledName;
+        if (!GO_CALL_IGNORES.has(rawCalledName) && !GO_CALL_IGNORES.has(calledName) && calleeName !== active.symbolName) {
+          calledIdentifiers.add(calleeName);
+          callExpressions.push({ callerName: active.symbolName, calleeName });
+        }
+      }
     }
   }
 
@@ -467,9 +429,8 @@ function normalizeRustCallName(value: string): string {
 
 export function parseRust(content: string): IndexedCodeResult {
   const lines = content.split("\n");
-  const codeLines = stripNonCode(content, { rustLifetimes: true }).split("\n");
+  const codeLines = stripNonCode(content, { rawStrings: true, byteStrings: true }).split("\n");
   const definedSymbols: ExtractedSymbol[] = [];
-  const importPaths: string[] = [];
   const calledIdentifiers = new Set<string>();
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
 
@@ -485,37 +446,46 @@ export function parseRust(content: string): IndexedCodeResult {
   const useRegex = /^(?:pub(?:\([^)]*\))?\s+)?use\s+(.+?);?$/;
   const callRegex = /(\w+(?:::\w+)*(?:\.\w+)*)\s*\(/g;
 
+  const importPaths: string[] = [];
   let implContext: string | null = null;
   let implBraceDepth = 0;
   let traitContext: string | null = null;
   let traitBraceDepth = 0;
 
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = codeLines[i].trim();
+  const activeFunctions: Array<{ name: string; symbolName: string; endLine: number }> = [];
+
+  for (let i = 0; i < codeLines.length; i++) {
+    const currentLineNum = i + 1;
+    const lineStr = codeLines[i];
+    const trimmed = lineStr.trim();
+
+    while (activeFunctions.length > 0 && activeFunctions[activeFunctions.length - 1].endLine < currentLineNum) {
+      activeFunctions.pop();
+    }
 
     if (implContext) {
-      implBraceDepth += countBraces(codeLines[i]);
+      implBraceDepth += countBraces(lineStr);
       if (implBraceDepth <= 0) {
         implContext = null;
         implBraceDepth = 0;
-        continue;
       }
     }
 
     if (traitContext) {
-      traitBraceDepth += countBraces(codeLines[i]);
+      traitBraceDepth += countBraces(lineStr);
       if (traitBraceDepth <= 0) {
         traitContext = null;
         traitBraceDepth = 0;
-        continue;
       }
     }
 
-    const implForMatch = implForRegex.exec(trimmed);
+    const isSymbolLine = /^(?:pub(?:\([^)]*\))?\s+)?(?:unsafe\s+)?(?:async\s+)?(?:fn|struct|enum|trait|impl|type|const|static|mod|use)\b/.test(trimmed);
+    if (isSymbolLine) {
+      const implForMatch = implForRegex.exec(trimmed);
     if (implForMatch) {
       const traitName = implForMatch[1];
       const typeName = implForMatch[2].trim();
-      const startLine = i + 1;
+      const startLine = currentLineNum;
       const endLine = findBraceBlockEnd(codeLines, i);
       definedSymbols.push({
         name: `impl ${traitName} for ${typeName}`,
@@ -525,128 +495,113 @@ export function parseRust(content: string): IndexedCodeResult {
         endLine
       });
       implContext = typeName;
-      implBraceDepth = countBraces(codeLines[i]);
+      implBraceDepth = countBraces(lineStr);
       if (implBraceDepth <= 0) implContext = null;
-      continue;
-    }
-
-    const implMatch = implRegex.exec(trimmed);
-    if (implMatch && !implForMatch) {
-      const typeName = implMatch[1].trim();
-      const startLine = i + 1;
-      const endLine = findBraceBlockEnd(codeLines, i);
-      definedSymbols.push({
-        name: `impl ${typeName}`,
-        symbolType: "impl", type: "impl",
-        exported: false,
-        startLine,
-        endLine
-      });
-      implContext = typeName;
-      implBraceDepth = countBraces(codeLines[i]);
-      if (implBraceDepth <= 0) implContext = null;
-      continue;
+    } else {
+      const implMatch = implRegex.exec(trimmed);
+      if (implMatch) {
+        const typeName = implMatch[1].trim();
+        const startLine = currentLineNum;
+        const endLine = findBraceBlockEnd(codeLines, i);
+        definedSymbols.push({
+          name: `impl ${typeName}`,
+          symbolType: "impl", type: "impl",
+          exported: false,
+          startLine,
+          endLine
+        });
+        implContext = typeName;
+        implBraceDepth = countBraces(lineStr);
+        if (implBraceDepth <= 0) implContext = null;
+      }
     }
 
     const fnMatch = fnRegex.exec(trimmed);
     if (fnMatch) {
       const name = fnMatch[1];
       const exported = trimmed.startsWith("pub");
-      const startLine = i + 1;
-      const endLine = trimmed.endsWith(";") ? i + 1 : findBraceBlockEnd(codeLines, i);
+      const startLine = currentLineNum;
+      const endLine = trimmed.endsWith(";") ? currentLineNum : findBraceBlockEnd(codeLines, i);
       const symbolName = implContext
         ? `${implContext}::${name}`
         : traitContext
           ? `${traitContext}::${name}`
           : name;
       definedSymbols.push({ name: symbolName, symbolType: "function", type: "function", exported, startLine, endLine });
-
-      const bodyContent = codeLines.slice(i, endLine).join("\n");
-      let callMatch;
-      const localCallRegex = new RegExp(callRegex);
-      while ((callMatch = localCallRegex.exec(bodyContent)) !== null) {
-        const rawCalledName = callMatch[1];
-        const calledName = normalizeRustCallName(rawCalledName);
-        if (!RUST_CALL_IGNORES.has(rawCalledName) && !RUST_CALL_IGNORES.has(calledName) && calledName !== name && calledName !== symbolName) {
-          calledIdentifiers.add(calledName);
-          callExpressions.push({ callerName: symbolName, calleeName: calledName });
-        }
+      if (endLine > currentLineNum) {
+        activeFunctions.push({ name, symbolName, endLine });
       }
-      continue;
     }
 
     const structMatch = structRegex.exec(trimmed);
     if (structMatch) {
       const name = structMatch[1];
       const exported = trimmed.startsWith("pub");
-      const startLine = i + 1;
+      const startLine = currentLineNum;
       const endLine = findBraceBlockEnd(codeLines, i);
       definedSymbols.push({ name, symbolType: "struct", type: "struct", exported, startLine, endLine });
-      continue;
     }
 
     const enumMatch = enumRegex.exec(trimmed);
     if (enumMatch) {
       const name = enumMatch[1];
       const exported = trimmed.startsWith("pub");
-      const startLine = i + 1;
+      const startLine = currentLineNum;
       const endLine = findBraceBlockEnd(codeLines, i);
       definedSymbols.push({ name, symbolType: "enum", type: "enum", exported, startLine, endLine });
-      continue;
     }
 
     const traitMatch = traitRegex.exec(trimmed);
     if (traitMatch && !implRegex.test(trimmed) && !implForRegex.test(trimmed)) {
       const name = traitMatch[1];
       const exported = trimmed.startsWith("pub");
-      const startLine = i + 1;
+      const startLine = currentLineNum;
       const endLine = findBraceBlockEnd(codeLines, i);
       definedSymbols.push({ name, symbolType: "trait", type: "trait", exported, startLine, endLine });
       traitContext = name;
-      traitBraceDepth = countBraces(codeLines[i]);
+      traitBraceDepth = countBraces(lineStr);
       if (traitBraceDepth <= 0) traitContext = null;
-      continue;
     }
 
     const typeMatch = typeRegex.exec(trimmed);
     if (typeMatch) {
       const name = typeMatch[1];
-      definedSymbols.push({
-        name,
-        symbolType: "type", type: "type",
-        exported: trimmed.startsWith("pub"),
-        startLine: i + 1,
-        endLine: i + 1
-      });
+      const exported = trimmed.startsWith("pub");
+      definedSymbols.push({ name, symbolType: "type", type: "type", exported, startLine: currentLineNum, endLine: currentLineNum });
     }
 
     const constMatch = constRegex.exec(trimmed);
     if (constMatch) {
       const name = constMatch[1];
-      definedSymbols.push({
-        name,
-        symbolType: "constant", type: "constant",
-        exported: trimmed.startsWith("pub"),
-        startLine: i + 1,
-        endLine: findSemicolonEnd(lines, i)
-      });
+      const exported = trimmed.startsWith("pub");
+      definedSymbols.push({ name, symbolType: "const", type: "const", exported, startLine: currentLineNum, endLine: currentLineNum });
     }
 
     const modMatch = modRegex.exec(trimmed);
     if (modMatch) {
       const name = modMatch[1];
-      definedSymbols.push({
-        name,
-        symbolType: "module", type: "module",
-        exported: trimmed.startsWith("pub"),
-        startLine: i + 1,
-        endLine: trimmed.endsWith(";") ? i + 1 : findBraceBlockEnd(codeLines, i)
-      });
+      const exported = trimmed.startsWith("pub");
+      definedSymbols.push({ name, symbolType: "module", type: "module", exported, startLine: currentLineNum, endLine: currentLineNum });
     }
 
     const useMatch = useRegex.exec(trimmed);
     if (useMatch) {
       importPaths.push(useMatch[1].replace(/;$/, ""));
+    }
+    }
+
+    if (activeFunctions.length > 0 && lineStr.includes("(")) {
+      const active = activeFunctions[activeFunctions.length - 1];
+      callRegex.lastIndex = 0;
+      let callMatch: RegExpExecArray | null;
+      while ((callMatch = callRegex.exec(lineStr)) !== null) {
+        const rawCalledName = callMatch[1];
+        const calledName = normalizeRustCallName(rawCalledName);
+        if (!RUST_CALL_IGNORES.has(rawCalledName) && !RUST_CALL_IGNORES.has(calledName) && calledName !== active.name && calledName !== active.symbolName) {
+          calledIdentifiers.add(calledName);
+          callExpressions.push({ callerName: active.symbolName, calleeName: calledName });
+        }
+      }
     }
   }
 
@@ -886,7 +841,11 @@ function findBraceBlockEnd(lines: string[], startIndex: number): number {
   let found = false;
 
   for (let i = startIndex; i < lines.length; i++) {
-    for (const char of lines[i]) {
+    const line = lines[i];
+    if (!found && !line.includes("{")) continue;
+
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
       if (char === "{") {
         braceCount++;
         found = true;
@@ -902,8 +861,10 @@ function findBraceBlockEnd(lines: string[], startIndex: number): number {
 }
 
 function countBraces(line: string): number {
+  if (!line.includes("{") && !line.includes("}")) return 0;
   let count = 0;
-  for (const char of line) {
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
     if (char === "{") count++;
     else if (char === "}") count--;
   }

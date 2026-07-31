@@ -13,14 +13,24 @@ const DEFAULT_INCLUDE_PATTERNS = [
 ];
 
 const DEFAULT_EXCLUDE_PATTERNS = [
+  "**/node_modules",
   "**/node_modules/**",
+  "**/.git",
   "**/.git/**",
+  "**/.next",
   "**/.next/**",
+  "**/dist",
   "**/dist/**",
+  "**/build",
   "**/build/**",
+  "**/coverage",
   "**/coverage/**",
+  "**/.turbo",
   "**/.turbo/**",
+  "**/.openez",
   "**/.openez/**",
+  "**/target",
+  "**/target/**",
   "**/pnpm-lock.yaml",
   "**/package-lock.json",
   "**/yarn.lock"
@@ -38,11 +48,13 @@ function loadGitignore(rootPath: string): string[] {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#"))
-      .map((pattern) => {
-        if (pattern.startsWith("/")) return `${pattern.slice(1)}/**`;
-        if (pattern.endsWith("/")) return `**/${pattern}**`;
-        if (!pattern.includes("/") && !pattern.startsWith("**/")) return `**/${pattern}/**`;
-        return pattern;
+      .flatMap((pattern) => {
+        const hasSlash = pattern.replace(/\/$/, "").includes("/");
+        const clean = pattern.replace(/^\//, "").replace(/\/$/, "");
+        if (hasSlash) {
+          return [clean, `${clean}/**`];
+        }
+        return [clean, `${clean}/**`, `**/${clean}`, `**/${clean}/**`];
       });
   } catch {
     return [];
