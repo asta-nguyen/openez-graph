@@ -7,7 +7,8 @@ import { Command } from "commander";
 import { createRegistryRepository, createWorkspaceRepository, writeLocalWorkspaceConfig } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
-const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf-8"));
+const cliDir = path.dirname(fs.realpathSync(process.argv[1]));
+const pkg = JSON.parse(fs.readFileSync(path.resolve(cliDir, "../package.json"), "utf-8"));
 
 const program = new Command();
 
@@ -217,9 +218,9 @@ program
       const { serve } = await import("@hono/node-server");
       const { createWebServer } = await import("./web-server");
       const app = createWebServer();
-      serve({ fetch: app.fetch, port }, (info) => {
+      serve({ fetch: app.fetch, hostname: "127.0.0.1", port }, (info) => {
         console.log(`OpenEZ Graph web dashboard:`);
-        console.log(`  http://localhost:${info.port}`);
+        console.log(`  http://${info.address}:${info.port}`);
         console.log(`  Press Ctrl+C to stop`);
       });
     } else {

@@ -121,6 +121,15 @@ export interface QueryResult {
   error: string | null;
 }
 
+export interface IndexWorkspaceResult {
+  workspaceId: string;
+  filesScanned: number;
+  filesUpdated: number;
+  chunksWritten: number;
+  embeddingsWritten: number;
+  status: "completed";
+}
+
 export const api = {
   getDashboard: () => request<DashboardSnapshot>("/dashboard"),
   listWorkspaces: () => request<{ ok: boolean; data: WorkspaceListItem[] }>("/workspaces"),
@@ -144,7 +153,7 @@ export const api = {
       body: JSON.stringify(input),
     }),
   startIndexRun: (workspaceId: string, mode?: string) =>
-    request<{ jobId: string; status: string }>(`/workspaces/${workspaceId}/index`, {
+    request<IndexWorkspaceResult>(`/workspaces/${workspaceId}/index`, {
       method: "POST",
       body: JSON.stringify({ mode: mode ?? "incremental" }),
     }),

@@ -1,7 +1,6 @@
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import crypto from "node:crypto";
 import { existsSync, promises as fs, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
@@ -36,7 +35,6 @@ import {
   listRegistryWorkspaces,
   listWorkspaceDocuments,
   resolveRegistryDbPath,
-  updateRegistryWorkspace,
 } from "./sqlite";
 
 import { memoryQuery } from "@openez-graph/core";
@@ -44,6 +42,7 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
 } from "@openez-graph/db";
+import { indexWorkspace } from "@openez-graph/indexer";
 
 const app = new Hono();
 app.use(
@@ -345,18 +344,26 @@ app.post("/api/workspaces/:id/index", async (c) => {
   const ws = getRegistryWorkspace(id);
   if (!ws)
     return c.json(
-      { jobId: null, status: "error", error: "Workspace not found" },
+      { status: "failed", error: "Workspace not found" },
       404
     );
   const body = await c.req
     .json<{ mode?: string }>()
     .catch(() => ({ mode: "incremental" }));
-  updateRegistryWorkspace(id, {
-    indexingStatus: "running",
-    status: "indexing",
-    lastError: null,
-  });
-  return c.json({ jobId: crypto.randomUUID(), status: "running" });
+  const mode = body.mode ?? "incremental";
+  if (mode !== "incremental" && mode !== "full") {
+    return c.json({ status: "failed", error: "Mode must be 'incremental' or 'full'" }, 400);
+  }
+
+  try {
+    const summary = await indexWorkspace({ workspaceId: id, mode });
+    return c.json({ ...summary, status: "completed" });
+  } catch (error) {
+    return c.json({
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    }, 500);
+  }
 });
 
 // Workspace graph
