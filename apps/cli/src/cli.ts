@@ -7,12 +7,14 @@ import { Command } from "commander";
 import { createRegistryRepository, createWorkspaceRepository, writeLocalWorkspaceConfig } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
+const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../package.json"), "utf-8"));
+
 const program = new Command();
 
 program
   .name("openez")
   .description("OpenEZ Graph - Local-first knowledge retrieval system")
-  .version("0.4.0");
+  .version(pkg.version);
 
 // ── openez init [path] ──
 
