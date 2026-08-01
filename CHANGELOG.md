@@ -5,6 +5,15 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-08-01
+
+### Added
+- Web dashboard changelog page (`/changelog`) with structured rendering of release notes from `CHANGELOG.md`
+- API endpoint `GET /api/changelog` serving the repo changelog
+- Changelog link in CLI README for npm package page
+- Release workflow instructions in `AGENTS.md` for cross-agent support (Codex, OpenCode, Claude Code)
+- Agent skill at `.agents/skills/release-cli/SKILL.md` for automated release workflow
+
 ## [0.6.1] - 2026-08-01
 
 ### Added
@@ -39,6 +48,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[0.7.0]: https://github.com/asta-nguyen/openez-graph/compare/9b7cc78...a7ce4df
 [0.6.1]: https://github.com/asta-nguyen/openez-graph/compare/405f7e8...9b7cc78
 [0.6.0]: https://github.com/asta-nguyen/openez-graph/compare/5ff0f5c...405f7e8
 [0.5.1]: https://github.com/asta-nguyen/openez-graph/releases/tag/v0.5.1
