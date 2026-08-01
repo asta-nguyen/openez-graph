@@ -179,6 +179,24 @@ export interface WorkspaceRepository {
 
   deleteGraphNodesByRefId(refId: string): Promise<void>;
 
+  /** Find a file-type graph node by its label (relative path). */
+  findFileNode(relativePath: string): Promise<{ id: string; type: string; label: string; refId: string | null; metadata: string } | null>;
+
+  /** Get all symbol nodes whose metadata.filePath matches the given relative path. */
+  getSymbolNodesByFilePath(filePath: string): Promise<Array<{ id: string; type: string; label: string; refId: string | null; metadata: string }>>;
+
+  /** Delete outgoing edges from a specific node, optionally filtered by edge types. */
+  deleteOutgoingEdges(nodeId: string, types?: string[]): void;
+
+  /** Update a symbol node's refId and metadata (for reuse when symbol still exists). */
+  updateSymbolNode(id: string, refId: string, metadata: string): void;
+
+  /** Delete specific graph nodes by id (used for stale symbols). */
+  deleteGraphNodesByIds(ids: string[]): void;
+
+  /** Delete only chunk-type graph nodes whose ref_id matches one of the given chunk IDs. */
+  deleteChunkNodesByChunkIds(chunkIds: string[]): void;
+
   insertEdge(input: {
     fromNodeId: string;
     toNodeId: string;
@@ -261,5 +279,7 @@ export interface WorkspaceRepository {
   /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
   loadAllSymbolNodes(): Promise<Map<string, string>>;
 
-  resetAll(): Promise<void>;
+  /** Delete only rebuildable index artifacts (documents, chunks, embeddings, graph_nodes, graph_edges).
+   *  Preserves memories, query_logs, index_runs, and graph_runs. */
+  resetIndexArtifacts(): void;
 }

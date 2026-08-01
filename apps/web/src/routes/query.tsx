@@ -1,6 +1,6 @@
-import { createFileRoute, useSearch } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
-import { Network, FileText, ArrowRight } from "lucide-react";
+import { Network, FileText, ArrowRight, ChevronLeft, Search, Loader2 } from "lucide-react";
 import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   Input, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea,
@@ -60,15 +60,28 @@ function QueryPage() {
   const symbolNodes = state.graphNodes.filter((n) => n.type === "symbol");
   const chunkNodes = state.graphNodes.filter((n) => n.type === "chunk");
 
+  const hasWorkspaceId = defaultWorkspaceId.trim().length > 0;
+
   return (
     <div className="page">
-      <div>
-        <h1>Query</h1>
-        <p className="muted">Test the retrieval flow against the indexed workspace.</p>
+      <div className="flex items-center gap-4 mb-6">
+        {hasWorkspaceId && (
+          <Link to="/workspaces/$workspaceId" params={{ workspaceId: defaultWorkspaceId }}>
+            <Button variant="ghost" size="icon">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+        )}
+        <div className="flex-1">
+          <h1>Query</h1>
+          <p className="muted text-sm">Test the retrieval flow against the indexed workspace.</p>
+        </div>
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Query interface</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base">Query interface</CardTitle>
+        </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="query-form">
             <div className="field">
@@ -79,8 +92,14 @@ function QueryPage() {
               <Label htmlFor="query">Query</Label>
               <Textarea id="query" name="query" placeholder="login session flow, auth design, createSession" />
             </div>
-            <Button type="submit" disabled={pending}>{pending ? "Running..." : "Run query"}</Button>
-            {state.error && <p className="text-destructive">{state.error}</p>}
+            <Button type="submit" disabled={pending}>
+              {pending ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
+              ) : (
+                <><Search className="h-4 w-4" /> Run query</>
+              )}
+            </Button>
+            {state.error && <p className="text-sm text-destructive mt-2">{state.error}</p>}
           </form>
         </CardContent>
       </Card>
@@ -88,7 +107,9 @@ function QueryPage() {
       {state.answerContext && (
         <Card>
           <CardHeader><CardTitle className="text-base">Context</CardTitle></CardHeader>
-          <CardContent><div className="code">{state.answerContext}</div></CardContent>
+          <CardContent>
+            <pre className="text-sm whitespace-pre-wrap font-mono bg-muted/30 rounded-md p-4 overflow-x-auto">{state.answerContext}</pre>
+          </CardContent>
         </Card>
       )}
 

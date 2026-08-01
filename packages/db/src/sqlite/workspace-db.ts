@@ -69,6 +69,21 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     // Non-fatal if legacy duplicates exist
   }
 
+  // Clean legacy duplicates and install the logical-edge constraint atomically.
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      DELETE FROM graph_edges
+      WHERE id NOT IN (
+        SELECT MIN(id) FROM graph_edges
+        GROUP BY from_node_id, to_node_id, type
+      );
+    `);
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type
+      ON graph_edges(from_node_id, to_node_id, type)
+    `);
+  })();
+
   // FTS5 includes file and symbol context because code queries often name either one.
   sqlite.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(

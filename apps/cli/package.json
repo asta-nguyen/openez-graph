@@ -52,12 +52,12 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.14",
+    "@hono/node-server": "^2.0.12",
     "better-sqlite3": "^12.10.0",
-    "hono": "^4.12.18"
+    "hono": "^4.12.33"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openez-graph/config": "workspace:*",
     "@openez-graph/core": "workspace:*",
     "@openez-graph/db": "workspace:*",

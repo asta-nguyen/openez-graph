@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   FolderKanban,
   Settings,
-  Database,
   FileText,
   ScrollText,
   Gauge,
@@ -12,7 +11,6 @@ import {
 import {
   dashboardQueryOptions,
   documentsQueryOptions,
-  jobsQueryOptions,
   settingsEnvQueryOptions,
   workspacesQueryOptions,
 } from "../lib/queries";
@@ -61,7 +59,6 @@ const debugNav = [
     icon: FileText,
     query: () => documentsQueryOptions(1, PAGE_SIZE),
   },
-  { href: "/jobs", label: "Jobs", icon: Database, query: jobsQueryOptions },
 ];
 
 const secondaryNav = [

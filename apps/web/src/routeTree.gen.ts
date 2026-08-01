@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkspacesRouteImport } from './routes/workspaces'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as QueryRouteImport } from './routes/query'
-import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as BenchmarkRouteImport } from './routes/benchmark'
 import { Route as IndexRouteImport } from './routes/index'
@@ -35,11 +34,6 @@ const SettingsRoute = SettingsRouteImport.update({
 const QueryRoute = QueryRouteImport.update({
   id: '/query',
   path: '/query',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const JobsRoute = JobsRouteImport.update({
-  id: '/jobs',
-  path: '/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocumentsRoute = DocumentsRouteImport.update({
@@ -89,7 +83,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/benchmark': typeof BenchmarkRoute
   '/documents': typeof DocumentsRoute
-  '/jobs': typeof JobsRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces': typeof WorkspacesRouteWithChildren
@@ -103,7 +96,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/benchmark': typeof BenchmarkRoute
   '/documents': typeof DocumentsRoute
-  '/jobs': typeof JobsRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces/new': typeof WorkspacesNewRoute
@@ -116,7 +108,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/benchmark': typeof BenchmarkRoute
   '/documents': typeof DocumentsRoute
-  '/jobs': typeof JobsRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces': typeof WorkspacesRouteWithChildren
@@ -132,7 +123,6 @@ export interface FileRouteTypes {
     | '/'
     | '/benchmark'
     | '/documents'
-    | '/jobs'
     | '/query'
     | '/settings'
     | '/workspaces'
@@ -146,7 +136,6 @@ export interface FileRouteTypes {
     | '/'
     | '/benchmark'
     | '/documents'
-    | '/jobs'
     | '/query'
     | '/settings'
     | '/workspaces/new'
@@ -158,7 +147,6 @@ export interface FileRouteTypes {
     | '/'
     | '/benchmark'
     | '/documents'
-    | '/jobs'
     | '/query'
     | '/settings'
     | '/workspaces'
@@ -173,7 +161,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BenchmarkRoute: typeof BenchmarkRoute
   DocumentsRoute: typeof DocumentsRoute
-  JobsRoute: typeof JobsRoute
   QueryRoute: typeof QueryRoute
   SettingsRoute: typeof SettingsRoute
   WorkspacesRoute: typeof WorkspacesRouteWithChildren
@@ -200,13 +187,6 @@ declare module '@tanstack/react-router' {
       path: '/query'
       fullPath: '/query'
       preLoaderRoute: typeof QueryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/jobs': {
-      id: '/jobs'
-      path: '/jobs'
-      fullPath: '/jobs'
-      preLoaderRoute: typeof JobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents': {
@@ -303,7 +283,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BenchmarkRoute: BenchmarkRoute,
   DocumentsRoute: DocumentsRoute,
-  JobsRoute: JobsRoute,
   QueryRoute: QueryRoute,
   SettingsRoute: SettingsRoute,
   WorkspacesRoute: WorkspacesRouteWithChildren,

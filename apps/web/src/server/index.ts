@@ -1,7 +1,6 @@
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import crypto from "node:crypto";
 import { existsSync, promises as fs, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
@@ -36,7 +35,6 @@ import {
   listRegistryWorkspaces,
   listWorkspaceDocuments,
   resolveRegistryDbPath,
-  updateRegistryWorkspace,
 } from "./sqlite";
 
 import { memoryQuery } from "@openez-graph/core";
@@ -44,6 +42,7 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
 } from "@openez-graph/db";
+import { indexWorkspace } from "@openez-graph/indexer";
 
 const app = new Hono();
 app.use(
@@ -122,23 +121,6 @@ function mapWorkspace(ws: {
     createdAt: new Date(ws.createdAt),
     updatedAt: new Date(ws.updatedAt),
   };
-}
-
-function toRunShim(run: {
-  id: string;
-  mode: string;
-  status: string;
-  filesScanned: number;
-  filesUpdated: number;
-  chunksWritten: number;
-  embeddingsWritten: number;
-  nodesCreated: number;
-  edgesCreated: number;
-  errorMessage: string | null;
-  startedAt: string;
-  finishedAt: string | null;
-}) {
-  return run;
 }
 
 // Dashboard
@@ -223,20 +205,6 @@ app.get("/api/documents", (c) => {
   } catch {
     return c.json({ items: [], totalCount: 0 });
   }
-});
-
-// Jobs
-app.get("/api/jobs", (c) => {
-  const workspaces = listRegistryWorkspaces();
-  const runs: Array<ReturnType<typeof toRunShim>> = [];
-  for (const ws of workspaces) {
-    const workspaceRuns = getRecentIndexRuns(ws.rootPath, 100);
-    runs.push(...workspaceRuns);
-  }
-  runs.sort(
-    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-  );
-  return c.json(runs);
 });
 
 // Validate path
@@ -376,30 +344,26 @@ app.post("/api/workspaces/:id/index", async (c) => {
   const ws = getRegistryWorkspace(id);
   if (!ws)
     return c.json(
-      { jobId: null, status: "error", error: "Workspace not found" },
+      { status: "failed", error: "Workspace not found" },
       404
     );
   const body = await c.req
     .json<{ mode?: string }>()
     .catch(() => ({ mode: "incremental" }));
-  updateRegistryWorkspace(id, {
-    indexingStatus: "running",
-    status: "indexing",
-    lastError: null,
-  });
-  return c.json({ jobId: crypto.randomUUID(), status: "running" });
-});
+  const mode = body.mode ?? "incremental";
+  if (mode !== "incremental" && mode !== "full") {
+    return c.json({ status: "failed", error: "Mode must be 'incremental' or 'full'" }, 400);
+  }
 
-// Workspace jobs
-app.get("/api/workspaces/:id/jobs", (c) => {
-  const id = c.req.param("id");
-  const ws = getRegistryWorkspace(id);
-  if (!ws) return c.json([]);
-  return c.json(getRecentIndexRuns(ws.rootPath, 100));
-});
-
-app.delete("/api/workspaces/:id/jobs/:jobId", (c) => {
-  return c.json({ ok: true });
+  try {
+    const summary = await indexWorkspace({ workspaceId: id, mode });
+    return c.json({ ...summary, status: "completed" });
+  } catch (error) {
+    return c.json({
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    }, 500);
+  }
 });
 
 // Workspace graph
