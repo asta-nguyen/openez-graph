@@ -191,6 +191,41 @@ function getNativeWorkspaceDb(rootPath: string): { db: ReturnType<typeof getWork
 export function createWorkspaceRepository(rootPath: string): WorkspaceRepository {
   const { db, native } = getNativeWorkspaceDb(rootPath);
 
+  // ── Cached prepared statements (prepared once, reused thousands of times) ──
+  const stmts = {
+    docByPath: native.prepare("SELECT * FROM documents WHERE path = ?"),
+    docById: native.prepare("SELECT * FROM documents WHERE id = ?"),
+    insertDoc: native.prepare(
+      "INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ),
+    chunksByDoc: native.prepare("SELECT * FROM chunks WHERE document_id = ? ORDER BY chunk_index"),
+    insertChunk: native.prepare(
+      "INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ),
+    deleteChunksByDoc: native.prepare("DELETE FROM chunks WHERE document_id = ?"),
+    nodeByTypeLabel: native.prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ?"),
+    nodeByTypeLabelRef: native.prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ? AND ref_id = ?"),
+    insertNode: native.prepare(
+      "INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ),
+    // Single-query upsert for non-symbol nodes (type, label is unique via partial index)
+    upsertNodeByTypeLabel: native.prepare(
+      `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET ref_id = COALESCE(excluded.ref_id, graph_nodes.ref_id), metadata = excluded.metadata, updated_at = excluded.updated_at
+       RETURNING id`
+    ),
+    updateNode: native.prepare("UPDATE graph_nodes SET ref_id = ?, metadata = ?, updated_at = ? WHERE id = ?"),
+    deleteNodesByRefId: native.prepare(
+      "DELETE FROM graph_nodes WHERE ref_id = ? OR ref_id IN (SELECT id FROM chunks WHERE document_id = ?)"
+    ),
+    insertEdge: native.prepare(
+      "INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ),
+    insertEmbedding: native.prepare(
+      "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ),
+  };
+
   return {
     rootPath,
 
@@ -217,23 +252,19 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Document Operations ──
 
     async getDocument(id: string) {
-      const row = native.prepare("SELECT * FROM documents WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+      const row = stmts.docById.get(id) as Record<string, unknown> | undefined;
       return row ? mapDocumentRow(row) : null;
     },
 
     async getDocumentByPath(path: string) {
-      const row = native.prepare("SELECT * FROM documents WHERE path = ?").get(path) as Record<string, unknown> | undefined;
+      const row = stmts.docByPath.get(path) as Record<string, unknown> | undefined;
       return row ? mapDocumentRow(row) : null;
     },
 
     async insertDocument(input) {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date().toISOString();
-      native
-        .prepare(
-          "INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        .run(id, input.path, input.absolutePath, input.kind, input.language, input.contentHash, input.sizeBytes, input.mtimeMs, now, now);
+      stmts.insertDoc.run(id, input.path, input.absolutePath, input.kind, input.language, input.contentHash, input.sizeBytes, input.mtimeMs, now, now);
       return id;
     },
 
@@ -262,58 +293,96 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Chunk Operations ──
 
     async getChunksByDocument(documentId: string) {
-      const rows = native.prepare("SELECT * FROM chunks WHERE document_id = ? ORDER BY chunk_index").all(documentId) as Array<Record<string, unknown>>;
+      const rows = stmts.chunksByDoc.all(documentId) as Array<Record<string, unknown>>;
       return rows.map(mapChunkRow);
     },
 
     async insertChunks(inputs) {
+      if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const stmt = native.prepare(
-        "INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      );
-      const ids: string[] = [];
-      for (const input of inputs) {
-        const id = crypto.randomUUID();
-        ids.push(id);
-        stmt.run(id, input.documentId, input.chunkIndex, input.heading ?? null, input.content, input.tokenCount, input.contentHash, input.metadata, now, now);
+      const ids: string[] = inputs.map(() => crypto.randomUUID());
+      const BATCH = 500;
+      for (let i = 0; i < inputs.length; i += BATCH) {
+        const batch = inputs.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (let j = 0; j < batch.length; j++) {
+          const item = batch[j];
+          params.push(
+            ids[i + j],
+            item.documentId,
+            item.chunkIndex,
+            item.heading ?? null,
+            item.content,
+            item.tokenCount,
+            item.contentHash,
+            item.metadata,
+            now,
+            now
+          );
+        }
+        native.prepare(`INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`).run(...params);
       }
       return ids;
     },
 
     async deleteChunksByDocument(documentId: string) {
-      native.prepare("DELETE FROM chunks WHERE document_id = ?").run(documentId);
+      stmts.deleteChunksByDoc.run(documentId);
     },
 
     // ── Graph Node Operations ──
 
     async upsertGraphNode(input) {
-      const existing = input.type === "symbol" && input.refId
-        ? native
-            .prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ? AND ref_id = ?")
-            .get(input.type, input.label, input.refId) as Record<string, unknown> | undefined
-        : native
-            .prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ?")
-            .get(input.type, input.label) as Record<string, unknown> | undefined;
-
-      if (existing) {
-        const nextMetadata = input.metadata ?? String(existing.metadata ?? "{}");
-        const existingRefId = (existing.ref_id as string | null) ?? null;
-        const nextRefId = input.refId ?? existingRefId;
-
-        if (nextRefId !== existingRefId || nextMetadata !== existing.metadata) {
-          native
-            .prepare("UPDATE graph_nodes SET ref_id = ?, metadata = ?, updated_at = ? WHERE id = ?")
-            .run(nextRefId, nextMetadata, new Date().toISOString(), existing.id);
+      if (input.type === "symbol") {
+        if (input.refId) {
+          const existing = stmts.nodeByTypeLabelRef.get(input.type, input.label, input.refId) as Record<string, unknown> | undefined;
+          if (existing) {
+            const nextMetadata = input.metadata ?? String(existing.metadata ?? "{}");
+            if (nextMetadata !== existing.metadata) {
+              stmts.updateNode.run(input.refId, nextMetadata, new Date().toISOString(), existing.id);
+            }
+            return String(existing.id);
+          }
         }
-        return String(existing.id);
+        const id = crypto.randomUUID();
+        const now = new Date().toISOString();
+        stmts.insertNode.run(id, input.type, input.label, input.refId ?? null, input.metadata ?? "{}", now, now);
+        return id;
       }
 
+      // Non-symbol nodes: (type, label) is unique — use ON CONFLICT ... RETURNING (one query)
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      native
-        .prepare("INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(id, input.type, input.label, input.refId ?? null, input.metadata ?? "{}", now, now);
-      return id;
+      const row = stmts.upsertNodeByTypeLabel.get(id, input.type, input.label, input.refId ?? null, input.metadata ?? "{}", now, now) as { id: string };
+      return String(row.id);
+    },
+
+    async insertGraphNodesBatch(inputs: Array<{ type: string; label: string; refId?: string; metadata?: string }>): Promise<string[]> {
+      if (inputs.length === 0) return [];
+      const now = new Date().toISOString();
+      const ids: string[] = inputs.map(() => crypto.randomUUID());
+      const BATCH = 500;
+      for (let i = 0; i < inputs.length; i += BATCH) {
+        const batch = inputs.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (let j = 0; j < batch.length; j++) {
+          const item = batch[j];
+          params.push(
+            ids[i + j],
+            item.type,
+            item.label,
+            item.refId ?? null,
+            item.metadata ?? "{}",
+            now,
+            now
+          );
+        }
+        native.prepare(
+          `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders} ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET metadata = excluded.metadata, updated_at = excluded.updated_at`
+        ).run(...params);
+      }
+      return ids;
     },
 
     async getGraphNode(id: string) {
@@ -322,24 +391,43 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     },
 
     async findGraphNode(type: string, label: string) {
-      const row = native.prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ?").get(type, label) as Record<string, unknown> | undefined;
+      const row = stmts.nodeByTypeLabel.get(type, label) as Record<string, unknown> | undefined;
       return row ? mapNodeRow(row) : null;
     },
 
     async deleteGraphNodesByRefId(refId: string) {
-      native.prepare(
-        "DELETE FROM graph_nodes WHERE ref_id = ? OR ref_id IN (SELECT id FROM chunks WHERE document_id = ?)"
-      ).run(refId, refId);
+      stmts.deleteNodesByRefId.run(refId, refId);
     },
 
     // ── Graph Edge Operations ──
 
     async insertEdge(input) {
       const id = crypto.randomUUID();
-      native
-        .prepare("INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(id, input.fromNodeId, input.toNodeId, input.type, input.weight ?? 1, input.metadata ?? "{}", new Date().toISOString());
+      stmts.insertEdge.run(id, input.fromNodeId, input.toNodeId, input.type, input.weight ?? 1, input.metadata ?? "{}", new Date().toISOString());
       return id;
+    },
+
+    async insertEdges(inputs: Array<{ fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }>): Promise<void> {
+      if (inputs.length === 0) return;
+      const now = new Date().toISOString();
+      const BATCH = 500;
+      for (let i = 0; i < inputs.length; i += BATCH) {
+        const batch = inputs.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (const item of batch) {
+          params.push(
+            crypto.randomUUID(),
+            item.fromNodeId,
+            item.toNodeId,
+            item.type,
+            item.weight ?? 1,
+            item.metadata ?? "{}",
+            now
+          );
+        }
+        native.prepare(`INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders}`).run(...params);
+      }
     },
 
     async deleteEdgesByNodeIds(nodeIds: string[]) {
@@ -353,12 +441,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Embedding Operations ──
 
     async insertEmbeddings(inputs) {
-      const stmt = native.prepare(
-        "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      );
       const now = new Date().toISOString();
       for (const input of inputs) {
-        stmt.run(crypto.randomUUID(), input.chunkId, input.provider, input.model, input.dimensions, input.embedding, now);
+        stmts.insertEmbedding.run(crypto.randomUUID(), input.chunkId, input.provider, input.model, input.dimensions, input.embedding, now);
       }
     },
 
@@ -528,6 +613,92 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         return native.prepare(sqlQuery).all(...params) as Array<Record<string, unknown>>;
       }
       return native.prepare(sqlQuery).all() as Array<Record<string, unknown>>;
+    },
+
+    async transaction<T>(fn: () => T | Promise<T>): Promise<T> {
+      native.exec("BEGIN");
+      try {
+        const result = await fn();
+        native.exec("COMMIT");
+        return result;
+      } catch (error) {
+        native.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
+    setOptimizedWriteMode(enabled: boolean): void {
+      if (enabled) {
+        native.pragma("synchronous = OFF");
+        native.pragma("cache_size = -65536");
+        native.pragma("temp_store = MEMORY");
+        native.pragma("mmap_size = 268435456");
+      } else {
+        native.pragma("synchronous = NORMAL");
+        native.pragma("cache_size = -2000");
+        native.pragma("temp_store = DEFAULT");
+        native.pragma("mmap_size = 0");
+      }
+    },
+
+    dropFtsTriggers(): void {
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
+    },
+
+    restoreFtsTriggers(): void {
+      // Remove orphaned FTS entries (chunks that were deleted while triggers were down)
+      native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
+
+      // Backfill missing FTS entries — use LEFT JOIN to avoid O(n²) NOT EXISTS subquery
+      native.exec(`
+        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+        SELECT c.id, d.path, coalesce(c.heading, ''),
+          coalesce(d.language, ''), coalesce(json_extract(c.metadata, '$.searchText'), ''), c.content
+        FROM chunks c
+        INNER JOIN documents d ON d.id = c.document_id
+        LEFT JOIN chunks_fts f ON f.chunk_id = c.id
+        WHERE f.chunk_id IS NULL;
+      `);
+
+      // Recreate triggers
+      native.exec(`
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
+        BEGIN
+          INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+          SELECT new.id, documents.path, coalesce(new.heading, ''),
+            coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
+          FROM documents WHERE documents.id = new.document_id;
+        END;
+      `);
+      native.exec(`
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
+        BEGIN
+          DELETE FROM chunks_fts WHERE chunk_id = old.id;
+        END;
+      `);
+      native.exec(`
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
+        BEGIN
+          DELETE FROM chunks_fts WHERE chunk_id = old.id;
+          INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+          SELECT new.id, documents.path, coalesce(new.heading, ''),
+            coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
+          FROM documents WHERE documents.id = new.document_id;
+        END;
+      `);
+    },
+
+    async loadAllSymbolNodes(): Promise<Map<string, string>> {
+      const rows = native
+        .prepare("SELECT label, id FROM graph_nodes WHERE type = 'symbol'")
+        .all() as Array<{ label: string; id: string }>;
+      const map = new Map<string, string>();
+      for (const row of rows) {
+        if (!map.has(row.label)) map.set(row.label, String(row.id));
+      }
+      return map;
     },
 
     // ── Reset ──

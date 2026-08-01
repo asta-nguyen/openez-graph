@@ -105,7 +105,11 @@ program
 
     await writeLocalWorkspaceConfig(workspace);
 
-    const summary = await indexWorkspace({ workspaceId: workspace.id, mode: "full" });
+    const summary = await indexWorkspace({
+      workspaceId: workspace.id,
+      mode: "full",
+      onProgress: (p) => console.log(`[${p.progress}%] ${p.message}`)
+    });
     console.log(JSON.stringify(summary, null, 2));
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateRetrieval, parseRetrievalCases, summarizeQuality } from "../apps/worker/src/retrieval-eval";
+import { evaluateRetrieval, parseRetrievalCases, summarizeQuality } from "../packages/indexer/src/retrieval-eval";
 
 describe("retrieval evaluation", () => {
   it("parses legacy strings and quality cases", () => {
