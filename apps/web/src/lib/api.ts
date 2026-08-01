@@ -138,7 +138,6 @@ export const api = {
     if (params.offset) qs.set("offset", String(params.offset));
     return request<{ items: DocumentRow[]; totalCount: number }>(`/documents?${qs}`);
   },
-  getAllJobs: () => request<RunRow[]>("/jobs"),
   runQuery: (input: { workspaceId: string; query: string }) =>
     request<QueryResult>("/query", {
       method: "POST",
@@ -151,10 +150,6 @@ export const api = {
     }),
   getIndexStatus: (workspaceId: string) =>
     request<{ status: string } | null>(`/workspaces/${workspaceId}/index`),
-  getWorkspaceJobs: (workspaceId: string) =>
-    request<RunRow[]>(`/workspaces/${workspaceId}/jobs`),
-  cancelJob: (workspaceId: string, jobId: string) =>
-    request<{ ok: boolean }>(`/workspaces/${workspaceId}/jobs/${jobId}`, { method: "DELETE" }),
   validatePath: (rootPath: string) =>
     request<{ valid: boolean; error?: string }>("/validate-path", {
       method: "POST",
