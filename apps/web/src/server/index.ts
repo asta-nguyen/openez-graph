@@ -547,6 +547,27 @@ app.get("/api/settings/env", (c) => {
   });
 });
 
+// ── Changelog ──
+
+app.get("/api/changelog", (c) => {
+  try {
+    const candidates = [
+      path.resolve(serverDir, "..", "..", "..", "CHANGELOG.md"),
+      path.resolve(serverDir, "..", "CHANGELOG.md"),
+      path.resolve(process.cwd(), "CHANGELOG.md"),
+    ];
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) {
+        const content = readFileSync(candidate, "utf-8");
+        return c.json({ content });
+      }
+    }
+    return c.json({ content: "" }, 404);
+  } catch {
+    return c.json({ content: "" }, 500);
+  }
+});
+
 // ── Static frontend serving ──
 
 function resolveWebDist(): string | null {
