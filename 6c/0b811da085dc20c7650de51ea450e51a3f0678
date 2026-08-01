@@ -1,0 +1,26 @@
+apps/web/src/routes/query.tsx
+  s_2203b1460f1984::t_43a3318f258ec7 8
+  s_2203b1460f1984::t_bd0c285650dbf4 112
+apps/web/src/components/context-blocks.tsx
+  s_2203b1460f1984::t_b55f4e4ba479cc 1-110
+apps/web/package.json
+  s_2203b1460f1984::t_415c86a10eac91 31
+pnpm-lock.yaml
+  s_2203b1460f1984::t_8cc242a0800944 180-182,2427-2429,4039-4043,6732-6733,7476,8386-8391
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "6c0b811da085dc20c7650de51ea450e51a3f0678",
+  "prompts": {},
+  "sessions": {
+    "s_2203b1460f1984": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "21ba7dc5-973b-4f52-be7c-901e6f563c55",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
