@@ -134,6 +134,10 @@ Opens a full web dashboard at `http://localhost:17881` with:
 - Node.js 20+
 - No external services needed
 
+## Changelog
+
+See [CHANGELOG.md](https://github.com/asta-nguyen/openez-graph/blob/main/CHANGELOG.md) for release history.
+
 ## License
 
 MIT © [Asta Nguyen](https://github.com/asta-nguyen)

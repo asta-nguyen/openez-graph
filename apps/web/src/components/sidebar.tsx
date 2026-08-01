@@ -7,6 +7,7 @@ import {
   FileText,
   ScrollText,
   Gauge,
+  History,
 } from "lucide-react";
 import {
   dashboardQueryOptions,
@@ -62,6 +63,11 @@ const debugNav = [
 ];
 
 const secondaryNav = [
+  {
+    href: "/changelog",
+    label: "Changelog",
+    icon: History,
+  },
   {
     href: "/settings",
     label: "Settings",
