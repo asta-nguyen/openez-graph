@@ -5,6 +5,7 @@ import {
   Badge, Button, Card, CardContent, CardHeader, CardTitle,
   Input, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea,
 } from "@openez-graph/ui";
+import { ContextBlocks } from "../components/context-blocks";
 import { api } from "../lib/api";
 import type { QueryResult } from "../lib/api";
 
@@ -108,7 +109,7 @@ function QueryPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Context</CardTitle></CardHeader>
           <CardContent>
-            <pre className="text-sm whitespace-pre-wrap font-mono bg-muted/30 rounded-md p-4 overflow-x-auto">{state.answerContext}</pre>
+            <ContextBlocks raw={state.answerContext} />
           </CardContent>
         </Card>
       )}

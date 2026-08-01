@@ -28,6 +28,7 @@
     "d3-force": "^3.0.0",
     "hono": "^4.12.33",
     "lucide-react": "^0.511.0",
+    "prism-react-renderer": "^2.4.1",
     "radix-ui": "^1.4.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
