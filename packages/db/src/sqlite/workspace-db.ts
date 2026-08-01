@@ -58,6 +58,17 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
   `);
 
+  // Partial unique index to enable ON CONFLICT upserts for non-symbol nodes.
+  // Symbols allow duplicate names across files and are handled separately.
+  try {
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label
+      ON graph_nodes(type, label) WHERE type != 'symbol'
+    `);
+  } catch {
+    // Non-fatal if legacy duplicates exist
+  }
+
   // FTS5 includes file and symbol context because code queries often name either one.
   sqlite.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
