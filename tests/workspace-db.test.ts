@@ -133,6 +133,25 @@ describe("createWorkspaceRepository", () => {
     expect((await repo.graphNeighbors(nodeA, 0)).nodes.map((node) => node.label)).toEqual(["funcA"]);
   });
 
+  it("deduplicates legacy edges before installing the unique index", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const nodeA = await repo.upsertGraphNode({ type: "function", label: "legacyA" });
+    const nodeB = await repo.upsertGraphNode({ type: "function", label: "legacyB" });
+
+    await repo.executeRaw("DROP INDEX idx_graph_edges_from_to_type");
+    const insertSql = "INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata) VALUES (?, ?, ?, 'calls', 1, '{}')";
+    await repo.executeRaw(insertSql, ["legacy-edge-1", nodeA, nodeB]);
+    await repo.executeRaw(insertSql, ["legacy-edge-2", nodeA, nodeB]);
+    expect(await repo.getEdgeCount()).toBe(2);
+
+    closeAllWorkspaceDbs();
+    const reopened = createWorkspaceRepository(tempRoot);
+    expect(await reopened.getEdgeCount()).toBe(1);
+    expect(await reopened.queryRaw(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_graph_edges_from_to_type'"
+    )).toEqual([{ name: "idx_graph_edges_from_to_type" }]);
+  });
+
   it("fullTextSearch finds chunks by content", async () => {
     const repo = createWorkspaceRepository(tempRoot);
 

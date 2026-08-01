@@ -143,6 +143,48 @@ async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: str
   await repo.deleteChunksByDocument(documentId);
 }
 
+/**
+ * Reset artifacts for a file that changed content, preserving stable graph node identities.
+ * - Deletes old chunk nodes and chunk rows (content-dependent)
+ * - Deletes outgoing edges from the file node (contains, defines, imports, mentions)
+ * - Deletes outgoing edges from the file's symbol nodes (represented_by, calls)
+ * - Preserves the file node and symbol nodes (identity = path / filePath+name)
+ * Caller must reconcile symbol nodes after re-parsing.
+ */
+async function resetChangedFileArtifacts(
+  repo: WorkspaceRepository,
+  documentId: string,
+  relativePath: string
+): Promise<Map<string, string>> {
+  const chunks = await repo.getChunksByDocument(documentId);
+  const chunkIds = chunks.map((c) => c.id);
+
+  if (chunkIds.length > 0) {
+    await repo.deleteEmbeddingsByChunkIds(chunkIds);
+  }
+
+  // Delete old chunk graph nodes only (preserve symbol nodes)
+  repo.deleteChunkNodesByChunkIds(chunkIds);
+
+  // Find file node and delete its outgoing edges (will be rebuilt)
+  const fileNode = await repo.findFileNode(relativePath);
+  if (fileNode) {
+    repo.deleteOutgoingEdges(fileNode.id, ["contains", "defines", "imports", "mentions"]);
+  }
+
+  // Get existing symbol nodes for this file, delete their outgoing edges (will be rebuilt)
+  const symbolNodes = await repo.getSymbolNodesByFilePath(relativePath);
+  const existingSymbolNodes = new Map<string, string>();
+  for (const sym of symbolNodes) {
+    repo.deleteOutgoingEdges(sym.id, ["represented_by", "calls"]);
+    existingSymbolNodes.set(sym.label, sym.id);
+  }
+
+  await repo.deleteChunksByDocument(documentId);
+
+  return existingSymbolNodes;
+}
+
 export function boundChunks(chunks: IndexedChunk[], targetTokens: number, overlapTokens: number): IndexedChunk[] {
   return chunks.flatMap((chunk) => {
     const parts = splitToTokenLimit(chunk.content, targetTokens, overlapTokens);
@@ -431,7 +473,7 @@ export async function indexWorkspace(input: {
   };
 
   if (runMode === "full") {
-    await repo.resetAll();
+    repo.resetIndexArtifacts();
   }
 
   const runId = await repo.createIndexRun({ mode: runMode });
@@ -444,9 +486,12 @@ export async function indexWorkspace(input: {
     exclude: excludeGlobs
   });
 
+  const existingDocuments = await repo.listDocuments();
+  const existingDocumentsByPath = new Map(existingDocuments.map((document) => [document.path, document]));
+
   if (runMode === "incremental") {
     const scannedPaths = new Set(files.map((file) => file.relativePath));
-    for (const document of await repo.listDocuments()) {
+    for (const document of existingDocuments) {
       if (!scannedPaths.has(document.path)) {
         await resetDocumentArtifacts(repo, document.id);
         await repo.deleteDocument(document.id);
@@ -465,6 +510,7 @@ export async function indexWorkspace(input: {
   let filesUpdated = 0;
   let chunksWritten = 0;
   let embeddingsWritten = 0;
+  let bulkWriteMode = false;
   const symbolNodeIdsByFileAndName = new Map<string, string>();
   const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
 
@@ -474,41 +520,60 @@ export async function indexWorkspace(input: {
       files.length === 0 ? 100 : 10
     );
 
-    // ── Phase 1: Read all files in parallel (concurrency-limited) ──
+    // ── Phase 1: Check which files changed (fast DB lookups, no file reads) ──
+    const parseTasks: ParseTask[] = [];
+    const unchangedFiles: Array<{
+      existingDocument: NonNullable<Awaited<ReturnType<typeof repo.getDocumentByPath>>>;
+    }> = [];
+    const filesToRead: typeof files = [];
+
+    for (const file of files) {
+      const existingDocument = existingDocumentsByPath.get(file.relativePath);
+      // Fast path: skip file read if mtime and size match (incremental only)
+      const statUnchanged =
+        runMode === "incremental" &&
+        existingDocument &&
+        existingDocument.mtimeMs === file.mtimeMs &&
+        existingDocument.sizeBytes === file.sizeBytes;
+
+      if (statUnchanged) {
+        unchangedFiles.push({ existingDocument: existingDocument! });
+      } else {
+        filesToRead.push(file);
+      }
+    }
+
+    // ── Phase 2: Read only changed files in parallel (concurrency-limited) ──
     const fileContents = new Map<string, string>();
     const READ_CONCURRENCY = 32;
     let readIndex = 0;
     async function readWorker() {
-      while (readIndex < files.length) {
+      while (readIndex < filesToRead.length) {
         const i = readIndex++;
-        fileContents.set(files[i].relativePath, await fs.readFile(files[i].absolutePath, "utf8"));
+        fileContents.set(filesToRead[i].relativePath, await fs.readFile(filesToRead[i].absolutePath, "utf8"));
       }
     }
     await Promise.all(
-      Array.from({ length: Math.min(READ_CONCURRENCY, files.length) }, () => readWorker())
+      Array.from({ length: Math.min(READ_CONCURRENCY, filesToRead.length) }, () => readWorker())
     );
 
-    // ── Phase 2: Check which files changed (main thread, fast DB lookups) ──
-    const parseTasks: ParseTask[] = [];
-    const unchangedFiles: Array<{
-      file: typeof files[0];
-      existingDocument: NonNullable<Awaited<ReturnType<typeof repo.getDocumentByPath>>>;
-      existingChunks: Awaited<ReturnType<typeof repo.getChunksByDocument>>;
-    }> = [];
-
-    for (const file of files) {
+    // ── Phase 2b: Verify content hash for changed files ──
+    for (const file of filesToRead) {
       const content = fileContents.get(file.relativePath)!;
       const contentHash = hashContent(content);
-      const existingDocument = await repo.getDocumentByPath(file.relativePath);
-      const existingChunks = existingDocument ? await repo.getChunksByDocument(existingDocument.id) : [];
+      const existingDocument = existingDocumentsByPath.get(file.relativePath);
       const unchanged =
         runMode === "incremental" &&
         existingDocument &&
-        existingDocument.contentHash === contentHash &&
-        existingDocument.mtimeMs === file.mtimeMs;
+        existingDocument.contentHash === contentHash;
 
       if (unchanged) {
-        unchangedFiles.push({ file, existingDocument: existingDocument!, existingChunks });
+        await repo.updateDocument(existingDocument.id, {
+          absolutePath: file.absolutePath,
+          sizeBytes: file.sizeBytes,
+          mtimeMs: file.mtimeMs
+        });
+        unchangedFiles.push({ existingDocument });
       } else {
         parseTasks.push({
           id: file.relativePath,
@@ -528,22 +593,29 @@ export async function indexWorkspace(input: {
       reportProgress(`Parsing ${done}/${total} files...`, Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)));
     });
 
-    // ── Phase 4: Write all results to DB (main thread, transactioned) ──
-    repo.setOptimizedWriteMode(true);
-    repo.dropFtsTriggers();
+    // Backfill unchanged embeddings only when embeddings are enabled.
+    if (embeddingProvider) {
+      for (const { existingDocument } of unchangedFiles) {
+        const existingChunks = await repo.getChunksByDocument(existingDocument.id);
+        embeddingsWritten += await writeEmbeddingsToRepo(
+          repo,
+          existingChunks.map((chunk) => ({
+            id: chunk.id,
+            content: chunk.content,
+            path: existingDocument.path,
+            heading: chunk.heading
+          })),
+          embeddingProvider
+        );
+      }
+    }
 
-    // Write unchanged file embeddings
-    for (const { file, existingDocument, existingChunks } of unchangedFiles) {
-      embeddingsWritten += await writeEmbeddingsToRepo(
-        repo,
-        existingChunks.map((chunk) => ({
-          id: chunk.id,
-          content: chunk.content,
-          path: existingDocument.path,
-          heading: chunk.heading
-        })),
-        embeddingProvider
-      );
+    // A true no-op never changes SQLite write pragmas or FTS triggers.
+    if (parseTasks.length > 0) {
+      // ── Phase 4: Write all results to DB (main thread, transactioned) ──
+      repo.setOptimizedWriteMode(true);
+      repo.dropFtsTriggers();
+      bulkWriteMode = true;
     }
 
     const allChunkRowsForEmbeddings: Array<{ id: string; content: string; path: string; heading?: string | null }> = [];
@@ -558,12 +630,13 @@ export async function indexWorkspace(input: {
 
         const indexed = parseResults.get(file.id)!;
         const contentHash = hashContent(file.content);
-        const existingDocument = await repo.getDocumentByPath(file.relativePath);
+        const existingDocument = existingDocumentsByPath.get(file.relativePath);
 
         let documentId: string;
+        let fileExistingSymbols: Map<string, string>;
 
         if (existingDocument) {
-          await resetDocumentArtifacts(repo, existingDocument.id);
+          fileExistingSymbols = await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
           await repo.updateDocument(existingDocument.id, {
             absolutePath: file.absolutePath,
             kind: indexed.kind,
@@ -583,6 +656,7 @@ export async function indexWorkspace(input: {
             sizeBytes: file.sizeBytes,
             mtimeMs: file.mtimeMs
           });
+          fileExistingSymbols = new Map();
         }
 
         const fileNodeId = await repo.upsertGraphNode({
@@ -617,6 +691,7 @@ export async function indexWorkspace(input: {
         const chunkNodeIds = await repo.insertGraphNodesBatch(chunkNodeInputs);
 
         const edges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> = [];
+        const reusedSymbolIds = new Set<string>();
 
         for (const [ci, chunkId] of chunkIds.entries()) {
           const chunkNodeId = chunkNodeIds[ci];
@@ -626,21 +701,49 @@ export async function indexWorkspace(input: {
           const symbolName = (metadataObj.symbolName as string | undefined) ?? indexed.chunks[ci].symbolName;
           if (symbolName) {
             const fileSymbolKey = `${file.relativePath}\0${symbolName}`;
-            const symbolNodeId = symbolNodeIdsByFileAndName.get(fileSymbolKey) ?? await repo.upsertGraphNode({
-              type: "symbol",
-              label: symbolName,
-              refId: chunkId,
-              metadata: JSON.stringify({
-                symbolType: indexed.chunks[ci].symbolType,
-                filePath: file.relativePath
-              })
-            });
+            let symbolNodeId = symbolNodeIdsByFileAndName.get(fileSymbolKey);
 
+            if (!symbolNodeId) {
+              const existingSymbolId = fileExistingSymbols.get(symbolName);
+              if (existingSymbolId) {
+                repo.updateSymbolNode(
+                  existingSymbolId,
+                  chunkId,
+                  JSON.stringify({
+                    symbolType: indexed.chunks[ci].symbolType,
+                    filePath: file.relativePath
+                  })
+                );
+                symbolNodeId = existingSymbolId;
+              } else {
+                symbolNodeId = await repo.upsertGraphNode({
+                  type: "symbol",
+                  label: symbolName,
+                  refId: chunkId,
+                  metadata: JSON.stringify({
+                    symbolType: indexed.chunks[ci].symbolType,
+                    filePath: file.relativePath
+                  })
+                });
+              }
+              symbolNodeIdsByFileAndName.set(fileSymbolKey, symbolNodeId);
+            }
+
+            reusedSymbolIds.add(symbolNodeId);
             edges.push({ fromNodeId: fileNodeId, toNodeId: symbolNodeId, type: "defines" });
             edges.push({ fromNodeId: symbolNodeId, toNodeId: chunkNodeId, type: "represented_by" });
-
-            symbolNodeIdsByFileAndName.set(fileSymbolKey, symbolNodeId);
           }
+        }
+
+        // Delete stale symbol nodes (existed before but not seen in this parse)
+        const staleSymbolIds: string[] = [];
+        for (const symbolId of fileExistingSymbols.values()) {
+          if (!reusedSymbolIds.has(symbolId)) {
+            staleSymbolIds.push(symbolId);
+          }
+        }
+        if (staleSymbolIds.length > 0) {
+          repo.deleteGraphNodesByIds(staleSymbolIds);
         }
 
         for (const importPath of indexed.importPaths) {
@@ -648,7 +751,6 @@ export async function indexWorkspace(input: {
 
           const resolvedImportPath = workspaceFileResolver?.resolveImport(file.relativePath, importPath, indexed.language ?? undefined);
           if (!resolvedImportPath) continue;
-
           const targetNodeId = await repo.upsertGraphNode({
             type: "file",
             label: resolvedImportPath,
@@ -668,7 +770,15 @@ export async function indexWorkspace(input: {
           edges.push({ fromNodeId: fileNodeId, toNodeId: entityNodeId, type: "mentions" });
         }
 
-        await repo.insertEdges(edges);
+        // Dedupe edges by from:to:type before insert
+        const edgeSet = new Set<string>();
+        const dedupedEdges = edges.filter((e) => {
+          const key = `${e.fromNodeId}:${e.toNodeId}:${e.type}`;
+          if (edgeSet.has(key)) return false;
+          edgeSet.add(key);
+          return true;
+        });
+        await repo.insertEdges(dedupedEdges);
 
         pendingCallEdges.push(...indexed.callExpressions.map((call) => ({ ...call, filePath: file.relativePath })));
 
@@ -690,8 +800,11 @@ export async function indexWorkspace(input: {
     }
 
     // ── Phase 5: Restore FTS triggers + bulk backfill ──
-    repo.restoreFtsTriggers();
-    repo.setOptimizedWriteMode(false);
+    if (bulkWriteMode) {
+      repo.restoreFtsTriggers();
+      repo.setOptimizedWriteMode(false);
+      bulkWriteMode = false;
+    }
 
     // ── Phase 6: Batch call-edge resolution from in-memory symbol map ──
     // Load all symbol nodes in one query instead of N queries per call expression.
@@ -745,9 +858,10 @@ export async function indexWorkspace(input: {
       lastError: ""
     });
   } catch (error) {
-    // Restore FTS triggers + normal pragma mode even on failure
-    try { repo.restoreFtsTriggers(); } catch { /* already restored or never dropped */ }
-    repo.setOptimizedWriteMode(false);
+    if (bulkWriteMode) {
+      try { repo.restoreFtsTriggers(); } catch { /* preserve original indexing error */ }
+      repo.setOptimizedWriteMode(false);
+    }
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     await repo.completeIndexRun(runId, {

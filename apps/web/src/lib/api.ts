@@ -121,6 +121,15 @@ export interface QueryResult {
   error: string | null;
 }
 
+export interface IndexWorkspaceResult {
+  workspaceId: string;
+  filesScanned: number;
+  filesUpdated: number;
+  chunksWritten: number;
+  embeddingsWritten: number;
+  status: "completed";
+}
+
 export const api = {
   getDashboard: () => request<DashboardSnapshot>("/dashboard"),
   listWorkspaces: () => request<{ ok: boolean; data: WorkspaceListItem[] }>("/workspaces"),
@@ -138,23 +147,18 @@ export const api = {
     if (params.offset) qs.set("offset", String(params.offset));
     return request<{ items: DocumentRow[]; totalCount: number }>(`/documents?${qs}`);
   },
-  getAllJobs: () => request<RunRow[]>("/jobs"),
   runQuery: (input: { workspaceId: string; query: string }) =>
     request<QueryResult>("/query", {
       method: "POST",
       body: JSON.stringify(input),
     }),
   startIndexRun: (workspaceId: string, mode?: string) =>
-    request<{ jobId: string; status: string }>(`/workspaces/${workspaceId}/index`, {
+    request<IndexWorkspaceResult>(`/workspaces/${workspaceId}/index`, {
       method: "POST",
       body: JSON.stringify({ mode: mode ?? "incremental" }),
     }),
   getIndexStatus: (workspaceId: string) =>
     request<{ status: string } | null>(`/workspaces/${workspaceId}/index`),
-  getWorkspaceJobs: (workspaceId: string) =>
-    request<RunRow[]>(`/workspaces/${workspaceId}/jobs`),
-  cancelJob: (workspaceId: string, jobId: string) =>
-    request<{ ok: boolean }>(`/workspaces/${workspaceId}/jobs/${jobId}`, { method: "DELETE" }),
   validatePath: (rootPath: string) =>
     request<{ valid: boolean; error?: string }>("/validate-path", {
       method: "POST",

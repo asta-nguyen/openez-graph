@@ -219,7 +219,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       "DELETE FROM graph_nodes WHERE ref_id = ? OR ref_id IN (SELECT id FROM chunks WHERE document_id = ?)"
     ),
     insertEdge: native.prepare(
-      "INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`
     ),
     insertEmbedding: native.prepare(
       "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
@@ -399,6 +401,43 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       stmts.deleteNodesByRefId.run(refId, refId);
     },
 
+    async findFileNode(relativePath: string) {
+      const row = stmts.nodeByTypeLabel.get("file", relativePath) as Record<string, unknown> | undefined;
+      return row ? mapNodeRow(row) : null;
+    },
+
+    async getSymbolNodesByFilePath(filePath: string) {
+      const rows = native
+        .prepare("SELECT * FROM graph_nodes WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ?")
+        .all(filePath) as Array<Record<string, unknown>>;
+      return rows.map(mapNodeRow);
+    },
+
+    deleteOutgoingEdges(nodeId: string, types?: string[]) {
+      if (types && types.length > 0) {
+        const placeholders = types.map(() => "?").join(",");
+        native.prepare(`DELETE FROM graph_edges WHERE from_node_id = ? AND type IN (${placeholders})`).run(nodeId, ...types);
+      } else {
+        native.prepare("DELETE FROM graph_edges WHERE from_node_id = ?").run(nodeId);
+      }
+    },
+
+    updateSymbolNode(id: string, refId: string, metadata: string) {
+      stmts.updateNode.run(refId, metadata, new Date().toISOString(), id);
+    },
+
+    deleteGraphNodesByIds(ids: string[]) {
+      if (ids.length === 0) return;
+      const placeholders = ids.map(() => "?").join(",");
+      native.prepare(`DELETE FROM graph_nodes WHERE id IN (${placeholders})`).run(...ids);
+    },
+
+    deleteChunkNodesByChunkIds(chunkIds: string[]) {
+      if (chunkIds.length === 0) return;
+      const placeholders = chunkIds.map(() => "?").join(",");
+      native.prepare(`DELETE FROM graph_nodes WHERE type = 'chunk' AND ref_id IN (${placeholders})`).run(...chunkIds);
+    },
+
     // ── Graph Edge Operations ──
 
     async insertEdge(input) {
@@ -426,7 +465,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
             now
           );
         }
-        native.prepare(`INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders}`).run(...params);
+        native.prepare(`INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders} ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`).run(...params);
       }
     },
 
@@ -703,16 +742,12 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     // ── Reset ──
 
-    async resetAll() {
-      native.exec("DELETE FROM memories");
-      native.exec("DELETE FROM query_logs");
+    resetIndexArtifacts(): void {
       native.exec("DELETE FROM graph_edges");
       native.exec("DELETE FROM graph_nodes");
       native.exec("DELETE FROM embeddings");
       native.exec("DELETE FROM chunks");
       native.exec("DELETE FROM documents");
-      native.exec("DELETE FROM index_runs");
-      native.exec("DELETE FROM graph_runs");
     }
   };
 }
