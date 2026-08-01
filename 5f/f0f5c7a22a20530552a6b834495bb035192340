@@ -1,0 +1,21 @@
+apps/cli/package.json
+  s_aca6c9d67d6b59::t_8ab377494893ac 3
+apps/cli/src/cli.ts
+  s_aca6c9d67d6b59::t_6ff31ab2faf561 10-11,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "5ff0f5c7a22a20530552a6b834495bb035192340",
+  "prompts": {},
+  "sessions": {
+    "s_aca6c9d67d6b59": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "07710c4c-f8dd-4840-90bd-d3f9cee7bf0e",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
