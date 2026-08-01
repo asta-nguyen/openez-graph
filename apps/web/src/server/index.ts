@@ -124,23 +124,6 @@ function mapWorkspace(ws: {
   };
 }
 
-function toRunShim(run: {
-  id: string;
-  mode: string;
-  status: string;
-  filesScanned: number;
-  filesUpdated: number;
-  chunksWritten: number;
-  embeddingsWritten: number;
-  nodesCreated: number;
-  edgesCreated: number;
-  errorMessage: string | null;
-  startedAt: string;
-  finishedAt: string | null;
-}) {
-  return run;
-}
-
 // Dashboard
 app.get("/api/dashboard", (c) => {
   try {
@@ -223,20 +206,6 @@ app.get("/api/documents", (c) => {
   } catch {
     return c.json({ items: [], totalCount: 0 });
   }
-});
-
-// Jobs
-app.get("/api/jobs", (c) => {
-  const workspaces = listRegistryWorkspaces();
-  const runs: Array<ReturnType<typeof toRunShim>> = [];
-  for (const ws of workspaces) {
-    const workspaceRuns = getRecentIndexRuns(ws.rootPath, 100);
-    runs.push(...workspaceRuns);
-  }
-  runs.sort(
-    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-  );
-  return c.json(runs);
 });
 
 // Validate path
@@ -388,18 +357,6 @@ app.post("/api/workspaces/:id/index", async (c) => {
     lastError: null,
   });
   return c.json({ jobId: crypto.randomUUID(), status: "running" });
-});
-
-// Workspace jobs
-app.get("/api/workspaces/:id/jobs", (c) => {
-  const id = c.req.param("id");
-  const ws = getRegistryWorkspace(id);
-  if (!ws) return c.json([]);
-  return c.json(getRecentIndexRuns(ws.rootPath, 100));
-});
-
-app.delete("/api/workspaces/:id/jobs/:jobId", (c) => {
-  return c.json({ ok: true });
 });
 
 // Workspace graph

@@ -30,11 +30,6 @@ export const documentsQueryOptions = (page: number, pageSize: number) =>
       api.getDocuments({ limit: pageSize, offset: (page - 1) * pageSize }),
   });
 
-export const jobsQueryOptions = queryOptions({
-  queryKey: ["jobs"],
-  queryFn: api.getAllJobs,
-});
-
 export const settingsEnvQueryOptions = queryOptions({
   queryKey: ["settings", "env"],
   queryFn: async () => {
