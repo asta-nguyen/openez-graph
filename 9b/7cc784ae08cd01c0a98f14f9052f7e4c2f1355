@@ -1,0 +1,20 @@
+apps/web/src/components/context-blocks.tsx
+  s_2203b1460f1984::t_6863fb52aa1293 5-18
+  s_2203b1460f1984::t_7260972fa21ffc 66-120,136,151-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "9b7cc784ae08cd01c0a98f14f9052f7e4c2f1355",
+  "prompts": {},
+  "sessions": {
+    "s_2203b1460f1984": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "21ba7dc5-973b-4f52-be7c-901e6f563c55",
+        "model": "Kimi K3 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
