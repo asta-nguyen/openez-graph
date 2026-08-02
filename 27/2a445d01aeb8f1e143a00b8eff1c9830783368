@@ -1,0 +1,110 @@
+package.json
+  s_093a011794a3bb::t_b9d26f12ef43a7 28
+apps/web/src/server/index.ts
+  s_249d2147fad3f9::t_cf54807b36c449 641,654-659
+  s_093a011794a3bb::t_e3316dd62f56ae 663
+packages/core/src/types.ts
+  s_093a011794a3bb::t_5978853ef409d7 12-19,40-41,43-48,50-60,64-77
+  s_093a011794a3bb::t_a57f7ffeff7460 42
+apps/web/src/lib/api.ts
+  s_093a011794a3bb::t_e3316dd62f56ae 80
+tests/web-index-endpoint.test.ts
+  s_093a011794a3bb::t_b1b7b3bc7cb9b3 81-93
+CHANGELOG.md
+  s_093a011794a3bb::t_83e309fc8265bb 8-24,87
+packages/core/src/graph.ts
+  s_093a011794a3bb::t_e12b09506dc080 3-24,32,36,39,41-57,59-60,62-66,79,82-84,88-100,102-104,106-109,111-114,116-121,123-127,129-148,150-151,153,155,162,168,171,173,178
+  s_093a011794a3bb::t_d824150284c59e 154,158,172,174-177
+  s_093a011794a3bb::t_a57f7ffeff7460 105
+  s_093a011794a3bb::t_46ba1370f9f1bd 101,110,122,128,163-167,169-170
+apps/web/src/routes/benchmark.tsx
+  s_093a011794a3bb::t_a57f7ffeff7460 20,107
+  s_093a011794a3bb::t_b8eb3586838416 34,89
+  s_093a011794a3bb::t_4349bc5aaaa366 1,3,19,27,29-33,35-38,42-45,49-50,64-65,67-70,76-77,79-82,88,90,93-103,105-106,108-118
+  s_093a011794a3bb::t_8eb2232b10ef27 21
+  s_093a011794a3bb::t_9cf735f2fe6e45 26
+apps/web/src/routes/index.tsx
+  s_093a011794a3bb::t_9876b358bbbc9a 3,39-40,45-46,49-50,53-54,57-58,63,170,184,202-203
+  s_093a011794a3bb::t_05e9c72a48fe63 192-194
+  s_093a011794a3bb::t_b8eb3586838416 38
+packages/db/src/sqlite/workspace-db.ts
+  s_249d2147fad3f9::t_ffd75be3e1b2c3 50-51,158-171
+  s_b5a51a9857cda0::t_ef8f2620adc9b6 172-173
+packages/db/src/sqlite/repository.ts
+  s_093a011794a3bb::t_699beda907b273 579-580
+  s_093a011794a3bb::t_9378f512323162 555,586-587,589
+tests/mcp-tools.test.ts
+  s_093a011794a3bb::t_7b8b36064ac727 6,59-73,82-93
+  s_093a011794a3bb::t_cfdc646cb13a98 117
+  s_093a011794a3bb::t_a83454de28f07e 12,126-127
+  s_093a011794a3bb::t_a57f7ffeff7460 75-76,78
+  s_093a011794a3bb::t_05c879e5868b92 37-42,153-156,159
+  s_093a011794a3bb::t_447f66a692113a 111,114,120,128-133,141
+  s_093a011794a3bb::t_0e3370f90cadcb 94-107
+  s_093a011794a3bb::t_c4befa4ec16b76 1-5,7-11,13-36,43-58,74,77,79-81,108-110,112-113,115-116,118-119,121-125,134-140,142-152,157-158,160-189
+apps/cli/tsup.config.ts
+  s_093a011794a3bb::t_cfdc646cb13a98 3,6-15,26
+packages/core/src/retrieval.ts
+  s_093a011794a3bb::t_d5bba06416628d 189,249-268,270-280,282
+packages/db/src/sqlite/types.ts
+  s_093a011794a3bb::t_9378f512323162 248
+apps/cli/src/cli.ts
+  s_093a011794a3bb::t_cfdc646cb13a98 214
+apps/cli/package.json
+  s_093a011794a3bb::t_1c06ea9a68e7bf 10,37
+  s_093a011794a3bb::t_3079bbb8d148fd 35,50,54,64
+  s_093a011794a3bb::t_83e309fc8265bb 3
+apps/cli/src/mcp-bridge.ts
+  s_093a011794a3bb::t_cfdc646cb13a98 3-6
+apps/web/src/server/sqlite.ts
+  s_093a011794a3bb::t_e3316dd62f56ae 756,798
+  s_249d2147fad3f9::t_8d13bf0484a3fa 294-296,309-322
+  s_249d2147fad3f9::t_97a3c445f69142 323-324
+apps/mcp/src/mcp-core.ts
+  s_093a011794a3bb::t_bd4f2fc0ce846d 508-514,516,521-522
+  s_093a011794a3bb::t_72ccad0a099c10 18-19,27,38,51,70
+  s_093a011794a3bb::t_e2becc20777ca4 287,605-608,613
+  s_093a011794a3bb::t_a6d5670e9de9ac 14-15,49-50,69,205-208,213,219-231,235-245,247,249,253-257,259-263,265-266,268-286
+  s_093a011794a3bb::t_1a0509660a316e 357,375,395,428
+  s_093a011794a3bb::t_d824150284c59e 246,250-251,264,267
+  s_093a011794a3bb::t_2d190d9f8ecdc8 248,252,258
+  s_093a011794a3bb::t_6ad73f2f8378ec 232-234,503-506,520
+  s_093a011794a3bb::t_0f059680ed1840 455-456,465-466,488,495-502,507,517-519,523-526,546,562-563,567,592
+  s_093a011794a3bb::t_5433682a21b110 653-654
+  s_093a011794a3bb::t_f35f79b93d8995 319,325,393-394,427
+  s_093a011794a3bb::t_2525a7f6666439 288
+pnpm-lock.yaml
+  s_093a011794a3bb::t_a2e9b9afdc1d39 35-37,69-71,102-104,5470-5491,9367-9370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "272a445d01aeb8f1e143a00b8eff1c9830783368",
+  "prompts": {},
+  "sessions": {
+    "s_093a011794a3bb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fc156-8874-7333-88c1-2dbe4d66e5ca",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_249d2147fad3f9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fc102-c737-78e3-bf55-4963c182c642",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_b5a51a9857cda0": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "7d59125a-f45d-4840-a961-c003089a2b7b",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
