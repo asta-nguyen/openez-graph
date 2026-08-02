@@ -11,18 +11,18 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import { codeContext, graphNeighbors, memoryQuery, memoryWrite } from "@openez-graph/core";
+import { codeContext, codeQuery, graphNeighbors, memoryRecall, memoryWrite } from "@openez-graph/core";
 import { createRegistryRepository, findLocalWorkspaceConfig } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
-const memoryQuerySchema = z.object({
+const codeQuerySchema = z.object({
   workspaceIds: z.array(z.string()).optional(),
   workspaceId: z.string().optional(),
   paths: z.array(z.string()).optional(),
   path: z.string().optional(),
-  query: z.string(),
-  limit: z.number().int().positive().optional(),
-  maxTokens: z.number().int().positive().optional()
+  query: z.string().trim().min(1),
+  limit: z.number().int().positive().max(100).optional(),
+  maxTokens: z.number().int().positive().max(100_000).optional()
 });
 
 const codeContextSchema = z.object({
@@ -31,7 +31,9 @@ const codeContextSchema = z.object({
   paths: z.array(z.string()).optional(),
   path: z.string().optional(),
   symbolOrPath: z.string(),
-  hops: z.number().int().positive().optional()
+  hops: z.number().int().positive().max(5).optional(),
+  limit: z.number().int().positive().max(200).optional(),
+  maxTokens: z.number().int().positive().max(100_000).optional()
 });
 
 const graphNeighborsSchema = z.object({
@@ -48,10 +50,19 @@ const graphNeighborsSchema = z.object({
 const memoryWriteSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
-  title: z.string(),
-  content: z.string(),
+  title: z.string().trim().min(1),
+  content: z.string().trim().min(1),
   tags: z.array(z.string()).optional(),
   supersedesId: z.string().optional()
+});
+
+const memoryRecallSchema = z.object({
+  workspaceIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
+  paths: z.array(z.string()).optional(),
+  path: z.string().optional(),
+  query: z.string().trim().min(1),
+  limit: z.number().int().positive().max(100).optional()
 });
 
 const indexWorkspaceSchema = z.object({
@@ -254,7 +265,7 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
         }
       },
       {
-        name: "memory_query",
+        name: "code_query",
         description: "Retrieve ranked code and documentation context for a user query. Supports one or many workspaces.",
         inputSchema: {
           type: "object",
@@ -281,7 +292,9 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
           paths: { type: "array", items: { type: "string" } },
           path: { type: "string" },
           symbolOrPath: { type: "string" },
-          hops: { type: "number" }
+          hops: { type: "number" },
+          limit: { type: "number", description: "Maximum total records returned" },
+          maxTokens: { type: "number", description: "Approximate JSON token budget" }
           },
           required: ["symbolOrPath"]
         }
@@ -321,6 +334,22 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
         }
       },
       {
+        name: "memory_recall",
+        description: "Recall active technical decisions and learned memories. Supports one or many workspaces.",
+        inputSchema: {
+          type: "object",
+          properties: {
+          workspaceIds: { type: "array", items: { type: "string" } },
+          workspaceId: { type: "string" },
+          paths: { type: "array", items: { type: "string" } },
+          path: { type: "string" },
+          query: { type: "string" },
+          limit: { type: "number" }
+          },
+          required: ["query"]
+        }
+      },
+      {
         name: "index_workspace",
         description: "Run indexing for a workspace.",
         inputSchema: {
@@ -338,14 +367,15 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
         const registry = createRegistryRepository();
         return jsonResponse(await registry.listWorkspaces());
       }
+      case "code_query":
       case "memory_query": {
-        const input = memoryQuerySchema.parse(request.params.arguments ?? {});
+        const input = codeQuerySchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspace,
-            result: await memoryQuery({
+            result: await codeQuery({
               workspaceId: workspace.id,
               query: input.query,
               limit: input.limit,
@@ -393,7 +423,9 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
             result: await codeContext({
               workspaceId: workspace.id,
               symbolOrPath: input.symbolOrPath,
-              hops: input.hops
+              hops: input.hops,
+              limit: input.limit,
+              maxTokens: input.maxTokens
             })
           }))
         );
@@ -423,6 +455,26 @@ export async function createAndStartMcpServer(options?: { defaultPath?: string }
         const input = memoryWriteSchema.parse(request.params.arguments ?? {});
         const workspace = await resolver.resolveWriteWorkspace(input);
         return jsonResponse(await memoryWrite({ ...input, workspaceId: workspace.id }));
+      }
+      case "memory_recall": {
+        const input = memoryRecallSchema.parse(request.params.arguments ?? {});
+        const workspaces = await resolver.resolveReadWorkspaces(input);
+        const results = await Promise.all(
+          workspaces.map(async (workspace) => ({
+            workspace,
+            result: await memoryRecall({ workspaceId: workspace.id, query: input.query, limit: input.limit })
+          }))
+        );
+        return jsonResponse({
+          memories: results.flatMap(({ workspace, result }) =>
+            result.memories.map((memory) => ({
+              ...memory,
+              workspaceId: workspace.id,
+              workspaceName: workspace.name,
+              rootPath: workspace.rootPath
+            }))
+          )
+        });
       }
       case "index_workspace": {
         const input = indexWorkspaceSchema.parse(request.params.arguments ?? {});
@@ -475,7 +527,7 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
   }
 
   if (!workspace) {
-    return;
+    workspace = await registry.ensureWorkspace({ rootPath: resolvedRoot });
   }
 
   // Auto-index if workspace has no documents yet

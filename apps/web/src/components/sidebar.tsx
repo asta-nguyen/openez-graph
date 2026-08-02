@@ -8,10 +8,12 @@ import {
   ScrollText,
   Gauge,
   History,
+  Brain,
 } from "lucide-react";
 import {
   dashboardQueryOptions,
   documentsQueryOptions,
+  memoriesQueryOptions,
   settingsEnvQueryOptions,
   workspacesQueryOptions,
 } from "../lib/queries";
@@ -59,6 +61,12 @@ const debugNav = [
     label: "Documents",
     icon: FileText,
     query: () => documentsQueryOptions(1, PAGE_SIZE),
+  },
+  {
+    href: "/memories",
+    label: "Memories",
+    icon: Brain,
+    query: () => memoriesQueryOptions(1, PAGE_SIZE),
   },
 ];
 

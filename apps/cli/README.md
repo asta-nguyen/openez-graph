@@ -15,7 +15,7 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 - **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
 - **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
 - **Vector search** — optional OpenAI/Ollama embeddings with cosine similarity
-- **MCP-first** — exposes `memory_query`, `code_context`, `graph_neighbors`, `memory_write`, `index_workspace`, `list_workspaces` tools
+- **MCP-first** — exposes `code_query`, `code_context`, `graph_neighbors`, `memory_recall`, `memory_write`, `index_workspace`, `list_workspaces` tools
 - **Multi-workspace** — register and query across multiple codebases
 - **Code graph** — symbols, files, chunks, and edges (calls, imports, contains)
 - **Web dashboard** — built-in graph explorer and workspace management UI
@@ -76,11 +76,14 @@ openez setup devin              # wire up Devin CLI
 | Tool | Description |
 |------|-------------|
 | `list_workspaces` | List all registered workspaces |
-| `memory_query` | Full-text search + graph expansion for retrieval context |
-| `code_context` | Get symbol context with callers, callees, and related files |
+| `code_query` | Hybrid FTS/vector search + graph expansion over indexed code and docs |
+| `code_context` | Get budgeted symbol context with callers, callees, and related files |
 | `graph_neighbors` | Traverse graph edges from a node or label |
+| `memory_recall` | Recall active memory entries and technical decisions |
 | `memory_write` | Write a memory entry (notes, decisions, patterns) |
 | `index_workspace` | Trigger indexing for a workspace |
+
+`memory_query` is accepted as a deprecated compatibility alias for `code_query`, but is not advertised to new clients.
 
 ## How it works
 

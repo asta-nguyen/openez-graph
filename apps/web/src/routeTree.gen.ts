@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkspacesRouteImport } from './routes/workspaces'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as QueryRouteImport } from './routes/query'
+import { Route as MemoriesRouteImport } from './routes/memories'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ChangelogRouteImport } from './routes/changelog'
 import { Route as BenchmarkRouteImport } from './routes/benchmark'
@@ -35,6 +36,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const QueryRoute = QueryRouteImport.update({
   id: '/query',
   path: '/query',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoriesRoute = MemoriesRouteImport.update({
+  id: '/memories',
+  path: '/memories',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocumentsRoute = DocumentsRouteImport.update({
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/benchmark': typeof BenchmarkRoute
   '/changelog': typeof ChangelogRoute
   '/documents': typeof DocumentsRoute
+  '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces': typeof WorkspacesRouteWithChildren
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/benchmark': typeof BenchmarkRoute
   '/changelog': typeof ChangelogRoute
   '/documents': typeof DocumentsRoute
+  '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces/new': typeof WorkspacesNewRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/benchmark': typeof BenchmarkRoute
   '/changelog': typeof ChangelogRoute
   '/documents': typeof DocumentsRoute
+  '/memories': typeof MemoriesRoute
   '/query': typeof QueryRoute
   '/settings': typeof SettingsRoute
   '/workspaces': typeof WorkspacesRouteWithChildren
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/benchmark'
     | '/changelog'
     | '/documents'
+    | '/memories'
     | '/query'
     | '/settings'
     | '/workspaces'
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/benchmark'
     | '/changelog'
     | '/documents'
+    | '/memories'
     | '/query'
     | '/settings'
     | '/workspaces/new'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '/benchmark'
     | '/changelog'
     | '/documents'
+    | '/memories'
     | '/query'
     | '/settings'
     | '/workspaces'
@@ -174,6 +186,7 @@ export interface RootRouteChildren {
   BenchmarkRoute: typeof BenchmarkRoute
   ChangelogRoute: typeof ChangelogRoute
   DocumentsRoute: typeof DocumentsRoute
+  MemoriesRoute: typeof MemoriesRoute
   QueryRoute: typeof QueryRoute
   SettingsRoute: typeof SettingsRoute
   WorkspacesRoute: typeof WorkspacesRouteWithChildren
@@ -200,6 +213,13 @@ declare module '@tanstack/react-router' {
       path: '/query'
       fullPath: '/query'
       preLoaderRoute: typeof QueryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memories': {
+      id: '/memories'
+      path: '/memories'
+      fullPath: '/memories'
+      preLoaderRoute: typeof MemoriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents': {
@@ -304,6 +324,7 @@ const rootRouteChildren: RootRouteChildren = {
   BenchmarkRoute: BenchmarkRoute,
   ChangelogRoute: ChangelogRoute,
   DocumentsRoute: DocumentsRoute,
+  MemoriesRoute: MemoriesRoute,
   QueryRoute: QueryRoute,
   SettingsRoute: SettingsRoute,
   WorkspacesRoute: WorkspacesRouteWithChildren,

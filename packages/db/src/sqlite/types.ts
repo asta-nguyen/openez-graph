@@ -23,6 +23,17 @@ export interface WorkspaceSettings {
   excludeGlobs?: string;
 }
 
+export interface StoredMemory {
+  id: string;
+  title: string;
+  content: string;
+  tags: string;
+  source: string;
+  supersedesId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RegistryRepository {
   listWorkspaces(): Promise<RegistryWorkspace[]>;
   getWorkspace(id: string): Promise<RegistryWorkspace | null>;
@@ -246,6 +257,8 @@ export interface WorkspaceRepository {
     source: string;
     supersedesId?: string;
   }): Promise<string>;
+  getMemory(id: string): Promise<StoredMemory | null>;
+  searchMemories(query: string, limit: number): Promise<StoredMemory[]>;
 
   createIndexRun(input: { mode: string }): Promise<string>;
   completeIndexRun(
