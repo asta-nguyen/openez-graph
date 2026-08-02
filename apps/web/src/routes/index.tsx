@@ -1,9 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
-import { api } from "../lib/api";
+import { ArrowRight, TrendingDown } from "lucide-react";
 import { formatDate } from "../lib/utils";
-import { dashboardQueryOptions } from "../lib/queries";
+import { dashboardQueryOptions, metricsQueryOptions } from "../lib/queries";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
   Badge, Card, CardContent, CardHeader, CardTitle, buttonVariants,
@@ -20,6 +19,7 @@ export const Route = createFileRoute("/")({
 
 function OverviewPage() {
   const { data: snapshot, isLoading, error } = useQuery(dashboardQueryOptions);
+  const { data: metrics } = useQuery(metricsQueryOptions(snapshot?.workspace?.id));
 
   if (isLoading) return <div className="page"><p className="muted">Loading...</p></div>;
   if (error) return <div className="page"><p className="text-destructive">{error.message}</p></div>;
@@ -35,34 +35,32 @@ function OverviewPage() {
       <section className="-mx-6 border-y bg-muted/20 px-6 py-5">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <Badge className="mb-3 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-600">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Retrieval benchmark passed
-            </Badge>
-            <h2 className="text-lg font-semibold">Measured retrieval quality</h2>
-            <p className="muted mt-1 text-sm">18 queries, 3 iterations, 54 measured runs per mode.</p>
+            <Badge variant="secondary" className="mb-3">Live code_query telemetry</Badge>
+            <h2 className="text-lg font-semibold">Measured agent context</h2>
+            <p className="muted mt-1 text-sm">Actual serialized MCP responses compared with the indexed full files they replace.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
             <div>
-              <div className="text-xs text-muted-foreground">Recall@5</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">94.44%</div>
+              <div className="text-xs text-muted-foreground">Queries</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">{metrics?.totalQueries ?? 0}</div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">MRR</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">0.6565</div>
+              <div className="text-xs text-muted-foreground">Response tokens</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">{(metrics?.totalTokensReturned ?? 0).toLocaleString()}</div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Queries hit</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">17/18</div>
+              <div className="text-xs text-muted-foreground">Context avoided</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">{(metrics?.totalTokensSaved ?? 0).toLocaleString()}</div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">FTS average</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">38.68 ms</div>
+              <div className="text-xs text-muted-foreground">Candidate files</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">{metrics?.totalFilesScanned ?? 0}</div>
             </div>
           </div>
 
           <Link to="/benchmark" className={buttonVariants({ variant: "outline", className: "shrink-0" })}>
-            Full benchmark <ArrowRight className="h-4 w-4" />
+            Method details <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </section>
@@ -163,6 +161,64 @@ function OverviewPage() {
           </CardContent>
         </Card>
       </div>
+
+      {metrics && metrics.totalQueries > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-emerald-600" />
+              Agent context evidence
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
+              <div>
+                <div className="text-xs text-muted-foreground">Total queries</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.totalQueries}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Tokens returned</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.totalTokensReturned.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Estimated context avoided</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums text-emerald-600">{metrics.totalTokensSaved.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Avg tokens/query</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.avgTokensPerQuery.toLocaleString()}</div>
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Context avoided is an estimate: token count of selected full files minus the serialized MCP response, floored at zero.
+            </p>
+            {metrics.recentQueries.length > 0 && (
+              <Table className="mt-4">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Query</TableHead>
+                    <TableHead>Results</TableHead>
+                    <TableHead>Tokens</TableHead>
+                    <TableHead>Avoided estimate</TableHead>
+                    <TableHead>Candidates</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {metrics.recentQueries.map((q) => (
+                    <TableRow key={q.id}>
+                      <TableCell className="font-medium max-w-[200px] truncate">{q.query}</TableCell>
+                      <TableCell>{q.resultCount}</TableCell>
+                      <TableCell>{q.tokensReturned.toLocaleString()}</TableCell>
+                      <TableCell className="text-emerald-600">{q.tokensSaved.toLocaleString()}</TableCell>
+                      <TableCell>{q.filesScanned}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

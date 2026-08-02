@@ -157,6 +157,9 @@ export const queryLogs = sqliteTable("query_logs", {
   query: text("query").notNull(),
   mode: text("mode").notNull(),
   resultCount: integer("result_count").notNull().default(0),
+  tokensReturned: integer("tokens_returned").notNull().default(0),
+  tokensSaved: integer("tokens_saved").notNull().default(0),
+  filesScanned: integer("files_scanned").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

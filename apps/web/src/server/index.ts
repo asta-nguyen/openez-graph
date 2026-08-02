@@ -1,5 +1,5 @@
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { existsSync, promises as fs, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
@@ -29,6 +29,7 @@ import {
   ensureRegistryWorkspace,
   getLatestGraphRun,
   getLatestIndexRun,
+  getWorkspaceQueryMetrics,
   getRecentGraphRuns,
   getRecentIndexRuns,
   getRegistryWorkspace,
@@ -628,6 +629,38 @@ app.delete("/api/memories/:id", (c) => {
     return c.json({ ok: true });
   } catch (err) {
     return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+// ── Metrics ──
+
+function resolveMetricsWorkspace(c: Context) {
+  const workspaceId = c.req.query("workspaceId");
+  const all = listRegistryWorkspaces();
+  if (workspaceId) {
+    return all.find((w) => w.id === workspaceId) ?? null;
+  }
+  // Default: same logic as dashboard — first workspace with valid root path
+  return (
+    all.find((w) => {
+      try { return w.rootPath && w.rootPath !== "/" && existsSync(w.rootPath); } catch { return false; }
+    }) ?? all[0]
+  );
+}
+
+app.get("/api/metrics", (c) => {
+  try {
+    const ws = resolveMetricsWorkspace(c);
+    if (!ws) {
+      return c.json(
+        { error: "Workspace not found" },
+        404
+      );
+    }
+    const metrics = getWorkspaceQueryMetrics(ws.rootPath, 10);
+    return c.json({ ...metrics, workspaceId: ws.id });
+  } catch {
+    return c.json({ metricMethod: "selected-full-files-minus-serialized-response", totalQueries: 0, totalTokensReturned: 0, totalTokensSaved: 0, totalFilesScanned: 0, avgTokensPerQuery: 0, recentQueries: [], workspaceId: null });
   }
 });
 
