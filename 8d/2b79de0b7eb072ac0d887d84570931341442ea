@@ -1,0 +1,106 @@
+packages/db/src/sqlite/repository.ts
+  s_08e5d81a6cc3c5::t_7d44a6d128da09 2-3,27-32,64,68,70-74
+  s_08e5d81a6cc3c5::t_043d311adce3ca 619-649,840-855
+  s_08e5d81a6cc3c5::t_0e66de930259ec 856
+packages/core/src/memory.ts
+  s_08e5d81a6cc3c5::t_144ec13c689808 18-20,31-50
+  s_08e5d81a6cc3c5::t_0537c7adcfd16a 51
+packages/db/src/sqlite-index.ts
+  s_08e5d81a6cc3c5::t_043d311adce3ca 11
+AGENTS.md
+  s_08e5d81a6cc3c5::t_468bc8fb8b7ad4 65,68-69,82
+README.md
+  s_08e5d81a6cc3c5::t_468bc8fb8b7ad4 148,154-155,157,161
+  s_c9aa167d72658b::t_b6d3112644b7d4 162
+packages/db/src/sqlite/index.ts
+  s_08e5d81a6cc3c5::t_043d311adce3ca 11
+apps/web/src/server/sqlite.ts
+  s_b5a51a9857cda0::t_5a4038e377205e 620-732
+apps/cli/README.md
+  s_08e5d81a6cc3c5::t_468bc8fb8b7ad4 18,79-80,82,86
+  s_c9aa167d72658b::t_38337bcffbf576 87
+tests/hybrid-retrieval.test.ts
+  s_08e5d81a6cc3c5::t_624e8b93981b5c 1-98
+packages/core/src/types.ts
+  s_08e5d81a6cc3c5::t_144ec13c689808 9,14-30
+  s_08e5d81a6cc3c5::t_e26b8a05483cb7 31
+apps/web/src/lib/api.ts
+  s_b5a51a9857cda0::t_01ceeca45ede6c 68-78
+  s_b5a51a9857cda0::t_c9a232dcb0477d 179-192
+apps/web/src/lib/queries.ts
+  s_b5a51a9857cda0::t_8a493767279760 42-54
+tests/registry.test.ts
+  s_08e5d81a6cc3c5::t_94230a852f51c4 73-84
+packages/db/src/sqlite/types.ts
+  s_08e5d81a6cc3c5::t_043d311adce3ca 26-36,260-261
+tests/index-workspace.test.ts
+  s_08e5d81a6cc3c5::t_c2918dd720f124 50-56
+  s_08e5d81a6cc3c5::t_ede67f9e0a70cf 207,209,213
+tests/e2e-search.test.ts
+  s_08e5d81a6cc3c5::t_ed3c3decde0728 7-8,178,181,194,197,206-239
+tests/workspace-db.test.ts
+  s_08e5d81a6cc3c5::t_ed3c3decde0728 257-258
+tests/fixtures/retrieval-eval.json
+  s_08e5d81a6cc3c5::t_28da06384e58a1 5
+packages/core/src/graph.ts
+  s_08e5d81a6cc3c5::t_a23243a9cb814f 3,45-46,64-84,87-91
+apps/web/src/server/index.ts
+  s_08e5d81a6cc3c5::t_28da06384e58a1 46,475
+  s_b5a51a9857cda0::t_38eba9c6269405 26,28,37-38,41,43,174-178,556-557,566-570,573-588,591-603,606-623,626-632
+  s_b5a51a9857cda0::t_4629d09ca5ac3a 636-656,659-662
+  s_b5a51a9857cda0::t_55c7d13a9a43f7 558-565,571-572,589-590,604-605,624-625
+  s_b5a51a9857cda0::t_7b8cf08ff26399 633
+documents/backlogs/TREE_SITTER_UPGRADE_GUIDE.md
+  s_08e5d81a6cc3c5::t_28da06384e58a1 578
+apps/web/src/routes/memories.tsx
+  s_b5a51a9857cda0::t_f4feed66d9e99d 53-59,61
+  s_b5a51a9857cda0::t_54f7fc310ee127 1-49,62-394
+  s_b5a51a9857cda0::t_e16847c54e759c 50-52,60
+CHANGELOG.md
+  s_08e5d81a6cc3c5::t_468bc8fb8b7ad4 16-20
+packages/core/src/retrieval.ts
+  s_08e5d81a6cc3c5::t_144ec13c689808 8,183,189,208-212,249,259-260
+  s_08e5d81a6cc3c5::t_2e9a244824aa21 261
+apps/mcp/src/mcp-core.ts
+  s_08e5d81a6cc3c5::t_292e84bbe2cfa3 14,18,23-25,34-36,53-54,59-67,268,295-297,336-351,370,372,378,426-428,459-477
+  s_08e5d81a6cc3c5::t_e88796307f6202 530
+  s_08e5d81a6cc3c5::t_08855efbe8ff60 478
+apps/web/src/components/sidebar.tsx
+  s_b5a51a9857cda0::t_d4f68e6d697223 65-70
+  s_b5a51a9857cda0::t_0019e32140bea4 11
+  s_b5a51a9857cda0::t_ce1660fc5633f8 16
+apps/web/src/routeTree.gen.ts
+  s_c9aa167d72658b::t_9daf72eea5e3b4 15,41-45,99,114,128,145,160,173,189,218-224,327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "8d2b79de0b7eb072ac0d887d84570931341442ea",
+  "prompts": {},
+  "sessions": {
+    "s_08e5d81a6cc3c5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fbbce-d300-74e2-a8ea-fd4bcd7df9e9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_b5a51a9857cda0": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "7d59125a-f45d-4840-a961-c003089a2b7b",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_c9aa167d72658b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "845d9361-d9b4-498e-8f92-8bb660163f6e",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
