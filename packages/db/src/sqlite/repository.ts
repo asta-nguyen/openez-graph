@@ -552,7 +552,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     // ── Graph Traversal ──
 
-    async graphNeighbors(labelOrId: string, depth: number) {
+    async graphNeighbors(labelOrId: string, depth: number, limit = 50) {
       const seedNodes = native
         .prepare("SELECT * FROM graph_nodes WHERE id = ? OR label = ? ORDER BY id = ? DESC LIMIT 1")
         .all(labelOrId, labelOrId, labelOrId) as Array<Record<string, unknown>>;
@@ -576,17 +576,17 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
         const placeholders = currentBatch.map(() => "?").join(",");
         const edges = native
-          .prepare(`SELECT * FROM graph_edges WHERE (from_node_id IN (${placeholders}) OR to_node_id IN (${placeholders}))`)
-          .all(...currentBatch, ...currentBatch) as Array<Record<string, unknown>>;
+          .prepare(`SELECT * FROM graph_edges WHERE (from_node_id IN (${placeholders}) OR to_node_id IN (${placeholders})) LIMIT ?`)
+          .all(...currentBatch, ...currentBatch, limit) as Array<Record<string, unknown>>;
 
         const nextBatch: string[] = [];
         for (const edge of edges) {
           const fromId = String(edge.from_node_id);
           const toId = String(edge.to_node_id);
-          if (!visited.has(fromId) && visited.size < 200) { nextBatch.push(fromId); visited.add(fromId); }
-          if (!visited.has(toId) && visited.size < 200) { nextBatch.push(toId); visited.add(toId); }
+          if (!visited.has(fromId) && visited.size < limit) { nextBatch.push(fromId); visited.add(fromId); }
+          if (!visited.has(toId) && visited.size < limit) { nextBatch.push(toId); visited.add(toId); }
           const edgeId = String(edge.id);
-          if (!resultEdgeIds.has(edgeId)) {
+          if (visited.has(fromId) && visited.has(toId) && !resultEdgeIds.has(edgeId) && resultEdges.length < limit) {
             resultEdgeIds.add(edgeId);
             resultEdges.push(edge);
           }
@@ -676,8 +676,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async insertQueryLog(input) {
       const id = crypto.randomUUID();
       native
-        .prepare("INSERT INTO query_logs (id, query, mode, result_count, created_at) VALUES (?, ?, ?, ?, ?)")
-        .run(id, input.query, input.mode, input.resultCount, new Date().toISOString());
+        .prepare("INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run(id, input.query, input.mode, input.resultCount, input.tokensReturned ?? 0, input.tokensSaved ?? 0, input.filesScanned ?? 0, new Date().toISOString());
       return id;
     },
 

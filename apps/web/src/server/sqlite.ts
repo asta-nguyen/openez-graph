@@ -272,6 +272,9 @@ function initializeWorkspaceSchema(db: SqliteDb) {
       query TEXT NOT NULL,
       mode TEXT NOT NULL,
       result_count INTEGER NOT NULL DEFAULT 0,
+      tokens_returned INTEGER NOT NULL DEFAULT 0,
+      tokens_saved INTEGER NOT NULL DEFAULT 0,
+      files_scanned INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS memories (
@@ -288,6 +291,9 @@ function initializeWorkspaceSchema(db: SqliteDb) {
   for (const ddl of tables) {
     db.exec(ddl);
   }
+
+  migrateQueryLogColumns(db);
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
     CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
@@ -298,6 +304,22 @@ function initializeWorkspaceSchema(db: SqliteDb) {
     CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
   `);
+}
+
+function migrateQueryLogColumns(db: SqliteDb) {
+  const columns = new Set(
+    (db.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map((row) => row.name)
+  );
+
+  if (!columns.has("tokens_returned")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN tokens_returned INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("tokens_saved")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN tokens_saved INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("files_scanned")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN files_scanned INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 function getWorkspaceDb(rootPath: string): SqliteDb {
@@ -728,6 +750,68 @@ export function insertWorkspaceMemory(input: {
 export function deleteWorkspaceMemory(rootPath: string, id: string): boolean {
   const result = getWorkspaceDb(rootPath).prepare("DELETE FROM memories WHERE id = ?").run(id);
   return result.changes > 0;
+}
+
+export interface WebQueryMetrics {
+  metricMethod: "selected-full-files-minus-serialized-response";
+  totalQueries: number;
+  totalTokensReturned: number;
+  totalTokensSaved: number;
+  totalFilesScanned: number;
+  avgTokensPerQuery: number;
+  recentQueries: Array<{
+    id: string;
+    query: string;
+    mode: string;
+    resultCount: number;
+    tokensReturned: number;
+    tokensSaved: number;
+    filesScanned: number;
+    createdAt: string;
+  }>;
+}
+
+export function getWorkspaceQueryMetrics(rootPath: string, recentLimit = 10): WebQueryMetrics {
+  const db = getWorkspaceDb(rootPath);
+  const totals = db.prepare(
+    `SELECT
+      COUNT(*) AS totalQueries,
+      COALESCE(SUM(tokens_returned), 0) AS totalTokensReturned,
+      COALESCE(SUM(tokens_saved), 0) AS totalTokensSaved,
+      COALESCE(SUM(files_scanned), 0) AS totalFilesScanned
+     FROM query_logs`
+  ).get() as Record<string, number> | undefined;
+
+  const recentRows = db.prepare(
+    `SELECT id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at
+     FROM query_logs
+     ORDER BY created_at DESC
+     LIMIT ?`
+  ).all(recentLimit) as Array<Record<string, unknown>>;
+
+  const totalQueries = Number(totals?.totalQueries ?? 0);
+  const totalTokensReturned = Number(totals?.totalTokensReturned ?? 0);
+  const totalTokensSaved = Number(totals?.totalTokensSaved ?? 0);
+  const totalFilesScanned = Number(totals?.totalFilesScanned ?? 0);
+
+  return {
+    metricMethod: "selected-full-files-minus-serialized-response",
+    totalQueries,
+    totalTokensReturned,
+    totalTokensSaved,
+    totalFilesScanned,
+    avgTokensPerQuery: totalQueries > 0 ? Math.round(totalTokensReturned / totalQueries) : 0,
+    recentQueries: recentRows.map((row) => ({
+      id: String(row.id),
+      query: String(row.query),
+      mode: String(row.mode),
+      resultCount: Number(row.result_count ?? 0),
+      tokensReturned: Number(row.tokens_returned ?? 0),
+      tokensSaved: Number(row.tokens_saved ?? 0),
+      filesScanned: Number(row.files_scanned ?? 0),
+      createdAt: String(row.created_at),
+    })),
+  };
 }
 
 // Optimized combined query for graph page - fetches nodes and edges in parallel

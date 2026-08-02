@@ -76,6 +76,26 @@ export interface MemoryRow {
   updatedAt: string;
 }
 
+export interface QueryMetrics {
+  metricMethod: "selected-full-files-minus-serialized-response";
+  totalQueries: number;
+  totalTokensReturned: number;
+  totalTokensSaved: number;
+  totalFilesScanned: number;
+  avgTokensPerQuery: number;
+  workspaceId: string | null;
+  recentQueries: Array<{
+    id: string;
+    query: string;
+    mode: string;
+    resultCount: number;
+    tokensReturned: number;
+    tokensSaved: number;
+    filesScanned: number;
+    createdAt: string;
+  }>;
+}
+
 export interface DashboardSnapshot {
   workspace: { id: string; name: string; root: string };
   stats: {
@@ -190,4 +210,6 @@ export const api = {
       body: JSON.stringify(input),
     }),
   deleteMemory: (id: string) => request<{ ok: boolean }>(`/memories/${id}`, { method: "DELETE" }),
+  getMetrics: (workspaceId?: string) =>
+    request<QueryMetrics>(workspaceId ? `/metrics?workspaceId=${workspaceId}` : "/metrics"),
 };

@@ -47,6 +47,8 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     sqlite.exec(ddl);
   }
 
+  migrateQueryLogColumns(sqlite);
+
   sqlite.exec(`
     CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
     CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
@@ -153,6 +155,22 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
   `);
 }
 
+function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const columns = new Set(
+    (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map((row) => row.name)
+  );
+
+  if (!columns.has("tokens_returned")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN tokens_returned INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("tokens_saved")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN tokens_saved INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("files_scanned")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN files_scanned INTEGER NOT NULL DEFAULT 0");
+  }
+}
+
 function getWorkspaceTableDefinitions(): string[] {
   return [
     `CREATE TABLE IF NOT EXISTS documents (
@@ -235,6 +253,9 @@ function getWorkspaceTableDefinitions(): string[] {
       query TEXT NOT NULL,
       mode TEXT NOT NULL,
       result_count INTEGER NOT NULL DEFAULT 0,
+      tokens_returned INTEGER NOT NULL DEFAULT 0,
+      tokens_saved INTEGER NOT NULL DEFAULT 0,
+      files_scanned INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS memories (
