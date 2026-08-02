@@ -273,7 +273,7 @@ export interface WorkspaceRepository {
     }
   ): Promise<void>;
 
-  insertQueryLog(input: { query: string; mode: string; resultCount: number }): Promise<string>;
+  insertQueryLog(input: { query: string; mode: string; resultCount: number; tokensReturned?: number; tokensSaved?: number; filesScanned?: number }): Promise<string>;
 
   executeRaw(sqlQuery: string, params?: unknown[]): Promise<unknown>;
   queryRaw(sqlQuery: string, params?: unknown[]): Promise<Array<Record<string, unknown>>>;

@@ -75,6 +75,35 @@ For cross-workspace questions, pass explicit multi-workspace scope:
 - `workspaceIds`
 - or `paths`
 
+## Code Search Rules (MANDATORY)
+
+These rules apply to ALL agents working in this repository. Violating them wastes tokens and context window.
+
+### When to use OpenEZ MCP tools
+
+- **ALWAYS** use `code_query` instead of `grep`/`ripgrep`/`find` when searching for code by concept, function name, or behavior. `code_query` returns ranked, token-budgeted chunks — not entire files.
+- **ALWAYS** use `code_context` when you need to understand what calls/imports a specific symbol or file.
+- **ALWAYS** use `memory_recall` at the start of a session to load prior architectural decisions.
+- **ALWAYS** use `memory_write` when the user makes an architectural decision or you discover a non-obvious technical constraint.
+
+### When NOT to use OpenEZ
+
+- You know the **exact file path** and need to read/edit it — use `read_file` directly.
+- The codebase has **not been indexed** (`openez index` not run) — `code_query` will return empty.
+- You need to **modify** code, not search for it — OpenEZ is read-only retrieval.
+
+### Token savings tracking
+
+Every `code_query` call logs `tokens_returned`, `tokens_saved`, and `files_scanned` to the `query_logs` table. The dashboard at `/` shows aggregate token savings. Use this data to verify that OpenEZ is reducing context window usage.
+
+### Setup
+
+```bash
+openez setup codex    # or claude, opencode, windsurf
+```
+
+This configures MCP server access. After setup, the agent automatically sees `code_query`, `code_context`, `graph_neighbors`, `memory_write`, `memory_recall`, `index_workspace`, and `list_workspaces` as available tools.
+
 ## MCP Expectations
 
 MCP should be multi-workspace aware.

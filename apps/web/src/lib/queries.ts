@@ -52,3 +52,10 @@ export const memoriesSearchQueryOptions = (query: string) =>
     queryKey: ["memories", "search", query],
     queryFn: () => api.getMemories({ q: query, limit: 100 }),
   });
+
+export const metricsQueryOptions = (workspaceId?: string) =>
+  queryOptions({
+    queryKey: ["metrics", workspaceId ?? "default"],
+    queryFn: () => api.getMetrics(workspaceId),
+    staleTime: 30_000,
+  });
