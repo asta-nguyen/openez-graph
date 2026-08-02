@@ -5,6 +5,20 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-02
+
+### Added
+- Memory management UI at `/memories` with list, search, detail view, and create dialog
+- Memory API routes: `GET /api/memories` (list + search), `GET /api/memories/:id`, `POST /api/memories`, `DELETE /api/memories/:id`
+- Recent memories section on the dashboard now populated from the workspace database
+- Memories navigation link in the sidebar with prefetch on hover
+- `resolveActiveWorkspace` helper to select the first workspace with a valid root path for memory operations
+- Integration tests for hybrid retrieval ranking and registry operations
+
+### Fixed
+- Changelog page stuck loading — `findChangelogPath` now walks up from `serverDir` and `cwd` to locate `CHANGELOG.md` in the monorepo root
+- Memory endpoints no longer fail when the first registered workspace has a stale root path
+
 ## [0.7.0] - 2026-08-01
 
 ### Added
@@ -53,6 +67,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[0.8.0]: https://github.com/asta-nguyen/openez-graph/compare/a7ce4df...849060b
 [0.7.0]: https://github.com/asta-nguyen/openez-graph/compare/9b7cc78...a7ce4df
 [0.6.1]: https://github.com/asta-nguyen/openez-graph/compare/405f7e8...9b7cc78
 [0.6.0]: https://github.com/asta-nguyen/openez-graph/compare/5ff0f5c...405f7e8
