@@ -245,7 +245,7 @@ export interface WorkspaceRepository {
     metadata: Record<string, unknown>;
   }>>;
 
-  graphNeighbors(label: string, depth: number): Promise<{
+  graphNeighbors(label: string, depth: number, limit?: number): Promise<{
     nodes: Array<Record<string, unknown>>;
     edges: Array<Record<string, unknown>>;
   }>;

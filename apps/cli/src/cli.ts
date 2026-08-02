@@ -211,7 +211,7 @@ program
   .action(async (options) => {
     if (options.mcp) {
       const { startMcpServer } = await import("./mcp-bridge");
-      await startMcpServer(options.path ? path.resolve(options.path) : undefined);
+      await startMcpServer(options.path ? path.resolve(options.path) : undefined, pkg.version);
     } else if (options.web) {
       const port = options.port ? Number(options.port) : Number(process.env.API_PORT ?? 11368);
       process.env.API_PORT = String(port);

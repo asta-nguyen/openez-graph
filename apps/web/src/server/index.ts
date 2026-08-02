@@ -638,8 +638,7 @@ function resolveMetricsWorkspace(c: Context) {
   const workspaceId = c.req.query("workspaceId");
   const all = listRegistryWorkspaces();
   if (workspaceId) {
-    const ws = all.find((w) => w.id === workspaceId);
-    if (ws) return ws;
+    return all.find((w) => w.id === workspaceId) ?? null;
   }
   // Default: same logic as dashboard — first workspace with valid root path
   return (
@@ -652,11 +651,16 @@ function resolveMetricsWorkspace(c: Context) {
 app.get("/api/metrics", (c) => {
   try {
     const ws = resolveMetricsWorkspace(c);
-    if (!ws) return c.json({ totalQueries: 0, totalTokensReturned: 0, totalTokensSaved: 0, totalFilesScanned: 0, avgTokensPerQuery: 0, recentQueries: [], workspaceId: null });
+    if (!ws) {
+      return c.json(
+        { error: "Workspace not found" },
+        404
+      );
+    }
     const metrics = getWorkspaceQueryMetrics(ws.rootPath, 10);
     return c.json({ ...metrics, workspaceId: ws.id });
   } catch {
-    return c.json({ totalQueries: 0, totalTokensReturned: 0, totalTokensSaved: 0, totalFilesScanned: 0, avgTokensPerQuery: 0, recentQueries: [], workspaceId: null });
+    return c.json({ metricMethod: "selected-full-files-minus-serialized-response", totalQueries: 0, totalTokensReturned: 0, totalTokensSaved: 0, totalFilesScanned: 0, avgTokensPerQuery: 0, recentQueries: [], workspaceId: null });
   }
 });
 

@@ -9,6 +9,14 @@ export interface QuerySource {
 export interface CodeQueryResult {
   answerContext: string;
   sources: QuerySource[];
+  metrics: {
+    retrievalTokens: number;
+    selectedFullFileTokens: number;
+    estimatedTokensSaved: number;
+    candidateFiles: number;
+    selectedFiles: number;
+    method: "selected-full-files-minus-retrieval-payload";
+  };
 }
 
 /** @deprecated Use CodeQueryResult. */
@@ -29,15 +37,42 @@ export interface MemoryRecallResult {
   memories: RecalledMemory[];
 }
 
+export interface CodeSymbolContext {
+  symbol: string;
+  label: string;
+  path?: string;
+  startLine?: number;
+  endLine?: number;
+  snippet?: string;
+}
+
 export interface CodeContextResult {
-  symbol?: Record<string, unknown>;
-  files: Record<string, unknown>[];
-  callers: Record<string, unknown>[];
-  callees: Record<string, unknown>[];
-  relatedChunks: Record<string, unknown>[];
+  symbol?: CodeSymbolContext;
+  files: Array<{ path: string }>;
+  callers: CodeSymbolContext[];
+  callees: CodeSymbolContext[];
+  relatedChunks: Array<{
+    path: string;
+    startLine?: number;
+    endLine?: number;
+    heading?: string;
+    snippet: string;
+  }>;
 }
 
 export interface GraphNeighborResult {
-  nodes: Record<string, unknown>[];
-  edges: Record<string, unknown>[];
+  nodes: Array<{
+    id: string;
+    type: string;
+    label: string;
+    path?: string;
+    startLine?: number;
+    endLine?: number;
+  }>;
+  edges: Array<{
+    from: string;
+    to: string;
+    type: string;
+    weight?: number;
+  }>;
 }

@@ -1,6 +1,17 @@
 import { defineConfig } from "tsup";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
+
+function getBuildId() {
+  try {
+    const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+    const dirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim();
+    return `${sha}${dirty ? "-dirty" : ""}`;
+  } catch {
+    return "unknown";
+  }
+}
 
 export default defineConfig({
   entry: ["src/cli.ts"],
@@ -12,6 +23,7 @@ export default defineConfig({
   sourcemap: false,
   minify: false,
   splitting: false,
+  define: { __OPENEZ_BUILD_ID__: JSON.stringify(getBuildId()) },
   // better-sqlite3 is a native module — must remain external
   external: ["better-sqlite3"],
   // Bundle everything else (workspace packages + npm deps)

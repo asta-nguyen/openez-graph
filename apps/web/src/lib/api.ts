@@ -77,6 +77,7 @@ export interface MemoryRow {
 }
 
 export interface QueryMetrics {
+  metricMethod: "selected-full-files-minus-serialized-response";
   totalQueries: number;
   totalTokensReturned: number;
   totalTokensSaved: number;
