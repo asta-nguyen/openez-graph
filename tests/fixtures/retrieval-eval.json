@@ -2,7 +2,7 @@
   { "query": "where is workspace indexing implemented?", "expectedPaths": ["packages/indexer/src/index-workspace.ts"] },
   { "query": "how does the retrieval pipeline work?", "expectedPaths": ["packages/core/src/retrieval.ts"] },
   { "query": "where are embeddings written?", "expectedPaths": ["packages/indexer/src/index-workspace.ts"] },
-  { "query": "how does memoryQuery work?", "expectedPaths": ["packages/core/src/retrieval.ts"] },
+  { "query": "how does codeQuery work?", "expectedPaths": ["packages/core/src/retrieval.ts"] },
   { "query": "what starts the queue worker?", "expectedPaths": ["apps/worker/src/index.ts"] },
   { "query": "where is the embedding provider selected?", "expectedPaths": ["packages/core/src/embeddings.ts"] },
   { "query": "how does vector search run?", "expectedPaths": ["packages/core/src/retrieval.ts"] },

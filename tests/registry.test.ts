@@ -70,6 +70,18 @@ describe("createRegistryRepository", () => {
     expect(notFound).toBeNull();
   });
 
+  it("resolves filesystem aliases to one workspace", async () => {
+    const repo = createRegistryRepository();
+    const actualRoot = path.join(tempDir, "actual-workspace");
+    const aliasRoot = path.join(tempDir, "workspace-alias");
+    fs.mkdirSync(actualRoot);
+    fs.symlinkSync(actualRoot, aliasRoot, "dir");
+
+    const created = await repo.ensureWorkspace({ rootPath: aliasRoot });
+    expect(created.rootPath).toBe(fs.realpathSync.native(actualRoot));
+    expect((await repo.getWorkspaceByPath(actualRoot))?.id).toBe(created.id);
+  });
+
   it("ensureWorkspace is idempotent by path", async () => {
     const repo = createRegistryRepository();
 

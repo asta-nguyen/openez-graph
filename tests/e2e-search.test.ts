@@ -4,7 +4,8 @@ import os from "node:os";
 import path from "node:path";
 
 import { createRegistryRepository, createWorkspaceRepository, closeAllWorkspaceDbs, closeRegistryDb } from "../packages/db/src/sqlite/index";
-import { memoryQuery } from "../packages/core/src/retrieval";
+import { memoryRecall, memoryWrite } from "../packages/core/src/memory";
+import { codeQuery } from "../packages/core/src/retrieval";
 
 let tempRoot: string;
 let tempDir: string;
@@ -174,10 +175,10 @@ describe("end-to-end search pipeline", () => {
     expect(new Set(results.map((result) => result.path)).size).toBe(results.length);
   });
 
-  it("memoryQuery returns ranked results with sources", async () => {
+  it("codeQuery returns ranked results with sources", async () => {
     await setupWorkspaceWithContent();
 
-    const result = await memoryQuery({
+    const result = await codeQuery({
       workspaceId: "test-e2e",
       query: "authenticate user",
       limit: 5,
@@ -190,10 +191,10 @@ describe("end-to-end search pipeline", () => {
     expect(result.sources[0]?.score).toBeGreaterThan(0);
   });
 
-  it("memoryQuery returns empty for no matches", async () => {
+  it("codeQuery returns empty for no matches", async () => {
     await setupWorkspaceWithContent();
 
-    const result = await memoryQuery({
+    const result = await codeQuery({
       workspaceId: "test-e2e",
       query: "zzznomatchxyz",
       limit: 5,
@@ -201,5 +202,39 @@ describe("end-to-end search pipeline", () => {
 
     expect(result.sources).toHaveLength(0);
     expect(result.answerContext).toBe("");
+  });
+
+  it("recalls only the active version of a written memory", async () => {
+    await setupWorkspaceWithContent();
+
+    const original = await memoryWrite({
+      workspaceId: "test-e2e",
+      title: "Storage decision",
+      content: "Use SQLite for local storage",
+      tags: ["decision", "storage"]
+    });
+    await memoryWrite({
+      workspaceId: "test-e2e",
+      title: "Storage decision v2",
+      content: "Use SQLite WAL for local storage",
+      tags: ["decision", "storage"],
+      supersedesId: original.id
+    });
+
+    const result = await memoryRecall({ workspaceId: "test-e2e", query: "SQLite storage" });
+    expect(result.memories).toHaveLength(1);
+    expect(result.memories[0].title).toBe("Storage decision v2");
+    expect(result.memories[0].tags).toEqual(["decision", "storage"]);
+  });
+
+  it("rejects a memory version with an unknown predecessor", async () => {
+    await setupWorkspaceWithContent();
+
+    await expect(memoryWrite({
+      workspaceId: "test-e2e",
+      title: "Broken version",
+      content: "This should not be stored",
+      supersedesId: "missing-memory"
+    })).rejects.toThrow("Memory 'missing-memory' not found");
   });
 });

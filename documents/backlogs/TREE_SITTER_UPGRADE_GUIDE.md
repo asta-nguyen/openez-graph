@@ -575,7 +575,7 @@ Khong doi contract cua tools chinh.
 Tools van la:
 
 ```text
-memory_query
+code_query
 code_context
 graph_neighbors
 index_workspace

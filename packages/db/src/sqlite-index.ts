@@ -8,5 +8,5 @@ export {
   readLocalWorkspaceConfig,
   writeLocalWorkspaceConfig
 } from "./sqlite/local-workspace";
-export type { RegistryWorkspace, RegistryRepository, WorkspaceRepository, WorkspaceSettings } from "./sqlite/types";
+export type { RegistryWorkspace, RegistryRepository, StoredMemory, WorkspaceRepository, WorkspaceSettings } from "./sqlite/types";
 export type { LocalWorkspaceConfig } from "./sqlite/local-workspace";
