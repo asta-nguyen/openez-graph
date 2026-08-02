@@ -62,5 +62,13 @@ export default defineConfig({
     } else {
       console.log("⚠ Frontend dist not found — run 'pnpm --filter @openez-graph/web build' first");
     }
+
+    // Copy CHANGELOG.md into dist for bundled changelog serving
+    const changelogSrc = path.resolve(__dirname, "../../CHANGELOG.md");
+    const changelogDest = path.resolve(__dirname, "dist/CHANGELOG.md");
+    if (existsSync(changelogSrc)) {
+      cpSync(changelogSrc, changelogDest);
+      console.log("✓ Copied CHANGELOG.md → dist/CHANGELOG.md");
+    }
   }
 });

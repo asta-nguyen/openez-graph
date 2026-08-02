@@ -668,6 +668,7 @@ app.get("/api/metrics", (c) => {
 
 function findChangelogPath(): string | null {
   const candidates = [
+    path.resolve(serverDir, "CHANGELOG.md"),
     path.resolve(serverDir, "..", "..", "..", "..", "CHANGELOG.md"),
     path.resolve(serverDir, "..", "..", "..", "CHANGELOG.md"),
     path.resolve(serverDir, "..", "CHANGELOG.md"),

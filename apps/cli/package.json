@@ -1,6 +1,6 @@
 {
   "name": "@openez-graph/cli",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Local-first code intelligence engine — index, query, and graph your codebase with zero config. SQLite-only, MCP-first.",
   "license": "MIT",
   "author": "Asta Nguyen",
@@ -39,7 +39,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "openez": "tsx src/cli.ts",
