@@ -617,6 +617,119 @@ export function searchGraphNodesByLabel(rootPath: string, query: string, nodeTyp
   }));
 }
 
+export interface WebMemoryRow {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  source: string;
+  supersedesId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapMemoryRow(row: Record<string, unknown>): WebMemoryRow {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    content: String(row.content),
+    tags: String(row.tags ?? "").split(",").filter(Boolean),
+    source: String(row.source ?? "agent"),
+    supersedesId: row.supersedes_id ? String(row.supersedes_id) : null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export function listWorkspaceMemories(rootPath: string, limit = 50, offset = 0): WebMemoryRow[] {
+  const rows = getWorkspaceDb(rootPath)
+    .prepare(
+      `SELECT m.* FROM memories m
+       WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
+       ORDER BY m.updated_at DESC, m.created_at DESC
+       LIMIT ? OFFSET ?`
+    )
+    .all(limit, offset) as Array<Record<string, unknown>>;
+  return rows.map(mapMemoryRow);
+}
+
+export function countWorkspaceMemories(rootPath: string): number {
+  const row = getWorkspaceDb(rootPath)
+    .prepare(
+      `SELECT COUNT(*) AS count FROM memories m
+       WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)`
+    )
+    .get() as { count: number } | undefined;
+  return row?.count ?? 0;
+}
+
+export function searchWorkspaceMemories(rootPath: string, query: string, limit = 50): WebMemoryRow[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return listWorkspaceMemories(rootPath, limit);
+
+  const terms = [...new Set(normalized.split(/\s+/).filter(Boolean))].slice(0, 8);
+  if (terms.length === 0) return listWorkspaceMemories(rootPath, limit);
+
+  const clauses = terms.map(() => "(lower(m.title) LIKE ? OR lower(m.content) LIKE ?)");
+  const termParams = terms.flatMap((t) => [`%${t}%`, `%${t}%`]);
+  const phrasePattern = `%${normalized}%`;
+
+  const rows = getWorkspaceDb(rootPath)
+    .prepare(
+      `SELECT m.* FROM memories m
+       WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
+         AND (${clauses.join(" AND ")})
+       ORDER BY
+         CASE WHEN lower(m.title) = ? THEN 0
+              WHEN lower(m.title) LIKE ? THEN 1
+              ELSE 2
+         END,
+         m.updated_at DESC
+       LIMIT ?`
+    )
+    .all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
+  return rows.map(mapMemoryRow);
+}
+
+export function getWorkspaceMemory(rootPath: string, id: string): WebMemoryRow | null {
+  const row = getWorkspaceDb(rootPath)
+    .prepare("SELECT * FROM memories WHERE id = ?")
+    .get(id) as Record<string, unknown> | undefined;
+  return row ? mapMemoryRow(row) : null;
+}
+
+export function insertWorkspaceMemory(input: {
+  rootPath: string;
+  title: string;
+  content: string;
+  tags?: string[];
+  source?: string;
+  supersedesId?: string;
+}): string {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  getWorkspaceDb(input.rootPath)
+    .prepare(
+      "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .run(
+      id,
+      input.title,
+      input.content,
+      (input.tags ?? []).join(","),
+      input.source ?? "user",
+      input.supersedesId ?? null,
+      now,
+      now
+    );
+  return id;
+}
+
+export function deleteWorkspaceMemory(rootPath: string, id: string): boolean {
+  const result = getWorkspaceDb(rootPath).prepare("DELETE FROM memories WHERE id = ?").run(id);
+  return result.changes > 0;
+}
+
 // Optimized combined query for graph page - fetches nodes and edges in parallel
 export function getWorkspaceGraphOptimized(
   rootPath: string,

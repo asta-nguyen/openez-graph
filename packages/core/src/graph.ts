@@ -1,5 +1,6 @@
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
+import { countTokens } from "./tokenizer";
 import type { CodeContextResult, GraphNeighborResult } from "./types";
 
 export async function graphNeighbors(input: {
@@ -41,6 +42,8 @@ export async function codeContext(input: {
   workspaceId: string;
   symbolOrPath: string;
   hops?: number;
+  limit?: number;
+  maxTokens?: number;
 }): Promise<CodeContextResult> {
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
@@ -58,12 +61,33 @@ export async function codeContext(input: {
     (node) => node.type === "symbol" && (node.label === input.symbolOrPath || node.id === input.symbolOrPath)
   );
   const symbolId = symbol ? String(symbol.id) : "";
+  const rawCallers = edges.filter((edge) => String(edge.to_node_id) === symbolId);
+  const rawCallees = edges.filter((edge) => String(edge.from_node_id) === symbolId);
+  const limit = input.limit ?? 50;
+  const maxTokens = input.maxTokens ?? 4000;
+  let selectedCount = 0;
+  let usedTokens = 0;
+
+  const takeWithinBudget = (records: Record<string, unknown>[]) => records.filter((record) => {
+    if (selectedCount >= limit) return false;
+    const tokens = countTokens(JSON.stringify(record));
+    if (usedTokens + tokens > maxTokens) return false;
+    selectedCount += 1;
+    usedTokens += tokens;
+    return true;
+  });
+
+  const selectedSymbol = symbol ? takeWithinBudget([symbol])[0] : undefined;
+  const callers = takeWithinBudget(rawCallers);
+  const callees = takeWithinBudget(rawCallees);
+  const selectedFiles = takeWithinBudget(files);
+  const selectedChunks = takeWithinBudget(relatedChunks);
 
   return {
-    symbol,
-    files,
-    callers: edges.filter((edge) => String(edge.to_node_id) === symbolId),
-    callees: edges.filter((edge) => String(edge.from_node_id) === symbolId),
-    relatedChunks
+    symbol: selectedSymbol,
+    files: selectedFiles,
+    callers,
+    callees,
+    relatedChunks: selectedChunks
   };
 }

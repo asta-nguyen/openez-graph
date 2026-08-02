@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 import { eq } from "drizzle-orm";
 
@@ -22,7 +24,12 @@ function getNativeDb(db: ReturnType<typeof getRegistryDb>): NativeDatabase {
 }
 
 function normalizeRootPath(rootPath: string): string {
-  return rootPath.trim().replace(/[\\/]+$/, "") || rootPath;
+  const resolved = path.resolve(rootPath.trim());
+  try {
+    return fs.realpathSync.native(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 function slugifyWorkspaceSegment(value: string): string {
@@ -54,12 +61,17 @@ export function createRegistryRepository(): RegistryRepository {
     },
 
     async getWorkspaceByPath(rootPath: string): Promise<RegistryWorkspace | null> {
+      const normalizedRootPath = normalizeRootPath(rootPath);
       const row = db
         .select()
         .from(schema.workspaces)
-        .where(eq(schema.workspaces.rootPath, normalizeRootPath(rootPath)))
+        .where(eq(schema.workspaces.rootPath, normalizedRootPath))
         .get();
-      return row ? mapWorkspaceRow(row) : null;
+      if (row) return mapWorkspaceRow(row);
+
+      const legacyRow = db.select().from(schema.workspaces).all()
+        .find((candidate) => normalizeRootPath(candidate.rootPath) === normalizedRootPath);
+      return legacyRow ? mapWorkspaceRow(legacyRow) : null;
     },
 
     async ensureWorkspace(input): Promise<RegistryWorkspace> {
@@ -604,6 +616,37 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       return id;
     },
 
+    async getMemory(id) {
+      const row = native.prepare("SELECT * FROM memories WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+      return row ? mapMemoryRow(row) : null;
+    },
+
+    async searchMemories(query, limit) {
+      const normalized = query.trim().toLowerCase();
+      const terms = [...new Set(normalized.split(/\s+/).filter(Boolean))].slice(0, 8);
+      if (terms.length === 0) return [];
+
+      const clauses = terms.map(() => "(lower(m.title) LIKE ? ESCAPE '\\' OR lower(m.content) LIKE ? ESCAPE '\\' OR lower(m.tags) LIKE ? ESCAPE '\\')");
+      const termParams = terms.flatMap((term) => {
+        const pattern = `%${escapeLikePattern(term)}%`;
+        return [pattern, pattern, pattern];
+      });
+      const phrasePattern = `%${escapeLikePattern(normalized)}%`;
+      const rows = native.prepare(
+        `SELECT m.*
+         FROM memories m
+         WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
+           AND ${clauses.join(" AND ")}
+         ORDER BY CASE
+           WHEN lower(m.title) = ? THEN 0
+           WHEN lower(m.title) LIKE ? ESCAPE '\\' THEN 1
+           ELSE 2
+         END, m.updated_at DESC
+         LIMIT ?`
+      ).all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
+      return rows.map(mapMemoryRow);
+    },
+
     // ── Index Run Operations ──
 
     async createIndexRun(input) {
@@ -792,6 +835,23 @@ function mapNodeRow(row: Record<string, unknown>) {
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };
+}
+
+function mapMemoryRow(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    content: String(row.content),
+    tags: String(row.tags ?? ""),
+    source: String(row.source),
+    supersedesId: row.supersedes_id ? String(row.supersedes_id) : null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
 }
 
 function safeParseJson(value: string | undefined, fallback: Record<string, unknown>): Record<string, unknown> {

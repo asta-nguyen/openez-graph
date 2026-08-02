@@ -254,5 +254,7 @@ describe("createWorkspaceRepository", () => {
     });
 
     expect(memId).toBeTruthy();
+    expect((await repo.getMemory(memId))?.title).toBe("Decision: use SQLite");
+    expect((await repo.searchMemories("SQLite storage", 10)).map((memory) => memory.id)).toEqual([memId]);
   });
 });

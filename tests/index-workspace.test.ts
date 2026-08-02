@@ -47,6 +47,13 @@ describe("indexWorkspace", () => {
     expect(context.symbol?.label).toBe("large");
     expect(context.callers).toHaveLength(1);
     expect(context.callees).toHaveLength(1);
+    const limitedContext = await codeContext({ workspaceId: workspace.id, symbolOrPath: "large", hops: 1, limit: 2 });
+    const limitedCount = Number(Boolean(limitedContext.symbol))
+      + limitedContext.files.length
+      + limitedContext.callers.length
+      + limitedContext.callees.length
+      + limitedContext.relatedChunks.length;
+    expect(limitedCount).toBeLessThanOrEqual(2);
     const largeEdges = await repo.queryRaw(
       `SELECT e.type, count(*) AS count
        FROM graph_edges e
@@ -197,12 +204,13 @@ describe("indexWorkspace", () => {
     fs.utimesSync(sourcePath, touchedAt, touchedAt);
 
     const readSpy = vi.spyOn(fsPromises, "readFile");
+    const sourceWasRead = () => readSpy.mock.calls.some(([filePath]) => fs.realpathSync(String(filePath)) === fs.realpathSync(sourcePath));
     expect((await indexWorkspace({ workspaceId: workspace.id })).filesUpdated).toBe(0);
-    expect(readSpy.mock.calls.some(([filePath]) => filePath === sourcePath)).toBe(true);
+    expect(sourceWasRead()).toBe(true);
     expect((await repo.getDocumentByPath("a.ts"))?.mtimeMs).toBe(Math.trunc(fs.statSync(sourcePath).mtimeMs));
     readSpy.mockClear();
     expect((await indexWorkspace({ workspaceId: workspace.id })).filesUpdated).toBe(0);
-    expect(readSpy.mock.calls.some(([filePath]) => filePath === sourcePath)).toBe(false);
+    expect(sourceWasRead()).toBe(false);
     readSpy.mockRestore();
   });
 

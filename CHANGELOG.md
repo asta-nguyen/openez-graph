@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changelog link in CLI README for npm package page
 - Release workflow instructions in `AGENTS.md` for cross-agent support (Codex, OpenCode, Claude Code)
 - Agent skill at `.agents/skills/release-cli/SKILL.md` for automated release workflow
+- `memory_recall` MCP tool for retrieving active technical decisions and learned notes written by `memory_write`
+
+### Changed
+- Renamed the public `memory_query` MCP tool to `code_query`; the old name remains a deprecated, hidden compatibility alias
+- Code retrieval now fuses both FTS and vector results, and `code_context` supports result/token budgets
 
 ## [0.6.1] - 2026-08-01
 
