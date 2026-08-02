@@ -145,17 +145,20 @@ pnpm openez setup opencode /path/to/project
 
 ## MCP usage
 
-OpenEZ Graph exposes MCP tools for listing workspaces, querying memory/retrieval context, fetching code context, inspecting graph neighbors, writing memory, and triggering workspace indexing.
+OpenEZ Graph exposes MCP tools for listing workspaces, querying indexed code, fetching code context, inspecting graph neighbors, recalling or writing durable memories, and triggering workspace indexing.
 The MCP resolver supports default workspace resolution, explicit single-workspace resolution, and multi-workspace read scopes through `workspaceIds` or `paths`.
 
 ### Core MCP tools
 
 - `list_workspaces` — list registered workspaces and their status
-- `memory_query` — RRF-ranked retrieval (FTS + vector + graph expansion)
-- `code_context` — graph-adjacent context for a symbol or file path
+- `code_query` — RRF-ranked code/document retrieval (FTS + vector + graph expansion)
+- `code_context` — budgeted graph-adjacent context for a symbol or file path
 - `graph_neighbors` — raw graph nodes/edges around a label or node ID
+- `memory_recall` — retrieve active technical decisions and learned notes
 - `memory_write` — persist a technical decision or learned note
 - `index_workspace` — trigger incremental or full re-index
+
+`memory_query` remains a deprecated compatibility alias for `code_query` and is no longer advertised by the server.
 
 ### Auto-sync
 

@@ -5,7 +5,7 @@ import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } fro
 import type { EmbeddingProvider } from "./embeddings";
 import { reciprocalRankFusion } from "./rrf";
 import { countTokens } from "./tokenizer";
-import type { MemoryQueryResult, QuerySource } from "./types";
+import type { CodeQueryResult, QuerySource } from "./types";
 
 interface ChunkHit {
   id: string;
@@ -180,13 +180,13 @@ async function graphExpand(
   }).slice(0, limit);
 }
 
-export async function memoryQuery(input: {
+export async function codeQuery(input: {
   workspaceId: string;
   query: string;
   limit?: number;
   maxTokens?: number;
   skipGraphExpand?: boolean;
-}): Promise<MemoryQueryResult> {
+}): Promise<CodeQueryResult> {
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
   if (!workspace) {
@@ -205,10 +205,11 @@ export async function memoryQuery(input: {
     vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit)
   ]);
 
-  const primaryResults = ftsResults.length > 0 ? ftsResults : vectorResults;
-  let fused = reciprocalRankFusion([
-    primaryResults.map((item) => ({ item, score: item.score }))
-  ]);
+  let fused = reciprocalRankFusion(
+    [ftsResults, vectorResults]
+      .filter((results) => results.length > 0)
+      .map((results) => results.map((item) => ({ item, score: item.score })))
+  );
 
   if (!input.skipGraphExpand) {
     const graphResults = await graphExpand(
@@ -245,7 +246,7 @@ export async function memoryQuery(input: {
 
   await repo.insertQueryLog({
     query: input.query,
-    mode: "memory_query",
+    mode: "code_query",
     resultCount: selected.length
   });
 
@@ -254,6 +255,9 @@ export async function memoryQuery(input: {
     sources
   };
 }
+
+/** @deprecated Use codeQuery. */
+export const memoryQuery = codeQuery;
 
 function safeParseJson(value: string | undefined, fallback: Record<string, unknown>): Record<string, unknown> {
   if (!value) return fallback;

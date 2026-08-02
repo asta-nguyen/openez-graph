@@ -62,10 +62,11 @@ Do not bias new work toward `--workspace`, `main-project`, or pinned single-work
 For questions about a codebase that has been indexed:
 
 1. Use MCP tools before reading files directly.
-2. Start with `memory_query` for broad questions.
+2. Start with `code_query` for broad code/documentation questions.
 3. Use `code_context` for symbol- or file-specific follow-up.
 4. Use `graph_neighbors` when relationship inspection is needed.
-5. Only fall back to direct file reads when MCP results are insufficient or need verification.
+5. Use `memory_recall` for previously stored technical decisions and agent notes.
+6. Only fall back to direct file reads when MCP results are insufficient or need verification.
 
 When no explicit workspace scope is provided, MCP should default by reading `.openez/workspace.json` from the current project or one of its parent directories.
 
@@ -78,7 +79,7 @@ For cross-workspace questions, pass explicit multi-workspace scope:
 
 MCP should be multi-workspace aware.
 
-- `memory_query`, `code_context`, and `graph_neighbors` should support one or many workspaces
+- `code_query`, `code_context`, `graph_neighbors`, and `memory_recall` should support one or many workspaces
 - `memory_write` and `index_workspace` remain single-workspace operations
 - `list_workspaces` should expose the registered workspace inventory
 - `workspaceId` is the canonical internal key

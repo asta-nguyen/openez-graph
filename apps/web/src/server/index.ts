@@ -23,7 +23,9 @@ const serverDir = getDirname();
 
 import {
   countWorkspaceDocuments,
+  countWorkspaceMemories,
   deleteRegistryWorkspace,
+  deleteWorkspaceMemory,
   ensureRegistryWorkspace,
   getLatestGraphRun,
   getLatestIndexRun,
@@ -32,12 +34,16 @@ import {
   getRegistryWorkspace,
   getWorkspaceCounts,
   getWorkspaceGraphOptimized,
+  getWorkspaceMemory,
+  insertWorkspaceMemory,
   listRegistryWorkspaces,
   listWorkspaceDocuments,
+  listWorkspaceMemories,
   resolveRegistryDbPath,
+  searchWorkspaceMemories,
 } from "./sqlite";
 
-import { memoryQuery } from "@openez-graph/core";
+import { codeQuery } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -165,11 +171,11 @@ app.get("/api/dashboard", (c) => {
       },
       recentRuns: run ? [run] : [],
       recentDocuments: listWorkspaceDocuments(target.rootPath, 10),
-      recentMemories: [] as Array<{
-        id: string;
-        title: string;
-        source: string;
-      }>,
+      recentMemories: listWorkspaceMemories(target.rootPath, 10).map((m) => ({
+        id: m.id,
+        title: m.title,
+        source: m.source,
+      })),
       databaseAvailable: true,
     });
   } catch (err) {
@@ -466,7 +472,7 @@ app.post("/api/query", async (c) => {
     const workspace = await registry.getWorkspace(workspaceId);
 
     const [result, neighborResults] = await Promise.all([
-      memoryQuery({ workspaceId, query, skipGraphExpand: true }),
+      codeQuery({ workspaceId, query, skipGraphExpand: true }),
       (async () => {
         if (!workspace) return [];
         const repo = createWorkspaceRepository(workspace.rootPath);
@@ -547,22 +553,113 @@ app.get("/api/settings/env", (c) => {
   });
 });
 
+// ── Memories ──
+
+function resolveActiveWorkspace() {
+  const all = listRegistryWorkspaces();
+  if (all.length === 0) return null;
+  // Prefer workspace whose rootPath exists on disk
+  const valid = all.find((w) => existsSync(w.rootPath));
+  return valid ?? all[0];
+}
+
+app.get("/api/memories", (c) => {
+  try {
+    const q = c.req.query("q") ?? "";
+    const limit = Number(c.req.query("limit") ?? 50);
+    const offset = Number(c.req.query("offset") ?? 0);
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ items: [], totalCount: 0 });
+    if (q.trim()) {
+      const items = searchWorkspaceMemories(ws.rootPath, q, limit);
+      return c.json({ items, totalCount: items.length });
+    }
+    const items = listWorkspaceMemories(ws.rootPath, limit, offset);
+    const totalCount = countWorkspaceMemories(ws.rootPath);
+    return c.json({ items, totalCount });
+  } catch (err) {
+    console.error("Memories list error:", err);
+    return c.json({ items: [], totalCount: 0 });
+  }
+});
+
+app.get("/api/memories/:id", (c) => {
+  try {
+    const id = c.req.param("id");
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ ok: false, error: "No workspace" }, 404);
+    const memory = getWorkspaceMemory(ws.rootPath, id);
+    if (!memory) return c.json({ ok: false, error: "Memory not found" }, 404);
+    return c.json({ ok: true, data: memory });
+  } catch (err) {
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+app.post("/api/memories", async (c) => {
+  try {
+    const body = await c.req.json<{ title?: string; content?: string; tags?: string[]; source?: string; supersedesId?: string }>();
+    if (!body.title?.trim()) return c.json({ ok: false, error: "title is required" }, 400);
+    if (!body.content?.trim()) return c.json({ ok: false, error: "content is required" }, 400);
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ ok: false, error: "No workspace registered" }, 400);
+    const id = insertWorkspaceMemory({
+      rootPath: ws.rootPath,
+      title: body.title.trim(),
+      content: body.content.trim(),
+      tags: body.tags ?? [],
+      source: body.source ?? "user",
+      supersedesId: body.supersedesId,
+    });
+    const memory = getWorkspaceMemory(ws.rootPath, id);
+    return c.json({ ok: true, data: memory });
+  } catch (err) {
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+app.delete("/api/memories/:id", (c) => {
+  try {
+    const id = c.req.param("id");
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ ok: false, error: "No workspace" }, 404);
+    const deleted = deleteWorkspaceMemory(ws.rootPath, id);
+    if (!deleted) return c.json({ ok: false, error: "Memory not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
 // ── Changelog ──
+
+function findChangelogPath(): string | null {
+  const candidates = [
+    path.resolve(serverDir, "..", "..", "..", "..", "CHANGELOG.md"),
+    path.resolve(serverDir, "..", "..", "..", "CHANGELOG.md"),
+    path.resolve(serverDir, "..", "CHANGELOG.md"),
+    path.resolve(process.cwd(), "CHANGELOG.md"),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  let dir = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, "CHANGELOG.md");
+    if (existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
 
 app.get("/api/changelog", (c) => {
   try {
-    const candidates = [
-      path.resolve(serverDir, "..", "..", "..", "CHANGELOG.md"),
-      path.resolve(serverDir, "..", "CHANGELOG.md"),
-      path.resolve(process.cwd(), "CHANGELOG.md"),
-    ];
-    for (const candidate of candidates) {
-      if (existsSync(candidate)) {
-        const content = readFileSync(candidate, "utf-8");
-        return c.json({ content });
-      }
-    }
-    return c.json({ content: "" }, 404);
+    const filePath = findChangelogPath();
+    if (!filePath) return c.json({ content: "" }, 404);
+    const content = readFileSync(filePath, "utf-8");
+    return c.json({ content });
   } catch {
     return c.json({ content: "" }, 500);
   }

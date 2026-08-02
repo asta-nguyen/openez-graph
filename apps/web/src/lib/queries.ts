@@ -39,3 +39,16 @@ export const settingsEnvQueryOptions = queryOptions({
     },
   staleTime: Infinity,
 });
+
+export const memoriesQueryOptions = (page: number, pageSize: number) =>
+  queryOptions({
+    queryKey: ["memories", page, pageSize],
+    queryFn: () =>
+      api.getMemories({ limit: pageSize, offset: (page - 1) * pageSize }),
+  });
+
+export const memoriesSearchQueryOptions = (query: string) =>
+  queryOptions({
+    queryKey: ["memories", "search", query],
+    queryFn: () => api.getMemories({ q: query, limit: 100 }),
+  });

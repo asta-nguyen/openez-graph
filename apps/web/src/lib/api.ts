@@ -65,6 +65,17 @@ export interface DocumentRow {
   updatedAt?: string;
 }
 
+export interface MemoryRow {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  source: string;
+  supersedesId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DashboardSnapshot {
   workspace: { id: string; name: string; root: string };
   stats: {
@@ -165,4 +176,18 @@ export const api = {
       body: JSON.stringify({ rootPath }),
     }),
   getChangelog: () => request<{ content: string }>("/changelog"),
+  getMemories: (params: { q?: string; limit?: number; offset?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.limit) qs.set("limit", String(params.limit));
+    if (params.offset) qs.set("offset", String(params.offset));
+    return request<{ items: MemoryRow[]; totalCount: number }>(`/memories?${qs}`);
+  },
+  getMemory: (id: string) => request<{ ok: boolean; data: MemoryRow | null }>(`/memories/${id}`),
+  createMemory: (input: { title: string; content: string; tags?: string[]; source?: string; supersedesId?: string }) =>
+    request<{ ok: boolean; data: MemoryRow | null }>(`/memories`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteMemory: (id: string) => request<{ ok: boolean }>(`/memories/${id}`, { method: "DELETE" }),
 };
