@@ -676,8 +676,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async insertQueryLog(input) {
       const id = crypto.randomUUID();
       native
-        .prepare("INSERT INTO query_logs (id, query, mode, result_count, created_at) VALUES (?, ?, ?, ?, ?)")
-        .run(id, input.query, input.mode, input.resultCount, new Date().toISOString());
+        .prepare("INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run(id, input.query, input.mode, input.resultCount, input.tokensReturned ?? 0, input.tokensSaved ?? 0, input.filesScanned ?? 0, new Date().toISOString());
       return id;
     },
 

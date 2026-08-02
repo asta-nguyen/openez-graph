@@ -244,10 +244,18 @@ export async function codeQuery(input: {
 
   const sources = selected.map((chunk) => sourceFromChunk(chunk, "retrieved-context"));
 
+  // Compute token metrics: estimate what it would cost to read the full files
+  const uniquePaths = new Set(selected.map((s) => s.path));
+  const allCandidatePaths = new Set(fused.map((e) => e.item.path));
+  const tokensSaved = Math.max(0, Math.round(usedTokens * (allCandidatePaths.size / Math.max(uniquePaths.size, 1)) - usedTokens));
+
   await repo.insertQueryLog({
     query: input.query,
     mode: "code_query",
-    resultCount: selected.length
+    resultCount: selected.length,
+    tokensReturned: usedTokens,
+    tokensSaved,
+    filesScanned: allCandidatePaths.size,
   });
 
   return {

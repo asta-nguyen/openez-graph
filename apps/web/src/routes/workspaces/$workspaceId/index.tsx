@@ -25,9 +25,11 @@ import {
   Layers,
   Loader2,
   MessageSquare,
+  TrendingDown,
 } from "lucide-react";
 import { StatusBadge } from "../../../components/status-badge";
 import {
+  metricsQueryOptions,
   workspaceGraphQueryOptions,
   workspaceQueryOptions,
 } from "../../../lib/queries";
@@ -75,6 +77,7 @@ function WorkspaceDetailPage() {
   const { data: result, isLoading } = useQuery(
     workspaceQueryOptions(workspaceId)
   );
+  const { data: metrics } = useQuery(metricsQueryOptions(workspaceId));
 
   const handlePrefetchQuery = () => {
     // Prefetching a POST request is not possible via standard GET prefetch,
@@ -372,6 +375,61 @@ function WorkspaceDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {metrics && metrics.totalQueries > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingDown className="h-4 w-4 text-emerald-600" />
+              Token Savings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 mb-4">
+              <div>
+                <div className="text-xs text-muted-foreground">Total queries</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.totalQueries}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Tokens returned</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.totalTokensReturned.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Tokens saved</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums text-emerald-600">{metrics.totalTokensSaved.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Avg tokens/query</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.avgTokensPerQuery.toLocaleString()}</div>
+              </div>
+            </div>
+            {metrics.recentQueries.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Query</TableHead>
+                    <TableHead>Results</TableHead>
+                    <TableHead>Tokens</TableHead>
+                    <TableHead>Saved</TableHead>
+                    <TableHead>Files</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {metrics.recentQueries.map((q) => (
+                    <TableRow key={q.id}>
+                      <TableCell className="font-medium max-w-50 truncate">{q.query}</TableCell>
+                      <TableCell>{q.resultCount}</TableCell>
+                      <TableCell>{q.tokensReturned.toLocaleString()}</TableCell>
+                      <TableCell className="text-emerald-600">{q.tokensSaved.toLocaleString()}</TableCell>
+                      <TableCell>{q.filesScanned}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
