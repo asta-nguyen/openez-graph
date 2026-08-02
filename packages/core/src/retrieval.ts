@@ -186,6 +186,7 @@ export async function codeQuery(input: {
   limit?: number;
   maxTokens?: number;
   skipGraphExpand?: boolean;
+  recordMetrics?: boolean;
 }): Promise<CodeQueryResult> {
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
@@ -243,25 +244,42 @@ export async function codeQuery(input: {
   }
 
   const sources = selected.map((chunk) => sourceFromChunk(chunk, "retrieved-context"));
-
-  // Compute token metrics: estimate what it would cost to read the full files
   const uniquePaths = new Set(selected.map((s) => s.path));
   const allCandidatePaths = new Set(fused.map((e) => e.item.path));
-  const tokensSaved = Math.max(0, Math.round(usedTokens * (allCandidatePaths.size / Math.max(uniquePaths.size, 1)) - usedTokens));
-
-  await repo.insertQueryLog({
-    query: input.query,
-    mode: "code_query",
-    resultCount: selected.length,
-    tokensReturned: usedTokens,
-    tokensSaved,
-    filesScanned: allCandidatePaths.size,
-  });
-
-  return {
-    answerContext: selected.map(formatContextBlock).join("\n\n"),
-    sources
+  const answerContext = selected.map(formatContextBlock).join("\n\n");
+  const retrievalTokens = countTokens(JSON.stringify({ answerContext, sources }));
+  const selectedFullFileTokens = uniquePaths.size === 0
+    ? 0
+    : Number((await repo.queryRaw(
+        `SELECT coalesce(sum(chunks.token_count), 0) AS tokens
+         FROM chunks
+         INNER JOIN documents ON documents.id = chunks.document_id
+         WHERE documents.path IN (${[...uniquePaths].map(() => "?").join(",")})`,
+        [...uniquePaths]
+      ))[0]?.tokens ?? 0);
+  const estimatedTokensSaved = Math.max(0, selectedFullFileTokens - retrievalTokens);
+  const metrics: CodeQueryResult["metrics"] = {
+    retrievalTokens,
+    selectedFullFileTokens,
+    estimatedTokensSaved,
+    candidateFiles: allCandidatePaths.size,
+    selectedFiles: uniquePaths.size,
+    method: "selected-full-files-minus-retrieval-payload"
   };
+
+  if (input.recordMetrics !== false) {
+    await repo.insertQueryLog({
+      query: input.query,
+      mode: "code_query",
+      resultCount: selected.length,
+      tokensReturned: retrievalTokens,
+      tokensSaved: estimatedTokensSaved,
+      // Legacy column name; this is the number of ranked candidate files.
+      filesScanned: allCandidatePaths.size
+    });
+  }
+
+  return { answerContext, sources, metrics };
 }
 
 /** @deprecated Use codeQuery. */

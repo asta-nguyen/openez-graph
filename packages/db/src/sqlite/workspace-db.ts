@@ -47,6 +47,8 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     sqlite.exec(ddl);
   }
 
+  migrateQueryLogColumns(sqlite);
+
   sqlite.exec(`
     CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
     CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
@@ -151,6 +153,22 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
       SELECT 1 FROM chunks_fts WHERE chunks_fts.chunk_id = chunks.id
     );
   `);
+}
+
+function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const columns = new Set(
+    (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map((row) => row.name)
+  );
+
+  if (!columns.has("tokens_returned")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN tokens_returned INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("tokens_saved")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN tokens_saved INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("files_scanned")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN files_scanned INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 function getWorkspaceTableDefinitions(): string[] {

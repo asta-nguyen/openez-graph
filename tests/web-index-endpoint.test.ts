@@ -78,3 +78,16 @@ describe("POST /api/workspaces/:id/index", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("GET /api/metrics", () => {
+  const app = createWebServer();
+
+  it("explains how token savings are estimated", async () => {
+    const response = await app.request(`/api/metrics?workspaceId=${workspaceId}`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      metricMethod: "selected-full-files-minus-serialized-response",
+    });
+  });
+});

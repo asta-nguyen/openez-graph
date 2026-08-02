@@ -5,6 +5,23 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-08-02
+
+### Added
+- MCP server version and Git build identity in the protocol handshake
+- Token budgets for `code_query`, `code_context`, `graph_neighbors`, and `memory_recall`, with compact graph/context responses
+- Live `code_query` token telemetry on the dashboard and benchmark page
+- MCP contract tests for response budgets, multi-workspace attribution, graph context, and startup indexing
+
+### Changed
+- Multi-workspace retrieval now applies one global serialized-response budget and attributes delivered tokens exactly across workspaces
+- CLI npm package now exposes the bundled entry point and installs only `better-sqlite3` at runtime
+
+### Fixed
+- Empty workspaces no longer re-index on every MCP server restart
+- Very small token budgets are rejected instead of returning an oversized response
+- Token-savings telemetry now uses selected full-file tokens minus the actual serialized response size
+
 ## [0.8.0] - 2026-08-02
 
 ### Added
@@ -67,6 +84,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[0.9.0]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD
 [0.8.0]: https://github.com/asta-nguyen/openez-graph/compare/a7ce4df...849060b
 [0.7.0]: https://github.com/asta-nguyen/openez-graph/compare/9b7cc78...a7ce4df
 [0.6.1]: https://github.com/asta-nguyen/openez-graph/compare/405f7e8...9b7cc78

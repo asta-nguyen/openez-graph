@@ -291,6 +291,9 @@ function initializeWorkspaceSchema(db: SqliteDb) {
   for (const ddl of tables) {
     db.exec(ddl);
   }
+
+  migrateQueryLogColumns(db);
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
     CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
@@ -301,6 +304,22 @@ function initializeWorkspaceSchema(db: SqliteDb) {
     CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
   `);
+}
+
+function migrateQueryLogColumns(db: SqliteDb) {
+  const columns = new Set(
+    (db.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map((row) => row.name)
+  );
+
+  if (!columns.has("tokens_returned")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN tokens_returned INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("tokens_saved")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN tokens_saved INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("files_scanned")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN files_scanned INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 function getWorkspaceDb(rootPath: string): SqliteDb {
@@ -734,6 +753,7 @@ export function deleteWorkspaceMemory(rootPath: string, id: string): boolean {
 }
 
 export interface WebQueryMetrics {
+  metricMethod: "selected-full-files-minus-serialized-response";
   totalQueries: number;
   totalTokensReturned: number;
   totalTokensSaved: number;
@@ -775,6 +795,7 @@ export function getWorkspaceQueryMetrics(rootPath: string, recentLimit = 10): We
   const totalFilesScanned = Number(totals?.totalFilesScanned ?? 0);
 
   return {
+    metricMethod: "selected-full-files-minus-serialized-response",
     totalQueries,
     totalTokensReturned,
     totalTokensSaved,
