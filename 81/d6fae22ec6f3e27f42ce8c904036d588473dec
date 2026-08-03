@@ -1,0 +1,33 @@
+landing/src/app/page.tsx
+  s_7318f09e541c4d::t_fb36d9cd122201 88,159,461
+  s_7318f09e541c4d::t_f89de3c7ece9d1 239
+  s_7318f09e541c4d::t_f93229755c520d 15,27-32,37-40,42-43,47-59,92-93,97-98,102-103,108-111,133-153,155,190-191,193,200,204-205,213,215,220,226-227,231,236-238,240,243,250,253,257-281,407,418-419,489,497,500-501,538,565,573,576-578,590-591,593-595,611-613,641,650-651,657,664,666-667,673,680,682-683
+landing/src/app/opengraph-image.tsx
+  s_7318f09e541c4d::t_fb36d9cd122201 309
+landing/src/app/layout.tsx
+  s_7318f09e541c4d::t_f93229755c520d 12,16,38,40,47,56,58,64,102
+landing/src/app/og-animated/route.tsx
+  s_7318f09e541c4d::t_fb36d9cd122201 358
+landing/src/app/globals.css
+  s_7318f09e541c4d::t_7b37d45a20f3e2 28-44,129-251
+  s_7318f09e541c4d::t_92ccc09b1f3377 252
+landing/src/app/components/dashboard-preview.tsx
+  s_7318f09e541c4d::t_f93229755c520d 20,23-24
+  s_7318f09e541c4d::t_fb36d9cd122201 14,199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "81d6fae22ec6f3e27f42ce8c904036d588473dec",
+  "prompts": {},
+  "sessions": {
+    "s_7318f09e541c4d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fc177-75ad-7c32-b24a-6229d5e07cc0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
