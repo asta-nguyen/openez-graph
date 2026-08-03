@@ -9,11 +9,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(baseUrl),
     title: {
-      default: "OpenEZ Graph — Understand Your Codebase",
+      default: "OpenEZ Graph — Durable context for coding agents",
       template: "%s | OpenEZ Graph",
     },
     description:
-      "OpenEZ Graph indexes your local projects and turns them into searchable, explorable knowledge graphs — no cloud required.",
+      "Local-first code intelligence for coding agents: ranked retrieval, graph context, durable memory, and multi-workspace MCP tools on SQLite.",
     keywords: [
       "code intelligence",
       "code graph",
@@ -35,16 +35,16 @@ export async function generateMetadata(): Promise<Metadata> {
       type: "website",
       locale: "en_US",
       siteName: "OpenEZ Graph",
-      title: "OpenEZ Graph — Understand Your Codebase",
+      title: "OpenEZ Graph — Durable context for coding agents",
       description:
-        "A local-first code intelligence engine that indexes your projects into a searchable knowledge graph — no cloud, no Postgres, no setup friction.",
+        "Ranked code retrieval, graph context, and durable project memory for Codex, Claude, OpenCode, Windsurf, and Devin.",
       url: baseUrl,
       images: [
         {
           url: "/og-animated",
           width: 1200,
           height: 630,
-          alt: "OpenEZ Graph — Understand Your Codebase",
+          alt: "OpenEZ Graph — Durable context for coding agents",
         },
       ],
     },
@@ -53,15 +53,15 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: "summary_large_image",
-      title: "OpenEZ Graph — Understand Your Codebase",
+      title: "OpenEZ Graph — Durable context for coding agents",
       description:
-        "A local-first code intelligence engine that indexes your projects into a searchable knowledge graph — no cloud, no Postgres, no setup friction.",
+        "Ranked code retrieval, graph context, and durable project memory for Codex, Claude, OpenCode, Windsurf, and Devin.",
       images: [
         {
           url: "/og-animated",
           width: 1200,
           height: 630,
-          alt: "OpenEZ Graph — Understand Your Codebase",
+          alt: "OpenEZ Graph — Durable context for coding agents",
         },
       ],
     },
@@ -99,7 +99,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               "@type": "SoftwareApplication",
               name: "OpenEZ Graph",
               description:
-                "A local-first code intelligence engine that indexes your projects into a searchable knowledge graph — no cloud, no Postgres, no setup friction.",
+                "Local-first code intelligence with ranked retrieval, graph context, durable memory, and multi-workspace MCP tools on SQLite.",
               url: baseUrl,
               applicationCategory: "DeveloperApplication",
               operatingSystem: "Windows, macOS, Linux",

@@ -11,16 +11,17 @@ const InteractiveGraph = dynamic(
 );
 
 /**
- * Dashboard frame with sidebar on the left and the 3D interactive
- * knowledge graph as the main content area.
+ * Dashboard frame with sidebar navigation and a graph preview.
  */
 export function DashboardPreview() {
   const navItems = [
     { label: "Overview", icon: "◆", active: true },
     { label: "Workspaces", icon: "⊞", active: false },
+    { label: "Benchmark", icon: "↘", active: false },
     { label: "Query", icon: "⊕", active: false, debug: true },
     { label: "Documents", icon: "⊡", active: false, debug: true },
-    { label: "Jobs", icon: "⬡", active: false, debug: true },
+    { label: "Memories", icon: "◇", active: false, debug: true },
+    { label: "Changelog", icon: "≡", active: false, secondary: true },
     { label: "Settings", icon: "⚙", active: false, secondary: true },
   ];
 
@@ -195,7 +196,7 @@ export function DashboardPreview() {
           ))}
       </div>
 
-      {/* ── Main content: Interactive 3D graph ── */}
+      {/* ── Main content: graph preview ── */}
       <div
         style={{
           flex: 1,
