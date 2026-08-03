@@ -1,0 +1,19 @@
+landing/src/app/components/footer.tsx
+  s_7318f09e541c4d::t_7906b691049612 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "261eaed2d4176d81749bbf0db1379bd609dd5860",
+  "prompts": {},
+  "sessions": {
+    "s_7318f09e541c4d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fc177-75ad-7c32-b24a-6229d5e07cc0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
