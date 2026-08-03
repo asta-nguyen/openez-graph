@@ -313,6 +313,7 @@ function parseGoImports(lines: string[]): string[] {
 export function parseGo(content: string): IndexedCodeResult {
   const lines = content.split("\n");
   const codeLines = stripNonCode(content, { backtickStrings: true }).split("\n");
+  const braceEndMap = buildBraceEndMap(codeLines);
   const definedSymbols: ExtractedSymbol[] = [];
   const calledIdentifiers = new Set<string>();
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
@@ -343,7 +344,7 @@ export function parseGo(content: string): IndexedCodeResult {
       const receiverType = receiverParts[receiverParts.length - 1];
       const exported = name[0] >= "A" && name[0] <= "Z";
       const startLine = currentLineNum;
-      const endLine = findBraceBlockEnd(codeLines, i);
+      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
       const symbolName = receiverType ? `${receiverType}::${name}` : name;
       definedSymbols.push({
         name: symbolName,
@@ -363,7 +364,7 @@ export function parseGo(content: string): IndexedCodeResult {
       const name = typeMatch[1];
       const exported = name[0] >= "A" && name[0] <= "Z";
       const startLine = currentLineNum;
-      const endLine = findBraceBlockEnd(codeLines, i);
+      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
       definedSymbols.push({
         name,
         symbolType: "type", type: "type",
@@ -430,6 +431,7 @@ function normalizeRustCallName(value: string): string {
 export function parseRust(content: string): IndexedCodeResult {
   const lines = content.split("\n");
   const codeLines = stripNonCode(content, { rawStrings: true, byteStrings: true }).split("\n");
+  const braceEndMap = buildBraceEndMap(codeLines);
   const definedSymbols: ExtractedSymbol[] = [];
   const calledIdentifiers = new Set<string>();
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
@@ -486,7 +488,7 @@ export function parseRust(content: string): IndexedCodeResult {
       const traitName = implForMatch[1];
       const typeName = implForMatch[2].trim();
       const startLine = currentLineNum;
-      const endLine = findBraceBlockEnd(codeLines, i);
+      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
       definedSymbols.push({
         name: `impl ${traitName} for ${typeName}`,
         symbolType: "impl", type: "impl",
@@ -502,7 +504,7 @@ export function parseRust(content: string): IndexedCodeResult {
       if (implMatch) {
         const typeName = implMatch[1].trim();
         const startLine = currentLineNum;
-        const endLine = findBraceBlockEnd(codeLines, i);
+        const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
         definedSymbols.push({
           name: `impl ${typeName}`,
           symbolType: "impl", type: "impl",
@@ -521,7 +523,7 @@ export function parseRust(content: string): IndexedCodeResult {
       const name = fnMatch[1];
       const exported = trimmed.startsWith("pub");
       const startLine = currentLineNum;
-      const endLine = trimmed.endsWith(";") ? currentLineNum : findBraceBlockEnd(codeLines, i);
+      const endLine = trimmed.endsWith(";") ? currentLineNum : findBraceBlockEndFast(codeLines, i, braceEndMap);
       const symbolName = implContext
         ? `${implContext}::${name}`
         : traitContext
@@ -538,7 +540,7 @@ export function parseRust(content: string): IndexedCodeResult {
       const name = structMatch[1];
       const exported = trimmed.startsWith("pub");
       const startLine = currentLineNum;
-      const endLine = findBraceBlockEnd(codeLines, i);
+      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
       definedSymbols.push({ name, symbolType: "struct", type: "struct", exported, startLine, endLine });
     }
 
@@ -547,7 +549,7 @@ export function parseRust(content: string): IndexedCodeResult {
       const name = enumMatch[1];
       const exported = trimmed.startsWith("pub");
       const startLine = currentLineNum;
-      const endLine = findBraceBlockEnd(codeLines, i);
+      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
       definedSymbols.push({ name, symbolType: "enum", type: "enum", exported, startLine, endLine });
     }
 
@@ -556,7 +558,7 @@ export function parseRust(content: string): IndexedCodeResult {
       const name = traitMatch[1];
       const exported = trimmed.startsWith("pub");
       const startLine = currentLineNum;
-      const endLine = findBraceBlockEnd(codeLines, i);
+      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
       definedSymbols.push({ name, symbolType: "trait", type: "trait", exported, startLine, endLine });
       traitContext = name;
       traitBraceDepth = countBraces(lineStr);
@@ -836,25 +838,32 @@ function findIndentedBlockEnd(lines: string[], startIndex: number): number {
   return lines.length;
 }
 
-function findBraceBlockEnd(lines: string[], startIndex: number): number {
-  let braceCount = 0;
-  let found = false;
-
-  for (let i = startIndex; i < lines.length; i++) {
+// Pre-compute closing brace line for every opening brace line in one pass — O(n) not O(n²)
+function buildBraceEndMap(lines: string[]): Map<number, number> {
+  const result = new Map<number, number>();
+  const stack: number[] = []; // line numbers where '{' was first seen
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!found && !line.includes("{")) continue;
-
+    if (!line.includes("{") && !line.includes("}")) continue;
     for (let j = 0; j < line.length; j++) {
-      const char = line[j];
-      if (char === "{") {
-        braceCount++;
-        found = true;
-      } else if (char === "}") {
-        braceCount--;
+      if (line[j] === "{") {
+        if (stack.length === 0) stack.push(i);
+      } else if (line[j] === "}") {
+        if (stack.length > 0) {
+          const openLine = stack.pop()!;
+          result.set(openLine, i + 1);
+        }
       }
     }
-    if (found && braceCount <= 0) {
-      return i + 1;
+  }
+  return result;
+}
+
+function findBraceBlockEndFast(lines: string[], startIndex: number, braceEndMap: Map<number, number>): number {
+  for (let i = startIndex; i < lines.length; i++) {
+    if (lines[i].includes("{")) {
+      const end = braceEndMap.get(i);
+      if (end !== undefined) return end;
     }
   }
   return lines.length;
@@ -869,15 +878,6 @@ function countBraces(line: string): number {
     else if (char === "}") count--;
   }
   return count;
-}
-
-function findSemicolonEnd(lines: string[], startIndex: number): number {
-  for (let i = startIndex; i < lines.length; i++) {
-    if (lines[i].trim().endsWith(";")) {
-      return i + 1;
-    }
-  }
-  return startIndex + 1;
 }
 
 function createSymbolChunks(

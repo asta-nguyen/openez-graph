@@ -14,7 +14,7 @@ function getBuildId() {
 }
 
 export default defineConfig({
-  entry: ["src/cli.ts"],
+  entry: ["src/cli.ts", "../../packages/indexer/src/parse-worker.ts"],
   format: ["cjs"],
   target: "node20",
   platform: "node",
@@ -69,6 +69,15 @@ export default defineConfig({
     if (existsSync(changelogSrc)) {
       cpSync(changelogSrc, changelogDest);
       console.log("✓ Copied CHANGELOG.md → dist/CHANGELOG.md");
+    }
+
+    // Copy package.json into dist/apps/cli/ for runtime version lookup
+    const pkgSrc = path.resolve(__dirname, "package.json");
+    const pkgDest = path.resolve(__dirname, "dist/apps/cli/package.json");
+    if (existsSync(pkgSrc)) {
+      mkdirSync(path.dirname(pkgDest), { recursive: true });
+      cpSync(pkgSrc, pkgDest);
+      console.log("✓ Copied package.json → dist/apps/cli/package.json");
     }
   }
 });

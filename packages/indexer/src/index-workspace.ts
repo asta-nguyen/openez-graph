@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { Worker } from "node:worker_threads";
+import { fileURLToPath } from "node:url";
 
 import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
 import {
@@ -19,10 +22,8 @@ import {
 } from "@openez-graph/db";
 import type { RegistryWorkspace, WorkspaceRepository } from "@openez-graph/db";
 
-import { indexCode } from "./code";
 import { hashContent } from "./hash";
-import { indexMarkdown } from "./markdown";
-import { parseGo, parsePython, parseRust, indexConfig, inferDocumentKind } from "./languages";
+import { chunkDocument, type ParseTask, type ParseResult } from "./parse-core";
 import { scanWorkspaceFiles } from "./scanner";
 import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
 
@@ -200,151 +201,6 @@ export function boundChunks(chunks: IndexedChunk[], targetTokens: number, overla
   });
 }
 
-export async function chunkDocument(input: {
-  relativePath: string;
-  absolutePath: string;
-  content: string;
-  targetTokens: number;
-  overlapTokens: number;
-}) {
-  const info = inferDocumentKind(input.relativePath);
-
-  if (info.kind === "markdown") {
-    const result = indexMarkdown({
-      content: input.content,
-      targetTokens: input.targetTokens,
-      overlapTokens: input.overlapTokens
-    });
-
-    return {
-      kind: info.kind,
-      language: info.language,
-      chunks: result.chunks,
-      importPaths: [] as string[],
-      wikilinks: result.wikilinks,
-      definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[],
-      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
-    };
-  }
-
-  if (info.kind === "config") {
-    const configChunks = indexConfig(input.content, info.language ?? "");
-    return {
-      kind: info.kind,
-      language: info.language,
-      chunks: configChunks,
-      importPaths: [] as string[],
-      wikilinks: [] as string[],
-      definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[],
-      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
-    };
-  }
-
-  if (info.kind === "code") {
-    if (info.language === "typescript" || info.language === "tsx" || info.language === "javascript" || info.language === "jsx") {
-      const result = indexCode(input.content, input.absolutePath);
-      return {
-        kind: info.kind,
-        language: info.language,
-        chunks: result.chunks,
-        importPaths: result.importPaths,
-        wikilinks: [] as string[],
-        definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers,
-        callExpressions: result.callExpressions
-      };
-    }
-
-    if (info.language === "python") {
-      const result = parsePython(input.content);
-      return {
-        kind: info.kind,
-        language: info.language,
-        chunks: result.chunks,
-        importPaths: result.importPaths,
-        wikilinks: [] as string[],
-        definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers,
-        callExpressions: result.callExpressions
-      };
-    }
-
-    if (info.language === "go") {
-      const result = parseGo(input.content);
-      return {
-        kind: info.kind,
-        language: info.language,
-        chunks: result.chunks,
-        importPaths: result.importPaths,
-        wikilinks: [] as string[],
-        definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers,
-        callExpressions: result.callExpressions
-      };
-    }
-
-    if (info.language === "rust") {
-      const result = parseRust(input.content);
-      return {
-        kind: info.kind,
-        language: info.language,
-        chunks: result.chunks,
-        importPaths: result.importPaths,
-        wikilinks: [] as string[],
-        definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers,
-        callExpressions: result.callExpressions
-      };
-    }
-
-    const fallbackChunk: IndexedChunk = {
-      content: input.content,
-      tokenCount: Math.ceil(input.content.length / 4),
-      contentHash: hashContent(input.content),
-      metadata: {
-        kind: "code",
-        language: info.language,
-        startLine: 1,
-        endLine: input.content.split("\n").length
-      }
-    };
-    return {
-      kind: info.kind,
-      language: info.language,
-      chunks: [fallbackChunk],
-      importPaths: [] as string[],
-      wikilinks: [] as string[],
-      definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[],
-      callExpressions: [] as Array<{ callerName: string; calleeName: string }>
-    };
-  }
-
-  const fallbackChunk: IndexedChunk = {
-    content: input.content,
-    tokenCount: Math.ceil(input.content.length / 4),
-    contentHash: hashContent(input.content),
-    metadata: {
-      kind: info.kind,
-      startLine: 1,
-      endLine: input.content.split("\n").length
-    }
-  };
-
-  return {
-    kind: info.kind,
-    language: info.language,
-    chunks: [fallbackChunk],
-    importPaths: [] as string[],
-    wikilinks: [] as string[],
-    definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-    calledIdentifiers: [] as string[],
-    callExpressions: [] as Array<{ callerName: string; calleeName: string }>
-  };
-}
-
 async function writeEmbeddingsToRepo(
   repo: WorkspaceRepository,
   chunkRows: Array<{ id: string; content: string; path: string; heading?: string | null }>,
@@ -401,19 +257,6 @@ async function writeEmbeddingsToRepo(
   }
 }
 
-interface ParseTask {
-  id: string;
-  content: string;
-  relativePath: string;
-  absolutePath: string;
-  sizeBytes: number;
-  mtimeMs: number;
-  targetTokens: number;
-  overlapTokens: number;
-}
-
-type ParseResult = Awaited<ReturnType<typeof chunkDocument>>;
-
 async function parseInline(
   tasks: ParseTask[],
   onProgress?: (done: number, total: number) => void
@@ -430,6 +273,67 @@ async function parseInline(
     indexed.chunks = boundChunks(indexed.chunks, task.targetTokens, task.overlapTokens);
     results.set(task.id, indexed);
     onProgress?.(i + 1, tasks.length);
+  }
+  return results;
+}
+
+function resolveWorkerPath(): string {
+  const baseDir = path.dirname(process.argv[1] || __filename);
+  const candidates = [
+    path.join(baseDir, "..", "..", "..", "packages", "indexer", "src", "parse-worker.cjs"),
+    path.join(baseDir, "parse-worker.cjs"),
+  ];
+  for (const candidate of candidates) {
+    if (fsSync.existsSync(candidate)) return candidate;
+  }
+  throw new Error("parse-worker not found — run build first");
+}
+
+async function parseWithWorkers(
+  tasks: ParseTask[],
+  onProgress?: (done: number, total: number) => void
+): Promise<Map<string, ParseResult>> {
+  const results = new Map<string, ParseResult>();
+  const workerPath = resolveWorkerPath();
+  const cpuCount = os.availableParallelism?.() ?? os.cpus().length;
+  const workerCount = Math.min(cpuCount - 1, 7, tasks.length);
+  let done = 0;
+
+  const workers: Worker[] = [];
+  for (let i = 0; i < workerCount; i++) {
+    workers.push(new Worker(workerPath));
+  }
+
+  let taskIndex = 0;
+  async function feedWorker(worker: Worker): Promise<void> {
+    while (taskIndex < tasks.length) {
+      const myIndex = taskIndex++;
+      const task = tasks[myIndex];
+      const result = await new Promise<{ id: string; result: ParseResult }>((resolve, reject) => {
+        const onMessage = (msg: { id: string; result: ParseResult }) => {
+          worker.off("message", onMessage);
+          worker.off("error", onError);
+          resolve(msg);
+        };
+        const onError = (err: Error) => {
+          worker.off("message", onMessage);
+          worker.off("error", onError);
+          reject(err);
+        };
+        worker.on("message", onMessage);
+        worker.on("error", onError);
+        worker.postMessage(task);
+      });
+      results.set(result.id, result.result);
+      done++;
+      onProgress?.(done, tasks.length);
+    }
+  }
+
+  try {
+    await Promise.all(workers.map((w) => feedWorker(w)));
+  } finally {
+    for (const w of workers) w.terminate();
   }
   return results;
 }
@@ -457,7 +361,6 @@ export async function indexWorkspace(input: {
 
   await writeLocalWorkspaceConfig(workspace);
 
-  const repo = createWorkspaceRepository(workspace.rootPath);
   const settings = await getBrainSettings();
   const config = await loadBrainConfig(workspace.rootPath);
   const configuredWorkspace = config.workspaces?.find(
@@ -472,9 +375,7 @@ export async function indexWorkspace(input: {
     await input.onProgress?.({ message, progress });
   };
 
-  if (runMode === "full") {
-    repo.resetIndexArtifacts();
-  }
+  const repo = createWorkspaceRepository(workspace.rootPath);
 
   const runId = await repo.createIndexRun({ mode: runMode });
 
@@ -485,17 +386,15 @@ export async function indexWorkspace(input: {
     include: includeGlobs,
     exclude: excludeGlobs
   });
-
   const existingDocuments = await repo.listDocuments();
   const existingDocumentsByPath = new Map(existingDocuments.map((document) => [document.path, document]));
 
-  if (runMode === "incremental") {
-    const scannedPaths = new Set(files.map((file) => file.relativePath));
-    for (const document of existingDocuments) {
-      if (!scannedPaths.has(document.path)) {
-        await resetDocumentArtifacts(repo, document.id);
-        await repo.deleteDocument(document.id);
-      }
+  // Delete documents for files that no longer exist on disk
+  const scannedPaths = new Set(files.map((file) => file.relativePath));
+  for (const document of existingDocuments) {
+    if (!scannedPaths.has(document.path)) {
+      await resetDocumentArtifacts(repo, document.id);
+      await repo.deleteDocument(document.id);
     }
   }
 
@@ -523,7 +422,9 @@ export async function indexWorkspace(input: {
     // ── Phase 1: Check which files changed (fast DB lookups, no file reads) ──
     const parseTasks: ParseTask[] = [];
     const unchangedFiles: Array<{
-      existingDocument: NonNullable<Awaited<ReturnType<typeof repo.getDocumentByPath>>>;
+      file: typeof files[0];
+      existingDocument: Awaited<ReturnType<typeof repo.listDocuments>>[number];
+      existingChunks: Awaited<ReturnType<typeof repo.getChunksByDocument>>;
     }> = [];
     const filesToRead: typeof files = [];
 
@@ -531,13 +432,12 @@ export async function indexWorkspace(input: {
       const existingDocument = existingDocumentsByPath.get(file.relativePath);
       // Fast path: skip file read if mtime and size match (incremental only)
       const statUnchanged =
-        runMode === "incremental" &&
         existingDocument &&
         existingDocument.mtimeMs === file.mtimeMs &&
         existingDocument.sizeBytes === file.sizeBytes;
 
       if (statUnchanged) {
-        unchangedFiles.push({ existingDocument: existingDocument! });
+        unchangedFiles.push({ file, existingDocument: existingDocument!, existingChunks: [] });
       } else {
         filesToRead.push(file);
       }
@@ -563,7 +463,6 @@ export async function indexWorkspace(input: {
       const contentHash = hashContent(content);
       const existingDocument = existingDocumentsByPath.get(file.relativePath);
       const unchanged =
-        runMode === "incremental" &&
         existingDocument &&
         existingDocument.contentHash === contentHash;
 
@@ -573,7 +472,7 @@ export async function indexWorkspace(input: {
           sizeBytes: file.sizeBytes,
           mtimeMs: file.mtimeMs
         });
-        unchangedFiles.push({ existingDocument });
+        unchangedFiles.push({ file, existingDocument, existingChunks: [] });
       } else {
         parseTasks.push({
           id: file.relativePath,
@@ -588,10 +487,19 @@ export async function indexWorkspace(input: {
       }
     }
 
-    // ── Phase 3: Parse changed files ──
-    const parseResults = await parseInline(parseTasks, (done, total) => {
-      reportProgress(`Parsing ${done}/${total} files...`, Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)));
-    });
+    // ── Phase 3: Parse changed files (parallel workers for large batches) ──
+    const cpuCount = os.availableParallelism?.() ?? os.cpus().length;
+    const useWorkers = parseTasks.length >= 50 && cpuCount >= 2;
+    const parseResults = await (useWorkers
+      ? parseWithWorkers(parseTasks, (done, total) => {
+          reportProgress(`Parsing ${done}/${total} files...`, Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)));
+        })
+      : parseInline(parseTasks, (done, total) => {
+          reportProgress(`Parsing ${done}/${total} files...`, Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)));
+        }));
+
+    const allChunkRowsForEmbeddings: Array<{ id: string; content: string; path: string; heading?: string | null }> = [];
+    const pendingFtsRows: Array<{ chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }> = [];
 
     // Backfill unchanged embeddings only when embeddings are enabled.
     if (embeddingProvider) {
@@ -616,9 +524,6 @@ export async function indexWorkspace(input: {
       repo.setOptimizedWriteMode(true);
       repo.dropFtsTriggers();
       bulkWriteMode = true;
-    }
-
-    const allChunkRowsForEmbeddings: Array<{ id: string; content: string; path: string; heading?: string | null }> = [];
 
     // Write parsed files to DB — ALL files in ONE transaction
     await repo.transaction(async () => {
@@ -681,6 +586,20 @@ export async function indexWorkspace(input: {
             metadata: JSON.stringify(chunk.metadata)
           }))
         );
+
+        // Collect FTS rows for batch insert (triggers are down)
+        for (const [ci, chunkId] of chunkIds.entries()) {
+          const metadataObj = (indexed.chunks[ci].metadata ?? {}) as Record<string, unknown>;
+          const searchText = String(metadataObj.searchText ?? "");
+          pendingFtsRows.push({
+            chunkId,
+            path: file.relativePath,
+            heading: indexed.chunks[ci].heading ?? "",
+            language: indexed.language ?? "",
+            searchText,
+            content: indexed.chunks[ci].content
+          });
+        }
 
         const chunkNodeInputs = chunkIds.map((chunkId, ci) => ({
           type: "chunk",
@@ -792,46 +711,57 @@ export async function indexWorkspace(input: {
         chunksWritten += chunkIds.length;
         filesUpdated += 1;
       }
+
+      // Batch insert FTS rows inside the same transaction (triggers are down)
+      repo.insertFtsBatch(pendingFtsRows);
     });
+    } // end if (parseTasks.length > 0)
 
     // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
     if (allChunkRowsForEmbeddings.length > 0) {
       embeddingsWritten += await writeEmbeddingsToRepo(repo, allChunkRowsForEmbeddings, embeddingProvider);
     }
 
-    // ── Phase 5: Restore FTS triggers + bulk backfill ──
+    // ── Phase 5: Restore FTS triggers (no backfill needed — we inserted inline) ──
     if (bulkWriteMode) {
-      repo.restoreFtsTriggers();
+      if (pendingFtsRows.length === 0) {
+        repo.restoreFtsTriggers();
+      } else {
+        repo.restoreFtsTriggersOnly();
+      }
       repo.setOptimizedWriteMode(false);
       bulkWriteMode = false;
     }
 
-    // ── Phase 6: Batch call-edge resolution from in-memory symbol map ──
-    // Load all symbol nodes in one query instead of N queries per call expression.
-    const globalSymbolNodes = await repo.loadAllSymbolNodes();
-    const insertedCallEdges = new Set<string>();
-    const callEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; weight: number; metadata: string }> = [];
-    for (const callExpression of pendingCallEdges) {
-      const callerNodeId = symbolNodeIdsByFileAndName.get(`${callExpression.filePath}\0${callExpression.callerName}`);
-      const sameFileCallee = symbolNodeIdsByFileAndName.get(`${callExpression.filePath}\0${callExpression.calleeName}`);
-      const calleeNodeId = sameFileCallee ?? globalSymbolNodes.get(callExpression.calleeName);
-      if (!callerNodeId || !calleeNodeId || callerNodeId === calleeNodeId) continue;
+    // ── Phase 6: Batch call-edge resolution ──
+    if (pendingCallEdges.length > 0) {
+      const globalSymbolNodes = await repo.loadAllSymbolNodes();
+      const insertedCallEdges = new Set<string>();
+      const callEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; weight: number; metadata: string }> = [];
+      for (const callExpression of pendingCallEdges) {
+        const callerNodeId = symbolNodeIdsByFileAndName.get(`${callExpression.filePath}\0${callExpression.callerName}`);
+        const sameFileCallee = symbolNodeIdsByFileAndName.get(`${callExpression.filePath}\0${callExpression.calleeName}`);
+        const calleeNodeId = sameFileCallee ?? globalSymbolNodes.get(callExpression.calleeName);
+        if (!callerNodeId || !calleeNodeId || callerNodeId === calleeNodeId) continue;
 
-      const edgeKey = `${callerNodeId}:${calleeNodeId}:calls`;
-      if (insertedCallEdges.has(edgeKey)) continue;
-      insertedCallEdges.add(edgeKey);
+        const edgeKey = `${callerNodeId}:${calleeNodeId}:calls`;
+        if (insertedCallEdges.has(edgeKey)) continue;
+        insertedCallEdges.add(edgeKey);
 
-      callEdges.push({
-        fromNodeId: callerNodeId,
-        toNodeId: calleeNodeId,
-        type: "calls",
-        weight: 0.35,
-        metadata: JSON.stringify({ heuristic: true, callee: callExpression.calleeName })
+        callEdges.push({
+          fromNodeId: callerNodeId,
+          toNodeId: calleeNodeId,
+          type: "calls",
+          weight: 0.35,
+          metadata: JSON.stringify({ heuristic: true, callee: callExpression.calleeName })
+        });
+      }
+      await repo.transaction(async () => {
+        await repo.insertEdges(callEdges);
       });
     }
-    await repo.transaction(async () => {
-      await repo.insertEdges(callEdges);
-    });
+
+    repo.setOptimizedWriteMode(false);
 
     await reportProgress("Finalizing index run...", 98);
     await repo.completeIndexRun(runId, {

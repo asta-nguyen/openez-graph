@@ -200,6 +200,34 @@ function getNativeWorkspaceDb(rootPath: string): { db: ReturnType<typeof getWork
   return { db, native };
 }
 
+function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
+  native.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
+    BEGIN
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''),
+        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
+      FROM documents WHERE documents.id = new.document_id;
+    END;
+  `);
+  native.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
+    BEGIN
+      DELETE FROM chunks_fts WHERE chunk_id = old.id;
+    END;
+  `);
+  native.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
+    BEGIN
+      DELETE FROM chunks_fts WHERE chunk_id = old.id;
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''),
+        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
+      FROM documents WHERE documents.id = new.document_id;
+    END;
+  `);
+}
+
 export function createWorkspaceRepository(rootPath: string): WorkspaceRepository {
   const { db, native } = getNativeWorkspaceDb(rootPath);
 
@@ -729,11 +757,25 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
     },
 
+    insertFtsBatch(rows: Array<{ chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }>): void {
+      if (rows.length === 0) return;
+      const BATCH = 500;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        const batch = rows.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (const r of batch) {
+          params.push(r.chunkId, r.path, r.heading, r.language, r.searchText, r.content);
+        }
+        native.prepare(`INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content) VALUES ${placeholders}`).run(...params);
+      }
+    },
+
     restoreFtsTriggers(): void {
       // Remove orphaned FTS entries (chunks that were deleted while triggers were down)
       native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
 
-      // Backfill missing FTS entries — use LEFT JOIN to avoid O(n²) NOT EXISTS subquery
+      // Backfill missing FTS entries — single INSERT with LEFT JOIN anti-pattern
       native.exec(`
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
         SELECT c.id, d.path, coalesce(c.heading, ''),
@@ -744,32 +786,11 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         WHERE f.chunk_id IS NULL;
       `);
 
-      // Recreate triggers
-      native.exec(`
-        CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
-        BEGIN
-          INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
-          SELECT new.id, documents.path, coalesce(new.heading, ''),
-            coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
-          FROM documents WHERE documents.id = new.document_id;
-        END;
-      `);
-      native.exec(`
-        CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
-        BEGIN
-          DELETE FROM chunks_fts WHERE chunk_id = old.id;
-        END;
-      `);
-      native.exec(`
-        CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
-        BEGIN
-          DELETE FROM chunks_fts WHERE chunk_id = old.id;
-          INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
-          SELECT new.id, documents.path, coalesce(new.heading, ''),
-            coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
-          FROM documents WHERE documents.id = new.document_id;
-        END;
-      `);
+      restoreFtsTriggerDefinitions(native);
+    },
+
+    restoreFtsTriggersOnly(): void {
+      restoreFtsTriggerDefinitions(native);
     },
 
     async loadAllSymbolNodes(): Promise<Map<string, string>> {

@@ -41,7 +41,7 @@ export function closeAllWorkspaceDbs() {
   dbCache.clear();
 }
 
-function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
+export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
   const tables = getWorkspaceTableDefinitions();
   for (const ddl of tables) {
     sqlite.exec(ddl);
@@ -143,16 +143,20 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     END;
   `);
 
-  sqlite.exec(`
-    INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
-    SELECT chunks.id, documents.path, coalesce(chunks.heading, ''),
-      coalesce(documents.language, ''), coalesce(json_extract(chunks.metadata, '$.searchText'), ''), chunks.content
-    FROM chunks
-    INNER JOIN documents ON documents.id = chunks.document_id
-    WHERE NOT EXISTS (
-      SELECT 1 FROM chunks_fts WHERE chunks_fts.chunk_id = chunks.id
-    );
-  `);
+  // Only backfill FTS if there are chunks missing from the index — skip if counts match
+  const chunkCount = (sqlite.prepare("SELECT count(*) as c FROM chunks").get() as { c: number }).c;
+  const ftsCount = (sqlite.prepare("SELECT count(*) as c FROM chunks_fts").get() as { c: number }).c;
+  if (chunkCount > 0 && ftsCount < chunkCount) {
+    sqlite.exec(`
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT c.id, d.path, coalesce(c.heading, ''),
+        coalesce(d.language, ''), coalesce(json_extract(c.metadata, '$.searchText'), ''), c.content
+      FROM chunks c
+      INNER JOIN documents d ON d.id = c.document_id
+      LEFT JOIN chunks_fts f ON f.chunk_id = c.id
+      WHERE f.chunk_id IS NULL;
+    `);
+  }
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
