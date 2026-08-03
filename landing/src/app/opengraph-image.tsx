@@ -306,7 +306,7 @@ export default async function OGImage() {
                 textTransform: "uppercase",
               }}
             >
-              v0.2.0
+              v0.9.1
             </span>
           </div>
 

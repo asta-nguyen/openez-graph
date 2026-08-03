@@ -25,6 +25,23 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+::selection {
+  background: oklch(0.72 0.14 200 / 0.3);
+}
+
+:focus-visible {
+  outline: 2px solid oklch(0.72 0.14 200);
+  outline-offset: 4px;
+}
+
+.nav-link {
+  transition: color 180ms ease;
+}
+
+.nav-link:hover {
+  color: oklch(0.78 0.12 195);
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -107,6 +124,130 @@ html {
   height: 3px;
   background: linear-gradient(90deg, transparent, oklch(0.72 0.14 200 / 0.6), transparent);
   animation: signalSweep 3s ease-in-out infinite;
+}
+
+.hero-install {
+  display: flex;
+  width: min(100%, 34rem);
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid oklch(1 0 0 / 9%);
+  border-radius: 0.625rem;
+  background: oklch(0.08 0.012 260 / 82%);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 4%);
+  backdrop-filter: blur(12px);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  color: oklch(0.85 0.01 260);
+}
+
+.mcp-surface {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid oklch(1 0 0 / 9%);
+  border-radius: 1rem;
+  background: oklch(0.085 0.014 260 / 88%);
+  box-shadow: 0 28px 80px oklch(0.03 0.02 260 / 60%);
+  backdrop-filter: blur(18px);
+  text-align: left;
+}
+
+.mcp-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, oklch(0.72 0.14 200 / 0.65), transparent);
+}
+
+.mcp-surface__header,
+.mcp-surface__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.125rem;
+}
+
+.mcp-surface__header {
+  border-bottom: 1px solid oklch(1 0 0 / 6%);
+}
+
+.mcp-surface__footer {
+  flex-wrap: wrap;
+  border-top: 1px solid oklch(1 0 0 / 6%);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.625rem;
+  color: oklch(0.52 0.02 260);
+}
+
+.mcp-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.625rem;
+  color: oklch(0.72 0.08 155);
+}
+
+.mcp-live span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.mcp-tool-list {
+  padding: 0.5rem;
+}
+
+.mcp-tool {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 2.65rem;
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.mcp-tool:hover {
+  background: oklch(0.72 0.14 200 / 8%);
+  transform: translateX(2px);
+}
+
+.mcp-tool code {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  color: oklch(0.88 0.01 260);
+}
+
+.agent-commands {
+  overflow: hidden;
+  border: 1px solid oklch(1 0 0 / 8%);
+  border-radius: 0.75rem;
+  background: oklch(0.07 0.01 260);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+}
+
+.agent-commands > div {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid oklch(1 0 0 / 5%);
+}
+
+.agent-commands > div:last-child {
+  border-bottom: 0;
+}
+
+.agent-commands span {
+  color: oklch(0.72 0.14 200);
+  user-select: none;
 }
 
 @keyframes signalSweep {
