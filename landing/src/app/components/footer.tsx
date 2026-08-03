@@ -69,7 +69,7 @@ export function Footer() {
 
           <div className="openez-footer__social">
             <a
-              href="https://unikorn.vn/p/kamehadb"
+              href="https://unikorn.vn/p/openez-graph"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Unikorn"
