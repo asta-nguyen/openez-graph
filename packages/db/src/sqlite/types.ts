@@ -286,8 +286,12 @@ export interface WorkspaceRepository {
 
   /** Drop FTS triggers so chunk INSERTs don't fire per-row trigger subqueries. */
   dropFtsTriggers(): void;
+  /** Bulk insert FTS rows without triggers (used during optimized write phase). */
+  insertFtsBatch(rows: Array<{ chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }>): void;
   /** Recreate FTS triggers and backfill any missing FTS rows. */
   restoreFtsTriggers(): void;
+  /** Recreate FTS triggers only (no backfill — use when FTS rows were inserted inline). */
+  restoreFtsTriggersOnly(): void;
 
   /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
   loadAllSymbolNodes(): Promise<Map<string, string>>;
