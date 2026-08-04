@@ -1,9 +1,47 @@
-import { Project, SyntaxKind } from "ts-morph";
-
-import { countTokens } from "@openez-graph/core";
+import { countTokens } from "./tokenizer";
 
 import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
+
+// Lazy-load ts-morph — only needed for TS/JS files (~200MB saved for C/Python/etc repos)
+let _tsMorph: typeof import("ts-morph") | null = null;
+function tsMorph() {
+  if (!_tsMorph) {
+    try { _tsMorph = require("ts-morph"); } catch {
+      // Bundled worker can't find ts-morph via normal resolution
+      const mod = require("module");
+      const path = require("path");
+      // Try resolving from the indexer package source (where node_modules lives)
+      const candidates = [
+        path.join(__dirname, "package.json"),
+        path.join(__dirname, "..", "package.json"),
+        path.join(__dirname, "..", "..", "package.json"),
+        path.join(__dirname, "..", "..", "..", "package.json"),
+        path.join(__dirname, "..", "..", "..", "..", "package.json"),
+        path.join(__dirname, "..", "..", "..", "..", "..", "package.json"),
+        path.join(__dirname, "..", "..", "..", "..", "..", "..", "packages", "indexer", "package.json"),
+      ];
+      for (const candidate of candidates) {
+        try {
+          _tsMorph = mod.createRequire(candidate)("ts-morph");
+          if (process.env.OPENEZ_DEBUG) console.error("[worker] ts-morph resolved from:", candidate);
+          break;
+        } catch { /* try next */ }
+      }
+      if (!_tsMorph) throw new Error("ts-morph not found — ensure @openez-graph/indexer dependencies are installed");
+    }
+  }
+  return _tsMorph;
+}
+
+let _project: import("ts-morph").Project | null = null;
+function project() {
+  if (!_project) {
+    const { Project } = tsMorph();
+    _project = new Project({ useInMemoryFileSystem: true, compilerOptions: { allowJs: true } });
+  }
+  return _project;
+}
 
 function getLineRange(node: { getStartLineNumber(): number; getEndLineNumber(): number }) {
   return {
@@ -23,13 +61,6 @@ function codeSearchText(text: string): string {
     .join(" ");
 }
 
-const project = new Project({
-  useInMemoryFileSystem: true,
-  compilerOptions: {
-    allowJs: true
-  }
-});
-
 export function indexCode(content: string, filePath: string): {
   chunks: IndexedChunk[];
   importPaths: string[];
@@ -37,7 +68,8 @@ export function indexCode(content: string, filePath: string): {
   calledIdentifiers: string[];
   callExpressions: Array<{ callerName: string; calleeName: string }>;
 } {
-  const sourceFile = project.createSourceFile(filePath, content, { overwrite: true });
+  const { SyntaxKind } = tsMorph();
+  const sourceFile = project().createSourceFile(filePath, content, { overwrite: true });
   try {
     const chunks: IndexedChunk[] = [];
     const definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }> = [];
@@ -179,6 +211,6 @@ export function indexCode(content: string, filePath: string): {
       callExpressions
     };
   } finally {
-    project.removeSourceFile(sourceFile);
+    project().removeSourceFile(sourceFile);
   }
 }

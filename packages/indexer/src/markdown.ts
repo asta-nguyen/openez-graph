@@ -1,6 +1,6 @@
 import GithubSlugger from "github-slugger";
 
-import { countTokens } from "@openez-graph/core";
+import { countTokens } from "./tokenizer";
 
 import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";

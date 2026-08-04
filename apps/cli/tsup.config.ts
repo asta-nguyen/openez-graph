@@ -21,11 +21,12 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   sourcemap: false,
-  minify: false,
+  minify: true,
   splitting: false,
   define: { __OPENEZ_BUILD_ID__: JSON.stringify(getBuildId()) },
   // better-sqlite3 is a native module — must remain external
-  external: ["better-sqlite3"],
+  // ts-morph is large (~200MB RAM) — keep external so workers lazy-load it only for TS/JS
+  external: ["better-sqlite3", "ts-morph"],
   // Bundle everything else (workspace packages + npm deps)
   noExternal: [
     "@openez-graph/config",
@@ -41,7 +42,6 @@ export default defineConfig({
     "zod",
     "fast-glob",
     "github-slugger",
-    "ts-morph",
     "gpt-tokenizer",
     "drizzle-orm",
     "dotenv",

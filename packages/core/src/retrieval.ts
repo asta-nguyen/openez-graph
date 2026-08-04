@@ -127,7 +127,7 @@ async function graphExpand(
     `WITH RECURSIVE walk(node_id, depth) AS (
       SELECT id, 0
       FROM graph_nodes
-      WHERE type = 'chunk'
+      WHERE type = 'symbol'
         AND ref_id IN (${placeholders})
       UNION
       SELECT
@@ -147,7 +147,7 @@ async function graphExpand(
       FROM walk
       INNER JOIN graph_nodes ON graph_nodes.id = walk.node_id
       INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
-      WHERE graph_nodes.type = 'chunk'
+      WHERE graph_nodes.type = 'symbol'
         AND walk.depth > 0
         AND chunks.id NOT IN (${placeholders})
       GROUP BY chunks.id

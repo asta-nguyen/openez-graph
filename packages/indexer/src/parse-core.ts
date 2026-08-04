@@ -7,6 +7,7 @@ import type { IndexedChunk } from "./types";
 export interface ParseTask {
   id: string;
   content: string;
+  contentHash: string;
   relativePath: string;
   absolutePath: string;
   sizeBytes: number;

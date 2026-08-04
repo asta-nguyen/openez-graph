@@ -25,7 +25,7 @@ import type { RegistryWorkspace, WorkspaceRepository } from "@openez-graph/db";
 import { hashContent } from "./hash";
 import { chunkDocument, type ParseTask, type ParseResult } from "./parse-core";
 import { scanWorkspaceFiles } from "./scanner";
-import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
+import type { FileToIndex, IndexedChunk, IndexWorkspaceSummary } from "./types";
 
 const RESOLVABLE_SOURCE_EXTENSIONS = [
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
@@ -164,20 +164,17 @@ async function resetChangedFileArtifacts(
     await repo.deleteEmbeddingsByChunkIds(chunkIds);
   }
 
-  // Delete old chunk graph nodes only (preserve symbol nodes)
-  repo.deleteChunkNodesByChunkIds(chunkIds);
-
   // Find file node and delete its outgoing edges (will be rebuilt)
   const fileNode = await repo.findFileNode(relativePath);
   if (fileNode) {
-    repo.deleteOutgoingEdges(fileNode.id, ["contains", "defines", "imports", "mentions"]);
+    repo.deleteOutgoingEdges(fileNode.id, ["defines", "imports", "mentions"]);
   }
 
   // Get existing symbol nodes for this file, delete their outgoing edges (will be rebuilt)
   const symbolNodes = await repo.getSymbolNodesByFilePath(relativePath);
   const existingSymbolNodes = new Map<string, string>();
   for (const sym of symbolNodes) {
-    repo.deleteOutgoingEdges(sym.id, ["represented_by", "calls"]);
+    repo.deleteOutgoingEdges(sym.id, ["calls"]);
     existingSymbolNodes.set(sym.label, sym.id);
   }
 
@@ -278,15 +275,77 @@ async function parseInline(
 }
 
 function resolveWorkerPath(): string {
-  const baseDir = path.dirname(process.argv[1] || __filename);
+  const baseDir = path.dirname(fsSync.realpathSync(process.argv[1] || __filename));
   const candidates = [
     path.join(baseDir, "..", "..", "..", "packages", "indexer", "src", "parse-worker.cjs"),
     path.join(baseDir, "parse-worker.cjs"),
   ];
   for (const candidate of candidates) {
-    if (fsSync.existsSync(candidate)) return candidate;
+    const resolved = path.resolve(candidate);
+    if (fsSync.existsSync(resolved)) return resolved;
   }
   throw new Error("parse-worker not found — run build first");
+}
+
+// Persistent worker pool — reused across batches to avoid worker spawn cost
+class WorkerPool {
+  private workers: Worker[] = [];
+  private busy: boolean[] = [];
+  private taskIndex = 0;
+  private done = 0;
+  private total = 0;
+  private onProgress?: (done: number, total: number) => void;
+
+  constructor(workerPath: string, workerCount: number) {
+    for (let i = 0; i < workerCount; i++) {
+      this.workers.push(new Worker(workerPath));
+      this.busy.push(false);
+    }
+  }
+
+  async parseBatch(
+    tasks: ParseTask[],
+    onProgress?: (done: number, total: number) => void
+  ): Promise<Map<string, ParseResult>> {
+    const results = new Map<string, ParseResult>();
+    this.taskIndex = 0;
+    this.done = 0;
+    this.total = tasks.length;
+    this.onProgress = onProgress;
+
+    const feedWorker = async (worker: Worker) => {
+      while (this.taskIndex < tasks.length) {
+        const myIndex = this.taskIndex++;
+        const task = tasks[myIndex];
+        const result = await new Promise<{ id: string; result: ParseResult }>((resolve, reject) => {
+          const onMessage = (msg: { id: string; result: ParseResult }) => {
+            worker.off("message", onMessage);
+            worker.off("error", onError);
+            resolve(msg);
+          };
+          const onError = (err: Error) => {
+            worker.off("message", onMessage);
+            worker.off("error", onError);
+            reject(err);
+          };
+          worker.on("message", onMessage);
+          worker.on("error", onError);
+          worker.postMessage(task);
+        });
+        results.set(result.id, result.result);
+        this.done++;
+        this.onProgress?.(this.done, this.total);
+      }
+    };
+
+    await Promise.all(this.workers.map((w) => feedWorker(w)));
+    return results;
+  }
+
+  terminate(): void {
+    for (const w of this.workers) w.terminate();
+    this.workers = [];
+  }
 }
 
 async function parseWithWorkers(
@@ -296,7 +355,7 @@ async function parseWithWorkers(
   const results = new Map<string, ParseResult>();
   const workerPath = resolveWorkerPath();
   const cpuCount = os.availableParallelism?.() ?? os.cpus().length;
-  const workerCount = Math.min(cpuCount - 1, 7, tasks.length);
+  const workerCount = Math.min(cpuCount - 1, 4, tasks.length);
   let done = 0;
 
   const workers: Worker[] = [];
@@ -381,12 +440,61 @@ export async function indexWorkspace(input: {
 
   await reportProgress("Scanning workspace files...", 5);
 
-  const files = await scanWorkspaceFiles({
-    rootPath: workspace.rootPath,
-    include: includeGlobs,
-    exclude: excludeGlobs
-  });
+  // Fast path: stat files from DB first. If all match, skip directory walk.
   const existingDocuments = await repo.listDocuments();
+
+  let files: FileToIndex[];
+
+  if (existingDocuments.length > 0 && !includeGlobs) {
+    // Fast path: stat DB files in parallel, skip directory walk if all match
+    const STAT_CONCURRENCY = 64;
+    const cachedResults: Array<{ doc: typeof existingDocuments[0]; file: FileToIndex } | null> = new Array(existingDocuments.length);
+    let allMatch = true;
+    let statIdx = 0;
+    async function cachedStatWorker() {
+      while (statIdx < existingDocuments.length) {
+        const i = statIdx++;
+        const doc = existingDocuments[i];
+        const absPath = path.join(workspace.rootPath, doc.path);
+        try {
+          const stat = await fs.stat(absPath);
+          if (stat.size === doc.sizeBytes && Math.trunc(stat.mtimeMs) === doc.mtimeMs) {
+            cachedResults[i] = {
+              doc,
+              file: { absolutePath: absPath, relativePath: doc.path, sizeBytes: stat.size, mtimeMs: Math.trunc(stat.mtimeMs) }
+            };
+          } else {
+            allMatch = false;
+            return;
+          }
+        } catch {
+          allMatch = false;
+          return;
+        }
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(STAT_CONCURRENCY, existingDocuments.length) }, () => cachedStatWorker())
+    );
+
+    if (allMatch) {
+      files = cachedResults.map((r) => r!.file);
+    } else {
+      files = await scanWorkspaceFiles({
+        rootPath: workspace.rootPath,
+        include: includeGlobs,
+        exclude: excludeGlobs
+      });
+    }
+  } else {
+    // No existing documents or custom include — full scan
+    files = await scanWorkspaceFiles({
+      rootPath: workspace.rootPath,
+      include: includeGlobs,
+      exclude: excludeGlobs
+    });
+  }
+
   const existingDocumentsByPath = new Map(existingDocuments.map((document) => [document.path, document]));
 
   // Delete documents for files that no longer exist on disk
@@ -411,7 +519,6 @@ export async function indexWorkspace(input: {
   let embeddingsWritten = 0;
   let bulkWriteMode = false;
   const symbolNodeIdsByFileAndName = new Map<string, string>();
-  const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
 
   try {
     await reportProgress(
@@ -443,63 +550,10 @@ export async function indexWorkspace(input: {
       }
     }
 
-    // ── Phase 2: Read only changed files in parallel (concurrency-limited) ──
-    const fileContents = new Map<string, string>();
-    const READ_CONCURRENCY = 32;
-    let readIndex = 0;
-    async function readWorker() {
-      while (readIndex < filesToRead.length) {
-        const i = readIndex++;
-        fileContents.set(filesToRead[i].relativePath, await fs.readFile(filesToRead[i].absolutePath, "utf8"));
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(READ_CONCURRENCY, filesToRead.length) }, () => readWorker())
-    );
-
-    // ── Phase 2b: Verify content hash for changed files ──
-    for (const file of filesToRead) {
-      const content = fileContents.get(file.relativePath)!;
-      const contentHash = hashContent(content);
-      const existingDocument = existingDocumentsByPath.get(file.relativePath);
-      const unchanged =
-        existingDocument &&
-        existingDocument.contentHash === contentHash;
-
-      if (unchanged) {
-        await repo.updateDocument(existingDocument.id, {
-          absolutePath: file.absolutePath,
-          sizeBytes: file.sizeBytes,
-          mtimeMs: file.mtimeMs
-        });
-        unchangedFiles.push({ file, existingDocument, existingChunks: [] });
-      } else {
-        parseTasks.push({
-          id: file.relativePath,
-          content,
-          relativePath: file.relativePath,
-          absolutePath: file.absolutePath,
-          sizeBytes: file.sizeBytes,
-          mtimeMs: file.mtimeMs,
-          targetTokens: settings.chunking.targetTokens,
-          overlapTokens: settings.chunking.overlapTokens
-        });
-      }
-    }
-
-    // ── Phase 3: Parse changed files (parallel workers for large batches) ──
+    // ── Phase 2-4: Pipelined batched read + parse + write ──
+    const BATCH_SIZE = 1000;
     const cpuCount = os.availableParallelism?.() ?? os.cpus().length;
-    const useWorkers = parseTasks.length >= 50 && cpuCount >= 2;
-    const parseResults = await (useWorkers
-      ? parseWithWorkers(parseTasks, (done, total) => {
-          reportProgress(`Parsing ${done}/${total} files...`, Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)));
-        })
-      : parseInline(parseTasks, (done, total) => {
-          reportProgress(`Parsing ${done}/${total} files...`, Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)));
-        }));
-
     const allChunkRowsForEmbeddings: Array<{ id: string; content: string; path: string; heading?: string | null }> = [];
-    const pendingFtsRows: Array<{ chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }> = [];
 
     // Backfill unchanged embeddings only when embeddings are enabled.
     if (embeddingProvider) {
@@ -518,248 +572,322 @@ export async function indexWorkspace(input: {
       }
     }
 
-    // A true no-op never changes SQLite write pragmas or FTS triggers.
-    if (parseTasks.length > 0) {
-      // ── Phase 4: Write all results to DB (main thread, transactioned) ──
+    if (filesToRead.length > 0) {
       repo.setOptimizedWriteMode(true);
       repo.dropFtsTriggers();
       bulkWriteMode = true;
 
-    // Write parsed files to DB — ALL files in ONE transaction
-    await repo.transaction(async () => {
-      for (const [idx, file] of parseTasks.entries()) {
-        if (idx % 100 === 0) {
-          const progress = Math.min(95, 50 + Math.round((idx / Math.max(parseTasks.length, 1)) * 45));
-          await reportProgress(`Writing ${idx}/${parseTasks.length}...`, progress);
+      const workerPath = resolveWorkerPath();
+      const workerCount = Math.min(
+        cpuCount - 1,
+        filesToRead.length,
+        Math.ceil(filesToRead.length / 50)
+      );
+      const pool = new WorkerPool(workerPath, workerCount);
+
+      async function readAndHashBatch(batchFiles: typeof files): Promise<ParseTask[]> {
+        const fileContents = new Map<string, string>();
+        const READ_CONCURRENCY = 32;
+        let readIndex = 0;
+        async function readWorker() {
+          while (readIndex < batchFiles.length) {
+            const i = readIndex++;
+            fileContents.set(batchFiles[i].relativePath, await fs.readFile(batchFiles[i].absolutePath, "utf8"));
+          }
         }
-
-        const indexed = parseResults.get(file.id)!;
-        const contentHash = hashContent(file.content);
-        const existingDocument = existingDocumentsByPath.get(file.relativePath);
-
-        let documentId: string;
-        let fileExistingSymbols: Map<string, string>;
-
-        if (existingDocument) {
-          fileExistingSymbols = await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
-          await repo.updateDocument(existingDocument.id, {
-            absolutePath: file.absolutePath,
-            kind: indexed.kind,
-            language: indexed.language,
-            contentHash,
-            sizeBytes: file.sizeBytes,
-            mtimeMs: file.mtimeMs
-          });
-          documentId = existingDocument.id;
-        } else {
-          documentId = await repo.insertDocument({
-            path: file.relativePath,
-            absolutePath: file.absolutePath,
-            kind: indexed.kind,
-            language: indexed.language,
-            contentHash,
-            sizeBytes: file.sizeBytes,
-            mtimeMs: file.mtimeMs
-          });
-          fileExistingSymbols = new Map();
-        }
-
-        const fileNodeId = await repo.upsertGraphNode({
-          type: "file",
-          label: file.relativePath,
-          refId: documentId,
-          metadata: JSON.stringify({
-            path: file.relativePath,
-            kind: indexed.kind,
-            language: indexed.language
-          })
-        });
-
-        const chunkIds = await repo.insertChunks(
-          indexed.chunks.map((chunk, chunkIndex) => ({
-            documentId,
-            chunkIndex,
-            heading: chunk.heading,
-            content: chunk.content,
-            tokenCount: chunk.tokenCount,
-            contentHash: chunk.contentHash,
-            metadata: JSON.stringify(chunk.metadata)
-          }))
+        await Promise.all(
+          Array.from({ length: Math.min(READ_CONCURRENCY, batchFiles.length) }, () => readWorker())
         );
 
-        // Collect FTS rows for batch insert (triggers are down)
-        for (const [ci, chunkId] of chunkIds.entries()) {
-          const metadataObj = (indexed.chunks[ci].metadata ?? {}) as Record<string, unknown>;
-          const searchText = String(metadataObj.searchText ?? "");
-          pendingFtsRows.push({
-            chunkId,
-            path: file.relativePath,
-            heading: indexed.chunks[ci].heading ?? "",
-            language: indexed.language ?? "",
-            searchText,
-            content: indexed.chunks[ci].content
-          });
-        }
+        const batchParseTasks: ParseTask[] = [];
+        const isColdBatch = existingDocumentsByPath.size === 0;
+        for (const file of batchFiles) {
+          const content = fileContents.get(file.relativePath)!;
+          const contentHash = isColdBatch ? `${file.mtimeMs}:${file.sizeBytes}` : hashContent(content);
+          const existingDocument = existingDocumentsByPath.get(file.relativePath);
+          const unchanged = existingDocument && existingDocument.contentHash === contentHash;
 
-        const chunkNodeInputs = chunkIds.map((chunkId, ci) => ({
-          type: "chunk",
-          label: `${file.relativePath}#${ci}`,
-          refId: chunkId,
-          metadata: JSON.stringify(indexed.chunks[ci].metadata)
-        }));
-        const chunkNodeIds = await repo.insertGraphNodesBatch(chunkNodeInputs);
-
-        const edges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> = [];
-        const reusedSymbolIds = new Set<string>();
-
-        for (const [ci, chunkId] of chunkIds.entries()) {
-          const chunkNodeId = chunkNodeIds[ci];
-          edges.push({ fromNodeId: fileNodeId, toNodeId: chunkNodeId, type: "contains" });
-
-          const metadataObj = (indexed.chunks[ci].metadata ?? {}) as Record<string, unknown>;
-          const symbolName = (metadataObj.symbolName as string | undefined) ?? indexed.chunks[ci].symbolName;
-          if (symbolName) {
-            const fileSymbolKey = `${file.relativePath}\0${symbolName}`;
-            let symbolNodeId = symbolNodeIdsByFileAndName.get(fileSymbolKey);
-
-            if (!symbolNodeId) {
-              const existingSymbolId = fileExistingSymbols.get(symbolName);
-              if (existingSymbolId) {
-                repo.updateSymbolNode(
-                  existingSymbolId,
-                  chunkId,
-                  JSON.stringify({
-                    symbolType: indexed.chunks[ci].symbolType,
-                    filePath: file.relativePath
-                  })
-                );
-                symbolNodeId = existingSymbolId;
-              } else {
-                symbolNodeId = await repo.upsertGraphNode({
-                  type: "symbol",
-                  label: symbolName,
-                  refId: chunkId,
-                  metadata: JSON.stringify({
-                    symbolType: indexed.chunks[ci].symbolType,
-                    filePath: file.relativePath
-                  })
-                });
-              }
-              symbolNodeIdsByFileAndName.set(fileSymbolKey, symbolNodeId);
-            }
-
-            reusedSymbolIds.add(symbolNodeId);
-            edges.push({ fromNodeId: fileNodeId, toNodeId: symbolNodeId, type: "defines" });
-            edges.push({ fromNodeId: symbolNodeId, toNodeId: chunkNodeId, type: "represented_by" });
+          if (unchanged) {
+            await repo.updateDocument(existingDocument.id, {
+              absolutePath: file.absolutePath,
+              sizeBytes: file.sizeBytes,
+              mtimeMs: file.mtimeMs
+            });
+            unchangedFiles.push({ file, existingDocument, existingChunks: [] });
+          } else {
+            batchParseTasks.push({
+              id: file.relativePath,
+              content,
+              contentHash,
+              relativePath: file.relativePath,
+              absolutePath: file.absolutePath,
+              sizeBytes: file.sizeBytes,
+              mtimeMs: file.mtimeMs,
+              targetTokens: settings.chunking.targetTokens,
+              overlapTokens: settings.chunking.overlapTokens
+            });
           }
         }
-
-        // Delete stale symbol nodes (existed before but not seen in this parse)
-        const staleSymbolIds: string[] = [];
-        for (const symbolId of fileExistingSymbols.values()) {
-          if (!reusedSymbolIds.has(symbolId)) {
-            staleSymbolIds.push(symbolId);
-          }
-        }
-        if (staleSymbolIds.length > 0) {
-          repo.deleteGraphNodesByIds(staleSymbolIds);
-        }
-
-        for (const importPath of indexed.importPaths) {
-          if (typeof importPath !== "string" || importPath.length === 0) continue;
-
-          const resolvedImportPath = workspaceFileResolver?.resolveImport(file.relativePath, importPath, indexed.language ?? undefined);
-          if (!resolvedImportPath) continue;
-          const targetNodeId = await repo.upsertGraphNode({
-            type: "file",
-            label: resolvedImportPath,
-            metadata: JSON.stringify({ path: resolvedImportPath })
-          });
-
-          edges.push({ fromNodeId: fileNodeId, toNodeId: targetNodeId, type: "imports", metadata: JSON.stringify({ importPath }) });
-        }
-
-        for (const link of indexed.wikilinks) {
-          const entityNodeId = await repo.upsertGraphNode({
-            type: "entity",
-            label: link,
-            metadata: "{}"
-          });
-
-          edges.push({ fromNodeId: fileNodeId, toNodeId: entityNodeId, type: "mentions" });
-        }
-
-        // Dedupe edges by from:to:type before insert
-        const edgeSet = new Set<string>();
-        const dedupedEdges = edges.filter((e) => {
-          const key = `${e.fromNodeId}:${e.toNodeId}:${e.type}`;
-          if (edgeSet.has(key)) return false;
-          edgeSet.add(key);
-          return true;
-        });
-        await repo.insertEdges(dedupedEdges);
-
-        pendingCallEdges.push(...indexed.callExpressions.map((call) => ({ ...call, filePath: file.relativePath })));
-
-        const chunkRows = chunkIds.map((id, i) => ({
-          id,
-          content: indexed.chunks[i].content,
-          path: file.relativePath,
-          heading: indexed.chunks[i].heading
-        }));
-        allChunkRowsForEmbeddings.push(...chunkRows);
-        chunksWritten += chunkIds.length;
-        filesUpdated += 1;
+        return batchParseTasks;
       }
 
-      // Batch insert FTS rows inside the same transaction (triggers are down)
-      repo.insertFtsBatch(pendingFtsRows);
-    });
-    } // end if (parseTasks.length > 0)
+      async function writeBatch(
+        batchParseTasks: ParseTask[],
+        parseResults: Map<string, ParseResult>,
+        batchStart: number
+      ): Promise<void> {
+        if (batchParseTasks.length === 0) return;
+
+        // Separate new files from existing (cold path = all new)
+        const newFiles: ParseTask[] = [];
+        const existingFiles: ParseTask[] = [];
+        for (const file of batchParseTasks) {
+          if (existingDocumentsByPath.has(file.relativePath)) {
+            existingFiles.push(file);
+          } else {
+            newFiles.push(file);
+          }
+        }
+
+        await repo.transaction(async () => {
+          repo.refreshStreamTimestamp();
+          const docIdMap = new Map<string, string>();
+          for (const file of newFiles) {
+            const indexed = parseResults.get(file.id)!;
+            const docId = crypto.randomUUID();
+            repo.streamDocument({
+              id: docId,
+              path: file.relativePath,
+              absolutePath: file.absolutePath,
+              kind: indexed.kind,
+              language: indexed.language,
+              contentHash: file.contentHash,
+              sizeBytes: file.sizeBytes,
+              mtimeMs: file.mtimeMs
+            });
+            docIdMap.set(file.relativePath, docId);
+          }
+
+          // ── Handle existing files (update + reset artifacts) ──
+          for (const file of existingFiles) {
+            const indexed = parseResults.get(file.id)!;
+            const existingDocument = existingDocumentsByPath.get(file.relativePath)!;
+            const fileExistingSymbols = await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
+            await repo.updateDocument(existingDocument.id, {
+              absolutePath: file.absolutePath,
+              kind: indexed.kind,
+              language: indexed.language,
+              contentHash: file.contentHash,
+              sizeBytes: file.sizeBytes,
+              mtimeMs: file.mtimeMs
+            });
+            docIdMap.set(file.relativePath, existingDocument.id);
+            (file as ParseTask & { _existingSymbols?: Map<string, string> })._existingSymbols = fileExistingSymbols;
+          }
+
+          const fileNodeIds: string[] = new Array(batchParseTasks.length);
+          for (const [fi, file] of batchParseTasks.entries()) {
+            const indexed = parseResults.get(file.id)!;
+            const nodeId = crypto.randomUUID();
+            repo.streamGraphNode({
+              id: nodeId,
+              type: "file",
+              label: file.relativePath,
+              refId: docIdMap.get(file.relativePath)!,
+              metadata: JSON.stringify({ path: file.relativePath, kind: indexed.kind, language: indexed.language })
+            });
+            fileNodeIds[fi] = nodeId;
+          }
+
+          const allChunkIds: string[] = [];
+          for (const file of batchParseTasks) {
+            const indexed = parseResults.get(file.id)!;
+            const documentId = docIdMap.get(file.relativePath)!;
+            const lang = indexed.language ?? "";
+            for (const [ci, chunk] of indexed.chunks.entries()) {
+              const chunkId = crypto.randomUUID();
+              const metadataJson = JSON.stringify(chunk.metadata);
+              repo.streamChunk({
+                id: chunkId,
+                documentId,
+                chunkIndex: ci,
+                heading: chunk.heading ?? null,
+                content: chunk.content,
+                tokenCount: chunk.tokenCount,
+                contentHash: chunk.contentHash,
+                metadata: metadataJson
+              });
+              allChunkIds.push(chunkId);
+            }
+          }
+
+          const isColdIndex = existingFiles.length === 0 && batchStart === 0;
+          let chunkIdx = 0;
+          if (!isColdIndex) {
+          const edgeSet = new Set<string>();
+          function streamEdge(fromNodeId: string, toNodeId: string, type: string, metadata?: string) {
+            const key = `${fromNodeId}:${toNodeId}:${type}`;
+            if (edgeSet.has(key)) return;
+            edgeSet.add(key);
+            repo.streamEdge({ id: crypto.randomUUID(), fromNodeId, toNodeId, type, metadata });
+          }
+          for (const [fi, file] of batchParseTasks.entries()) {
+            const indexed = parseResults.get(file.id)!;
+            const fileNodeId = fileNodeIds[fi];
+            const hasGraphData = indexed.definedSymbols.length > 0 || indexed.importPaths.length > 0 || indexed.wikilinks.length > 0;
+
+            if (hasGraphData) {
+              const fileExistingSymbols = (file as ParseTask & { _existingSymbols?: Map<string, string> })._existingSymbols ?? new Map<string, string>();
+              const reusedSymbolIds = new Set<string>();
+
+              for (const [ci] of indexed.chunks.entries()) {
+                const chunkId = allChunkIds[chunkIdx + ci];
+                const metadataObj = (indexed.chunks[ci].metadata ?? {}) as Record<string, unknown>;
+                const symbolName = (metadataObj.symbolName as string | undefined) ?? indexed.chunks[ci].symbolName;
+                if (symbolName) {
+                  const fileSymbolKey = `${file.relativePath}\0${symbolName}`;
+                  let symbolNodeId = symbolNodeIdsByFileAndName.get(fileSymbolKey);
+
+                  if (!symbolNodeId) {
+                    const existingSymbolId = fileExistingSymbols.get(symbolName);
+                    if (existingSymbolId) {
+                      repo.updateSymbolNode(existingSymbolId, chunkId, JSON.stringify({ symbolType: indexed.chunks[ci].symbolType, filePath: file.relativePath }));
+                      symbolNodeId = existingSymbolId;
+                    } else {
+                      // Stream symbol node immediately — no pending placeholder
+                      symbolNodeId = crypto.randomUUID();
+                      repo.streamGraphNode({
+                        id: symbolNodeId,
+                        type: "symbol",
+                        label: symbolName,
+                        refId: chunkId,
+                        metadata: JSON.stringify({ symbolType: indexed.chunks[ci].symbolType, filePath: file.relativePath })
+                      });
+                    }
+                    symbolNodeIdsByFileAndName.set(fileSymbolKey, symbolNodeId);
+                  }
+
+                  reusedSymbolIds.add(symbolNodeId);
+                  streamEdge(fileNodeId, symbolNodeId, "defines");
+                }
+              }
+
+              // Stale symbol cleanup
+              const staleSymbolIds: string[] = [];
+              for (const symbolId of fileExistingSymbols.values()) {
+                if (!reusedSymbolIds.has(symbolId)) staleSymbolIds.push(symbolId);
+              }
+              if (staleSymbolIds.length > 0) repo.deleteGraphNodesByIds(staleSymbolIds);
+
+              // Imports — stream edges directly
+              for (const importPath of indexed.importPaths) {
+                if (typeof importPath !== "string" || importPath.length === 0) continue;
+                const resolvedImportPath = workspaceFileResolver?.resolveImport(file.relativePath, importPath, indexed.language ?? undefined);
+                if (!resolvedImportPath) continue;
+                const targetNodeId = await repo.upsertGraphNode({ type: "file", label: resolvedImportPath, metadata: JSON.stringify({ path: resolvedImportPath }) });
+                streamEdge(fileNodeId, targetNodeId, "imports", JSON.stringify({ importPath }));
+              }
+
+              // Wikilinks — stream edges directly
+              for (const link of indexed.wikilinks) {
+                const entityNodeId = await repo.upsertGraphNode({ type: "entity", label: link, metadata: "{}" });
+                streamEdge(fileNodeId, entityNodeId, "mentions");
+              }
+            }
+
+            chunkIdx += indexed.chunks.length;
+          }
+          }
+
+          if (embeddingProvider) {
+            chunkIdx = 0;
+            for (const file of batchParseTasks) {
+              const indexed = parseResults.get(file.id)!;
+              allChunkRowsForEmbeddings.push(...indexed.chunks.map((_, i) => ({
+                id: allChunkIds[chunkIdx + i],
+                content: indexed.chunks[i].content,
+                path: file.relativePath,
+                heading: indexed.chunks[i].heading
+              })));
+              chunkIdx += indexed.chunks.length;
+            }
+          }
+
+
+          // ── Stats ──
+          for (const file of batchParseTasks) {
+            chunksWritten += parseResults.get(file.id)!.chunks.length;
+            filesUpdated += 1;
+          }
+
+          // Progress
+          const overall = batchStart + batchParseTasks.length;
+          const progress = Math.min(95, 50 + Math.round((overall / Math.max(filesToRead.length, 1)) * 45));
+          await reportProgress(`Writing ${overall}/${filesToRead.length}...`, progress);
+        });
+
+        symbolNodeIdsByFileAndName.clear();
+      }
+
+      // Pipelined loop: parse batch N+1 while writing batch N
+      let prevParsePromise: Promise<Map<string, ParseResult>> | null = null;
+      let prevBatchTasks: ParseTask[] | null = null;
+      let prevBatchStart = 0;
+
+      for (let batchStart = 0; batchStart < filesToRead.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, filesToRead.length);
+        const batchFiles = filesToRead.slice(batchStart, batchEnd);
+
+        // Read + hash current batch (overlaps with previous batch's parse)
+        const currentTasks = await readAndHashBatch(batchFiles);
+
+        // Wait for previous batch's parse to finish, then write it
+        if (prevParsePromise !== null) {
+          const prevResults = await prevParsePromise;
+          await writeBatch(prevBatchTasks!, prevResults, prevBatchStart);
+          prevResults.clear();
+          prevBatchTasks = null;
+        }
+
+        // Start parsing current batch (will overlap with next batch's read)
+        if (currentTasks.length > 0) {
+          const batchProgress = (done: number, total: number) => {
+            const overall = batchStart + Math.round((done / total) * (batchEnd - batchStart));
+            reportProgress(`Parsing ${overall}/${filesToRead.length} files...`, Math.min(50, 10 + Math.round((overall / Math.max(filesToRead.length, 1)) * 40)));
+          };
+          // Use workers for all batches >= 50 files (parallel parsing)
+          if (currentTasks.length >= 50 && cpuCount >= 2) {
+            prevParsePromise = pool.parseBatch(currentTasks, batchProgress);
+          } else {
+            prevParsePromise = parseInline(currentTasks, batchProgress);
+          }
+          prevBatchTasks = currentTasks;
+          prevBatchStart = batchStart;
+        }
+      }
+
+      // Write the last batch
+      if (prevParsePromise !== null) {
+        const prevResults = await prevParsePromise;
+        await writeBatch(prevBatchTasks!, prevResults, prevBatchStart);
+        prevResults.clear();
+      }
+
+      pool.terminate();
+    }
 
     // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
     if (allChunkRowsForEmbeddings.length > 0) {
       embeddingsWritten += await writeEmbeddingsToRepo(repo, allChunkRowsForEmbeddings, embeddingProvider);
     }
 
-    // ── Phase 5: Restore FTS triggers (no backfill needed — we inserted inline) ──
     if (bulkWriteMode) {
-      if (pendingFtsRows.length === 0) {
-        repo.restoreFtsTriggers();
-      } else {
-        repo.restoreFtsTriggersOnly();
-      }
+      repo.restoreFtsTriggers();
       repo.setOptimizedWriteMode(false);
       bulkWriteMode = false;
     }
 
-    // ── Phase 6: Batch call-edge resolution ──
-    if (pendingCallEdges.length > 0) {
-      const globalSymbolNodes = await repo.loadAllSymbolNodes();
-      const insertedCallEdges = new Set<string>();
-      const callEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; weight: number; metadata: string }> = [];
-      for (const callExpression of pendingCallEdges) {
-        const callerNodeId = symbolNodeIdsByFileAndName.get(`${callExpression.filePath}\0${callExpression.callerName}`);
-        const sameFileCallee = symbolNodeIdsByFileAndName.get(`${callExpression.filePath}\0${callExpression.calleeName}`);
-        const calleeNodeId = sameFileCallee ?? globalSymbolNodes.get(callExpression.calleeName);
-        if (!callerNodeId || !calleeNodeId || callerNodeId === calleeNodeId) continue;
-
-        const edgeKey = `${callerNodeId}:${calleeNodeId}:calls`;
-        if (insertedCallEdges.has(edgeKey)) continue;
-        insertedCallEdges.add(edgeKey);
-
-        callEdges.push({
-          fromNodeId: callerNodeId,
-          toNodeId: calleeNodeId,
-          type: "calls",
-          weight: 0.35,
-          metadata: JSON.stringify({ heuristic: true, callee: callExpression.calleeName })
-        });
-      }
-      await repo.transaction(async () => {
-        await repo.insertEdges(callEdges);
-      });
-    }
+    // ── Phase 6: Call-edge resolution skipped during index — resolve lazily on first query ──
 
     repo.setOptimizedWriteMode(false);
 

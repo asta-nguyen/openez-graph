@@ -103,6 +103,16 @@ export interface WorkspaceRepository {
     mtimeMs: number;
   }): Promise<string>;
 
+  insertDocumentsBatch(inputs: Array<{
+    path: string;
+    absolutePath: string;
+    kind: string;
+    language?: string | null;
+    contentHash: string;
+    sizeBytes: number;
+    mtimeMs: number;
+  }>): Promise<string[]>;
+
   updateDocument(
     id: string,
     updates: Partial<{
@@ -284,6 +294,9 @@ export interface WorkspaceRepository {
   /** Toggle fast-write pragmas (synchronous=OFF, big cache, mmap). Call before/after bulk indexing. */
   setOptimizedWriteMode(enabled: boolean): void;
 
+  /** Checkpoint WAL to bound file growth during long indexing runs. */
+  walCheckpoint(): void;
+
   /** Drop FTS triggers so chunk INSERTs don't fire per-row trigger subqueries. */
   dropFtsTriggers(): void;
   /** Bulk insert FTS rows without triggers (used during optimized write phase). */
@@ -292,6 +305,14 @@ export interface WorkspaceRepository {
   restoreFtsTriggers(): void;
   /** Recreate FTS triggers only (no backfill — use when FTS rows were inserted inline). */
   restoreFtsTriggersOnly(): void;
+
+  // ── Streaming inserts — cached prepared statements, no dynamic SQL ──
+  streamDocument(input: { id: string; path: string; absolutePath: string; kind: string; language?: string | null; contentHash: string; sizeBytes: number; mtimeMs: number }): void;
+  streamChunk(input: { id: string; documentId: string; chunkIndex: number; heading: string | null; content: string; tokenCount: number; contentHash: string; metadata: string }): void;
+  streamGraphNode(input: { id: string; type: string; label: string; refId?: string | null; metadata?: string }): void;
+  streamEdge(input: { id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }): void;
+  streamFtsRow(input: { chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }): void;
+  refreshStreamTimestamp(): void;
 
   /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
   loadAllSymbolNodes(): Promise<Map<string, string>>;
