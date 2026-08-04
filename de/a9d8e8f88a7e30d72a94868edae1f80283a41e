@@ -1,0 +1,379 @@
+landing/src/app/layout.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 92
+tests/web-index-endpoint.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 68-70
+tests/go-rust-indexer.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 45,65-67,69-75,101,180-185
+documents/backlogs/sigma.md
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 14,24,30,38,69,78,86,96,105,117
+landing/src/app/components/particle-text.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 72,141,962,1043-1049,1057,1163,1212
+landing/src/app/components/interactive-graph.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 29-31,51-52,99-103,183-188,227,275-279,293,400-401,423-424
+packages/db/src/sqlite/repository.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 73-76,88-92,113,134,136-144,165,170-209,220-222,238-241,250-253,267,289,293-296,310,314,318-320,322,328-331,334,339,348,356-358,368-370,375-377,396-407,414-437,447-449,481,484-488,502-504,508-513,520-528,535-543,547-549,567,570-574,580-582,596-598,604-606,614-616,635-637,644-652,656-664,680,683-687,695-697,703-712,715-724,756,761-780,797,809-811,818-825,827-832,839-841,859-871,876-878,887-890,896-898,907-909,919-921,929-952,962-974,1088,1103,1118,1130,1143,1151-1154,1171-1187,1195,1197-1199
+  s_a712b4c1af1c9e::t_d8ac5687e6be87 9
+  s_a712b4c1af1c9e::t_be60004e61a376 217-219,232-234,236-237,243-244,249,254-255,265-266
+  s_7318f09e541c4d::t_098d49c32a562d 342-347
+  s_a712b4c1af1c9e::t_0eff04b4632e95 223-231,235,242,256-264
+  s_7318f09e541c4d::t_885ef90c9d7c9a 245-248
+packages/ui/src/components/ui/separator.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1,3-4,6,21,25,28
+README.md
+  s_a712b4c1af1c9e::t_bb3fd35c8a11be 68-70
+  s_a712b4c1af1c9e::t_c9f0cfc6ef9cea 80-81
+  s_a712b4c1af1c9e::t_946955c67e0ea5 108-112,114,116-127,136-140
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 44-52,99-100,102,128-135
+  s_a712b4c1af1c9e::t_be3e6ec7ba4bb3 101,103-104,106
+  s_a712b4c1af1c9e::t_39ebe3a1d0b587 97-98,105,107
+  s_a712b4c1af1c9e::t_776f883f9bc3e2 113,115
+apps/cli/src/setup-claude.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 53
+.windsurf/skills/release-cli/SKILL.md
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 40,51,89,110-114
+packages/db/src/sqlite/index.ts
+  s_a712b4c1af1c9e::t_3ee01fc44e44a7 4
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 10,12-18
+apps/web/src/lib/queries.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 29,35-38,51
+  s_a712b4c1af1c9e::t_f1e576274a9c97 42-47
+.env.example
+  s_a712b4c1af1c9e::t_e24e31c8232e67 22
+  s_a712b4c1af1c9e::t_7d61f6b4aa444d 5-6,8-14
+  s_a712b4c1af1c9e::t_d450de9e13d6ef 7
+landing/tsconfig.json
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 4,18,30-31
+packages/db/src/sqlite/workspace-db.ts
+  s_7318f09e541c4d::t_472edcbd44d493 51,64-78,194-195,199-202
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 118-120,178-180,196-198,303
+  s_7bdd3876b643a8::t_12f748bb32bff9 239
+  s_a712b4c1af1c9e::t_a48810270aac41 203-205
+apps/web/src/components/sidebar.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 129
+packages/ui/src/components/ui/sidebar.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1-22,25-32,34,37,39,42,54-56,58-59,63-64,67,69,71,75,77-78,82-83,88-90,92,94-96,100,112-113,128,135,147-149,151,159,165,191,212,224,237,240-241,251-252,259,263,280,284,293,297,300,308,319,330,333,341,351,355,366,374,382,386,394,402,406,409,417,428,439,461-462,473-475,477-478,489,492,498,511,520-521,523,533,537,540,547,551,559,563-564,573,584,594,598,601,609,619-621,623,633,637,665
+apps/web/src/routes/index.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 7-18,33-44,57-59,61-63,69-71,75-77,81-83,87-89,93-96,108-127,153-155,228-230,234-236,240-242,246-248,252-253,269-271,274-276
+tests/embed-benchmark.test.ts
+  s_7318f09e541c4d::t_9e70d9dd4102a0 1,147,171,241
+  s_a712b4c1af1c9e::t_b30982360440da 153-158,163-166,180-184,195-200
+  s_a712b4c1af1c9e::t_43b5754e177c8f 10,14,100
+  s_a712b4c1af1c9e::t_9ad38d7f61f340 205-240,242-306
+  s_a712b4c1af1c9e::t_66094316a34246 2-3,5-9,11-13,131-146,148-152,159-162,167-170,172-179,185-194,201-204,307
+  s_a712b4c1af1c9e::t_197e18efb6279c 4
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 15-99,101-130
+packages/ui/src/components/ui/sheet.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1,3-4,6-8,11,14-15,18-19,22-23,35,39,49-50,60,67,75,85,95,98,102,105,118,130
+packages/ui/src/hooks/use-mobile.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1,3,6,9,11-16,18
+.husky/pre-commit
+  s_a712b4c1af1c9e::t_298a5843867df0 1
+apps/web/src/server/sqlite.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 141,287,309-311,364,369-371,376-378,401-405,421-423,425-435,453,458-497,500-502,522,528-547,560,565-567,608,629,632,636-637,643-644,651,664,680,684-688,695-698,701-702,711,731-733,747,757,763-767,789,796-798,814,824,855-857,862-864,866-868,871-873,904-910,956,963-964
+packages/ui/src/components/label.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 9-12,15,19
+packages/db/src/sqlite/secure-storage.ts
+  s_a712b4c1af1c9e::t_aecec331ba53cd 1-68
+apps/cli/src/resolve-cli.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 36,47,56
+apps/web/src/routes/workspaces/index.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 8,24-29,45-46,119-121,125-127,131-133
+packages/config/src/types.ts
+  s_a712b4c1af1c9e::t_2a00bfc0d596fc 37
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 38,46-47
+packages/indexer/src/retrieval-eval.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 22-23,27-29,33,40-45,47-53,64,75-77
+packages/ui/src/components/code-block.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 9
+apps/web/src/routes/benchmark.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 29-40,44-67,73-75,77-79,84-87,105-116,123-125,129-136,163-165
+packages/core/src/memory.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 26,32,44-48
+tests/vector-search.test.ts
+  s_a712b4c1af1c9e::t_9ad38d7f61f340 146-155
+  s_7318f09e541c4d::t_8777924d1ed254 131,193-208
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 40,49,52-59,62-69,72-85,106,109-116,119-125,176-182,186-190
+  s_a712b4c1af1c9e::t_de2a24d77ffea6 33-35,38-39,41-47,51,60-61,91-105,107-108,117-118,126-130
+  s_7318f09e541c4d::t_6148d9e6afbd5a 133-145,156-172
+  s_a712b4c1af1c9e::t_ec0de99c6ad714 132
+tests/fixtures/retrieval-eval.json
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 2-13,16-19,21-44,46-61
+apps/web/src/components/graph/GraphClient.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 3,60,101,111-112,233-234,237-238,248,308,323,330,338,342,352,363,373,386
+tests/workspace-db.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 6,128-130,132-134,143-144,152-156,197,200-207,222,230-237,276-278
+packages/ui/src/lib/utils.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1-2,5-6
+packages/ui/src/components/ui/skeleton.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1,10,13
+apps/web/src/lib/theme.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 36
+packages/ui/src/components/button.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 29,33,38,40,44
+apps/web/src/routes/workspaces/new.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 4-12,16-22,60,77,81,123-125,218-220
+packages/ui/src/components/ui/button.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1-3,5,41-42,52,54,64,67
+packages/ui/src/components/table.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 10,14-19,22-27,30-39,47-48,52,54-68,71-80,83-88,91
+brain.config.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 30,67-69,73,81-82
+  s_a712b4c1af1c9e::t_2e3987eaedd28c 72
+  s_7318f09e541c4d::t_753a146035e6ef 78
+apps/web/src/main.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 36
+apps/web/src/lib/api.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 149-155,183-190,195-196,230-236,245-254
+  s_a712b4c1af1c9e::t_9361f5e114a2a0 244,255-258
+  s_a712b4c1af1c9e::t_8449a100fae51b 170-179
+apps/web/src/lib/pagination.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 8
+apps/web/src/routes/query.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 5-19,34-46,53-62,119-124,128-132,136-138,140-142,152-154,163-165,180-182,195-199,203-205,217-219,222-224,231-233,239-245,247-249,251-253
+landing/src/app/opengraph-image.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 13,18,42-51,55-68,72-77,85-88,105-108,111-122,125-130,132,134-145,147-171,173-181,183-221,225-228,230-248,250-261,264-267,269-295,297,302-303,309-310,313-314,316-318,320-322,325-347,349,353-355,360-372,375-379,381-401,403-407,410-415,417-427,429-430,432-433,436-469,472
+apps/web/src/routes/changelog.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 118-124,136-139,145-158
+landing/src/app/components/typewriter.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 61
+apps/cli/src/setup-opencode.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 53
+tests/chunking.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 12,25
+apps/web/src/components/status-badge.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 14-18
+landing/next-env.d.ts
+  s_bd17fc46d0a461::t_70155c66d133fb 3
+documents/backlogs/embedding-review.md
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 72
+packages/ui/src/components/card.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 6-9,32
+apps/web/src/routes/workspaces/$workspaceId/index.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 41,44,52-53,57,68,95,97,149,191,200-201,236,241-242,245-246,249,269,281,299,324,358-360,364-366,370-372,376-378,398-400,418,456,493-494
+landing/src/app/components/dashboard-preview.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 116-117,229
+apps/web/src/routes/settings.tsx
+  s_a712b4c1af1c9e::t_3d8becf73fa099 114
+  s_a712b4c1af1c9e::t_1b2145178ebb7f 2-5
+  s_a712b4c1af1c9e::t_4d529a14e95edc 105-113,115-137,142-144,147-160,162-174,178-217,219-247,264-267,275-278
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 6-17,80-88,93-95,97-99,138-141,145-146,161,175-177,255-257,261-263,270-272,284-286,288-307
+  s_a712b4c1af1c9e::t_56702af9226ca6 218
+  s_a712b4c1af1c9e::t_88bb36c47a2862 268-269
+tests/index-workspace.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 8-13,41-44,54-58,62-73,80,97-100,109-113,120-123,127-131,138-142,149-152,161,172,180-183,187-191,198-202,208-211,229-232,235,247,263-266,269-271
+  s_a712b4c1af1c9e::t_2a5e5264536e06 52
+.prettierignore
+  s_a712b4c1af1c9e::t_43ac590b61a338 1-9,11
+  s_a712b4c1af1c9e::t_076534374fe7fc 10
+packages/ui/src/components/textarea.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 10,17
+landing/src/app/components/animated-counter.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 33,41-42
+packages/db/src/sqlite/database-loader.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 19-22,39,52,69
+packages/ui/src/index.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 16
+packages/db/src/sqlite/types.ts
+  s_a712b4c1af1c9e::t_8d6caf0e574605 224
+  s_a712b4c1af1c9e::t_cb978a8720d073 73-75,77
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 56-70,134,138-178,189-196,208-211,225-230,233-237,259-267,271-280,284-296,298-302,327,330-337
+  s_7318f09e541c4d::t_cb8c20f5f1edce 76
+tests/retrieval-eval.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 3-7,13
+tests/config-indexer.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 19
+apps/web/src/components/graph/WorkspaceGraph.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 86,177-180,195,200,205,214-216,353,394,503,640-644
+packages/ui/src/components/input.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 7-19,22
+packages/indexer/src/scanner.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 12,36,79-84,88-91,100,110,112
+packages/ui/package.json
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 31
+apps/cli/README.md
+  s_a712b4c1af1c9e::t_a81ae076399f41 115,119,121-122,124
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 81-89,104-105,107-111,117-118,120,142
+  s_a712b4c1af1c9e::t_1beb9dc01918c3 72-74,77-78,116,123,126,128,130-131,133
+  s_a712b4c1af1c9e::t_043c51a06cfd75 127,129
+packages/core/src/retrieval.ts
+  s_a712b4c1af1c9e::t_37884930cc8ea3 265-266
+  s_a712b4c1af1c9e::t_2eae6f5def48a5 95,111-115
+  s_a712b4c1af1c9e::t_d950a08aa6288a 94,296,303,307
+  s_a712b4c1af1c9e::t_d68556ac688ed2 67,109
+  s_7318f09e541c4d::t_4110e79dde6946 268,290
+  s_a712b4c1af1c9e::t_37419b6e7318bd 119-130,134-135,146
+  s_a712b4c1af1c9e::t_b7bfd8061638dd 138
+  s_a712b4c1af1c9e::t_10814de8e94b90 65-66,68-71,97-105,107-108
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 29,76,91,106,131-133,137,148,164,210,214-228,252-254,257,267,276,280-289,291,315-321,325-328,336,347,357-360
+  s_a712b4c1af1c9e::t_45204590bf048a 145,147,149,153-157
+  s_a712b4c1af1c9e::t_909e190a950c2b 261
+  s_a712b4c1af1c9e::t_ee59369096cd23 139-144,150-152,259
+apps/cli/src/setup-devin.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 52
+tests/e2e-search.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 6-11,55,67,88-89,220,227,239-246
+tests/python-indexer.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 25-36,40-45,70-80,131,135,139,143,147-148,151-161
+tests/mcp-tools.test.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 12-17,41-44,47-54,78-80,82,112-117,134-146,150-158,160-162,179-184,204-209,211-216,221-223
+CHANGELOG.md
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 11,18,23,31,40,47,56,63,68,76,80,89,95
+tests/hybrid-retrieval.test.ts
+  s_7318f09e541c4d::t_7b3d3e946475d8 118-134,136-154,164,171-173
+  s_7318f09e541c4d::t_59354aaab945ac 135
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 10,14-16,22-27,53,64,66-76,85,87-106,108-116
+  s_a712b4c1af1c9e::t_9ad38d7f61f340 155-163,165-170
+  s_a712b4c1af1c9e::t_3566cbcdd094f8 17
+  s_a712b4c1af1c9e::t_9346bfa5c96007 117
+package.json
+  s_a712b4c1af1c9e::t_b24f48c348428a 60-62
+  s_a712b4c1af1c9e::t_de948add3412ab 27-28
+  s_a712b4c1af1c9e::t_a789af453b7e32 36-38
+  s_a712b4c1af1c9e::t_74715003f9a196 25-26
+packages/indexer/src/index-workspace.ts
+  s_7bdd3876b643a8::t_d5c976de8f21d2 403,405-406,461,465
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 12,18,30-40,49,53-56,64-66,103-106,135-139,150,177,208-212,222,240,251,265,270-275,285,299,313,327,339-340,350,361-362,373,380,393,404,433,437-439,446-448,466-467,473-475,497,506,530,542-544,566,570-572,588-589,602-605,638-641,645,662,674,681-684,697,699,714-719,725-728,740-744,751,762,774-775,786-787,794,798-803,811-812,825-826,836-837,863-867,872,875-880,887,903-905,911,922-925,941-947,949-954,967,980,1000,1004-1008,1019,1025,1037
+  s_a712b4c1af1c9e::t_3f22373b77b0f8 407-418,420-423,428-429
+  s_a712b4c1af1c9e::t_4a68a63e076eae 424-425,431-432,434-435,440-442,444,449-450,452-453,455-457,459-460,462-464,468-471,476,478
+  s_a712b4c1af1c9e::t_0ce73541f8ea60 548
+  s_7318f09e541c4d::t_8678d3da62ec24 383,426,436,445,454,472,479,595,691,701-702,921,926-927,981-984,1038
+  s_7318f09e541c4d::t_036423cf04eac1 386-392,395-396,398,402
+  s_7318f09e541c4d::t_003ce8031c8810 400
+  s_7318f09e541c4d::t_e5f8bf5611a290 399
+  s_7318f09e541c4d::t_963f3da47fc02e 401
+  s_a712b4c1af1c9e::t_ffdba483ad94d9 430
+packages/db/src/sqlite-index.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 9,11-17
+packages/ui/src/components/select.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 11,17
+apps/web/src/server/index.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 48,62,107-108,113,215,288,291,340-341,351-357,371-376,392-394,575-576,625-631,675-679,688,693-702
+  s_a712b4c1af1c9e::t_7a1d0824581c30 525-570,573
+packages/config/src/env.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 47
+packages/db/src/sqlite/schema.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 34,67
+  s_a712b4c1af1c9e::t_45c1c16ae2b324 37-44
+  s_7318f09e541c4d::t_cb8c20f5f1edce 98
+packages/core/src/rrf.ts
+  s_7318f09e541c4d::t_991a7b5f2c8e9b 10,16,21
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 9,23
+apps/cli/src/setup-windsurf.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 52
+packages/core/src/embeddings.ts
+  s_7bdd3876b643a8::t_fb3845b9d013a3 106-109,111
+  s_7bdd3876b643a8::t_50f0db8b2a6c0c 10-23,25,27-29,31-41,43-50
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 24,26,30,42,64,66-77,110,136,143,145,185,187-188,203,208
+  s_a712b4c1af1c9e::t_806b807bbdf31c 78,81-88
+  s_a712b4c1af1c9e::t_84ed1999789938 129-133,135,142,146,150
+  s_a712b4c1af1c9e::t_f56a0371d6ceda 134,147-149
+  s_a712b4c1af1c9e::t_1ab49e8a5f0d71 207
+  s_7bdd3876b643a8::t_763e5543de8059 137-141,144
+  s_a712b4c1af1c9e::t_3b78a0acd5c24f 5
+  s_a712b4c1af1c9e::t_f73735a462b5f9 156-165,167-184,186,189-193,195,199,201-202
+  s_a712b4c1af1c9e::t_a083b474964481 79-80
+apps/web/src/routes/memories.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 28,63,126,271-274,346-349,380
+landing/src/app/components/github-stars.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 64
+apps/web/src/routes/workspaces/$workspaceId/graph.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 5-6,12-13,21
+landing/src/app/components/footer.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 7-9
+packages/ui/src/components/tooltip.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 56-61,63-68,101
+packages/db/src/sqlite/registry-db.ts
+  s_a712b4c1af1c9e::t_eb77abd3ca386f 87-92
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 19,53
+apps/mcp/src/mcp-core.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 10,14-27,39,50,63,72,82,88,141,168-170,174,186-188,192-196,200-204,218-221,228,240-242,248-251,279-280,286-287,293-296,307-310,314-315,341-343,363-365,369-371,382-383,387-388,392-396,398-402,406-411,413-414,418-419,423-434,436-437,441-442,446-459,461-462,470-475,477-478,482-483,487-497,499-500,507-515,539-541,550-551,555-590,596-599,602-607,611-626,643-645,664-666,681,683-700,727-729,738,783,801-803
+apps/web/src/routes/documents.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 22,52,82-84,89
+packages/config/src/load-brain-config.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 29-32,36,47,59,68,75,79-82,106
+packages/db/src/sqlite/local-workspace.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 24-26,37,40,42,62,70-72,95-97
+apps/cli/src/cli.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 7-9,11-12,50-52,62,89,121,139,159,162,301-302,319-321,359,389-391,413-415,424-426
+  s_a712b4c1af1c9e::t_9ad38d7f61f340 330
+  s_7318f09e541c4d::t_5d720c7ea5b28f 10
+  s_a712b4c1af1c9e::t_c7152b42b6441f 308-318,322-329,331-358,360-386
+packages/ui/src/components/ui/tooltip.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1,3-4,6,18,21-22,25-26,42,50,53
+apps/web/src/components/context-blocks.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 13-14,29-30,152-164
+packages/core/src/graph.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 8,17,42-46,86-90,93-95,97-109,113-114,117-120,158-167,174-182,187-190,193-202
+packages/ui/src/components/badge.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 12-15,22,26,32
+apps/cli/tsup.config.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 49,52,73
+landing/src/app/components/hero-graph.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 13-15,121,139
+packages/ui/src/components/ui/input.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 1,3,12,16,19
+apps/cli/src/setup-codex.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 54
+packages/indexer/src/languages.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 31,38,97-103,131-137,152-154,161,170-191,242-243,248-256,265-270,290-295,314-320,326-348,399-405,412-415,432-433,437,452-453,456,470,481-491,504-510,516-535,577-580,600-603,606-608,612-614,617,622-639,642-663,666-680,682-696,698-715,717-729,731-743,745-757,759-762,772-777,790-796,837-838,903-904,941-942,992-994,1069,1072-1073,1090-1093,1101-1104,1116-1117,1121-1127
+.prettierrc
+  s_a712b4c1af1c9e::t_b4901274dc582f 1-10
+packages/indexer/src/markdown.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 58-64,83,123-124,131
+packages/indexer/src/types.ts
+  s_7318f09e541c4d::t_003ce8031c8810 32
+landing/src/app/page.tsx
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 116-118,132-135,140-148,162-165,202-211,213-227,229-238,240-245,247-269,275-277,280-283,288-290,349-350,407-408,436-437,493,516-517,570,590-591,608-611,627-638,644,673-674,690-691,707-708
+documents/backlogs/TREE_SITTER_UPGRADE_GUIDE.md
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 160,207-208,215,221
+BENCHMARK.md
+  s_a712b4c1af1c9e::t_5064501d60b209 3,8,12-13,35-38,45,49,57-58,60,64-66
+  s_a712b4c1af1c9e::t_591d0f0ab982bd 40,46-47
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 33-34,42-44,71-82
+  s_a712b4c1af1c9e::t_ad8272a57111f7 17,20,26,28,31,39,41,48,62,68-70,89
+  s_a712b4c1af1c9e::t_e2792ac5092d69 9,11,23,27,51-56,67,90
+packages/indexer/src/code.ts
+  s_a712b4c1af1c9e::t_62acdf0c9dab3e 11,17-27,35-36,39-42,52-57,72-73,81,89,97,105,118-119,127,143-144,173-174,193
+pnpm-lock.yaml
+  s_a712b4c1af1c9e::t_eb4ee8ed59004e 50-58,70,119,219,234,252,3319-3323,3571-3575,3989-3992,4383-4386,4502-4505,4873-4877,6657,6674,6828,6836,6848,6855,7639-7640,7804-7811,8391-8392,8403,8410,8918-8919,9036-9037,9094,9105,9251,9257,9272,9286,9288,9302,9304,9308,9326-9327,9389-9391
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "dea9d8e8f88a7e30d72a94868edae1f80283a41e",
+  "prompts": {},
+  "sessions": {
+    "s_7318f09e541c4d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fc177-75ad-7c32-b24a-6229d5e07cc0",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_7bdd3876b643a8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ses_032b083a6ffeDXXA6x2FEv3Sql",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_a712b4c1af1c9e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "8c8b45d3-8d74-48ce-8f96-4d97c9cfb3d7",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_bd17fc46d0a461": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fascinated-femur",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
