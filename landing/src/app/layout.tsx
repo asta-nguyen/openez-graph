@@ -41,7 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
       url: baseUrl,
       images: [
         {
-          url: "/og-animated",
+          url: "/og.png",
           width: 1200,
           height: 630,
           alt: "OpenEZ Graph — Durable context for coding agents",
@@ -58,7 +58,7 @@ export async function generateMetadata(): Promise<Metadata> {
         "Ranked code retrieval, graph context, and durable project memory for Codex, Claude, OpenCode, Windsurf, and Devin.",
       images: [
         {
-          url: "/og-animated",
+          url: "/og.png",
           width: 1200,
           height: 630,
           alt: "OpenEZ Graph — Durable context for coding agents",
