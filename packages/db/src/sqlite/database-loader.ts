@@ -1,5 +1,3 @@
-import path from "node:path";
-import fs from "node:fs";
 import module from "node:module";
 
 declare const __non_webpack_require__: typeof require | undefined;
@@ -12,15 +10,12 @@ function getRequireUrl(): string {
   } catch {
     // import.meta not available (CJS)
   }
-  // CJS fallback
   return `file://${__filename}`;
 }
 
 const _require: typeof require = typeof __non_webpack_require__ === "function"
   ? __non_webpack_require__
   : module.createRequire(getRequireUrl());
-
-let resolvedAddon: string | null | undefined;
 
 interface NativeDatabase {
   pragma(command: string): unknown;
@@ -31,42 +26,13 @@ interface NativeDatabase {
     run(...params: unknown[]): unknown;
   };
   transaction<T>(fn: () => T): () => T;
-}
-
-type NativeDatabaseConstructor = new (
-  filename: string,
-  options?: { nativeBinding?: string }
-) => NativeDatabase;
-
-function tryResolveAddon(): string | null {
-  if (resolvedAddon !== undefined) return resolvedAddon;
-
-  try {
-    const betterSqlite3Main = _require.resolve("better-sqlite3");
-    const addonPath = path.resolve(
-      path.dirname(betterSqlite3Main),
-      "..",
-      "build",
-      "Release",
-      "better_sqlite3.node"
-    );
-    if (fs.existsSync(addonPath)) {
-      resolvedAddon = addonPath;
-      return addonPath;
-    }
-  } catch {
-    // fall through
-  }
-
-  resolvedAddon = null;
-  return null;
+  close(): void;
 }
 
 export function createNativeDatabase(dbPath: string): NativeDatabase {
-  const DatabaseConstructor = _require("better-sqlite3") as NativeDatabaseConstructor;
-  const nativeBinding = tryResolveAddon();
-  return new DatabaseConstructor(
-    dbPath,
-    nativeBinding ? { nativeBinding } : {}
-  );
+  const { Database } = _require("bun:sqlite");
+  const db = new Database(dbPath, { create: true });
+  // Add .pragma() shim — bun:sqlite doesn't have it natively
+  (db as any).pragma = (cmd: string) => db.exec(`PRAGMA ${cmd}`);
+  return db as unknown as NativeDatabase;
 }

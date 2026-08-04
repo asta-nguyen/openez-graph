@@ -299,6 +299,9 @@ export interface WorkspaceRepository {
 
   /** Drop FTS triggers so chunk INSERTs don't fire per-row trigger subqueries. */
   dropFtsTriggers(): void;
+  dropNonUniqueIndexes(): void;
+  restoreNonUniqueIndexes(): void;
+  ensureGraphBuilt(): void;
   /** Bulk insert FTS rows without triggers (used during optimized write phase). */
   insertFtsBatch(rows: Array<{ chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }>): void;
   /** Recreate FTS triggers and backfill any missing FTS rows. */
@@ -309,7 +312,10 @@ export interface WorkspaceRepository {
   // ── Streaming inserts — cached prepared statements, no dynamic SQL ──
   streamDocument(input: { id: string; path: string; absolutePath: string; kind: string; language?: string | null; contentHash: string; sizeBytes: number; mtimeMs: number }): void;
   streamChunk(input: { id: string; documentId: string; chunkIndex: number; heading: string | null; content: string; tokenCount: number; contentHash: string; metadata: string }): void;
+  streamChunksBatch(inputs: Array<{ id: string; documentId: string; chunkIndex: number; heading: string | null; content: string; tokenCount: number; contentHash: string; metadata: string }>): void;
   streamGraphNode(input: { id: string; type: string; label: string; refId?: string | null; metadata?: string }): void;
+  streamGraphNodesBatch(inputs: Array<{ id: string; type: string; label: string; refId?: string | null; metadata?: string }>): void;
+  streamEdgesBatch(inputs: Array<{ id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }>): void;
   streamEdge(input: { id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }): void;
   streamFtsRow(input: { chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }): void;
   refreshStreamTimestamp(): void;

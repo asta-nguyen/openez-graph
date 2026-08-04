@@ -4,10 +4,35 @@ import path from "node:path";
 
 import { eq } from "drizzle-orm";
 
-import { getRegistryDb } from "./registry-db";
+import { getRegistryDb, getRegistryNativeDb } from "./registry-db";
 import * as schema from "./schema";
 import type { RegistryRepository, RegistryWorkspace, WorkspaceRepository } from "./types";
-import { getWorkspaceDb } from "./workspace-db";
+import { getWorkspaceDb, getWorkspaceNativeDb } from "./workspace-db";
+
+const RESOLVABLE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".md", ".mdx", ".py"];
+
+function resolveImportPath(importerPath: string, importPath: string, language: string, knownPaths: Set<string>): string | null {
+  if (language === "python") {
+    const basePath = importPath.replace(/\./g, "/");
+    const direct = `${basePath}.py`;
+    if (knownPaths.has(direct)) return direct;
+    const init = `${basePath}/__init__.py`;
+    if (knownPaths.has(init)) return init;
+    return null;
+  }
+  const importerDir = path.dirname(importerPath);
+  const baseCandidate = path.posix.normalize(path.posix.join(importerDir, importPath));
+  if (knownPaths.has(baseCandidate)) return baseCandidate;
+  for (const ext of RESOLVABLE_EXTENSIONS) {
+    const withExt = `${baseCandidate}${ext}`;
+    if (knownPaths.has(withExt)) return withExt;
+  }
+  for (const ext of RESOLVABLE_EXTENSIONS) {
+    const indexFile = `${baseCandidate}/index${ext}`;
+    if (knownPaths.has(indexFile)) return indexFile;
+  }
+  return null;
+}
 
 interface NativeDatabase {
   pragma(command: string): unknown;
@@ -17,10 +42,6 @@ interface NativeDatabase {
     get(...params: unknown[]): unknown;
     run(...params: unknown[]): unknown;
   };
-}
-
-function getNativeDb(db: ReturnType<typeof getRegistryDb>): NativeDatabase {
-  return (db as unknown as { $client: NativeDatabase }).$client;
 }
 
 function normalizeRootPath(rootPath: string): string {
@@ -47,7 +68,7 @@ function displayNameForSuffix(baseName: string, suffix: number): string {
 
 export function createRegistryRepository(): RegistryRepository {
   const db = getRegistryDb();
-  const native = getNativeDb(db);
+  const native = getRegistryNativeDb();
 
   return {
     async listWorkspaces(): Promise<RegistryWorkspace[]> {
@@ -62,15 +83,11 @@ export function createRegistryRepository(): RegistryRepository {
 
     async getWorkspaceByPath(rootPath: string): Promise<RegistryWorkspace | null> {
       const normalizedRootPath = normalizeRootPath(rootPath);
-      const row = db
-        .select()
-        .from(schema.workspaces)
-        .where(eq(schema.workspaces.rootPath, normalizedRootPath))
-        .get();
+      const row = db.select().from(schema.workspaces).where(eq(schema.workspaces.rootPath, normalizedRootPath)).get();
       if (row) return mapWorkspaceRow(row);
 
-      const legacyRow = db.select().from(schema.workspaces).all()
-        .find((candidate) => normalizeRootPath(candidate.rootPath) === normalizedRootPath);
+      const allRows = db.select().from(schema.workspaces).all();
+      const legacyRow = allRows.find((candidate) => normalizeRootPath(candidate.rootPath) === normalizedRootPath);
       return legacyRow ? mapWorkspaceRow(legacyRow) : null;
     },
 
@@ -194,10 +211,9 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
   };
 }
 
-function getNativeWorkspaceDb(rootPath: string): { db: ReturnType<typeof getWorkspaceDb>; native: NativeDatabase } {
-  const db = getWorkspaceDb(rootPath);
-  const native = (db as unknown as { $client: NativeDatabase }).$client;
-  return { db, native };
+function getNativeWorkspaceDb(rootPath: string): { native: NativeDatabase } {
+  const native = getWorkspaceNativeDb(rootPath);
+  return { native };
 }
 
 function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
@@ -229,7 +245,7 @@ function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
 }
 
 export function createWorkspaceRepository(rootPath: string): WorkspaceRepository {
-  const { db, native } = getNativeWorkspaceDb(rootPath);
+  const { native } = getNativeWorkspaceDb(rootPath);
 
   // ── Cached prepared statements (prepared once, reused thousands of times) ──
   const stmts = {
@@ -561,6 +577,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       const ftsQuery = sanitizeFtsQuery(query);
       if (!ftsQuery) return [];
 
+      this.ensureFtsReady();
+
       const rows = native
         .prepare(
           `SELECT
@@ -604,6 +622,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Graph Traversal ──
 
     async graphNeighbors(labelOrId: string, depth: number, limit = 50) {
+      this.ensureGraphBuilt();
       const seedNodes = native
         .prepare("SELECT * FROM graph_nodes WHERE id = ? OR label = ? ORDER BY id = ? DESC LIMIT 1")
         .all(labelOrId, labelOrId, labelOrId) as Array<Record<string, unknown>>;
@@ -772,17 +791,40 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         native.pragma("cache_size = -2000");
         native.pragma("temp_store = DEFAULT");
         native.pragma("mmap_size = 0");
+        native.pragma("wal_autocheckpoint = 1000");
       }
     },
 
     walCheckpoint(): void {
-      native.pragma("wal_checkpoint(PASSIVE)");
+      native.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     },
 
     dropFtsTriggers(): void {
       native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
       native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
       native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
+    },
+
+    dropNonUniqueIndexes(): void {
+      native.exec("DROP INDEX IF EXISTS idx_chunks_document_id");
+      native.exec("DROP INDEX IF EXISTS idx_chunks_content_hash");
+      native.exec("DROP INDEX IF EXISTS idx_graph_nodes_type");
+      native.exec("DROP INDEX IF EXISTS idx_graph_nodes_label");
+      native.exec("DROP INDEX IF EXISTS idx_graph_edges_from");
+      native.exec("DROP INDEX IF EXISTS idx_graph_edges_to");
+      native.exec("DROP INDEX IF EXISTS idx_graph_edges_type");
+      native.exec("DROP INDEX IF EXISTS idx_embeddings_chunk_id");
+    },
+
+    restoreNonUniqueIndexes(): void {
+      native.exec("CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)");
+      native.exec("CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash)");
+      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type)");
+      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label)");
+      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id)");
+      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id)");
+      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type)");
+      native.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
     },
 
     insertFtsBatch(rows: Array<{ chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }>): void {
@@ -809,9 +851,54 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       stmts.insertChunk.run(input.id, input.documentId, input.chunkIndex, input.heading, input.content, input.tokenCount, input.contentHash, input.metadata, now, now);
     },
 
+    streamChunksBatch(inputs: Array<{ id: string; documentId: string; chunkIndex: number; heading: string | null; content: string; tokenCount: number; contentHash: string; metadata: string }>): void {
+      if (inputs.length === 0) return;
+      const BATCH = 100;
+      const now = streamNow;
+      for (let i = 0; i < inputs.length; i += BATCH) {
+        const batch = inputs.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (const c of batch) {
+          params.push(c.id, c.documentId, c.chunkIndex, c.heading, c.content, c.tokenCount, c.contentHash, c.metadata, now, now);
+        }
+        native.prepare(`INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`).run(...params);
+      }
+    },
+
     streamGraphNode(input: { id: string; type: string; label: string; refId?: string | null; metadata?: string }): void {
       const now = streamNow;
       stmts.insertNode.run(input.id, input.type, input.label, input.refId ?? null, input.metadata ?? "{}", now, now);
+    },
+
+    streamGraphNodesBatch(inputs: Array<{ id: string; type: string; label: string; refId?: string | null; metadata?: string }>): void {
+      if (inputs.length === 0) return;
+      const BATCH = 500;
+      const now = streamNow;
+      for (let i = 0; i < inputs.length; i += BATCH) {
+        const batch = inputs.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (const n of batch) {
+          params.push(n.id, n.type, n.label, n.refId ?? null, n.metadata ?? "{}", now, now);
+        }
+        native.prepare(`INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders}`).run(...params);
+      }
+    },
+
+    streamEdgesBatch(inputs: Array<{ id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }>): void {
+      if (inputs.length === 0) return;
+      const BATCH = 500;
+      const now = streamNow;
+      for (let i = 0; i < inputs.length; i += BATCH) {
+        const batch = inputs.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (const e of batch) {
+          params.push(e.id, e.fromNodeId, e.toNodeId, e.type, e.weight ?? 1, e.metadata ?? "{}", now);
+        }
+        native.prepare(`INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders}`).run(...params);
+      }
     },
 
     streamEdge(input: { id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }): void {
@@ -837,18 +924,103 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     ensureFtsReady(): void {
       if (this.getMeta("fts_backfill_pending") !== "1") return;
-      native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
-      native.exec(`
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
-        SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''), coalesce(json_extract(c.metadata, '$.searchText'), ''), c.content
-        FROM chunks c
-        INNER JOIN documents d ON d.id = c.document_id
-        LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-        WHERE f.chunk_id IS NULL;
-      `);
-      restoreFtsTriggerDefinitions(native);
-      this.setMeta("fts_backfill_pending", "0");
+      native.exec("BEGIN IMMEDIATE");
+      try {
+        if (this.getMeta("fts_backfill_pending") !== "1") {
+          native.exec("COMMIT");
+          return;
+        }
+        native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
+        native.exec(`
+          INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+          SELECT c.id, d.path, coalesce(c.heading, ''),
+            coalesce(d.language, ''), coalesce(json_extract(c.metadata, '$.searchText'), ''), c.content
+          FROM chunks c
+          INNER JOIN documents d ON d.id = c.document_id
+          LEFT JOIN chunks_fts f ON f.chunk_id = c.id
+          WHERE f.chunk_id IS NULL;
+        `);
+        restoreFtsTriggerDefinitions(native);
+        this.setMeta("fts_backfill_pending", "0");
+        native.exec("COMMIT");
+      } catch (error) {
+        try { native.exec("ROLLBACK"); } catch {}
+        throw error;
+      }
+    },
+
+    ensureGraphBuilt(): void {
+      if (this.getMeta("graph_pending") !== "1") return;
+      native.exec("BEGIN IMMEDIATE");
+      try {
+        if (this.getMeta("graph_pending") !== "1") {
+          native.exec("COMMIT");
+          return;
+        }
+        native.exec("DELETE FROM graph_edges");
+        native.exec("DELETE FROM graph_nodes");
+        const now = new Date().toISOString();
+        native.exec(`INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at)
+          SELECT 'fn_' || d.id, 'file', d.path, d.id, json_object('path', d.path, 'kind', d.kind, 'language', coalesce(d.language, '')), '${now}', '${now}'
+          FROM documents d`);
+        native.exec(`INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at)
+          SELECT 'sn_' || c.id, 'symbol', json_extract(c.metadata, '$.symbolName'), c.id,
+            json_object('symbolType', json_extract(c.metadata, '$.symbolType'), 'filePath', d.path),
+            '${now}', '${now}'
+          FROM chunks c
+          INNER JOIN documents d ON d.id = c.document_id
+          WHERE json_extract(c.metadata, '$.symbolName') IS NOT NULL`);
+        native.exec(`INSERT OR IGNORE INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at)
+          SELECT 'de_' || c.id, 'fn_' || c.document_id, 'sn_' || c.id, 'defines', 1, '{}', '${now}'
+          FROM chunks c
+          WHERE json_extract(c.metadata, '$.symbolName') IS NOT NULL`);
+        const importRows = native.prepare(`
+          SELECT c.id AS chunk_id, c.document_id, d.path AS importer_path,
+            json_extract(c.metadata, '$.importPaths') AS imports,
+            coalesce(d.language, '') AS language
+          FROM chunks c
+          INNER JOIN documents d ON d.id = c.document_id
+          WHERE c.chunk_index = 0
+            AND json_extract(c.metadata, '$.importPaths') IS NOT NULL
+        `).all() as Array<{ chunk_id: string; document_id: string; importer_path: string; imports: string; language: string }>;
+        const allPaths = new Set((native.prepare("SELECT path FROM documents").all() as Array<{ path: string }>).map((r) => r.path));
+        const edgeBatch: Array<{ id: string; fromNodeId: string; toNodeId: string; type: string; metadata?: string }> = [];
+        let edgeIdx = 0;
+        for (const row of importRows) {
+          let paths: string[];
+          try { paths = JSON.parse(row.imports) as string[]; } catch { continue; }
+          for (const imp of paths) {
+            if (typeof imp !== "string" || imp.length === 0) continue;
+            const resolved = resolveImportPath(row.importer_path, imp, row.language, allPaths);
+            if (!resolved) continue;
+            edgeBatch.push({
+              id: `im_${row.chunk_id}_${edgeIdx++}`,
+              fromNodeId: `fn_${row.document_id}`,
+              toNodeId: `fn_${(native.prepare("SELECT id FROM documents WHERE path = ?").get(resolved) as { id: string } | undefined)?.id}`,
+              type: "imports",
+              metadata: JSON.stringify({ importPath: imp })
+            });
+          }
+        }
+        const validEdges = edgeBatch.filter((e) => e.toNodeId !== "fn_undefined");
+        if (validEdges.length > 0) {
+          const EBATCH = 500;
+          for (let i = 0; i < validEdges.length; i += EBATCH) {
+            const batch = validEdges.slice(i, i + EBATCH);
+            const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+            const params: unknown[] = [];
+            for (const e of batch) {
+              params.push(e.id, e.fromNodeId, e.toNodeId, e.type, 1, e.metadata ?? "{}", now);
+            }
+            native.prepare(`INSERT OR IGNORE INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders}`).run(...params);
+          }
+        }
+        this.setMeta("graph_pending", "0");
+        native.exec("COMMIT");
+      } catch (error) {
+        try { native.exec("ROLLBACK"); } catch {}
+        throw error;
+      }
     },
 
     restoreFtsTriggers(): void {

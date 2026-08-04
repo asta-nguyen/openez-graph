@@ -24,9 +24,9 @@ export default defineConfig({
   minify: true,
   splitting: false,
   define: { __OPENEZ_BUILD_ID__: JSON.stringify(getBuildId()) },
-  // better-sqlite3 is a native module — must remain external
-  // ts-morph is large (~200MB RAM) — keep external so workers lazy-load it only for TS/JS
-  external: ["better-sqlite3", "ts-morph"],
+  // bun:sqlite is built-in to Bun — no external needed
+  // gpt-tokenizer is external — its 965KB BPE vocab is only needed for retrieval, not indexing
+  external: ["bun:sqlite", "gpt-tokenizer"],
   // Bundle everything else (workspace packages + npm deps)
   noExternal: [
     "@openez-graph/config",
@@ -42,11 +42,11 @@ export default defineConfig({
     "zod",
     "fast-glob",
     "github-slugger",
-    "gpt-tokenizer",
     "drizzle-orm",
     "dotenv",
     "openai",
-    "ollama"
+    "ollama",
+    "oxc-parser"
   ],
   banner: {
     js: "#!/usr/bin/env node"
@@ -78,6 +78,25 @@ export default defineConfig({
       mkdirSync(path.dirname(pkgDest), { recursive: true });
       cpSync(pkgSrc, pkgDest);
       console.log("✓ Copied package.json → dist/apps/cli/package.json");
+    }
+
+    // Copy prebuilt SQLite templates into dist for fast init
+    const templateSrc = path.resolve(__dirname, "../../packages/db/template.sqlite");
+    const templateDest = path.resolve(__dirname, "dist/template.sqlite");
+    if (existsSync(templateSrc)) {
+      cpSync(templateSrc, templateDest);
+      console.log("✓ Copied template.sqlite → dist/template.sqlite");
+    } else {
+      console.log("⚠ template.sqlite not found — run 'bun packages/db/scripts/build-template.ts' first");
+    }
+
+    const regTemplateSrc = path.resolve(__dirname, "../../packages/db/registry-template.sqlite");
+    const regTemplateDest = path.resolve(__dirname, "dist/registry-template.sqlite");
+    if (existsSync(regTemplateSrc)) {
+      cpSync(regTemplateSrc, regTemplateDest);
+      console.log("✓ Copied registry-template.sqlite → dist/registry-template.sqlite");
+    } else {
+      console.log("⚠ registry-template.sqlite not found — run 'bun packages/db/scripts/build-template.ts' first");
     }
   }
 });

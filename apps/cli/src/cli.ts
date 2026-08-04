@@ -4,11 +4,22 @@ import path from "node:path";
 import chokidar from "chokidar";
 import { Command } from "commander";
 
-import { createRegistryRepository, createWorkspaceRepository, writeLocalWorkspaceConfig } from "@openez-graph/db";
+import { createRegistryRepository, createWorkspaceRepository, writeLocalWorkspaceConfig, readLocalWorkspaceConfig } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
-const cliDir = path.dirname(fs.realpathSync(process.argv[1]));
-const pkg = JSON.parse(fs.readFileSync(path.resolve(cliDir, "../package.json"), "utf-8"));
+let cliDir: string;
+try {
+  cliDir = path.dirname(fs.realpathSync(process.argv[1]));
+} catch {
+  // Compiled binary (bun build --compile) — process.argv[1] is virtual
+  cliDir = process.cwd();
+}
+let pkg: { version: string };
+try {
+  pkg = JSON.parse(fs.readFileSync(path.resolve(cliDir, "../package.json"), "utf-8"));
+} catch {
+  pkg = { version: "0.0.0-compiled" };
+}
 
 const program = new Command();
 
@@ -73,20 +84,23 @@ program
   .argument("[path]", "path to the workspace directory", process.cwd())
   .action(async (targetPath) => {
     const resolvedPath = path.resolve(targetPath);
-    const registry = createRegistryRepository();
 
-    let workspace = await registry.getWorkspaceByPath(resolvedPath);
+    // Fast path: read workspace.json directly (avoids opening registry DB)
+    let workspace = await readLocalWorkspaceConfig(resolvedPath);
 
     if (!workspace) {
-      workspace = await registry.ensureWorkspace({
-        rootPath: resolvedPath
-      });
-      console.log(`Auto-registered workspace '${workspace.name}' (${workspace.id})`);
+      // Fallback: registry lookup or auto-register
+      const registry = createRegistryRepository();
+      let regWorkspace = await registry.getWorkspaceByPath(resolvedPath);
+      if (!regWorkspace) {
+        regWorkspace = await registry.ensureWorkspace({ rootPath: resolvedPath });
+        console.log(`Auto-registered workspace '${regWorkspace.name}' (${regWorkspace.id})`);
+      }
+      await writeLocalWorkspaceConfig(regWorkspace);
+      workspace = { workspaceId: regWorkspace.id, rootPath: regWorkspace.rootPath, name: regWorkspace.name, updatedAt: new Date().toISOString() };
     }
 
-    await writeLocalWorkspaceConfig(workspace);
-
-    const summary = await indexWorkspace({ workspaceId: workspace.id });
+    const summary = await indexWorkspace({ rootPath: workspace.rootPath });
     console.log(JSON.stringify(summary, null, 2));
   });
 
