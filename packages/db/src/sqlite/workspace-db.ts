@@ -271,6 +271,10 @@ function getWorkspaceTableDefinitions(): string[] {
       supersedes_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS index_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
     )`
   ];
 }

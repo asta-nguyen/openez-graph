@@ -3,8 +3,15 @@ import { parentPort } from "node:worker_threads";
 import { countTokens, splitToTokenLimit } from "./tokenizer";
 
 import { chunkDocument, type ParseTask, type ParseResult } from "./parse-core";
-import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
+
+function fastHash(content: string): string {
+  let h = 5381;
+  for (let i = 0; i < content.length; i++) {
+    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
 
 export function boundChunks(chunks: IndexedChunk[], targetTokens: number, overlapTokens: number): IndexedChunk[] {
   const split = chunks.flatMap((chunk) => {
@@ -14,7 +21,7 @@ export function boundChunks(chunks: IndexedChunk[], targetTokens: number, overla
       ...chunk,
       content,
       tokenCount: countTokens(content),
-      contentHash: hashContent(content),
+      contentHash: fastHash(content),
       metadata: { ...chunk.metadata, splitIndex, splitCount: parts.length }
     }));
   });
@@ -48,7 +55,7 @@ function mergeChunks(chunks: IndexedChunk[]): IndexedChunk {
   return {
     content,
     tokenCount: countTokens(content),
-    contentHash: hashContent(content),
+    contentHash: fastHash(content),
     heading: chunks[0].heading,
     metadata: { ...chunks[0].metadata, mergedCount: chunks.length }
   };

@@ -200,6 +200,7 @@ export async function codeQuery(input: {
   const maxTokens = input.maxTokens ?? retrieval.maxContextTokens;
 
   const repo = createWorkspaceRepository(workspace.rootPath);
+  repo.ensureFtsReady();
 
   const [ftsResults, vectorResults] = await Promise.all([
     repo.fullTextSearch(input.query, retrieval.textLimit),

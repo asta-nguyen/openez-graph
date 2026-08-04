@@ -826,6 +826,31 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       streamNow = new Date().toISOString();
     },
 
+    setMeta(key: string, value: string): void {
+      native.prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)").run(key, value);
+    },
+
+    getMeta(key: string): string | null {
+      const row = native.prepare("SELECT value FROM index_meta WHERE key = ?").get(key) as { value: string } | undefined;
+      return row?.value ?? null;
+    },
+
+    ensureFtsReady(): void {
+      if (this.getMeta("fts_backfill_pending") !== "1") return;
+      native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
+      native.exec(`
+        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+        SELECT c.id, d.path, coalesce(c.heading, ''),
+          coalesce(d.language, ''), coalesce(json_extract(c.metadata, '$.searchText'), ''), c.content
+        FROM chunks c
+        INNER JOIN documents d ON d.id = c.document_id
+        LEFT JOIN chunks_fts f ON f.chunk_id = c.id
+        WHERE f.chunk_id IS NULL;
+      `);
+      restoreFtsTriggerDefinitions(native);
+      this.setMeta("fts_backfill_pending", "0");
+    },
+
     restoreFtsTriggers(): void {
       // Remove orphaned FTS entries (chunks that were deleted while triggers were down)
       native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");

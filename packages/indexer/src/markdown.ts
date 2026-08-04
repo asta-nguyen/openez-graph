@@ -2,7 +2,13 @@ import GithubSlugger from "github-slugger";
 
 import { countTokens } from "./tokenizer";
 
-import { hashContent } from "./hash";
+function fastHash(content: string): string {
+  let h = 5381;
+  for (let i = 0; i < content.length; i++) {
+    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
 import type { IndexedChunk } from "./types";
 
 interface HeadingState {
@@ -108,7 +114,7 @@ export function indexMarkdown(input: {
         heading: section.heading,
         content,
         tokenCount: countTokens(content),
-        contentHash: hashContent(content),
+        contentHash: fastHash(content),
         metadata: {
           kind: "markdown",
           headingPath: section.headingPath,
