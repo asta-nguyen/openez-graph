@@ -8,16 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.9.0] - 2026-08-02
 
 ### Added
+
 - MCP server version and Git build identity in the protocol handshake
 - Token budgets for `code_query`, `code_context`, `graph_neighbors`, and `memory_recall`, with compact graph/context responses
 - Live `code_query` token telemetry on the dashboard and benchmark page
 - MCP contract tests for response budgets, multi-workspace attribution, graph context, and startup indexing
 
 ### Changed
+
 - Multi-workspace retrieval now applies one global serialized-response budget and attributes delivered tokens exactly across workspaces
 - CLI npm package now exposes the bundled entry point and installs only `better-sqlite3` at runtime
 
 ### Fixed
+
 - Empty workspaces no longer re-index on every MCP server restart
 - Very small token budgets are rejected instead of returning an oversized response
 - Token-savings telemetry now uses selected full-file tokens minus the actual serialized response size
@@ -25,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.8.0] - 2026-08-02
 
 ### Added
+
 - Memory management UI at `/memories` with list, search, detail view, and create dialog
 - Memory API routes: `GET /api/memories` (list + search), `GET /api/memories/:id`, `POST /api/memories`, `DELETE /api/memories/:id`
 - Recent memories section on the dashboard now populated from the workspace database
@@ -33,12 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration tests for hybrid retrieval ranking and registry operations
 
 ### Fixed
+
 - Changelog page stuck loading — `findChangelogPath` now walks up from `serverDir` and `cwd` to locate `CHANGELOG.md` in the monorepo root
 - Memory endpoints no longer fail when the first registered workspace has a stale root path
 
 ## [0.7.0] - 2026-08-01
 
 ### Added
+
 - Web dashboard changelog page (`/changelog`) with structured rendering of release notes from `CHANGELOG.md`
 - API endpoint `GET /api/changelog` serving the repo changelog
 - Changelog link in CLI README for npm package page
@@ -47,16 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `memory_recall` MCP tool for retrieving active technical decisions and learned notes written by `memory_write`
 
 ### Changed
+
 - Renamed the public `memory_query` MCP tool to `code_query`; the old name remains a deprecated, hidden compatibility alias
 - Code retrieval now fuses both FTS and vector results, and `code_context` supports result/token budgets
 
 ## [0.6.1] - 2026-08-01
 
 ### Added
+
 - Syntax-highlighted context blocks in the web Query page (`prism-react-renderer`), with per-source file metadata (path, line range, score) and line numbers
 - Markdown context blocks now render fenced code blocks with their own language highlighting (e.g. ` ```bash ` gets real bash highlighting)
 
 ### Fixed
+
 - Dark boxes obscuring markdown inline code in context blocks (stripped token `backgroundColor` from the nightOwl theme)
 
 ## [0.6.0] - 2026-08-01
@@ -64,9 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Remediation release — index/graph correctness, data protection, and web flow fixes.
 
 ### Security
+
 - Web API and CLI dashboard now bind to loopback (`127.0.0.1`) by default (FIX-01)
 
 ### Fixed
+
 - Full reindex no longer wipes memories, query logs, and run history — only rebuildable index artifacts are reset (FIX-02)
 - Incremental indexing preserves inbound graph edges (calls/imports) to symbols in changed files; symbol and file node identities are now stable across re-parses (FIX-03)
 - Graph edges are deduplicated by `(from, to, type)` with a unique SQLite index and `ON CONFLICT DO NOTHING` inserts (FIX-04)
@@ -75,11 +86,13 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Regenerated stale route tree referencing the deleted `/jobs` route; removed the CI lint no-op (`turbo run lint` with zero lint tasks) (FIX-08)
 
 ### Removed
+
 - Jobs page and related API endpoints
 
 ## [0.5.1] - 2026-07-31
 
 ### Fixed
+
 - Blazing-fast indexing for large codebases (batch transactions, optimized write mode)
 - Error handling and validation for import path extraction
 - CLI npm packaging

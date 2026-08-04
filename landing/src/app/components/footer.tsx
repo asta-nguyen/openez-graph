@@ -4,10 +4,9 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Github } from "lucide-react";
 
-const ParticleText = dynamic(
-  () => import("./particle-text").then((m) => m.ParticleText),
-  { ssr: false },
-);
+const ParticleText = dynamic(() => import("./particle-text").then((m) => m.ParticleText), {
+  ssr: false,
+});
 
 const navLinks = [
   { label: "GitHub", href: "https://github.com/asta-nguyen/openez-graph" },

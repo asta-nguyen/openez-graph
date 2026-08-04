@@ -45,10 +45,7 @@ import {
 } from "./sqlite";
 
 import { codeQuery } from "@openez-graph/core";
-import {
-  createRegistryRepository,
-  createWorkspaceRepository,
-} from "@openez-graph/db";
+import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
 const app = new Hono();
@@ -62,7 +59,7 @@ app.use(
       "http://127.0.0.1:11368",
     ],
     credentials: true,
-  })
+  }),
 );
 
 const DEFAULT_INCLUDE_GLOBS = [
@@ -107,19 +104,13 @@ function mapWorkspace(ws: {
     id: ws.id,
     name: ws.name,
     rootPath: ws.rootPath,
-    includeGlobs: ws.includeGlobs
-      ? ws.includeGlobs.split("\n").filter(Boolean)
-      : [],
-    excludeGlobs: ws.excludeGlobs
-      ? ws.excludeGlobs.split("\n").filter(Boolean)
-      : [],
+    includeGlobs: ws.includeGlobs ? ws.includeGlobs.split("\n").filter(Boolean) : [],
+    excludeGlobs: ws.excludeGlobs ? ws.excludeGlobs.split("\n").filter(Boolean) : [],
     status: ws.status,
     indexingStatus: ws.indexingStatus,
     graphStatus: ws.graphStatus,
     lastIndexedAt: ws.lastIndexedAt ? new Date(ws.lastIndexedAt) : null,
-    lastGraphBuiltAt: ws.lastGraphBuiltAt
-      ? new Date(ws.lastGraphBuiltAt)
-      : null,
+    lastGraphBuiltAt: ws.lastGraphBuiltAt ? new Date(ws.lastGraphBuiltAt) : null,
     documentCount: ws.documentCount,
     chunkCount: ws.chunkCount,
     nodeCount: ws.nodeCount,
@@ -221,8 +212,7 @@ app.post("/api/validate-path", async (c) => {
   if (!rootPath) return c.json({ valid: false, error: "Path is required" });
   try {
     const stats = await fs.stat(rootPath);
-    if (!stats.isDirectory())
-      return c.json({ valid: false, error: "Path is not a directory" });
+    if (!stats.isDirectory()) return c.json({ valid: false, error: "Path is not a directory" });
     return c.json({ valid: true });
   } catch {
     return c.json({
@@ -295,12 +285,10 @@ app.post("/api/workspaces", async (c) => {
       excludeGlobs?: string[];
     }>();
     const rootPath = body.rootPath;
-    if (!rootPath)
-      return c.json({ success: false, error: "rootPath is required" });
+    if (!rootPath) return c.json({ success: false, error: "rootPath is required" });
     try {
       const stats = await fs.stat(rootPath);
-      if (!stats.isDirectory())
-        return c.json({ success: false, error: "Path is not a directory" });
+      if (!stats.isDirectory()) return c.json({ success: false, error: "Path is not a directory" });
     } catch {
       return c.json({
         success: false,
@@ -349,14 +337,8 @@ app.get("/api/workspaces/:id/index", (c) => {
 app.post("/api/workspaces/:id/index", async (c) => {
   const id = c.req.param("id");
   const ws = getRegistryWorkspace(id);
-  if (!ws)
-    return c.json(
-      { status: "failed", error: "Workspace not found" },
-      404
-    );
-  const body = await c.req
-    .json<{ mode?: string }>()
-    .catch(() => ({ mode: "incremental" }));
+  if (!ws) return c.json({ status: "failed", error: "Workspace not found" }, 404);
+  const body = await c.req.json<{ mode?: string }>().catch(() => ({ mode: "incremental" }));
   const mode = body.mode ?? "incremental";
   if (mode !== "incremental" && mode !== "full") {
     return c.json({ status: "failed", error: "Mode must be 'incremental' or 'full'" }, 400);
@@ -366,10 +348,13 @@ app.post("/api/workspaces/:id/index", async (c) => {
     const summary = await indexWorkspace({ workspaceId: id, mode });
     return c.json({ ...summary, status: "completed" });
   } catch (error) {
-    return c.json({
-      status: "failed",
-      error: error instanceof Error ? error.message : String(error),
-    }, 500);
+    return c.json(
+      {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      },
+      500,
+    );
   }
 });
 
@@ -383,11 +368,12 @@ app.get("/api/workspaces/:id/graph", (c) => {
   const maxNodes = Math.min(parseInt(c.req.query("limit") ?? "25000", 10) || 25000, 25000);
   const maxEdges = Math.min(parseInt(c.req.query("edgeLimit") ?? "75000", 10) || 75000, 75000);
 
-  const { nodes: nodeRows, edges: edgeRows, totalNodeCount, totalEdgeCount } = getWorkspaceGraphOptimized(
-    workspace.rootPath,
-    maxNodes,
-    maxEdges
-  );
+  const {
+    nodes: nodeRows,
+    edges: edgeRows,
+    totalNodeCount,
+    totalEdgeCount,
+  } = getWorkspaceGraphOptimized(workspace.rootPath, maxNodes, maxEdges);
 
   const degreeMap = new Map<string, number>();
   for (const edge of edgeRows) {
@@ -403,16 +389,9 @@ app.get("/api/workspaces/:id/graph", (c) => {
     type: node.type,
     degree: degreeMap.get(node.id) ?? 0,
     metadata: node.metadata,
-    path:
-      typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
-    startLine:
-      typeof node.metadata?.startLine === "number"
-        ? node.metadata.startLine
-        : undefined,
-    endLine:
-      typeof node.metadata?.endLine === "number"
-        ? node.metadata.endLine
-        : undefined,
+    path: typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
+    startLine: typeof node.metadata?.startLine === "number" ? node.metadata.startLine : undefined,
+    endLine: typeof node.metadata?.endLine === "number" ? node.metadata.endLine : undefined,
     refId: node.refId,
   }));
 
@@ -543,14 +522,58 @@ app.post("/api/query", async (c) => {
   }
 });
 
+app.get("/api/settings/embedding", async (c) => {
+  try {
+    const { getEmbeddingConfig } = await import("@openez-graph/core");
+    const config = await getEmbeddingConfig();
+    const registry = createRegistryRepository();
+    const dbSettings = await registry.getAllSettings();
+    return c.json({
+      provider: config.provider,
+      openaiApiKey: config.openaiApiKey ? "****" : "",
+      openaiBaseUrl: config.openaiBaseUrl ?? "",
+      openaiModel: config.openaiModel,
+      ollamaBaseUrl: config.ollamaBaseUrl,
+      ollamaModel: config.ollamaModel,
+      dbOverrides: Object.keys(dbSettings).filter((k) => k.startsWith("embedding.")),
+    });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+app.put("/api/settings/embedding", async (c) => {
+  try {
+    const body = await c.req.json();
+    const VALID_KEYS: Record<string, boolean> = {
+      "embedding.provider": true,
+      "embedding.openai_api_key": true,
+      "embedding.openai_base_url": true,
+      "embedding.openai_model": true,
+      "embedding.ollama_base_url": true,
+      "embedding.ollama_model": true,
+    };
+    const registry = createRegistryRepository();
+    const updated: string[] = [];
+    for (const [key, value] of Object.entries(body)) {
+      if (!VALID_KEYS[key]) continue;
+      if (typeof value !== "string") continue;
+      if (value.trim() === "") continue;
+      await registry.setSetting(key, value);
+      updated.push(key);
+    }
+    return c.json({ ok: true, updated });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
 app.get("/api/settings/env", (c) => {
   return c.json({
-    EMBEDDING_PROVIDER: process.env.EMBEDDING_PROVIDER ?? "ollama",
+    EMBEDDING_PROVIDER: process.env.EMBEDDING_PROVIDER ?? "none",
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? undefined,
-    OPENAI_EMBEDDING_MODEL:
-      process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
-    OLLAMA_EMBEDDING_MODEL:
-      process.env.OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text",
+    OPENAI_EMBEDDING_MODEL: process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
+    OLLAMA_EMBEDDING_MODEL: process.env.OLLAMA_EMBEDDING_MODEL ?? "bge-m3",
   });
 });
 
@@ -599,7 +622,13 @@ app.get("/api/memories/:id", (c) => {
 
 app.post("/api/memories", async (c) => {
   try {
-    const body = await c.req.json<{ title?: string; content?: string; tags?: string[]; source?: string; supersedesId?: string }>();
+    const body = await c.req.json<{
+      title?: string;
+      content?: string;
+      tags?: string[];
+      source?: string;
+      supersedesId?: string;
+    }>();
     if (!body.title?.trim()) return c.json({ ok: false, error: "title is required" }, 400);
     if (!body.content?.trim()) return c.json({ ok: false, error: "content is required" }, 400);
     const ws = resolveActiveWorkspace();
@@ -643,7 +672,11 @@ function resolveMetricsWorkspace(c: Context) {
   // Default: same logic as dashboard — first workspace with valid root path
   return (
     all.find((w) => {
-      try { return w.rootPath && w.rootPath !== "/" && existsSync(w.rootPath); } catch { return false; }
+      try {
+        return w.rootPath && w.rootPath !== "/" && existsSync(w.rootPath);
+      } catch {
+        return false;
+      }
     }) ?? all[0]
   );
 }
@@ -652,15 +685,21 @@ app.get("/api/metrics", (c) => {
   try {
     const ws = resolveMetricsWorkspace(c);
     if (!ws) {
-      return c.json(
-        { error: "Workspace not found" },
-        404
-      );
+      return c.json({ error: "Workspace not found" }, 404);
     }
     const metrics = getWorkspaceQueryMetrics(ws.rootPath, 10);
     return c.json({ ...metrics, workspaceId: ws.id });
   } catch {
-    return c.json({ metricMethod: "selected-full-files-minus-serialized-response", totalQueries: 0, totalTokensReturned: 0, totalTokensSaved: 0, totalFilesScanned: 0, avgTokensPerQuery: 0, recentQueries: [], workspaceId: null });
+    return c.json({
+      metricMethod: "selected-full-files-minus-serialized-response",
+      totalQueries: 0,
+      totalTokensReturned: 0,
+      totalTokensSaved: 0,
+      totalFilesScanned: 0,
+      avgTokensPerQuery: 0,
+      recentQueries: [],
+      workspaceId: null,
+    });
   }
 });
 

@@ -16,7 +16,7 @@ export function resolveRegistryDbPath(): string {
   }
 
   const homeDir = [os.homedir(), process.env.HOME, process.env.USERPROFILE, process.cwd()].find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
   );
 
   if (!homeDir) {
@@ -50,9 +50,7 @@ export function getRegistryDb() {
       initializeRegistrySchema(sqlite);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `Failed to open registry DB at "${dbPath}": ${message}`
-      );
+      throw new Error(`Failed to open registry DB at "${dbPath}": ${message}`);
     }
   }
   return registryDb;
@@ -86,5 +84,11 @@ function initializeRegistrySchema(sqlite: ReturnType<typeof createNativeDatabase
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_root_path
     ON workspaces(root_path);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }

@@ -19,27 +19,38 @@ export function parseRetrievalCases(value: unknown): RetrievalCase[] {
   return value.map((item) => {
     if (typeof item === "string" && item.trim()) return { query: item.trim() };
     if (
-      typeof item === "object" && item !== null &&
+      typeof item === "object" &&
+      item !== null &&
       typeof (item as RetrievalCase).query === "string" &&
       (item as RetrievalCase).query.trim() &&
       Array.isArray((item as RetrievalCase).expectedPaths) &&
-      (item as RetrievalCase).expectedPaths!.every((path) => typeof path === "string" && path.length > 0)
+      (item as RetrievalCase).expectedPaths!.every(
+        (path) => typeof path === "string" && path.length > 0,
+      )
     ) {
       return {
         query: (item as RetrievalCase).query.trim(),
-        expectedPaths: [...(item as RetrievalCase).expectedPaths!]
+        expectedPaths: [...(item as RetrievalCase).expectedPaths!],
       };
     }
     throw new Error("Each benchmark item must be a query string or { query, expectedPaths }.");
   });
 }
 
-export function evaluateRetrieval(sourcePaths: string[], expectedPaths?: string[]): RetrievalQuality {
-  const duplicatePathRate = sourcePaths.length === 0
-    ? 0
-    : 1 - new Set(sourcePaths).size / sourcePaths.length;
+export function evaluateRetrieval(
+  sourcePaths: string[],
+  expectedPaths?: string[],
+): RetrievalQuality {
+  const duplicatePathRate =
+    sourcePaths.length === 0 ? 0 : 1 - new Set(sourcePaths).size / sourcePaths.length;
   if (!expectedPaths?.length) {
-    return { evaluated: false, hitAt5: false, reciprocalRank: 0, duplicatePathRate, firstRelevantRank: null };
+    return {
+      evaluated: false,
+      hitAt5: false,
+      reciprocalRank: 0,
+      duplicatePathRate,
+      firstRelevantRank: null,
+    };
   }
 
   const expected = new Set(expectedPaths);
@@ -50,7 +61,7 @@ export function evaluateRetrieval(sourcePaths: string[], expectedPaths?: string[
     hitAt5: firstIndex >= 0 && firstIndex < 5,
     reciprocalRank: firstIndex === -1 ? 0 : 1 / (firstIndex + 1),
     duplicatePathRate,
-    firstRelevantRank
+    firstRelevantRank,
   };
 }
 
@@ -61,6 +72,8 @@ export function summarizeQuality(qualities: RetrievalQuality[]) {
     evaluatedRuns: evaluated.length,
     recallAt5: evaluated.reduce((sum, quality) => sum + Number(quality.hitAt5), 0) / divisor,
     mrr: evaluated.reduce((sum, quality) => sum + quality.reciprocalRank, 0) / divisor,
-    duplicatePathRate: qualities.reduce((sum, quality) => sum + quality.duplicatePathRate, 0) / Math.max(qualities.length, 1)
+    duplicatePathRate:
+      qualities.reduce((sum, quality) => sum + quality.duplicatePathRate, 0) /
+      Math.max(qualities.length, 1),
   };
 }

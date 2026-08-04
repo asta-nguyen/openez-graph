@@ -9,7 +9,7 @@ describe("indexMarkdown", () => {
     const result = indexMarkdown({
       content: "# Intro\n\nHello [[Auth Design]]\n\n## Details\n\nMore text",
       targetTokens: 50,
-      overlapTokens: 10
+      overlapTokens: 10,
     });
 
     expect(result.wikilinks).toContain("Auth Design");
@@ -22,7 +22,7 @@ describe("indexCode", () => {
   it("adds split identifiers as FTS search terms", () => {
     const result = indexCode(
       "export function extractTypeScriptSymbols() { const definedSymbols = []; return definedSymbols; }",
-      "code.ts"
+      "code.ts",
     );
 
     expect(result.chunks[0]?.metadata.searchText).toContain("Type Script Symbols");

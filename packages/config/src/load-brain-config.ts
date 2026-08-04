@@ -26,11 +26,14 @@ function findConfigFile(startDir: string): string | null {
   }
 }
 
-function resolveWorkspace(configFile: string, workspace: BrainWorkspaceConfig): BrainWorkspaceConfig {
+function resolveWorkspace(
+  configFile: string,
+  workspace: BrainWorkspaceConfig,
+): BrainWorkspaceConfig {
   const configDir = path.dirname(configFile);
   return {
     ...workspace,
-    root: path.resolve(configDir, workspace.root)
+    root: path.resolve(configDir, workspace.root),
   };
 }
 
@@ -41,7 +44,7 @@ export async function loadBrainConfig(startDir = process.cwd()): Promise<BrainCo
     const defaults = getDefaultSettings();
     return {
       chunking: defaults.chunking,
-      retrieval: defaults.retrieval
+      retrieval: defaults.retrieval,
     };
   }
 
@@ -53,7 +56,7 @@ export async function loadBrainConfig(startDir = process.cwd()): Promise<BrainCo
     .replace(/export default\s+/m, "const __default__ = ");
 
   const evaluator = new Function(
-    `${sanitized}\nreturn typeof __default__ !== "undefined" ? __default__ : (typeof config !== "undefined" ? config : undefined);`
+    `${sanitized}\nreturn typeof __default__ !== "undefined" ? __default__ : (typeof config !== "undefined" ? config : undefined);`,
   );
   const loaded = evaluator() as BrainConfig | undefined;
 
@@ -62,18 +65,21 @@ export async function loadBrainConfig(startDir = process.cwd()): Promise<BrainCo
   if (!loaded) {
     return {
       chunking: defaults.chunking,
-      retrieval: defaults.retrieval
+      retrieval: defaults.retrieval,
     };
   }
 
   return {
     workspaces: loaded.workspaces?.map((workspace) => resolveWorkspace(configFile, workspace)),
     chunking: loaded.chunking ?? defaults.chunking,
-    retrieval: loaded.retrieval ?? defaults.retrieval
+    retrieval: loaded.retrieval ?? defaults.retrieval,
   };
 }
 
-export async function getWorkspaceConfig(workspaceId: string, startDir = process.cwd()): Promise<BrainWorkspaceConfig> {
+export async function getWorkspaceConfig(
+  workspaceId: string,
+  startDir = process.cwd(),
+): Promise<BrainWorkspaceConfig> {
   const config = await loadBrainConfig(startDir);
   const workspace = config.workspaces?.find((entry) => entry.id === workspaceId);
   if (!workspace) {
@@ -97,6 +103,6 @@ export async function getBrainSettings(startDir = process.cwd()): Promise<{
   const defaults = getDefaultSettings();
   return {
     chunking: config.chunking ?? defaults.chunking,
-    retrieval: config.retrieval ?? defaults.retrieval
+    retrieval: config.retrieval ?? defaults.retrieval,
   };
 }

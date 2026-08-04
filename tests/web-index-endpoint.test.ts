@@ -65,7 +65,9 @@ describe("POST /api/workspaces/:id/index", () => {
       filesUpdated: 1,
       status: "completed",
     });
-    expect((await createRegistryRepository().getWorkspace(workspaceId))?.indexingStatus).toBe("completed");
+    expect((await createRegistryRepository().getWorkspace(workspaceId))?.indexingStatus).toBe(
+      "completed",
+    );
   });
 
   it("returns 404 for an unknown workspace", async () => {

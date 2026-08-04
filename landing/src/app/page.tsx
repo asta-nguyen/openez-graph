@@ -22,7 +22,6 @@ import { HeroGraph } from "./components/graph-loader";
 import { DashboardPreview } from "./components/dashboard-preview";
 import { Footer } from "./components/footer";
 
-
 const cliCommands = [
   "npm install -g @openez-graph/cli",
   "openez setup codex .",
@@ -114,10 +113,9 @@ const stats = [
 export default async function LandingPage() {
   let starCount: number | null = null;
   try {
-    const res = await fetch(
-      "https://api.github.com/repos/asta-nguyen/openez-graph",
-      { next: { revalidate: 3600 } },
-    );
+    const res = await fetch("https://api.github.com/repos/asta-nguyen/openez-graph", {
+      next: { revalidate: 3600 },
+    });
     if (res.ok) {
       const data = await res.json();
       if (typeof data.stargazers_count === "number") {
@@ -131,14 +129,23 @@ export default async function LandingPage() {
       <div className="scanline" />
       <div className="min-h-svh bg-background text-foreground dot-grid overflow-hidden">
         <header className="absolute inset-x-0 top-0 z-30 px-6 py-5">
-          <nav className="mx-auto flex max-w-7xl items-center justify-between" aria-label="Primary navigation">
+          <nav
+            className="mx-auto flex max-w-7xl items-center justify-between"
+            aria-label="Primary navigation"
+          >
             <a href="#top" className="font-heading text-sm font-black tracking-[-0.04em]">
               OPEN<span className="text-primary">EZ</span>
             </a>
             <div className="hidden items-center gap-7 text-xs text-muted-foreground sm:flex">
-              <a className="nav-link" href="#product">Product</a>
-              <a className="nav-link" href="#quick-start">Quick start</a>
-              <a className="nav-link" href="#agents">MCP</a>
+              <a className="nav-link" href="#product">
+                Product
+              </a>
+              <a className="nav-link" href="#quick-start">
+                Quick start
+              </a>
+              <a className="nav-link" href="#agents">
+                MCP
+              </a>
             </div>
             <a
               href="https://github.com/asta-nguyen/openez-graph"
@@ -152,7 +159,10 @@ export default async function LandingPage() {
         </header>
 
         {/* ── HERO ── */}
-        <section id="top" className="relative flex min-h-svh items-center overflow-hidden px-6 py-32">
+        <section
+          id="top"
+          className="relative flex min-h-svh items-center overflow-hidden px-6 py-32"
+        >
           <div className="glow-orb top-1/4 left-1/2 -translate-x-1/2" />
           <div className="glow-orb--alt top-3/4 left-1/4" />
 
@@ -189,85 +199,95 @@ export default async function LandingPage() {
 
           <div className="relative mx-auto grid w-full max-w-7xl items-center gap-14 lg:grid-cols-[1.08fr_0.92fr]">
             <div className="text-left">
-            <div
-              className="mb-8 inline-flex items-center gap-2 border-l-2 border-primary bg-accent/30 px-3 py-1.5 font-mono text-xs font-medium tracking-wider text-accent-foreground"
-              style={{
-                animation: "fadeUp 0.5s ease 0.3s forwards",
-                opacity: 0,
-              }}
-            >
-              <Star className="h-3 w-3" />
-              OpenEZ Graph v0.9.1 · local-first
-            </div>
-
-            <h1
-              className="hero-glitch mb-6 text-[clamp(2.8rem,6.5vw,5.8rem)] font-black leading-[0.96] tracking-[-0.065em] text-balance"
-              data-text="Durable context for coding agents"
-              style={{
-                fontFamily: "var(--font-heading), sans-serif",
-                animation: "fadeUp 0.6s ease 0.5s forwards",
-                opacity: 0,
-              }}
-            >
-              <span className="gradient-text">
-                Durable context
-                <br />
-                for coding agents
-              </span>
-            </h1>
-
-            <p
-              className="mb-7 max-w-xl text-base leading-relaxed text-muted-foreground text-pretty sm:text-lg"
-              style={{
-                animation: "fadeUp 0.6s ease 0.7s forwards",
-                opacity: 0,
-              }}
-            >
-              Index code once. Let Codex, Claude, OpenCode, Windsurf, and Devin
-              retrieve ranked code, graph context, and project memory from local SQLite.
-            </p>
-
-            <div
-              className="hero-install"
-              style={{
-                animation: "fadeUp 0.6s ease 0.8s forwards",
-                opacity: 0,
-              }}
-            >
-              <span className="select-none text-primary">$</span>
-              <code>npx @openez-graph/cli setup codex</code>
-              <Terminal className="ml-auto h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-            </div>
-
-            <div
-              className="flex flex-wrap items-center gap-4"
-              style={{
-                animation: "fadeUp 0.6s ease 0.9s forwards",
-                opacity: 0,
-              }}
-            >
-              <a
-                href="#quick-start"
-                className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground px-7 py-3 text-sm font-semibold hover:brightness-110 transition-all active:scale-[0.98]"
+              <div
+                className="mb-8 inline-flex items-center gap-2 border-l-2 border-primary bg-accent/30 px-3 py-1.5 font-mono text-xs font-medium tracking-wider text-accent-foreground"
+                style={{
+                  animation: "fadeUp 0.5s ease 0.3s forwards",
+                  opacity: 0,
+                }}
               >
-                Connect your agent <ArrowRight className="h-4 w-4" />
-              </a>
-              <GitHubStars repo="asta-nguyen/openez-graph" initialCount={starCount} />
-            </div>
+                <Star className="h-3 w-3" />
+                OpenEZ Graph v0.9.1 · local-first
+              </div>
+
+              <h1
+                className="hero-glitch mb-6 text-[clamp(2.8rem,6.5vw,5.8rem)] font-black leading-[0.96] tracking-[-0.065em] text-balance"
+                data-text="Durable context for coding agents"
+                style={{
+                  fontFamily: "var(--font-heading), sans-serif",
+                  animation: "fadeUp 0.6s ease 0.5s forwards",
+                  opacity: 0,
+                }}
+              >
+                <span className="gradient-text">
+                  Durable context
+                  <br />
+                  for coding agents
+                </span>
+              </h1>
+
+              <p
+                className="mb-7 max-w-xl text-base leading-relaxed text-muted-foreground text-pretty sm:text-lg"
+                style={{
+                  animation: "fadeUp 0.6s ease 0.7s forwards",
+                  opacity: 0,
+                }}
+              >
+                Index code once. Let Codex, Claude, OpenCode, Windsurf, and Devin retrieve ranked
+                code, graph context, and project memory from local SQLite.
+              </p>
+
+              <div
+                className="hero-install"
+                style={{
+                  animation: "fadeUp 0.6s ease 0.8s forwards",
+                  opacity: 0,
+                }}
+              >
+                <span className="select-none text-primary">$</span>
+                <code>npx @openez-graph/cli setup codex</code>
+                <Terminal
+                  className="ml-auto h-3.5 w-3.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              </div>
+
+              <div
+                className="flex flex-wrap items-center gap-4"
+                style={{
+                  animation: "fadeUp 0.6s ease 0.9s forwards",
+                  opacity: 0,
+                }}
+              >
+                <a
+                  href="#quick-start"
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground px-7 py-3 text-sm font-semibold hover:brightness-110 transition-all active:scale-[0.98]"
+                >
+                  Connect your agent <ArrowRight className="h-4 w-4" />
+                </a>
+                <GitHubStars repo="asta-nguyen/openez-graph" initialCount={starCount} />
+              </div>
             </div>
 
             <aside className="mcp-surface" aria-label="OpenEZ MCP tool surface">
               <div className="mcp-surface__header">
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">MCP server</p>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
+                    MCP server
+                  </p>
                   <h2 className="mt-1 text-base font-semibold">Tools exposed to your agent</h2>
                 </div>
-                <span className="mcp-live"><span />ready</span>
+                <span className="mcp-live">
+                  <span />
+                  ready
+                </span>
               </div>
               <div className="mcp-tool-list">
                 {mcpTools.map((tool, index) => (
                   <div className="mcp-tool" key={tool}>
-                    <span className="font-mono text-[10px] text-muted-foreground">0{index + 1}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      0{index + 1}
+                    </span>
                     <code>{tool}</code>
                     <Check className="ml-auto h-3.5 w-3.5 text-primary" />
                   </div>
@@ -326,9 +346,8 @@ export default async function LandingPage() {
               AI agents shouldn&apos;t have to re-read everything
             </h2>
             <p className="text-base text-muted-foreground max-w-2xl mx-auto mb-10 text-pretty leading-relaxed">
-              Every time an AI coding agent starts a conversation, it reads your
-              source files from scratch — burning tokens, context, and time on
-              the same code it already saw yesterday.
+              Every time an AI coding agent starts a conversation, it reads your source files from
+              scratch — burning tokens, context, and time on the same code it already saw yesterday.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-5 text-left">
@@ -385,9 +404,8 @@ export default async function LandingPage() {
               Every language you use
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-10 text-pretty">
-              Rich AST-level indexing for TypeScript and JavaScript. Symbol
-              extraction for Python, Go, and Rust. Structure-aware chunking for
-              config files and documentation.
+              Rich AST-level indexing for TypeScript and JavaScript. Symbol extraction for Python,
+              Go, and Rust. Structure-aware chunking for config files and documentation.
             </p>
             <div className="flex flex-wrap justify-center gap-2.5">
               {languages.map((lang) => (
@@ -415,8 +433,8 @@ export default async function LandingPage() {
               What it looks like
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-12 text-pretty">
-              Inspect workspace state, measured MCP query telemetry, memories,
-              documents, and symbol relationships from one local management UI.
+              Inspect workspace state, measured MCP query telemetry, memories, documents, and symbol
+              relationships from one local management UI.
             </p>
             <div className="max-w-5xl mx-auto">
               <div
@@ -472,9 +490,7 @@ export default async function LandingPage() {
                   <div className="timeline-body">
                     <div className="timeline-step-num">{s.step}</div>
                     <h3 className="font-semibold text-sm mb-2">{s.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {s.desc}
-                    </p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
                   </div>
                 </div>
               ))}
@@ -497,8 +513,8 @@ export default async function LandingPage() {
               Install once. Pick your agent.
             </h2>
             <p className="text-sm text-muted-foreground text-center mb-10 max-w-md mx-auto">
-              Setup writes the agent config, registers the current project, indexes it,
-              and keeps the workspace synced while MCP is running.
+              Setup writes the agent config, registers the current project, indexes it, and keeps
+              the workspace synced while MCP is running.
             </p>
             <div className="max-w-3xl mx-auto">
               <div
@@ -551,9 +567,7 @@ export default async function LandingPage() {
                     </div>
                     <h3 className="font-semibold text-sm">{f.title}</h3>
                   </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {f.desc}
-                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
                 </div>
               ))}
             </div>
@@ -573,9 +587,8 @@ export default async function LandingPage() {
               A focused tool surface for agents
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-10 text-pretty">
-              OpenEZ exposes seven workspace-aware tools over MCP. Read tools can
-              search one or many workspaces; memory writes and indexing stay scoped
-              to a single workspace.
+              OpenEZ exposes seven workspace-aware tools over MCP. Read tools can search one or many
+              workspaces; memory writes and indexing stay scoped to a single workspace.
             </p>
 
             <div className="grid sm:grid-cols-5 gap-6">
@@ -592,7 +605,10 @@ export default async function LandingPage() {
                 </p>
                 <div className="agent-commands">
                   {["codex", "claude", "opencode", "windsurf", "devin"].map((agent) => (
-                    <div key={agent}><span>$</span><code>openez setup {agent} .</code></div>
+                    <div key={agent}>
+                      <span>$</span>
+                      <code>openez setup {agent} .</code>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -608,17 +624,24 @@ export default async function LandingPage() {
                 <h3 className="font-semibold text-sm mb-4">Works with:</h3>
                 <ul className="space-y-3">
                   {[
-                    { name: "Retrieval", desc: "Ranked FTS, graph expansion, and optional vector reranking" },
-                    { name: "Durable context", desc: "Recall and write technical decisions between sessions" },
-                    { name: "Workspace control", desc: "List, resolve, and index local workspaces" },
+                    {
+                      name: "Retrieval",
+                      desc: "Ranked FTS, graph expansion, and optional vector reranking",
+                    },
+                    {
+                      name: "Durable context",
+                      desc: "Recall and write technical decisions between sessions",
+                    },
+                    {
+                      name: "Workspace control",
+                      desc: "List, resolve, and index local workspaces",
+                    },
                   ].map((item) => (
                     <li key={item.name} className="flex gap-3">
                       <Braces className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                       <div>
                         <div className="text-sm font-medium">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {item.desc}
-                        </div>
+                        <div className="text-xs text-muted-foreground">{item.desc}</div>
                       </div>
                     </li>
                   ))}
@@ -647,7 +670,8 @@ export default async function LandingPage() {
                 </div>
                 <div className="diagram-node-label">CLI</div>
                 <div className="diagram-node-desc">
-                  init, index, status<br />
+                  init, index, status
+                  <br />
                   watch, serve, setup
                 </div>
               </div>
@@ -663,7 +687,8 @@ export default async function LandingPage() {
                 </div>
                 <div className="diagram-node-label">SQLite Runtime</div>
                 <div className="diagram-node-desc">
-                  registry + workspace DBs<br />
+                  registry + workspace DBs
+                  <br />
                   FTS + graph + memory
                 </div>
               </div>
@@ -679,7 +704,8 @@ export default async function LandingPage() {
                 </div>
                 <div className="diagram-node-label">MCP + Dashboard</div>
                 <div className="diagram-node-desc">
-                  agent tools + telemetry<br />
+                  agent tools + telemetry
+                  <br />
                   graph inspection
                 </div>
               </div>
