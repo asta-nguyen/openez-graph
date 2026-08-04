@@ -11,14 +11,14 @@
     "@openez-graph/config": "workspace:*",
     "@openez-graph/core": "workspace:*",
     "@openez-graph/db": "workspace:*",
-    "drizzle-orm": "^0.45.2",
     "fast-glob": "^3.3.3",
     "github-slugger": "^2.0.0",
     "js-yaml": "^4.3.1",
+    "oxc-parser": "^0.143.0",
+    "picomatch": "^4.0.5",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "toml": "^4.1.1",
-    "ts-morph": "^28.0.0",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.0.0"
   }

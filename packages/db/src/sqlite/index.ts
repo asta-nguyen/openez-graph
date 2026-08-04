@@ -1,5 +1,5 @@
 export { getRegistryDb, closeRegistryDb, resolveRegistryDbPath } from "./registry-db";
-export { getWorkspaceDb, closeWorkspaceDb, closeAllWorkspaceDbs } from "./workspace-db";
+export { getWorkspaceDb, closeAllWorkspaceDbs } from "./workspace-db";
 export { createRegistryRepository, createWorkspaceRepository } from "./repository";
 export {
   findLocalWorkspaceConfig,

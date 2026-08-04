@@ -659,6 +659,13 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
     }
   }
 
+  // Kick off lazy graph build in background — AI will likely query graph soon.
+  // Non-blocking: if it's not done by first query, ensureGraphBuilt() finishes it.
+  try {
+    const repo = createWorkspaceRepository(workspace.rootPath);
+    setImmediate(() => { try { repo.ensureGraphBuilt(); } catch { /* non-fatal */ } });
+  } catch { /* non-fatal */ }
+
   // The stdio MCP server must stay cheap to start and robust on large repos.
   // Read tools run throttled incremental catch-up before querying; live watch is opt-in.
   if (!WATCH_ENABLED) {

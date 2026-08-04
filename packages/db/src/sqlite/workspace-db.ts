@@ -1,162 +1,133 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { Database } from "bun:sqlite";
 
-import * as workspaceSchema from "./schema";
+import * as schema from "./schema";
 import { createNativeDatabase } from "./database-loader";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
 
-const dbCache = new Map<string, ReturnType<typeof drizzle>>();
+const dbCache = new Map<string, ReturnType<typeof getWorkspaceDbRaw>>();
 
-export function getWorkspaceDb(rootPath: string) {
-  const cached = dbCache.get(rootPath);
-  if (cached) {
-    return cached;
+// Resolve a bundled file (template.sqlite, registry-template.sqlite) that ships alongside the CLI binary.
+export function resolveBundledFile(filename: string): string | null {
+  const candidates = [
+    // Bundled CLI: dist/apps/cli/src/cli.cjs → dist/<filename> (up 4)
+    path.join(__dirname, "..", "..", "..", "..", filename),
+    // Bundled CLI alt: relative to process.argv[1]
+    path.join(path.dirname(process.argv[1] || __filename), "..", "..", "..", "..", filename),
+    // Dev: packages/db/src/sqlite/ → packages/db/<filename> (up 3)
+    path.join(__dirname, "..", "..", "..", filename),
+    // Fallback: cwd
+    path.join(process.cwd(), filename),
+    path.join(process.cwd(), "apps", "cli", "dist", filename),
+  ];
+  for (const c of candidates) {
+    try { if (fs.existsSync(c)) return c; } catch {}
   }
+  return null;
+}
 
+function getWorkspaceDbRaw(rootPath: string) {
   const dbDir = path.join(rootPath, WORKSPACE_DB_DIR_NAME);
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true, mode: 0o755 });
   }
-
   const dbPath = path.join(dbDir, WORKSPACE_DB_FILE_NAME);
+
+  if (!fs.existsSync(dbPath)) {
+    const template = resolveBundledFile("template.sqlite");
+    if (template) {
+      const tmpPath = `${dbPath}.${process.pid}.tmp`;
+      try {
+        fs.copyFileSync(template, tmpPath);
+        if (!fs.existsSync(dbPath)) fs.renameSync(tmpPath, dbPath);
+        else fs.unlinkSync(tmpPath);
+      } catch {
+        try { fs.unlinkSync(tmpPath); } catch {}
+      }
+    }
+  }
+
   const sqlite = createNativeDatabase(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  return { sqlite, db: drizzle(sqlite as any, { schema }) };
+}
 
-  const db = drizzle(sqlite as never, { schema: workspaceSchema });
+export function getWorkspaceDb(rootPath: string) {
+  const cached = dbCache.get(rootPath);
+  if (cached) return cached.db;
+
+  const { sqlite, db } = getWorkspaceDbRaw(rootPath);
   initializeWorkspaceSchema(sqlite);
-  dbCache.set(rootPath, db);
+  dbCache.set(rootPath, { sqlite, db });
   return db;
 }
 
-export function closeWorkspaceDb(rootPath: string) {
-  dbCache.delete(rootPath);
+export function getWorkspaceNativeDb(rootPath: string) {
+  const cached = dbCache.get(rootPath);
+  if (cached) return cached.sqlite;
+  getWorkspaceDb(rootPath);
+  return dbCache.get(rootPath)!.sqlite;
 }
 
 export function closeAllWorkspaceDbs() {
+  for (const entry of dbCache.values()) {
+    try { entry.sqlite.close(); } catch {}
+  }
   dbCache.clear();
 }
 
+export function getFullWorkspaceDdl(): string {
+  return [
+    ...getWorkspaceTableDefinitions(),
+    "CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)",
+    "CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type)",
+    "CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label)",
+    "CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id)",
+    "CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id)",
+    "CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type)",
+    "CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol'",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type)",
+    "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, content, tokenize = 'porter unicode61')",
+  ].join(";\n") + ";";
+}
+
 export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
-  const tables = getWorkspaceTableDefinitions();
-  for (const ddl of tables) {
-    sqlite.exec(ddl);
+  const tableExists = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='documents'").get() as { c: number }).c > 0;
+
+  if (tableExists) {
+    const hasIndexMeta = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='index_meta'").get() as { c: number }).c > 0;
+    if (!hasIndexMeta) {
+      sqlite.exec(`CREATE TABLE IF NOT EXISTS index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+    }
+
+    const hasFts = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='chunks_fts'").get() as { c: number }).c > 0;
+    if (!hasFts) {
+      sqlite.exec(`CREATE VIRTUAL TABLE chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, content, tokenize = 'porter unicode61')`);
+    }
+
+    const hasTypeLabelIdx = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_graph_nodes_type_label'").get() as { c: number }).c > 0;
+    if (!hasTypeLabelIdx) {
+      try { sqlite.exec(`CREATE UNIQUE INDEX idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol'`); } catch {}
+    }
+    const hasEdgeIdx = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_graph_edges_from_to_type'").get() as { c: number }).c > 0;
+    if (!hasEdgeIdx) {
+      sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type)`);
+    }
+
+    migrateQueryLogColumns(sqlite);
+    return;
   }
 
+  sqlite.exec(getFullWorkspaceDdl());
   migrateQueryLogColumns(sqlite);
-
-  sqlite.exec(`
-    CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
-    CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
-    CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type);
-    CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
-    CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
-  `);
-
-  // Partial unique index to enable ON CONFLICT upserts for non-symbol nodes.
-  // Symbols allow duplicate names across files and are handled separately.
-  try {
-    sqlite.exec(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label
-      ON graph_nodes(type, label) WHERE type != 'symbol'
-    `);
-  } catch {
-    // Non-fatal if legacy duplicates exist
-  }
-
-  // Clean legacy duplicates and install the logical-edge constraint atomically.
-  sqlite.transaction(() => {
-    sqlite.exec(`
-      DELETE FROM graph_edges
-      WHERE id NOT IN (
-        SELECT MIN(id) FROM graph_edges
-        GROUP BY from_node_id, to_node_id, type
-      );
-    `);
-    sqlite.exec(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type
-      ON graph_edges(from_node_id, to_node_id, type)
-    `);
-  })();
-
-  // FTS5 includes file and symbol context because code queries often name either one.
-  sqlite.exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-      chunk_id UNINDEXED,
-      path,
-      heading,
-      language,
-      search_text,
-      content,
-      tokenize = 'porter unicode61'
-    );
-  `);
-
-  const ftsColumns = sqlite.prepare("PRAGMA table_info(chunks_fts)").all() as Array<{ name: string }>;
-  if (!ftsColumns.some((column) => column.name === "search_text")) {
-    sqlite.exec(`
-      DROP TRIGGER IF EXISTS chunks_fts_insert;
-      DROP TRIGGER IF EXISTS chunks_fts_delete;
-      DROP TRIGGER IF EXISTS chunks_fts_update;
-      DROP TABLE chunks_fts;
-      CREATE VIRTUAL TABLE chunks_fts USING fts5(
-        chunk_id UNINDEXED,
-        path,
-        heading,
-        language,
-        search_text,
-        content,
-        tokenize = 'porter unicode61'
-      );
-    `);
-  }
-
-  // Triggers to keep FTS table in sync with chunks
-  sqlite.exec(`
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
-    BEGIN
-      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
-      SELECT new.id, documents.path, coalesce(new.heading, ''),
-        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
-      FROM documents WHERE documents.id = new.document_id;
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
-    BEGIN
-      DELETE FROM chunks_fts WHERE chunk_id = old.id;
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
-    BEGIN
-      DELETE FROM chunks_fts WHERE chunk_id = old.id;
-      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
-      SELECT new.id, documents.path, coalesce(new.heading, ''),
-        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
-      FROM documents WHERE documents.id = new.document_id;
-    END;
-  `);
-
-  // Only backfill FTS if there are chunks missing from the index — skip if counts match
-  const chunkCount = (sqlite.prepare("SELECT count(*) as c FROM chunks").get() as { c: number }).c;
-  const ftsCount = (sqlite.prepare("SELECT count(*) as c FROM chunks_fts").get() as { c: number }).c;
-  if (chunkCount > 0 && ftsCount < chunkCount) {
-    sqlite.exec(`
-      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
-      SELECT c.id, d.path, coalesce(c.heading, ''),
-        coalesce(d.language, ''), coalesce(json_extract(c.metadata, '$.searchText'), ''), c.content
-      FROM chunks c
-      INNER JOIN documents d ON d.id = c.document_id
-      LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-      WHERE f.chunk_id IS NULL;
-    `);
-  }
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {

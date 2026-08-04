@@ -63,9 +63,5 @@
     "tsup": "^8.5.1",
     "typescript": "^5.0.0",
     "zod": "^3.25.76"
-  },
-  "dependencies": {
-    "@types/better-sqlite3": "^9.6.0",
-    "better-sqlite3": "^13.0.2"
   }
 }

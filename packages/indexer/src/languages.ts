@@ -1,15 +1,33 @@
 import path from "node:path";
-
 import { countTokens } from "./tokenizer";
-
-function fastHash(content: string): string {
-  let h = 5381;
-  for (let i = 0; i < content.length; i++) {
-    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
-  }
-  return (h >>> 0).toString(36);
-}
+import { fastHash } from "./hash";
 import type { IndexedChunk } from "./types";
+
+// oxc-parser — Rust-based, 13x faster than @babel/parser, ESTree-compatible AST
+let _parser: any = null;
+function loadParser(): any {
+  if (_parser) return _parser;
+  try {
+    _parser = require("oxc-parser");
+  } catch {
+    const mod = require("module");
+    const candidates = [
+      path.join(__dirname, "package.json"),
+      path.join(__dirname, "..", "package.json"),
+      path.join(__dirname, "..", "..", "package.json"),
+      path.join(__dirname, "..", "..", "..", "package.json"),
+      path.join(process.cwd(), "package.json"),
+      path.join(process.cwd(), "packages", "indexer", "package.json"),
+    ];
+    for (const candidate of candidates) {
+      try {
+        _parser = mod.createRequire(candidate)("oxc-parser");
+        break;
+      } catch { /* try next */ }
+    }
+  }
+  return _parser;
+}
 
 function codeSearchText(text: string): string {
   const terms = text.match(/[A-Z]?[a-z0-9]+|[A-Z]+(?=[A-Z][a-z]|\b)/g) ?? [];
@@ -102,7 +120,7 @@ function isEscaped(text: string, index: number): boolean {
 
 function stripNonCode(
   content: string,
-  options: { hashComments?: boolean; backtickStrings?: boolean; tripleStrings?: boolean; rawStrings?: boolean; byteStrings?: boolean } = {}
+  options: { hashComments?: boolean; backtickStrings?: boolean; tripleStrings?: boolean; rawStrings?: boolean; byteStrings?: boolean; singleQuoteStrings?: boolean } = {}
 ): string {
   // Single-pass state machine — O(n), no regex backtracking
   // Replaces comments and string contents with spaces (preserving newlines)
@@ -123,12 +141,14 @@ function stripNonCode(
     }
     // Block comment: /* ... */
     if (c === SLASH && next === STAR) {
-      out[i] = SPACE; out[i + 1] = SPACE; i += 2;
-      while (i < len && !(buf[i] === STAR && buf[i + 1] === SLASH)) {
+      if (i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; }
+      i += 2;
+      while (i < len && !(buf[i] === STAR && i + 1 < len && buf[i + 1] === SLASH)) {
         out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
         i++;
       }
-      if (i < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; }
+      if (i < len && i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; }
+      else { while (i < len) { out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE; i++; } }
       continue;
     }
     // Triple strings: """ ... """ or ''' ... '''
@@ -188,8 +208,8 @@ function stripNonCode(
       if (i < len) { out[i] = SPACE; i++; }
       continue;
     }
-    // Single-quoted strings: '...'
-    if (c === SQUOTE) {
+    // Single-quoted strings: '...' (skip for Rust — ' is a lifetime, not a string)
+    if (options.singleQuoteStrings !== false && c === SQUOTE) {
       out[i] = SPACE; i++;
       while (i < len && buf[i] !== SQUOTE) {
         if (buf[i] === BSLASH && i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; continue; }
@@ -516,7 +536,7 @@ function normalizeRustCallName(value: string): string {
 
 export function parseRust(content: string): IndexedCodeResult {
   const lines = content.split("\n");
-  const codeLines = stripNonCode(content, { rawStrings: true, byteStrings: true }).split("\n");
+  const codeLines = stripNonCode(content, { rawStrings: true, byteStrings: true, singleQuoteStrings: false }).split("\n");
   const braceEndMap = buildBraceEndMap(codeLines);
   const definedSymbols: ExtractedSymbol[] = [];
   const calledIdentifiers = new Set<string>();
@@ -927,7 +947,7 @@ function findIndentedBlockEnd(lines: string[], startIndex: number): number {
 // Pre-compute closing brace line for every opening brace line in one pass — O(n) not O(n²)
 function buildBraceEndMap(lines: string[]): Map<number, number> {
   const result = new Map<number, number>();
-  const stack: number[] = []; // line numbers where '{' was first seen
+  const stack: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line.includes("{") && !line.includes("}")) continue;
@@ -1016,4 +1036,232 @@ function makeFallbackChunks(content: string, lines: string[]): IndexedCodeResult
   }
 
   return { chunks, importPaths: [], definedSymbols: [], calledIdentifiers: [], callExpressions: [] };
+}
+
+export function parseTypeScript(content: string, filePath?: string): IndexedCodeResult {
+  const lines = content.split("\n");
+  const lineStarts: number[] = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === "\n") lineStarts.push(i + 1);
+  }
+
+  function offsetToLine(offset: number): number {
+    let lo = 0, hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo + 1;
+  }
+
+  const definedSymbols: ExtractedSymbol[] = [];
+  const importPaths: string[] = [];
+  const calledIdentifiers = new Set<string>();
+  const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
+
+  let ast: { body: any[] };
+  try {
+    const parser = loadParser();
+    const fullAst = parser.parseSync(filePath ?? "file.ts", content, { sourceType: "module" });
+    ast = fullAst.program;
+  } catch {
+    return parseTypeScriptRegex(content);
+  }
+
+  function extractCalls(node: any, callerName: string) {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "CallExpression") {
+      const expr = node.callee;
+      const name = expr.type === "Identifier" ? expr.name :
+                   expr.type === "MemberExpression" ? (expr.property?.name ?? "") : "";
+      if (name) {
+        calledIdentifiers.add(name);
+        if (callerName) callExpressions.push({ callerName, calleeName: name });
+      }
+    }
+    for (const key of Object.keys(node)) {
+      const val = (node as any)[key];
+      if (Array.isArray(val)) val.forEach((c) => extractCalls(c, callerName));
+      else if (val && typeof val === "object" && val.type) extractCalls(val, callerName);
+    }
+  }
+
+  for (const node of ast.body) {
+    const isExported = node.type === "ExportNamedDeclaration" || node.type === "ExportDefaultDeclaration";
+    const inner = isExported ? node.declaration : node;
+
+    if (node.type === "ImportDeclaration") {
+      if (node.source?.value) importPaths.push(node.source.value);
+      continue;
+    }
+
+    if (!inner) continue;
+
+    let name: string | null = null;
+    let symbolType = "variable";
+    let body: any = null;
+
+    switch (inner.type) {
+      case "FunctionDeclaration":
+      case "FunctionExpression":
+        name = inner.id?.name ?? null;
+        symbolType = "function";
+        body = inner.body;
+        break;
+      case "ClassDeclaration":
+        name = inner.id?.name ?? null;
+        symbolType = "class";
+        body = inner.body;
+        break;
+      case "TSInterfaceDeclaration":
+        name = inner.id?.name ?? null;
+        symbolType = "interface";
+        body = inner.body;
+        break;
+      case "TSTypeAliasDeclaration":
+        name = inner.id?.name ?? null;
+        symbolType = "type";
+        break;
+      case "VariableDeclaration":
+        name = inner.declarations?.[0]?.id?.name ?? null;
+        symbolType = "variable";
+        body = inner.declarations?.[0]?.init;
+        break;
+    }
+
+    if (!name) continue;
+
+    const startLine = offsetToLine(inner.start);
+    const endLine = offsetToLine(inner.end);
+    definedSymbols.push({
+      name,
+      symbolType,
+      type: symbolType,
+      exported: isExported,
+      startLine,
+      endLine
+    });
+
+    if (body) extractCalls(body, name);
+  }
+
+  if (definedSymbols.length === 0) {
+    return makeFallbackChunks(content, lines);
+  }
+
+  const chunks = createSymbolChunks(definedSymbols, lines, "typescript");
+  return {
+    chunks,
+    importPaths,
+    definedSymbols,
+    calledIdentifiers: [...calledIdentifiers],
+    callExpressions
+  };
+}
+
+function parseTypeScriptRegex(content: string): IndexedCodeResult {
+  const lines = content.split("\n");
+  const codeLines = stripNonCode(content, { backtickStrings: true }).split("\n");
+  const braceEndMap = buildBraceEndMap(codeLines);
+
+  const definedSymbols: ExtractedSymbol[] = [];
+  const importPaths: string[] = [];
+
+  const fnRegex = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+(\w+)/;
+  const fnArrowRegex = /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?\s*=\s*(?:async\s*)?\(/;
+  const fnArrowArrowRegex = /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?\s*=\s*(?:async\s*)?([^=]+)=>/;
+  const classRegex = /^(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+(\w+)/;
+  const interfaceRegex = /^(?:export\s+)?interface\s+(\w+)/;
+  const typeRegex = /^(?:export\s+)?type\s+(\w+)\s*=/;
+  const constRegex = /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?\s*=/;
+  const importRegex = /^(?:export\s+)?import\s+.*?\s+from\s+['"`](.+?)['"`]/;
+  const importSideEffectRegex = /^(?:export\s+)?import\s+['"`](.+?)['"`]/;
+  const exportRegex = /^export\s+/;
+
+  for (let i = 0; i < codeLines.length; i++) {
+    const trimmed = codeLines[i].trim();
+    if (!trimmed) continue;
+
+    const importMatch = importRegex.exec(trimmed) || importSideEffectRegex.exec(trimmed);
+    if (importMatch) {
+      importPaths.push(importMatch[1]);
+      continue;
+    }
+
+    const match = fnRegex.exec(trimmed)
+      || classRegex.exec(trimmed)
+      || interfaceRegex.exec(trimmed)
+      || typeRegex.exec(trimmed)
+      || fnArrowRegex.exec(trimmed)
+      || fnArrowArrowRegex.exec(trimmed);
+
+    if (match) {
+      const name = match[1];
+      const isExported = exportRegex.test(trimmed);
+      let symbolType = "function";
+      if (classRegex.test(trimmed)) symbolType = "class";
+      else if (interfaceRegex.test(trimmed)) symbolType = "interface";
+      else if (typeRegex.test(trimmed)) symbolType = "type";
+      else if (fnArrowRegex.test(trimmed) || fnArrowArrowRegex.test(trimmed)) symbolType = "function";
+
+      const startLine = i + 1;
+      const endLine = trimmed.includes("{") || classRegex.test(trimmed) || interfaceRegex.test(trimmed)
+        ? findBraceBlockEndFast(codeLines, i, braceEndMap)
+        : (typeRegex.test(trimmed) ? findTypeEnd(codeLines, i) : startLine);
+
+      definedSymbols.push({
+        name,
+        symbolType,
+        type: symbolType,
+        exported: isExported,
+        startLine,
+        endLine
+      });
+      i = endLine - 1;
+      continue;
+    }
+
+    const constMatch = constRegex.exec(trimmed);
+    if (constMatch && !fnArrowRegex.test(trimmed) && !fnArrowArrowRegex.test(trimmed)) {
+      const name = constMatch[1];
+      const isExported = exportRegex.test(trimmed);
+      const startLine = i + 1;
+      const endLine = trimmed.includes("{")
+        ? findBraceBlockEndFast(codeLines, i, braceEndMap)
+        : startLine;
+      definedSymbols.push({
+        name,
+        symbolType: "variable",
+        type: "variable",
+        exported: isExported,
+        startLine,
+        endLine
+      });
+      if (endLine > startLine) i = endLine - 1;
+    }
+  }
+
+  if (definedSymbols.length === 0) {
+    return makeFallbackChunks(content, lines);
+  }
+
+  const chunks = createSymbolChunks(definedSymbols, lines, "typescript");
+  return {
+    chunks,
+    importPaths,
+    definedSymbols,
+    calledIdentifiers: [],
+    callExpressions: []
+  };
+}
+
+function findTypeEnd(lines: string[], startIndex: number): number {
+  for (let i = startIndex; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes(";") || (i > startIndex && /^[^;\s]/.test(line.trim()))) {
+      return i + 1;
+    }
+  }
+  return startIndex + 1;
 }

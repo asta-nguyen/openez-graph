@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import type { FileToIndex } from "./types";
 import { codeExtensions, configExtensions, markdownExtensions } from "./languages";
+import picomatch from "picomatch";
 
 const DEFAULT_INCLUDE_PATTERNS = [
   ...Array.from(codeExtensions.keys()).map((ext) => `**/*${ext}`),
@@ -129,34 +130,39 @@ export async function scanWorkspaceFiles(input: {
     else if (p.endsWith("/")) dirName = p.replace(/^\//, "").replace(/\/$/, "");
     if (dirName && !dirName.includes("/") && !dirName.includes("*")) ignoreDirs.add(dirName);
   }
+  const isIgnored = picomatch(ignorePatterns, { dot: true });
   const results: FileToIndex[] = [];
+  let scanErrors = 0;
 
   async function walk(dir: string) {
     let entries: import("node:fs").Dirent[];
     try {
       entries = await fsAsync.readdir(dir, { withFileTypes: true });
-    } catch { return; }
+    } catch { scanErrors++; return; }
 
     const tasks: Promise<void>[] = [];
     for (const entry of entries) {
       if (entry.name.startsWith(".")) continue;
       const fullPath = path.join(dir, entry.name);
+      const relative = path.relative(rootPath, fullPath).split(path.sep).join("/");
 
       if (entry.isDirectory()) {
         if (ignoreDirs.has(entry.name)) continue;
+        if (isIgnored(relative)) continue;
         tasks.push(walk(fullPath));
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name);
         if (!ALLOWED_EXTENSIONS.has(ext)) continue;
+        if (isIgnored(relative)) continue;
         tasks.push(
           fsAsync.stat(fullPath).then((stat) => {
             results.push({
               absolutePath: fullPath,
-              relativePath: path.relative(rootPath, fullPath),
+              relativePath: relative,
               sizeBytes: stat.size,
               mtimeMs: Math.trunc(stat.mtimeMs)
             });
-          }).catch(() => {})
+          }).catch(() => { scanErrors++; })
         );
       }
     }
@@ -164,5 +170,6 @@ export async function scanWorkspaceFiles(input: {
   }
 
   await walk(rootPath);
+  if (scanErrors > 0) console.warn(`[openez] scan: ${scanErrors} errors`);
   return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 }

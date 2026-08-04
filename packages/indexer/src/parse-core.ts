@@ -1,12 +1,5 @@
-import { indexCode } from "./code";
-function fastHash(content: string): string {
-  let h = 5381;
-  for (let i = 0; i < content.length; i++) {
-    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
-  }
-  return (h >>> 0).toString(36);
-}
-import { indexConfig, inferDocumentKind, parseGo, parsePython, parseRust } from "./languages";
+import { indexConfig, inferDocumentKind, parseGo, parsePython, parseRust, parseTypeScript } from "./languages";
+import { fastHash } from "./hash";
 import { indexMarkdown } from "./markdown";
 import type { IndexedChunk } from "./types";
 
@@ -59,8 +52,8 @@ export function chunkDocument(input: {
 
   if (info.kind === "code") {
     if (info.language === "typescript" || info.language === "tsx" || info.language === "javascript" || info.language === "jsx") {
-      const r = indexCode(input.content, input.absolutePath);
-      return { kind: info.kind, language: info.language, chunks: r.chunks, importPaths: r.importPaths, wikilinks: [] as string[], definedSymbols: r.definedSymbols, calledIdentifiers: r.calledIdentifiers, callExpressions: r.callExpressions };
+      const r = parseTypeScript(input.content, input.relativePath);
+      return { kind: info.kind, language: info.language, chunks: r.chunks.map(c => ({ ...c, metadata: { ...c.metadata, language: info.language ?? "typescript" } })), importPaths: r.importPaths, wikilinks: [] as string[], definedSymbols: r.definedSymbols, calledIdentifiers: r.calledIdentifiers, callExpressions: r.callExpressions };
     }
     if (info.language === "python") {
       const r = parsePython(input.content);
@@ -77,7 +70,7 @@ export function chunkDocument(input: {
     return { kind: info.kind, language: info.language, chunks: [fallbackChunk(input.content, "code", info.language ?? undefined)], ...EMPTY };
   }
 
-  return { kind: info.kind, language: info.language, chunks: [fallbackChunk(input.content, info.kind)], ...EMPTY };
+  return { kind: info.kind, language: info.language, chunks: [fallbackChunk(input.content, info.kind, info.language ?? undefined)], ...EMPTY };
 }
 
 export type ParseResult = ReturnType<typeof chunkDocument>;
