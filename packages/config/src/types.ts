@@ -34,8 +34,8 @@ export interface BrainConfig {
 export function getDefaultSettings(): GlobalSettings {
   return {
     chunking: {
-      targetTokens: 512,
-      overlapTokens: 50
+      targetTokens: 1024,
+      overlapTokens: 100
     },
     retrieval: {
       vectorLimit: 20,

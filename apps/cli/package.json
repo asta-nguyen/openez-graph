@@ -47,19 +47,15 @@
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json"
   },
-  "dependencies": {
-    "better-sqlite3": "^12.10.0"
-  },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "@hono/node-server": "^2.0.12",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openez-graph/config": "workspace:*",
     "@openez-graph/core": "workspace:*",
     "@openez-graph/db": "workspace:*",
     "@openez-graph/indexer": "workspace:*",
     "@openez-graph/mcp": "workspace:*",
     "@openez-graph/web": "workspace:*",
-    "@types/better-sqlite3": "^7.6.13",
     "chokidar": "^4.0.3",
     "commander": "^14.0.0",
     "hono": "^4.12.33",
@@ -67,5 +63,9 @@
     "tsup": "^8.5.1",
     "typescript": "^5.0.0",
     "zod": "^3.25.76"
+  },
+  "dependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "better-sqlite3": "^13.0.2"
   }
 }

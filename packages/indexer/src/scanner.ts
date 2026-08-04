@@ -65,6 +65,12 @@ function baseName(filePath: string): string {
   return path.basename(filePath);
 }
 
+const ALLOWED_EXTENSIONS = new Set([
+  ...codeExtensions.keys(),
+  ...configExtensions.keys(),
+  ...markdownExtensions
+]);
+
 export async function scanWorkspaceFiles(input: {
   rootPath: string;
   include?: string;
@@ -79,30 +85,84 @@ export async function scanWorkspaceFiles(input: {
     ...(input.exclude ? input.exclude.split("\n").filter(Boolean).map((p) => p.trim()) : [])
   ];
 
-  const includePatterns = input.include
-    ? input.include.split("\n").filter(Boolean).map((p) => p.trim())
-    : DEFAULT_INCLUDE_PATTERNS;
+  // Custom include patterns: fall back to fast-glob (needs pattern matching)
+  if (input.include) {
+    const includePatterns = input.include.split("\n").filter(Boolean).map((p) => p.trim());
+    const entries = await fg(includePatterns, {
+      cwd: rootPath,
+      ignore: ignorePatterns,
+      onlyFiles: true,
+      absolute: true,
+      followSymbolicLinks: false,
+      dot: false
+    });
 
-  const entries = await fg(includePatterns, {
-    cwd: rootPath,
-    ignore: ignorePatterns,
-    onlyFiles: true,
-    absolute: true,
-    followSymbolicLinks: false,
-    dot: false
-  });
+    const STAT_CONCURRENCY = 64;
+    const results: FileToIndex[] = [];
+    let statIndex = 0;
+    async function statWorker() {
+      while (statIndex < entries.length) {
+        const i = statIndex++;
+        try {
+          const stat = await fsAsync.stat(entries[i]);
+          results.push({
+            absolutePath: entries[i],
+            relativePath: path.relative(rootPath, entries[i]),
+            sizeBytes: stat.size,
+            mtimeMs: Math.trunc(stat.mtimeMs)
+          });
+        } catch { /* deleted between glob and stat */ }
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(STAT_CONCURRENCY, entries.length) }, () => statWorker())
+    );
+    return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+  }
 
-  const results = await Promise.all(
-    entries.map(async (absolutePath) => {
-      const stat = await fsAsync.stat(absolutePath);
-      return {
-        absolutePath,
-        relativePath: path.relative(rootPath, absolutePath),
-        sizeBytes: stat.size,
-        mtimeMs: Math.trunc(stat.mtimeMs)
-      } satisfies FileToIndex;
-    })
-  );
+  // Default: recursive readdir with Dirent (avoids fast-glob pattern matching + separate stat)
+  const ignoreDirs = new Set(["node_modules", "dist", "build", "coverage", "target", ".git", ".next", ".turbo", ".openez"]);
+  for (const p of gitignorePatterns) {
+    // Only extract simple directory names: **/dirname or dirname/
+    let dirName: string | null = null;
+    if (p.startsWith("**/")) dirName = p.slice(3).replace(/\/$/, "");
+    else if (p.endsWith("/")) dirName = p.replace(/^\//, "").replace(/\/$/, "");
+    if (dirName && !dirName.includes("/") && !dirName.includes("*")) ignoreDirs.add(dirName);
+  }
+  const results: FileToIndex[] = [];
 
+  async function walk(dir: string) {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fsAsync.readdir(dir, { withFileTypes: true });
+    } catch { return; }
+
+    const tasks: Promise<void>[] = [];
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (ignoreDirs.has(entry.name)) continue;
+        tasks.push(walk(fullPath));
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name);
+        if (!ALLOWED_EXTENSIONS.has(ext)) continue;
+        tasks.push(
+          fsAsync.stat(fullPath).then((stat) => {
+            results.push({
+              absolutePath: fullPath,
+              relativePath: path.relative(rootPath, fullPath),
+              sizeBytes: stat.size,
+              mtimeMs: Math.trunc(stat.mtimeMs)
+            });
+          }).catch(() => {})
+        );
+      }
+    }
+    await Promise.all(tasks);
+  }
+
+  await walk(rootPath);
   return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 }

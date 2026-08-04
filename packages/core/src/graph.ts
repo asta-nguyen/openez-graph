@@ -86,7 +86,7 @@ export async function codeContext(input: {
     (node) => node.type === "symbol" && (node.label === input.symbolOrPath || node.id === input.symbolOrPath)
   );
   const referencedChunkIds = [...new Set(neighbors.nodes
-    .filter((node) => node.type === "symbol" || node.type === "chunk")
+    .filter((node) => node.type === "symbol")
     .map((node) => node.ref_id)
     .filter((id): id is string => typeof id === "string" && id.length > 0))];
   const chunkRows = referencedChunkIds.length === 0 ? [] : await repo.queryRaw(
@@ -131,7 +131,7 @@ export async function codeContext(input: {
       .filter((node) => node.type === "file")
       .map((node) => ({ path: String(node.label) })),
     relatedChunks: neighbors.nodes
-      .filter((node) => node.type === "chunk")
+      .filter((node) => node.type === "symbol")
       .flatMap((node) => {
         const chunk = chunksById.get(String(node.ref_id ?? ""));
         if (!chunk) return [];

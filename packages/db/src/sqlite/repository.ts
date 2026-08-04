@@ -266,7 +266,12 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     insertEmbedding: native.prepare(
       "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ),
+    insertFtsRow: native.prepare(
+      "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content) VALUES (?, ?, ?, ?, ?, ?)"
+    ),
   };
+
+  let streamNow = new Date().toISOString();
 
   return {
     rootPath,
@@ -308,6 +313,24 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       const now = new Date().toISOString();
       stmts.insertDoc.run(id, input.path, input.absolutePath, input.kind, input.language, input.contentHash, input.sizeBytes, input.mtimeMs, now, now);
       return id;
+    },
+
+    async insertDocumentsBatch(inputs: Array<{ path: string; absolutePath: string; kind: string; language?: string | null; contentHash: string; sizeBytes: number; mtimeMs: number }>): Promise<string[]> {
+      if (inputs.length === 0) return [];
+      const now = new Date().toISOString();
+      const ids: string[] = inputs.map(() => crypto.randomUUID());
+      const BATCH = 500;
+      for (let i = 0; i < inputs.length; i += BATCH) {
+        const batch = inputs.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (let j = 0; j < batch.length; j++) {
+          const item = batch[j];
+          params.push(ids[i + j], item.path, item.absolutePath, item.kind, item.language ?? null, item.contentHash, item.sizeBytes, item.mtimeMs, now, now);
+        }
+        native.prepare(`INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES ${placeholders}`).run(...params);
+      }
+      return ids;
     },
 
     async updateDocument(id, updates) {
@@ -740,15 +763,20 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     setOptimizedWriteMode(enabled: boolean): void {
       if (enabled) {
         native.pragma("synchronous = OFF");
-        native.pragma("cache_size = -65536");
+        native.pragma("cache_size = -4096");
         native.pragma("temp_store = MEMORY");
-        native.pragma("mmap_size = 268435456");
+        native.pragma("mmap_size = 0");
+        native.pragma("wal_autocheckpoint = 500");
       } else {
         native.pragma("synchronous = NORMAL");
         native.pragma("cache_size = -2000");
         native.pragma("temp_store = DEFAULT");
         native.pragma("mmap_size = 0");
       }
+    },
+
+    walCheckpoint(): void {
+      native.pragma("wal_checkpoint(PASSIVE)");
     },
 
     dropFtsTriggers(): void {
@@ -769,6 +797,33 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         }
         native.prepare(`INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content) VALUES ${placeholders}`).run(...params);
       }
+    },
+
+    streamDocument(input: { id: string; path: string; absolutePath: string; kind: string; language?: string | null; contentHash: string; sizeBytes: number; mtimeMs: number }): void {
+      const now = streamNow;
+      stmts.insertDoc.run(input.id, input.path, input.absolutePath, input.kind, input.language ?? null, input.contentHash, input.sizeBytes, input.mtimeMs, now, now);
+    },
+
+    streamChunk(input: { id: string; documentId: string; chunkIndex: number; heading: string | null; content: string; tokenCount: number; contentHash: string; metadata: string }): void {
+      const now = streamNow;
+      stmts.insertChunk.run(input.id, input.documentId, input.chunkIndex, input.heading, input.content, input.tokenCount, input.contentHash, input.metadata, now, now);
+    },
+
+    streamGraphNode(input: { id: string; type: string; label: string; refId?: string | null; metadata?: string }): void {
+      const now = streamNow;
+      stmts.insertNode.run(input.id, input.type, input.label, input.refId ?? null, input.metadata ?? "{}", now, now);
+    },
+
+    streamEdge(input: { id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }): void {
+      stmts.insertEdge.run(input.id, input.fromNodeId, input.toNodeId, input.type, input.weight ?? 1, input.metadata ?? "{}", streamNow);
+    },
+
+    streamFtsRow(input: { chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }): void {
+      stmts.insertFtsRow.run(input.chunkId, input.path, input.heading, input.language, input.searchText, input.content);
+    },
+
+    refreshStreamTimestamp(): void {
+      streamNow = new Date().toISOString();
     },
 
     restoreFtsTriggers(): void {

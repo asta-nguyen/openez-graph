@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { countTokens } from "@openez-graph/core";
+import { countTokens } from "./tokenizer";
 
 import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
@@ -28,7 +28,9 @@ export const codeExtensions = new Map<string, string>([
   [".cts", "typescript"],
   [".py", "python"],
   [".go", "go"],
-  [".rs", "rust"]
+  [".rs", "rust"],
+  [".c", "c"],
+  [".h", "c"]
 ]);
 
 export const configExtensions = new Map<string, string>([
@@ -96,27 +98,105 @@ function stripNonCode(
   content: string,
   options: { hashComments?: boolean; backtickStrings?: boolean; tripleStrings?: boolean; rawStrings?: boolean; byteStrings?: boolean } = {}
 ): string {
-  let result = content;
-  if (options.tripleStrings) {
-    result = result.replace(/"""[\s\S]*?"""|'''[\s\S]*?'''/g, (m) => m.replace(/[^\n]/g, " "));
+  // Single-pass state machine — O(n), no regex backtracking
+  // Replaces comments and string contents with spaces (preserving newlines)
+  const buf = Buffer.from(content, "utf8") as unknown as { [i: number]: number; length: number };
+  const len = buf.length;
+  const out = Buffer.alloc(len);
+  let i = 0;
+  const SPACE = 32, NEWLINE = 10, SLASH = 47, STAR = 42, HASH = 35, DQUOTE = 34, SQUOTE = 39, BACKTICK = 96, R = 114, BSLASH = 92;
+
+  while (i < len) {
+    const c = buf[i];
+    const next = buf[i + 1];
+
+    // Line comment: // or #
+    if ((c === SLASH && next === SLASH) || (options.hashComments && c === HASH)) {
+      while (i < len && buf[i] !== NEWLINE) { out[i] = SPACE; i++; }
+      continue;
+    }
+    // Block comment: /* ... */
+    if (c === SLASH && next === STAR) {
+      out[i] = SPACE; out[i + 1] = SPACE; i += 2;
+      while (i < len && !(buf[i] === STAR && buf[i + 1] === SLASH)) {
+        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
+        i++;
+      }
+      if (i < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; }
+      continue;
+    }
+    // Triple strings: """ ... """ or ''' ... '''
+    if (options.tripleStrings && ((c === DQUOTE && next === DQUOTE && buf[i + 2] === DQUOTE) || (c === SQUOTE && next === SQUOTE && buf[i + 2] === SQUOTE))) {
+      const quote = c;
+      out[i] = SPACE; out[i + 1] = SPACE; out[i + 2] = SPACE; i += 3;
+      while (i < len && !(buf[i] === quote && buf[i + 1] === quote && buf[i + 2] === quote)) {
+        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
+        i++;
+      }
+      if (i < len) { out[i] = SPACE; out[i + 1] = SPACE; out[i + 2] = SPACE; i += 3; }
+      continue;
+    }
+    // Raw strings: r"..." or r#"..."#
+    if (options.rawStrings && c === R && (next === HASH || next === DQUOTE)) {
+      let hashCount = 0;
+      let j = i + 1;
+      while (buf[j] === HASH) { hashCount++; j++; }
+      if (buf[j] === DQUOTE) {
+        for (let k = i; k <= j; k++) out[k] = SPACE;
+        i = j + 1;
+        while (i < len) {
+          if (buf[i] === DQUOTE) {
+            let allHash = true;
+            for (let k = 1; k <= hashCount; k++) { if (buf[i + k] !== HASH) { allHash = false; break; } }
+            if (allHash) {
+              out[i] = SPACE;
+              for (let k = 1; k <= hashCount; k++) out[i + k] = SPACE;
+              i += 1 + hashCount;
+              break;
+            }
+          }
+          out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
+          i++;
+        }
+        continue;
+      }
+    }
+    // Backtick strings: `...`
+    if (options.backtickStrings && c === BACKTICK) {
+      out[i] = SPACE; i++;
+      while (i < len && buf[i] !== BACKTICK) {
+        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
+        i++;
+      }
+      if (i < len) { out[i] = SPACE; i++; }
+      continue;
+    }
+    // Double-quoted strings: "..."
+    if (c === DQUOTE) {
+      out[i] = SPACE; i++;
+      while (i < len && buf[i] !== DQUOTE) {
+        if (buf[i] === BSLASH && i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; continue; }
+        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
+        i++;
+      }
+      if (i < len) { out[i] = SPACE; i++; }
+      continue;
+    }
+    // Single-quoted strings: '...'
+    if (c === SQUOTE) {
+      out[i] = SPACE; i++;
+      while (i < len && buf[i] !== SQUOTE) {
+        if (buf[i] === BSLASH && i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; continue; }
+        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
+        i++;
+      }
+      if (i < len) { out[i] = SPACE; i++; }
+      continue;
+    }
+    out[i] = c;
+    i++;
   }
-  if (options.hashComments) {
-    result = result.replace(/#[^\n]*/g, (m) => " ".repeat(m.length));
-  } else {
-    result = result
-      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-      .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
-  }
-  if (options.backtickStrings) {
-    result = result.replace(/`[\s\S]*?`/g, (m) => m.replace(/[^\n]/g, " "));
-  }
-  if (options.rawStrings) {
-    result = result.replace(/r(#*)"[\s\S]*?"\1/g, (m) => m.replace(/[^\n]/g, " "));
-  }
-  result = result
-    .replace(/"(?:\\.|[^"\\])*"/g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/'(?:\\.|[^'\\])*'/g, (m) => m.replace(/[^\n]/g, " "));
-  return result;
+  return out.toString("utf8");
 }
 
 // ── Python parser ──

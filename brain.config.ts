@@ -69,7 +69,7 @@ const config: BrainConfig = {
     }
   ],
   chunking: {
-    targetTokens: 700,
+    targetTokens: 1024,
     overlapTokens: 100
   },
   retrieval: {
