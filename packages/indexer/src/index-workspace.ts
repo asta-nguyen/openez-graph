@@ -22,7 +22,18 @@ import {
 } from "@openez-graph/db";
 import type { RegistryWorkspace, WorkspaceRepository } from "@openez-graph/db";
 
-import { hashContent } from "./hash";
+function fastHash(content: string): string {
+  let h = 5381;
+  for (let i = 0; i < content.length; i++) {
+    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
+
+let _idCounter = 0;
+function nextId(): string {
+  return `c${(_idCounter++).toString(36)}`;
+}
 import { chunkDocument, type ParseTask, type ParseResult } from "./parse-core";
 import { scanWorkspaceFiles } from "./scanner";
 import type { FileToIndex, IndexedChunk, IndexWorkspaceSummary } from "./types";
@@ -192,7 +203,7 @@ export function boundChunks(chunks: IndexedChunk[], targetTokens: number, overla
       ...chunk,
       content,
       tokenCount: countTokens(content),
-      contentHash: hashContent(content),
+      contentHash: fastHash(content),
       metadata: { ...chunk.metadata, splitIndex, splitCount: parts.length }
     }));
   });
@@ -572,10 +583,12 @@ export async function indexWorkspace(input: {
       }
     }
 
+    const isColdRun = existingDocumentsByPath.size === 0;
     if (filesToRead.length > 0) {
       repo.setOptimizedWriteMode(true);
       repo.dropFtsTriggers();
       bulkWriteMode = true;
+      repo.refreshStreamTimestamp();
 
       const workerPath = resolveWorkerPath();
       const workerCount = Math.min(
@@ -603,7 +616,7 @@ export async function indexWorkspace(input: {
         const isColdBatch = existingDocumentsByPath.size === 0;
         for (const file of batchFiles) {
           const content = fileContents.get(file.relativePath)!;
-          const contentHash = isColdBatch ? `${file.mtimeMs}:${file.sizeBytes}` : hashContent(content);
+          const contentHash = isColdBatch ? `${file.mtimeMs}:${file.sizeBytes}` : fastHash(content);
           const existingDocument = existingDocumentsByPath.get(file.relativePath);
           const unchanged = existingDocument && existingDocument.contentHash === contentHash;
 
@@ -650,11 +663,10 @@ export async function indexWorkspace(input: {
         }
 
         await repo.transaction(async () => {
-          repo.refreshStreamTimestamp();
           const docIdMap = new Map<string, string>();
           for (const file of newFiles) {
             const indexed = parseResults.get(file.id)!;
-            const docId = crypto.randomUUID();
+            const docId = nextId();
             repo.streamDocument({
               id: docId,
               path: file.relativePath,
@@ -688,7 +700,7 @@ export async function indexWorkspace(input: {
           const fileNodeIds: string[] = new Array(batchParseTasks.length);
           for (const [fi, file] of batchParseTasks.entries()) {
             const indexed = parseResults.get(file.id)!;
-            const nodeId = crypto.randomUUID();
+            const nodeId = nextId();
             repo.streamGraphNode({
               id: nodeId,
               type: "file",
@@ -705,7 +717,7 @@ export async function indexWorkspace(input: {
             const documentId = docIdMap.get(file.relativePath)!;
             const lang = indexed.language ?? "";
             for (const [ci, chunk] of indexed.chunks.entries()) {
-              const chunkId = crypto.randomUUID();
+              const chunkId = nextId();
               const metadataJson = JSON.stringify(chunk.metadata);
               repo.streamChunk({
                 id: chunkId,
@@ -729,7 +741,7 @@ export async function indexWorkspace(input: {
             const key = `${fromNodeId}:${toNodeId}:${type}`;
             if (edgeSet.has(key)) return;
             edgeSet.add(key);
-            repo.streamEdge({ id: crypto.randomUUID(), fromNodeId, toNodeId, type, metadata });
+            repo.streamEdge({ id: nextId(), fromNodeId, toNodeId, type, metadata });
           }
           for (const [fi, file] of batchParseTasks.entries()) {
             const indexed = parseResults.get(file.id)!;
@@ -755,7 +767,7 @@ export async function indexWorkspace(input: {
                       symbolNodeId = existingSymbolId;
                     } else {
                       // Stream symbol node immediately — no pending placeholder
-                      symbolNodeId = crypto.randomUUID();
+                      symbolNodeId = nextId();
                       repo.streamGraphNode({
                         id: symbolNodeId,
                         type: "symbol",
@@ -882,7 +894,12 @@ export async function indexWorkspace(input: {
     }
 
     if (bulkWriteMode) {
-      repo.restoreFtsTriggers();
+      if (isColdRun) {
+        repo.setMeta("fts_backfill_pending", "1");
+        repo.restoreFtsTriggersOnly();
+      } else {
+        repo.restoreFtsTriggers();
+      }
       repo.setOptimizedWriteMode(false);
       bulkWriteMode = false;
     }

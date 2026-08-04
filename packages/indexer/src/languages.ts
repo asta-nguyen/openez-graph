@@ -2,7 +2,13 @@ import path from "node:path";
 
 import { countTokens } from "./tokenizer";
 
-import { hashContent } from "./hash";
+function fastHash(content: string): string {
+  let h = 5381;
+  for (let i = 0; i < content.length; i++) {
+    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
 import type { IndexedChunk } from "./types";
 
 function codeSearchText(text: string): string {
@@ -727,7 +733,7 @@ function parseYamlConfig(content: string): IndexedChunk[] {
       heading: currentKey,
       content: text,
       tokenCount: countTokens(text),
-      contentHash: hashContent(text),
+      contentHash: fastHash(text),
       metadata: {
         kind: "config",
         language: "yaml",
@@ -794,7 +800,7 @@ function parseJsonConfig(content: string): IndexedChunk[] {
         heading: key,
         content: text,
         tokenCount: countTokens(text),
-        contentHash: hashContent(text),
+        contentHash: fastHash(text),
         metadata: {
           kind: "config",
           language: "json",
@@ -830,7 +836,7 @@ function parseTomlConfig(content: string): IndexedChunk[] {
       heading: currentKey,
       content: text,
       tokenCount: countTokens(text),
-      contentHash: hashContent(text),
+      contentHash: fastHash(text),
       metadata: {
         kind: "config",
         language: "toml",
@@ -885,7 +891,7 @@ function makeFallbackConfigChunk(content: string, language: string): IndexedChun
     {
       content,
       tokenCount: countTokens(content),
-      contentHash: hashContent(content),
+      contentHash: fastHash(content),
       metadata: {
         kind: "config",
         language
@@ -971,7 +977,7 @@ function createSymbolChunks(
       heading: symbol.name,
       content,
       tokenCount: countTokens(content),
-      contentHash: hashContent(content),
+      contentHash: fastHash(content),
       symbolName: symbol.name,
       symbolType: symbol.symbolType,
       metadata: {
@@ -998,7 +1004,7 @@ function makeFallbackChunks(content: string, lines: string[]): IndexedCodeResult
     chunks.push({
       content: slice,
       tokenCount: countTokens(slice),
-      contentHash: hashContent(slice),
+      contentHash: fastHash(slice),
       metadata: {
         kind: "code",
         searchText: codeSearchText(slice),

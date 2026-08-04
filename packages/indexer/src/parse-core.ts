@@ -1,5 +1,11 @@
 import { indexCode } from "./code";
-import { hashContent } from "./hash";
+function fastHash(content: string): string {
+  let h = 5381;
+  for (let i = 0; i < content.length; i++) {
+    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
 import { indexConfig, inferDocumentKind, parseGo, parsePython, parseRust } from "./languages";
 import { indexMarkdown } from "./markdown";
 import type { IndexedChunk } from "./types";
@@ -28,7 +34,7 @@ function fallbackChunk(content: string, kind: string, language?: string): Indexe
   return {
     content,
     tokenCount: Math.ceil(content.length / 4),
-    contentHash: hashContent(content),
+    contentHash: fastHash(content),
     metadata: { kind, language, startLine: 1, endLine: content.split("\n").length }
   };
 }

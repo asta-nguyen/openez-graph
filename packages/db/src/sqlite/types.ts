@@ -313,6 +313,9 @@ export interface WorkspaceRepository {
   streamEdge(input: { id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }): void;
   streamFtsRow(input: { chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }): void;
   refreshStreamTimestamp(): void;
+  setMeta(key: string, value: string): void;
+  getMeta(key: string): string | null;
+  ensureFtsReady(): void;
 
   /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
   loadAllSymbolNodes(): Promise<Map<string, string>>;

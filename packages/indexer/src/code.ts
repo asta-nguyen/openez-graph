@@ -1,7 +1,14 @@
 import { countTokens } from "./tokenizer";
 
-import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
+
+function fastHash(content: string): string {
+  let h = 5381;
+  for (let i = 0; i < content.length; i++) {
+    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(36);
+}
 
 // Lazy-load ts-morph — only needed for TS/JS files (~200MB saved for C/Python/etc repos)
 let _tsMorph: typeof import("ts-morph") | null = null;
@@ -150,7 +157,7 @@ export function indexCode(content: string, filePath: string): {
       chunks.push({
         content: text,
         tokenCount: countTokens(text),
-        contentHash: hashContent(text),
+        contentHash: fastHash(text),
         metadata: {
           kind: "code",
           symbolName: symbol.name,
@@ -182,7 +189,7 @@ export function indexCode(content: string, filePath: string): {
         chunks.push({
           content: slice,
           tokenCount: countTokens(slice),
-          contentHash: hashContent(slice),
+          contentHash: fastHash(slice),
           metadata: {
             kind: "code",
             searchText: codeSearchText(slice),
