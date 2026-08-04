@@ -89,10 +89,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const baseUrl = await getBaseUrl();
 
   return (
-    <html
-      lang="en"
-      className={`dark ${syne.variable} ${sora.variable} ${jetbrainsMono.variable}`}
-    >
+    <html lang="en" className={`dark ${syne.variable} ${sora.variable} ${jetbrainsMono.variable}`}>
       <body className="antialiased">
         <script
           type="application/ld+json"

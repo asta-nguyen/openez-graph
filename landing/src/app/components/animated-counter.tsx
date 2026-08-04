@@ -30,7 +30,7 @@ export function AnimatedCounter({ target, duration = 1200, suffix = "" }: Props)
           observer.disconnect();
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.5 },
     );
     if (el.current) observer.observe(el.current);
     return () => observer.disconnect();
@@ -38,7 +38,8 @@ export function AnimatedCounter({ target, duration = 1200, suffix = "" }: Props)
 
   return (
     <div ref={el}>
-      {val}{suffix}
+      {val}
+      {suffix}
     </div>
   );
 }

@@ -48,6 +48,7 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
   }
 
   migrateQueryLogColumns(sqlite);
+  migrateEmbeddingColumns(sqlite);
 
   sqlite.exec(`
     CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
@@ -59,6 +60,21 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
   `);
+
+  // Remove duplicate derived vectors before enforcing their logical identity.
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      DELETE FROM embeddings
+      WHERE id NOT IN (
+        SELECT MIN(id) FROM embeddings
+        GROUP BY chunk_id, provider, model
+      );
+    `);
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model
+      ON embeddings(chunk_id, provider, model)
+    `);
+  })();
 
   // Partial unique index to enable ON CONFLICT upserts for non-symbol nodes.
   // Symbols allow duplicate names across files and are handled separately.
@@ -99,7 +115,9 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     );
   `);
 
-  const ftsColumns = sqlite.prepare("PRAGMA table_info(chunks_fts)").all() as Array<{ name: string }>;
+  const ftsColumns = sqlite.prepare("PRAGMA table_info(chunks_fts)").all() as Array<{
+    name: string;
+  }>;
   if (!ftsColumns.some((column) => column.name === "search_text")) {
     sqlite.exec(`
       DROP TRIGGER IF EXISTS chunks_fts_insert;
@@ -157,7 +175,9 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
   const columns = new Set(
-    (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map((row) => row.name)
+    (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
   );
 
   if (!columns.has("tokens_returned")) {
@@ -168,6 +188,18 @@ function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>)
   }
   if (!columns.has("files_scanned")) {
     sqlite.exec("ALTER TABLE query_logs ADD COLUMN files_scanned INTEGER NOT NULL DEFAULT 0");
+  }
+}
+
+function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const columns = new Set(
+    (sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+
+  if (!columns.has("input_hash")) {
+    sqlite.exec("ALTER TABLE embeddings ADD COLUMN input_hash TEXT");
   }
 }
 
@@ -204,6 +236,7 @@ function getWorkspaceTableDefinitions(): string[] {
       model TEXT NOT NULL,
       dimensions INTEGER NOT NULL,
       embedding TEXT NOT NULL,
+      input_hash TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_nodes (
@@ -267,6 +300,6 @@ function getWorkspaceTableDefinitions(): string[] {
       supersedes_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`
+    )`,
   ];
 }

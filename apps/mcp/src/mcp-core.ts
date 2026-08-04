@@ -7,12 +7,24 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  type CallToolRequest
+  type CallToolRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import { codeContext, codeQuery, countTokens, graphNeighbors, memoryRecall, memoryWrite, truncateToTokenLimit } from "@openez-graph/core";
-import { createRegistryRepository, createWorkspaceRepository, findLocalWorkspaceConfig } from "@openez-graph/db";
+import {
+  codeContext,
+  codeQuery,
+  countTokens,
+  graphNeighbors,
+  memoryRecall,
+  memoryWrite,
+  truncateToTokenLimit,
+} from "@openez-graph/core";
+import {
+  createRegistryRepository,
+  createWorkspaceRepository,
+  findLocalWorkspaceConfig,
+} from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
 const MIN_RESPONSE_TOKENS = 32;
@@ -24,7 +36,7 @@ const codeQuerySchema = z.object({
   path: z.string().optional(),
   query: z.string().trim().min(1),
   limit: z.number().int().positive().max(100).optional(),
-  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional()
+  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
 });
 
 const codeContextSchema = z.object({
@@ -35,7 +47,7 @@ const codeContextSchema = z.object({
   symbolOrPath: z.string(),
   hops: z.number().int().positive().max(5).optional(),
   limit: z.number().int().positive().max(200).optional(),
-  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional()
+  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
 });
 
 const graphNeighborsSchema = z.object({
@@ -48,7 +60,7 @@ const graphNeighborsSchema = z.object({
   edgeTypes: z.array(z.string()).optional(),
   depth: z.number().int().positive().max(5).optional(),
   limit: z.number().int().positive().max(200).optional(),
-  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional()
+  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
 });
 
 const memoryWriteSchema = z.object({
@@ -57,7 +69,7 @@ const memoryWriteSchema = z.object({
   title: z.string().trim().min(1),
   content: z.string().trim().min(1),
   tags: z.array(z.string()).optional(),
-  supersedesId: z.string().optional()
+  supersedesId: z.string().optional(),
 });
 
 const memoryRecallSchema = z.object({
@@ -67,13 +79,13 @@ const memoryRecallSchema = z.object({
   path: z.string().optional(),
   query: z.string().trim().min(1),
   limit: z.number().int().positive().max(100).optional(),
-  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional()
+  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
 });
 
 const indexWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
-  mode: z.enum(["incremental", "full"]).optional()
+  mode: z.enum(["incremental", "full"]).optional(),
 });
 
 const MCP_CATCHUP_INTERVAL_MS = Number(process.env.OPENEZ_MCP_CATCHUP_INTERVAL_MS ?? 5000);
@@ -126,7 +138,7 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
     if (!workspace) {
       throw new Error(
         `No workspace registered at ${path.resolve(searchPath)}. ` +
-        "Run 'openez init <path>' or pass a registered workspaceId."
+          "Run 'openez init <path>' or pass a registered workspaceId.",
       );
     }
     return workspace;
@@ -153,11 +165,13 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
     if (workspaces.length === 1) return workspaces[0];
 
     if (workspaces.length === 0) {
-      throw new Error("No workspace registered. Run 'openez init <path>' or pass 'workspaceId' or 'path'.");
+      throw new Error(
+        "No workspace registered. Run 'openez init <path>' or pass 'workspaceId' or 'path'.",
+      );
     }
 
     throw new Error(
-      `Multiple workspaces found. Specify 'workspaceId' or 'path' to disambiguate. Available: ${workspaces.map((w) => `'${w.id}'`).join(", ")}`
+      `Multiple workspaces found. Specify 'workspaceId' or 'path' to disambiguate. Available: ${workspaces.map((w) => `'${w.id}'`).join(", ")}`,
     );
   }
 
@@ -169,15 +183,25 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
       path?: string;
     }): Promise<WorkspaceLike[]> {
       if (countDefinedScopes(input) > 1) {
-        throw new Error("Pass only one workspace selector type at a time: workspaceIds, workspaceId, paths, or path.");
+        throw new Error(
+          "Pass only one workspace selector type at a time: workspaceIds, workspaceId, paths, or path.",
+        );
       }
 
       if (input.workspaceIds && input.workspaceIds.length > 0) {
-        return dedupeById(await Promise.all(input.workspaceIds.map((workspaceId) => resolveWorkspaceById(workspaceId))));
+        return dedupeById(
+          await Promise.all(
+            input.workspaceIds.map((workspaceId) => resolveWorkspaceById(workspaceId)),
+          ),
+        );
       }
 
       if (input.paths && input.paths.length > 0) {
-        return dedupeById(await Promise.all(input.paths.map((workspacePath) => resolveWorkspaceByPath(workspacePath))));
+        return dedupeById(
+          await Promise.all(
+            input.paths.map((workspacePath) => resolveWorkspaceByPath(workspacePath)),
+          ),
+        );
       }
 
       if (input.workspaceId) {
@@ -191,14 +215,17 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
       return [await resolveDefaultWorkspace()];
     },
 
-    async resolveWriteWorkspace(input: { workspaceId?: string; path?: string }): Promise<WorkspaceLike> {
+    async resolveWriteWorkspace(input: {
+      workspaceId?: string;
+      path?: string;
+    }): Promise<WorkspaceLike> {
       if (input.workspaceId && input.path) {
         throw new Error("Pass either workspaceId or path, not both.");
       }
       if (input.workspaceId) return resolveWorkspaceById(input.workspaceId);
       if (input.path) return resolveWorkspaceByPath(input.path);
       return resolveDefaultWorkspace();
-    }
+    },
   };
 }
 
@@ -210,17 +237,18 @@ function jsonResponse(result: unknown, maxTokens?: number) {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(value)
-      }
-    ]
+        text: JSON.stringify(value),
+      },
+    ],
   };
 }
 
 function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
   const value = structuredClone(result) as Record<string, unknown>;
-  const metrics = typeof value.metrics === "object" && value.metrics !== null
-    ? value.metrics as Record<string, unknown>
-    : {};
+  const metrics =
+    typeof value.metrics === "object" && value.metrics !== null
+      ? (value.metrics as Record<string, unknown>)
+      : {};
   value.metrics = metrics;
   metrics.tokenBudget = maxTokens;
   metrics.truncated = false;
@@ -248,20 +276,24 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
     const visit = (current: unknown, parentKey?: string) => {
       if (Array.isArray(current)) {
         const minimum = parentKey === "nodes" ? 1 : 0;
-        if (current.length > minimum && parentKey !== "results") arrays.push({ items: current, minimum });
+        if (current.length > minimum && parentKey !== "results")
+          arrays.push({ items: current, minimum });
         current.forEach((item) => visit(item));
         return;
       }
       if (!current || typeof current !== "object") return;
       for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
-        if (typeof child === "string" && key !== "method") strings.push({ owner: current as Record<string, unknown>, key, value: child });
+        if (typeof child === "string" && key !== "method")
+          strings.push({ owner: current as Record<string, unknown>, key, value: child });
         else visit(child, key);
       }
     };
     visit(value);
 
-    const array = arrays.sort((left, right) =>
-      JSON.stringify(right.items[right.items.length - 1]).length - JSON.stringify(left.items[left.items.length - 1]).length
+    const array = arrays.sort(
+      (left, right) =>
+        JSON.stringify(right.items[right.items.length - 1]).length -
+        JSON.stringify(left.items[left.items.length - 1]).length,
     )[0];
     if (array) {
       array.items.pop();
@@ -272,11 +304,15 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
     if (!longest?.value) break;
     const overflow = serializedTokens() - maxTokens;
     const currentTokens = countTokens(longest.value);
-    longest.owner[longest.key] = truncateToTokenLimit(longest.value, Math.max(0, currentTokens - overflow - 8));
+    longest.owner[longest.key] = truncateToTokenLimit(
+      longest.value,
+      Math.max(0, currentTokens - overflow - 8),
+    );
   }
 
   updateMetrics();
-  while (serializedTokens() > maxTokens && typeof metrics.method === "string") delete metrics.method;
+  while (serializedTokens() > maxTokens && typeof metrics.method === "string")
+    delete metrics.method;
   updateMetrics();
   if (serializedTokens() > maxTokens) {
     const minimal = { metrics: { responseTokens: 0, tokenBudget: maxTokens, truncated: true } };
@@ -302,7 +338,9 @@ async function catchUpWorkspaceIndex(workspaceId: string): Promise<void> {
   const inFlight = indexWorkspace({ workspaceId, mode: "incremental" })
     .then(() => undefined)
     .catch((error) => {
-      console.error(`OpenEZ MCP catch-up indexing failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(
+        `OpenEZ MCP catch-up indexing failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     })
     .finally(() => {
       catchupState.set(workspaceId, { lastRunAt: Date.now() });
@@ -322,13 +360,15 @@ export function createMcpServer(options?: McpServerOptions) {
   const server = new Server(
     {
       name: "openez-graph",
-      version: options?.build ? `${options.version ?? "development"}+${options.build}` : options?.version ?? "development"
+      version: options?.build
+        ? `${options.version ?? "development"}+${options.build}`
+        : (options?.version ?? "development"),
     },
     {
       capabilities: {
-        tools: {}
-      }
-    }
+        tools: {},
+      },
+    },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -339,63 +379,87 @@ export function createMcpServer(options?: McpServerOptions) {
         inputSchema: {
           type: "object",
           properties: {},
-          required: []
-        }
+          required: [],
+        },
       },
       {
         name: "code_query",
-        description: "Retrieve ranked code and documentation context for a user query. Supports one or many workspaces.",
+        description:
+          "Retrieve ranked code and documentation context for a user query. Supports one or many workspaces.",
         inputSchema: {
           type: "object",
           properties: {
-            workspaceIds: { type: "array", items: { type: "string" }, description: "IDs of registered workspaces" },
+            workspaceIds: {
+              type: "array",
+              items: { type: "string" },
+              description: "IDs of registered workspaces",
+            },
             workspaceId: { type: "string", description: "ID of a registered workspace" },
-            paths: { type: "array", items: { type: "string" }, description: "Filesystem paths to registered workspaces" },
+            paths: {
+              type: "array",
+              items: { type: "string" },
+              description: "Filesystem paths to registered workspaces",
+            },
             path: { type: "string", description: "Filesystem path to a registered workspace" },
             query: { type: "string" },
             limit: { type: "number" },
-            maxTokens: { type: "number", minimum: MIN_RESPONSE_TOKENS, description: "Maximum tokens for the complete serialized tool response across all selected workspaces" }
+            maxTokens: {
+              type: "number",
+              minimum: MIN_RESPONSE_TOKENS,
+              description:
+                "Maximum tokens for the complete serialized tool response across all selected workspaces",
+            },
           },
-          required: ["query"]
-        }
+          required: ["query"],
+        },
       },
       {
         name: "code_context",
-        description: "Fetch graph-adjacent context for a symbol or file path. Supports one or many workspaces.",
+        description:
+          "Fetch graph-adjacent context for a symbol or file path. Supports one or many workspaces.",
         inputSchema: {
           type: "object",
           properties: {
-          workspaceIds: { type: "array", items: { type: "string" } },
-          workspaceId: { type: "string" },
-          paths: { type: "array", items: { type: "string" } },
-          path: { type: "string" },
-          symbolOrPath: { type: "string" },
-          hops: { type: "number" },
-          limit: { type: "number", description: "Maximum total records returned" },
-          maxTokens: { type: "number", minimum: MIN_RESPONSE_TOKENS, description: "Maximum tokens for the complete serialized tool response" }
+            workspaceIds: { type: "array", items: { type: "string" } },
+            workspaceId: { type: "string" },
+            paths: { type: "array", items: { type: "string" } },
+            path: { type: "string" },
+            symbolOrPath: { type: "string" },
+            hops: { type: "number" },
+            limit: { type: "number", description: "Maximum total records returned" },
+            maxTokens: {
+              type: "number",
+              minimum: MIN_RESPONSE_TOKENS,
+              description: "Maximum tokens for the complete serialized tool response",
+            },
           },
-          required: ["symbolOrPath"]
-        }
+          required: ["symbolOrPath"],
+        },
       },
       {
         name: "graph_neighbors",
-        description: "Inspect raw graph nodes and edges around a label or node id. Supports one or many workspaces.",
+        description:
+          "Inspect raw graph nodes and edges around a label or node id. Supports one or many workspaces.",
         inputSchema: {
           type: "object",
           properties: {
-          workspaceIds: { type: "array", items: { type: "string" } },
-          workspaceId: { type: "string" },
-          paths: { type: "array", items: { type: "string" } },
-          path: { type: "string" },
-          nodeId: { type: "string" },
-          label: { type: "string" },
-          edgeTypes: { type: "array", items: { type: "string" } },
-          depth: { type: "number" },
-          limit: { type: "number", description: "Maximum nodes and edges per workspace" },
-          maxTokens: { type: "number", minimum: MIN_RESPONSE_TOKENS, description: "Maximum tokens for the complete serialized tool response" }
+            workspaceIds: { type: "array", items: { type: "string" } },
+            workspaceId: { type: "string" },
+            paths: { type: "array", items: { type: "string" } },
+            path: { type: "string" },
+            nodeId: { type: "string" },
+            label: { type: "string" },
+            edgeTypes: { type: "array", items: { type: "string" } },
+            depth: { type: "number" },
+            limit: { type: "number", description: "Maximum nodes and edges per workspace" },
+            maxTokens: {
+              type: "number",
+              minimum: MIN_RESPONSE_TOKENS,
+              description: "Maximum tokens for the complete serialized tool response",
+            },
           },
-          required: []
-        }
+          required: [],
+        },
       },
       {
         name: "memory_write",
@@ -403,43 +467,52 @@ export function createMcpServer(options?: McpServerOptions) {
         inputSchema: {
           type: "object",
           properties: {
-          workspaceId: { type: "string" },
-          path: { type: "string" },
-          title: { type: "string" },
-          content: { type: "string" },
-          tags: { type: "array", items: { type: "string" } },
-          supersedesId: { type: "string" }
+            workspaceId: { type: "string" },
+            path: { type: "string" },
+            title: { type: "string" },
+            content: { type: "string" },
+            tags: { type: "array", items: { type: "string" } },
+            supersedesId: { type: "string" },
           },
-          required: ["title", "content"]
-        }
+          required: ["title", "content"],
+        },
       },
       {
         name: "memory_recall",
-        description: "Recall active technical decisions and learned memories. Supports one or many workspaces.",
+        description:
+          "Recall active technical decisions and learned memories. Supports one or many workspaces.",
         inputSchema: {
           type: "object",
           properties: {
-          workspaceIds: { type: "array", items: { type: "string" } },
-          workspaceId: { type: "string" },
-          paths: { type: "array", items: { type: "string" } },
-          path: { type: "string" },
-          query: { type: "string" },
-          limit: { type: "number" },
-          maxTokens: { type: "number", minimum: MIN_RESPONSE_TOKENS, description: "Maximum tokens for the complete serialized tool response" }
+            workspaceIds: { type: "array", items: { type: "string" } },
+            workspaceId: { type: "string" },
+            paths: { type: "array", items: { type: "string" } },
+            path: { type: "string" },
+            query: { type: "string" },
+            limit: { type: "number" },
+            maxTokens: {
+              type: "number",
+              minimum: MIN_RESPONSE_TOKENS,
+              description: "Maximum tokens for the complete serialized tool response",
+            },
           },
-          required: ["query"]
-        }
+          required: ["query"],
+        },
       },
       {
         name: "index_workspace",
         description: "Run indexing for a workspace.",
         inputSchema: {
           type: "object",
-          properties: { workspaceId: { type: "string" }, path: { type: "string" }, mode: { type: "string", enum: ["incremental", "full"] } },
-          required: []
-        }
-      }
-    ]
+          properties: {
+            workspaceId: { type: "string" },
+            path: { type: "string" },
+            mode: { type: "string", enum: ["incremental", "full"] },
+          },
+          required: [],
+        },
+      },
+    ],
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
@@ -463,9 +536,9 @@ export function createMcpServer(options?: McpServerOptions) {
               query: input.query,
               limit: input.limit,
               maxTokens: workspaceBudget,
-              recordMetrics: false
-            })
-          }))
+              recordMetrics: false,
+            }),
+          })),
         );
 
         const mergedSources = results
@@ -474,55 +547,83 @@ export function createMcpServer(options?: McpServerOptions) {
               ...source,
               workspaceId: workspace.id,
               workspaceName: workspace.name,
-              rootPath: workspace.rootPath
-            }))
+              rootPath: workspace.rootPath,
+            })),
           )
           .sort((left, right) => right.score - left.score);
 
-        const answerContext = results.length === 1
-          ? results[0].result.answerContext
-          : results
-              .map(({ workspace, result }) => `## Workspace: ${workspace.name} (${workspace.id})\n${result.answerContext}`)
-              .join("\n\n");
+        const answerContext =
+          results.length === 1
+            ? results[0].result.answerContext
+            : results
+                .map(
+                  ({ workspace, result }) =>
+                    `## Workspace: ${workspace.name} (${workspace.id})\n${result.answerContext}`,
+                )
+                .join("\n\n");
 
-        const response = jsonResponse({
-          answerContext,
-          sources: mergedSources,
-          workspaces: results.map(({ workspace }) => ({
-            workspaceId: workspace.id,
-            workspaceName: workspace.name,
-            rootPath: workspace.rootPath
-          })),
-          metrics: {
-            selectedFullFileTokens: results.reduce((sum, entry) => sum + entry.result.metrics.selectedFullFileTokens, 0),
-            candidateFiles: results.reduce((sum, entry) => sum + entry.result.metrics.candidateFiles, 0),
-            selectedFiles: results.reduce((sum, entry) => sum + entry.result.metrics.selectedFiles, 0)
-          }
-        }, responseBudget);
+        const response = jsonResponse(
+          {
+            answerContext,
+            sources: mergedSources,
+            workspaces: results.map(({ workspace }) => ({
+              workspaceId: workspace.id,
+              workspaceName: workspace.name,
+              rootPath: workspace.rootPath,
+            })),
+            metrics: {
+              selectedFullFileTokens: results.reduce(
+                (sum, entry) => sum + entry.result.metrics.selectedFullFileTokens,
+                0,
+              ),
+              candidateFiles: results.reduce(
+                (sum, entry) => sum + entry.result.metrics.candidateFiles,
+                0,
+              ),
+              selectedFiles: results.reduce(
+                (sum, entry) => sum + entry.result.metrics.selectedFiles,
+                0,
+              ),
+            },
+          },
+          responseBudget,
+        );
         const responseTokens = countTokens(response.content[0].text);
         const delivered = JSON.parse(response.content[0].text) as {
           sources?: Array<{ workspaceId?: string }>;
           metrics?: { truncated?: boolean };
         };
-        const totalRetrievalTokens = Math.max(1, results.reduce((sum, entry) => sum + entry.result.metrics.retrievalTokens, 0));
+        const totalRetrievalTokens = Math.max(
+          1,
+          results.reduce((sum, entry) => sum + entry.result.metrics.retrievalTokens, 0),
+        );
         let attributedSoFar = 0;
         const attributedTokens = results.map(({ result }, index) => {
-          const tokens = index === results.length - 1
-            ? responseTokens - attributedSoFar
-            : Math.floor(responseTokens * result.metrics.retrievalTokens / totalRetrievalTokens);
+          const tokens =
+            index === results.length - 1
+              ? responseTokens - attributedSoFar
+              : Math.floor(
+                  (responseTokens * result.metrics.retrievalTokens) / totalRetrievalTokens,
+                );
           attributedSoFar += tokens;
           return tokens;
         });
-        await Promise.all(results.map(({ workspace, result }, index) => {
-          return createWorkspaceRepository(workspace.rootPath).insertQueryLog({
-            query: input.query,
-            mode: "code_query",
-            resultCount: delivered.sources?.filter((source) => source.workspaceId === workspace.id).length ?? 0,
-            tokensReturned: attributedTokens[index],
-            tokensSaved: delivered.metrics?.truncated ? 0 : Math.max(0, result.metrics.selectedFullFileTokens - attributedTokens[index]),
-            filesScanned: result.metrics.candidateFiles
-          });
-        }));
+        await Promise.all(
+          results.map(({ workspace, result }, index) => {
+            return createWorkspaceRepository(workspace.rootPath).insertQueryLog({
+              query: input.query,
+              mode: "code_query",
+              resultCount:
+                delivered.sources?.filter((source) => source.workspaceId === workspace.id).length ??
+                0,
+              tokensReturned: attributedTokens[index],
+              tokensSaved: delivered.metrics?.truncated
+                ? 0
+                : Math.max(0, result.metrics.selectedFullFileTokens - attributedTokens[index]),
+              filesScanned: result.metrics.candidateFiles,
+            });
+          }),
+        );
         return response;
       }
       case "code_context": {
@@ -539,9 +640,9 @@ export function createMcpServer(options?: McpServerOptions) {
               symbolOrPath: input.symbolOrPath,
               hops: input.hops,
               limit: input.limit,
-              maxTokens: input.maxTokens
-            })
-          }))
+              maxTokens: input.maxTokens,
+            }),
+          })),
         );
         return jsonResponse({ results }, input.maxTokens ?? 4000);
       }
@@ -560,9 +661,9 @@ export function createMcpServer(options?: McpServerOptions) {
               label: input.label,
               edgeTypes: input.edgeTypes,
               depth: input.depth,
-              limit: input.limit
-            })
-          }))
+              limit: input.limit,
+            }),
+          })),
         );
         return jsonResponse({ results }, input.maxTokens ?? 4000);
       }
@@ -577,19 +678,26 @@ export function createMcpServer(options?: McpServerOptions) {
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspace,
-            result: await memoryRecall({ workspaceId: workspace.id, query: input.query, limit: input.limit })
-          }))
-        );
-        return jsonResponse({
-          memories: results.flatMap(({ workspace, result }) =>
-            result.memories.map((memory) => ({
-              ...memory,
+            result: await memoryRecall({
               workspaceId: workspace.id,
-              workspaceName: workspace.name,
-              rootPath: workspace.rootPath
-            }))
-          )
-        }, input.maxTokens ?? 4000);
+              query: input.query,
+              limit: input.limit,
+            }),
+          })),
+        );
+        return jsonResponse(
+          {
+            memories: results.flatMap(({ workspace, result }) =>
+              result.memories.map((memory) => ({
+                ...memory,
+                workspaceId: workspace.id,
+                workspaceName: workspace.name,
+                rootPath: workspace.rootPath,
+              })),
+            ),
+          },
+          input.maxTokens ?? 4000,
+        );
       }
       case "index_workspace": {
         const input = indexWorkspaceSchema.parse(request.params.arguments ?? {});
@@ -616,7 +724,9 @@ export async function createAndStartMcpServer(options?: McpServerOptions) {
 }
 
 const WATCH_DEBOUNCE_MS = 2000;
-const WATCH_ENABLED = ["1", "true", "yes"].includes((process.env.OPENEZ_MCP_WATCH ?? "").toLowerCase());
+const WATCH_ENABLED = ["1", "true", "yes"].includes(
+  (process.env.OPENEZ_MCP_WATCH ?? "").toLowerCase(),
+);
 const WATCH_IGNORE_PATTERNS = [
   "**/node_modules/**",
   "**/.git/**",
@@ -625,7 +735,7 @@ const WATCH_IGNORE_PATTERNS = [
   "**/build/**",
   "**/coverage/**",
   "**/.turbo/**",
-  "**/.openez/**"
+  "**/.openez/**",
 ];
 
 async function autoIndexAndSync(searchRoot: string): Promise<void> {
@@ -670,7 +780,7 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
   const watcher = chokidar.watch(resolvedRoot, {
     ignored: WATCH_IGNORE_PATTERNS,
     ignoreInitial: true,
-    persistent: true
+    persistent: true,
   });
 
   const triggerReindex = () => {
@@ -688,7 +798,9 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
   watcher.on("change", triggerReindex);
   watcher.on("unlink", triggerReindex);
   watcher.on("error", (error) => {
-    console.error(`OpenEZ MCP auto-sync watcher disabled: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `OpenEZ MCP auto-sync watcher disabled: ${error instanceof Error ? error.message : String(error)}`,
+    );
     void watcher.close();
   });
 }

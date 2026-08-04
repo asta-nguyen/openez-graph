@@ -25,8 +25,7 @@ import { PAGE_SIZE, Pagination } from "../lib/pagination";
 import { Plus, Trash2, Search, X } from "lucide-react";
 
 export const Route = createFileRoute("/memories")({
-  loader: ({ context }) =>
-    context.queryClient.ensureQueryData(memoriesQueryOptions(1, PAGE_SIZE)),
+  loader: ({ context }) => context.queryClient.ensureQueryData(memoriesQueryOptions(1, PAGE_SIZE)),
   component: MemoriesPage,
   validateSearch: (search: Record<string, string | undefined>) => ({
     page: Math.max(1, parseInt(search.page ?? "", 10) || 1),
@@ -61,9 +60,7 @@ function MemoriesPage() {
     placeholderData: (prev) => prev,
   });
 
-  const totalPages = isSearching
-    ? 1
-    : Math.max(1, Math.ceil((data?.totalCount ?? 0) / PAGE_SIZE));
+  const totalPages = isSearching ? 1 : Math.max(1, Math.ceil((data?.totalCount ?? 0) / PAGE_SIZE));
 
   useEffect(() => {
     if (!isSearching) {
@@ -126,9 +123,7 @@ function MemoriesPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {isSearching
-              ? `Search results (${items.length})`
-              : `Memories (${totalCount})`}
+            {isSearching ? `Search results (${items.length})` : `Memories (${totalCount})`}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -273,7 +268,10 @@ function CreateMemoryDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <Card
         className="w-full max-w-lg max-h-[80vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -345,7 +343,10 @@ function MemoryDetailDialog({
   deleting: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <Card
         className="w-full max-w-lg max-h-[80vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -376,12 +377,7 @@ function MemoryDetailDialog({
                 <div>Created: {formatDate(memory.createdAt)}</div>
                 <div>Updated: {formatDate(memory.updatedAt)}</div>
               </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={onDelete}
-                disabled={deleting}
-              >
+              <Button variant="destructive" size="sm" onClick={onDelete} disabled={deleting}>
                 <Trash2 className="h-4 w-4 mr-1" />
                 {deleting ? "Deleting..." : "Delete"}
               </Button>

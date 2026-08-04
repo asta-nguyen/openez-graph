@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 
 import { getRegistryDb } from "./registry-db";
 import * as schema from "./schema";
+import { decryptValue, encryptValue, isSensitiveKey } from "./secure-storage";
 import type { RegistryRepository, RegistryWorkspace, WorkspaceRepository } from "./types";
 import { getWorkspaceDb } from "./workspace-db";
 
@@ -69,7 +70,10 @@ export function createRegistryRepository(): RegistryRepository {
         .get();
       if (row) return mapWorkspaceRow(row);
 
-      const legacyRow = db.select().from(schema.workspaces).all()
+      const legacyRow = db
+        .select()
+        .from(schema.workspaces)
+        .all()
         .find((candidate) => normalizeRootPath(candidate.rootPath) === normalizedRootPath);
       return legacyRow ? mapWorkspaceRow(legacyRow) : null;
     },
@@ -81,7 +85,11 @@ export function createRegistryRepository(): RegistryRepository {
         return existing;
       }
 
-      const requestedName = (input.name?.trim() || normalizeRootPath(normalizedRootPath).split(/[\\/]/).pop() || "workspace").trim();
+      const requestedName = (
+        input.name?.trim() ||
+        normalizeRootPath(normalizedRootPath).split(/[\\/]/).pop() ||
+        "workspace"
+      ).trim();
       const baseId = slugifyWorkspaceSegment(requestedName);
       const allWorkspaces = await this.listWorkspaces();
       const takenIds = new Set(allWorkspaces.map((workspace) => workspace.id));
@@ -102,7 +110,7 @@ export function createRegistryRepository(): RegistryRepository {
         name: nextName,
         rootPath: normalizedRootPath,
         includeGlobs: input.includeGlobs,
-        excludeGlobs: input.excludeGlobs
+        excludeGlobs: input.excludeGlobs,
       });
     },
 
@@ -123,9 +131,17 @@ export function createRegistryRepository(): RegistryRepository {
       native
         .prepare(
           `INSERT INTO workspaces (id, name, root_path, include_globs, exclude_globs, status, indexing_status, graph_status, document_count, chunk_count, node_count, edge_count, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 0, 0, 0, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 0, 0, 0, ?, ?)`,
         )
-        .run(input.id, input.name, normalizedRootPath, input.includeGlobs ?? "", input.excludeGlobs ?? "", now, now);
+        .run(
+          input.id,
+          input.name,
+          normalizedRootPath,
+          input.includeGlobs ?? "",
+          input.excludeGlobs ?? "",
+          now,
+          now,
+        );
 
       return (await this.getWorkspace(input.id))!;
     },
@@ -146,21 +162,51 @@ export function createRegistryRepository(): RegistryRepository {
           | "edgeCount"
           | "lastError"
         >
-      >
+      >,
     ): Promise<void> {
       const sets: string[] = ["updated_at = ?"];
       const params: unknown[] = [new Date().toISOString()];
 
-      if (updates.status !== undefined) { sets.push("status = ?"); params.push(updates.status); }
-      if (updates.indexingStatus !== undefined) { sets.push("indexing_status = ?"); params.push(updates.indexingStatus); }
-      if (updates.graphStatus !== undefined) { sets.push("graph_status = ?"); params.push(updates.graphStatus); }
-      if (updates.lastIndexedAt !== undefined) { sets.push("last_indexed_at = ?"); params.push(updates.lastIndexedAt); }
-      if (updates.lastGraphBuiltAt !== undefined) { sets.push("last_graph_built_at = ?"); params.push(updates.lastGraphBuiltAt); }
-      if (updates.documentCount !== undefined) { sets.push("document_count = ?"); params.push(updates.documentCount); }
-      if (updates.chunkCount !== undefined) { sets.push("chunk_count = ?"); params.push(updates.chunkCount); }
-      if (updates.nodeCount !== undefined) { sets.push("node_count = ?"); params.push(updates.nodeCount); }
-      if (updates.edgeCount !== undefined) { sets.push("edge_count = ?"); params.push(updates.edgeCount); }
-      if (updates.lastError !== undefined) { sets.push("last_error = ?"); params.push(updates.lastError); }
+      if (updates.status !== undefined) {
+        sets.push("status = ?");
+        params.push(updates.status);
+      }
+      if (updates.indexingStatus !== undefined) {
+        sets.push("indexing_status = ?");
+        params.push(updates.indexingStatus);
+      }
+      if (updates.graphStatus !== undefined) {
+        sets.push("graph_status = ?");
+        params.push(updates.graphStatus);
+      }
+      if (updates.lastIndexedAt !== undefined) {
+        sets.push("last_indexed_at = ?");
+        params.push(updates.lastIndexedAt);
+      }
+      if (updates.lastGraphBuiltAt !== undefined) {
+        sets.push("last_graph_built_at = ?");
+        params.push(updates.lastGraphBuiltAt);
+      }
+      if (updates.documentCount !== undefined) {
+        sets.push("document_count = ?");
+        params.push(updates.documentCount);
+      }
+      if (updates.chunkCount !== undefined) {
+        sets.push("chunk_count = ?");
+        params.push(updates.chunkCount);
+      }
+      if (updates.nodeCount !== undefined) {
+        sets.push("node_count = ?");
+        params.push(updates.nodeCount);
+      }
+      if (updates.edgeCount !== undefined) {
+        sets.push("edge_count = ?");
+        params.push(updates.edgeCount);
+      }
+      if (updates.lastError !== undefined) {
+        sets.push("last_error = ?");
+        params.push(updates.lastError);
+      }
 
       params.push(id);
       native.prepare(`UPDATE workspaces SET ${sets.join(", ")} WHERE id = ?`).run(...params);
@@ -168,7 +214,57 @@ export function createRegistryRepository(): RegistryRepository {
 
     async deleteWorkspace(id: string): Promise<void> {
       db.delete(schema.workspaces).where(eq(schema.workspaces.id, id)).run();
-    }
+    },
+
+    async getSetting(key: string): Promise<string | null> {
+      const row = native.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
+        | { value: string }
+        | undefined;
+      if (!row?.value) return null;
+      if (isSensitiveKey(key)) {
+        try {
+          return decryptValue(row.value);
+        } catch {
+          return null;
+        }
+      }
+      return row.value;
+    },
+
+    async setSetting(key: string, value: string): Promise<void> {
+      const stored = isSensitiveKey(key) ? encryptValue(value) : value;
+      const now = new Date().toISOString();
+      native
+        .prepare(
+          `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+                  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+        )
+        .run(key, stored, now);
+    },
+
+    async deleteSetting(key: string): Promise<void> {
+      native.prepare("DELETE FROM settings WHERE key = ?").run(key);
+    },
+
+    async getAllSettings(): Promise<Record<string, string>> {
+      const rows = native.prepare("SELECT key, value FROM settings").all() as Array<{
+        key: string;
+        value: string;
+      }>;
+      const result: Record<string, string> = {};
+      for (const row of rows) {
+        if (isSensitiveKey(row.key)) {
+          try {
+            result[row.key] = decryptValue(row.value);
+          } catch {
+            // Skip undecryptable values
+          }
+        } else {
+          result[row.key] = row.value;
+        }
+      }
+      return result;
+    },
   };
 }
 
@@ -190,11 +286,14 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     edgeCount: row.edgeCount,
     lastError: row.lastError ?? undefined,
     createdAt: row.createdAt,
-    updatedAt: row.updatedAt
+    updatedAt: row.updatedAt,
   };
 }
 
-function getNativeWorkspaceDb(rootPath: string): { db: ReturnType<typeof getWorkspaceDb>; native: NativeDatabase } {
+function getNativeWorkspaceDb(rootPath: string): {
+  db: ReturnType<typeof getWorkspaceDb>;
+  native: NativeDatabase;
+} {
   const db = getWorkspaceDb(rootPath);
   const native = (db as unknown as { $client: NativeDatabase }).$client;
   return { db, native };
@@ -208,35 +307,45 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     docByPath: native.prepare("SELECT * FROM documents WHERE path = ?"),
     docById: native.prepare("SELECT * FROM documents WHERE id = ?"),
     insertDoc: native.prepare(
-      "INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ),
     chunksByDoc: native.prepare("SELECT * FROM chunks WHERE document_id = ? ORDER BY chunk_index"),
     insertChunk: native.prepare(
-      "INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ),
     deleteChunksByDoc: native.prepare("DELETE FROM chunks WHERE document_id = ?"),
     nodeByTypeLabel: native.prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ?"),
-    nodeByTypeLabelRef: native.prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ? AND ref_id = ?"),
+    nodeByTypeLabelRef: native.prepare(
+      "SELECT * FROM graph_nodes WHERE type = ? AND label = ? AND ref_id = ?",
+    ),
     insertNode: native.prepare(
-      "INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     ),
     // Single-query upsert for non-symbol nodes (type, label is unique via partial index)
     upsertNodeByTypeLabel: native.prepare(
       `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET ref_id = COALESCE(excluded.ref_id, graph_nodes.ref_id), metadata = excluded.metadata, updated_at = excluded.updated_at
-       RETURNING id`
+       RETURNING id`,
     ),
-    updateNode: native.prepare("UPDATE graph_nodes SET ref_id = ?, metadata = ?, updated_at = ? WHERE id = ?"),
+    updateNode: native.prepare(
+      "UPDATE graph_nodes SET ref_id = ?, metadata = ?, updated_at = ? WHERE id = ?",
+    ),
     deleteNodesByRefId: native.prepare(
-      "DELETE FROM graph_nodes WHERE ref_id = ? OR ref_id IN (SELECT id FROM chunks WHERE document_id = ?)"
+      "DELETE FROM graph_nodes WHERE ref_id = ? OR ref_id IN (SELECT id FROM chunks WHERE document_id = ?)",
     ),
     insertEdge: native.prepare(
       `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`
+       ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
     ),
     insertEmbedding: native.prepare(
-      "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      `INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(chunk_id, provider, model) DO UPDATE SET
+         dimensions = excluded.dimensions,
+         embedding = excluded.embedding,
+         input_hash = excluded.input_hash,
+         created_at = excluded.created_at`,
     ),
   };
 
@@ -244,7 +353,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     rootPath,
 
     async getDocumentCount(): Promise<number> {
-      const row = native.prepare("SELECT count(*) AS count FROM documents").get() as { count: number };
+      const row = native.prepare("SELECT count(*) AS count FROM documents").get() as {
+        count: number;
+      };
       return row?.count ?? 0;
     },
 
@@ -254,12 +365,16 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     },
 
     async getNodeCount(): Promise<number> {
-      const row = native.prepare("SELECT count(*) AS count FROM graph_nodes").get() as { count: number };
+      const row = native.prepare("SELECT count(*) AS count FROM graph_nodes").get() as {
+        count: number;
+      };
       return row?.count ?? 0;
     },
 
     async getEdgeCount(): Promise<number> {
-      const row = native.prepare("SELECT count(*) AS count FROM graph_edges").get() as { count: number };
+      const row = native.prepare("SELECT count(*) AS count FROM graph_edges").get() as {
+        count: number;
+      };
       return row?.count ?? 0;
     },
 
@@ -278,19 +393,48 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async insertDocument(input) {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date().toISOString();
-      stmts.insertDoc.run(id, input.path, input.absolutePath, input.kind, input.language, input.contentHash, input.sizeBytes, input.mtimeMs, now, now);
+      stmts.insertDoc.run(
+        id,
+        input.path,
+        input.absolutePath,
+        input.kind,
+        input.language,
+        input.contentHash,
+        input.sizeBytes,
+        input.mtimeMs,
+        now,
+        now,
+      );
       return id;
     },
 
     async updateDocument(id, updates) {
       const sets: string[] = ["updated_at = ?"];
       const params: unknown[] = [new Date().toISOString()];
-      if (updates.absolutePath !== undefined) { sets.push("absolute_path = ?"); params.push(updates.absolutePath); }
-      if (updates.kind !== undefined) { sets.push("kind = ?"); params.push(updates.kind); }
-      if (updates.language !== undefined) { sets.push("language = ?"); params.push(updates.language); }
-      if (updates.contentHash !== undefined) { sets.push("content_hash = ?"); params.push(updates.contentHash); }
-      if (updates.sizeBytes !== undefined) { sets.push("size_bytes = ?"); params.push(updates.sizeBytes); }
-      if (updates.mtimeMs !== undefined) { sets.push("mtime_ms = ?"); params.push(updates.mtimeMs); }
+      if (updates.absolutePath !== undefined) {
+        sets.push("absolute_path = ?");
+        params.push(updates.absolutePath);
+      }
+      if (updates.kind !== undefined) {
+        sets.push("kind = ?");
+        params.push(updates.kind);
+      }
+      if (updates.language !== undefined) {
+        sets.push("language = ?");
+        params.push(updates.language);
+      }
+      if (updates.contentHash !== undefined) {
+        sets.push("content_hash = ?");
+        params.push(updates.contentHash);
+      }
+      if (updates.sizeBytes !== undefined) {
+        sets.push("size_bytes = ?");
+        params.push(updates.sizeBytes);
+      }
+      if (updates.mtimeMs !== undefined) {
+        sets.push("mtime_ms = ?");
+        params.push(updates.mtimeMs);
+      }
       params.push(id);
       native.prepare(`UPDATE documents SET ${sets.join(", ")} WHERE id = ?`).run(...params);
     },
@@ -300,7 +444,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     },
 
     async listDocuments() {
-      const rows = native.prepare("SELECT * FROM documents ORDER BY path").all() as Array<Record<string, unknown>>;
+      const rows = native.prepare("SELECT * FROM documents ORDER BY path").all() as Array<
+        Record<string, unknown>
+      >;
       return rows.map(mapDocumentRow);
     },
 
@@ -332,10 +478,14 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
             item.contentHash,
             item.metadata,
             now,
-            now
+            now,
           );
         }
-        native.prepare(`INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`).run(...params);
+        native
+          .prepare(
+            `INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
+          )
+          .run(...params);
       }
       return ids;
     },
@@ -349,29 +499,54 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async upsertGraphNode(input) {
       if (input.type === "symbol") {
         if (input.refId) {
-          const existing = stmts.nodeByTypeLabelRef.get(input.type, input.label, input.refId) as Record<string, unknown> | undefined;
+          const existing = stmts.nodeByTypeLabelRef.get(input.type, input.label, input.refId) as
+            | Record<string, unknown>
+            | undefined;
           if (existing) {
             const nextMetadata = input.metadata ?? String(existing.metadata ?? "{}");
             if (nextMetadata !== existing.metadata) {
-              stmts.updateNode.run(input.refId, nextMetadata, new Date().toISOString(), existing.id);
+              stmts.updateNode.run(
+                input.refId,
+                nextMetadata,
+                new Date().toISOString(),
+                existing.id,
+              );
             }
             return String(existing.id);
           }
         }
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        stmts.insertNode.run(id, input.type, input.label, input.refId ?? null, input.metadata ?? "{}", now, now);
+        stmts.insertNode.run(
+          id,
+          input.type,
+          input.label,
+          input.refId ?? null,
+          input.metadata ?? "{}",
+          now,
+          now,
+        );
         return id;
       }
 
       // Non-symbol nodes: (type, label) is unique — use ON CONFLICT ... RETURNING (one query)
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      const row = stmts.upsertNodeByTypeLabel.get(id, input.type, input.label, input.refId ?? null, input.metadata ?? "{}", now, now) as { id: string };
+      const row = stmts.upsertNodeByTypeLabel.get(
+        id,
+        input.type,
+        input.label,
+        input.refId ?? null,
+        input.metadata ?? "{}",
+        now,
+        now,
+      ) as { id: string };
       return String(row.id);
     },
 
-    async insertGraphNodesBatch(inputs: Array<{ type: string; label: string; refId?: string; metadata?: string }>): Promise<string[]> {
+    async insertGraphNodesBatch(
+      inputs: Array<{ type: string; label: string; refId?: string; metadata?: string }>,
+    ): Promise<string[]> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
       const ids: string[] = inputs.map(() => crypto.randomUUID());
@@ -389,18 +564,22 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
             item.refId ?? null,
             item.metadata ?? "{}",
             now,
-            now
+            now,
           );
         }
-        native.prepare(
-          `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders} ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET metadata = excluded.metadata, updated_at = excluded.updated_at`
-        ).run(...params);
+        native
+          .prepare(
+            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders} ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET metadata = excluded.metadata, updated_at = excluded.updated_at`,
+          )
+          .run(...params);
       }
       return ids;
     },
 
     async getGraphNode(id: string) {
-      const row = native.prepare("SELECT * FROM graph_nodes WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+      const row = native.prepare("SELECT * FROM graph_nodes WHERE id = ?").get(id) as
+        | Record<string, unknown>
+        | undefined;
       return row ? mapNodeRow(row) : null;
     },
 
@@ -414,13 +593,17 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     },
 
     async findFileNode(relativePath: string) {
-      const row = stmts.nodeByTypeLabel.get("file", relativePath) as Record<string, unknown> | undefined;
+      const row = stmts.nodeByTypeLabel.get("file", relativePath) as
+        | Record<string, unknown>
+        | undefined;
       return row ? mapNodeRow(row) : null;
     },
 
     async getSymbolNodesByFilePath(filePath: string) {
       const rows = native
-        .prepare("SELECT * FROM graph_nodes WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ?")
+        .prepare(
+          "SELECT * FROM graph_nodes WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ?",
+        )
         .all(filePath) as Array<Record<string, unknown>>;
       return rows.map(mapNodeRow);
     },
@@ -428,7 +611,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     deleteOutgoingEdges(nodeId: string, types?: string[]) {
       if (types && types.length > 0) {
         const placeholders = types.map(() => "?").join(",");
-        native.prepare(`DELETE FROM graph_edges WHERE from_node_id = ? AND type IN (${placeholders})`).run(nodeId, ...types);
+        native
+          .prepare(`DELETE FROM graph_edges WHERE from_node_id = ? AND type IN (${placeholders})`)
+          .run(nodeId, ...types);
       } else {
         native.prepare("DELETE FROM graph_edges WHERE from_node_id = ?").run(nodeId);
       }
@@ -447,18 +632,36 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     deleteChunkNodesByChunkIds(chunkIds: string[]) {
       if (chunkIds.length === 0) return;
       const placeholders = chunkIds.map(() => "?").join(",");
-      native.prepare(`DELETE FROM graph_nodes WHERE type = 'chunk' AND ref_id IN (${placeholders})`).run(...chunkIds);
+      native
+        .prepare(`DELETE FROM graph_nodes WHERE type = 'chunk' AND ref_id IN (${placeholders})`)
+        .run(...chunkIds);
     },
 
     // ── Graph Edge Operations ──
 
     async insertEdge(input) {
       const id = crypto.randomUUID();
-      stmts.insertEdge.run(id, input.fromNodeId, input.toNodeId, input.type, input.weight ?? 1, input.metadata ?? "{}", new Date().toISOString());
+      stmts.insertEdge.run(
+        id,
+        input.fromNodeId,
+        input.toNodeId,
+        input.type,
+        input.weight ?? 1,
+        input.metadata ?? "{}",
+        new Date().toISOString(),
+      );
       return id;
     },
 
-    async insertEdges(inputs: Array<{ fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }>): Promise<void> {
+    async insertEdges(
+      inputs: Array<{
+        fromNodeId: string;
+        toNodeId: string;
+        type: string;
+        weight?: number;
+        metadata?: string;
+      }>,
+    ): Promise<void> {
       if (inputs.length === 0) return;
       const now = new Date().toISOString();
       const BATCH = 500;
@@ -474,10 +677,14 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
             item.type,
             item.weight ?? 1,
             item.metadata ?? "{}",
-            now
+            now,
           );
         }
-        native.prepare(`INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders} ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`).run(...params);
+        native
+          .prepare(
+            `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders} ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
+          )
+          .run(...params);
       }
     },
 
@@ -485,16 +692,36 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       if (nodeIds.length === 0) return;
       const placeholders = nodeIds.map(() => "?").join(",");
       native
-        .prepare(`DELETE FROM graph_edges WHERE from_node_id IN (${placeholders}) OR to_node_id IN (${placeholders})`)
+        .prepare(
+          `DELETE FROM graph_edges WHERE from_node_id IN (${placeholders}) OR to_node_id IN (${placeholders})`,
+        )
         .run(...nodeIds, ...nodeIds);
     },
 
     // ── Embedding Operations ──
 
-    async insertEmbeddings(inputs) {
+    async insertEmbeddings(
+      inputs: Array<{
+        chunkId: string;
+        provider: string;
+        model: string;
+        dimensions: number;
+        embedding: string;
+        inputHash?: string | null;
+      }>,
+    ) {
       const now = new Date().toISOString();
       for (const input of inputs) {
-        stmts.insertEmbedding.run(crypto.randomUUID(), input.chunkId, input.provider, input.model, input.dimensions, input.embedding, now);
+        stmts.insertEmbedding.run(
+          crypto.randomUUID(),
+          input.chunkId,
+          input.provider,
+          input.model,
+          input.dimensions,
+          input.embedding,
+          input.inputHash ?? null,
+          now,
+        );
       }
     },
 
@@ -526,28 +753,31 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
            INNER JOIN documents ON documents.id = chunks.document_id
            WHERE chunks_fts MATCH ?
            ORDER BY bm25_score ASC
-           LIMIT ?`
+           LIMIT ?`,
         )
         .all(ftsQuery, limit * 5) as Array<Record<string, unknown>>;
 
       const seenPaths = new Set<string>();
-      return rows.map((row) => {
-        const bm25 = Number(row.bm25_score ?? 0);
-        // Convert bm25 (lower = better) to a 0-1 score (higher = better)
-        const score = -bm25;
-        return {
-          id: String(row.id),
-          path: String(row.path),
-          content: String(row.content),
-          score,
-          heading: row.heading ? String(row.heading) : null,
-          metadata: safeParseJson(String(row.metadata ?? ""), {}) as Record<string, unknown>
-        };
-      }).filter((row) => {
-        if (seenPaths.has(row.path)) return false;
-        seenPaths.add(row.path);
-        return true;
-      }).slice(0, limit);
+      return rows
+        .map((row) => {
+          const bm25 = Number(row.bm25_score ?? 0);
+          // Convert bm25 (lower = better) to a 0-1 score (higher = better)
+          const score = -bm25;
+          return {
+            id: String(row.id),
+            path: String(row.path),
+            content: String(row.content),
+            score,
+            heading: row.heading ? String(row.heading) : null,
+            metadata: safeParseJson(String(row.metadata ?? ""), {}) as Record<string, unknown>,
+          };
+        })
+        .filter((row) => {
+          if (seenPaths.has(row.path)) return false;
+          seenPaths.add(row.path);
+          return true;
+        })
+        .slice(0, limit);
     },
 
     // ── Graph Traversal ──
@@ -564,7 +794,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       const seedId = String(seedNodes[0].id);
       const visited = new Set<string>();
       const resultNodes: Array<Record<string, unknown>> = [
-        { ...seedNodes[0], metadata: safeParseJson(String(seedNodes[0].metadata ?? ""), {}) }
+        { ...seedNodes[0], metadata: safeParseJson(String(seedNodes[0].metadata ?? ""), {}) },
       ];
       const resultEdges: Array<Record<string, unknown>> = [];
       const resultEdgeIds = new Set<string>();
@@ -576,24 +806,39 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
         const placeholders = currentBatch.map(() => "?").join(",");
         const edges = native
-          .prepare(`SELECT * FROM graph_edges WHERE (from_node_id IN (${placeholders}) OR to_node_id IN (${placeholders})) LIMIT ?`)
+          .prepare(
+            `SELECT * FROM graph_edges WHERE (from_node_id IN (${placeholders}) OR to_node_id IN (${placeholders})) LIMIT ?`,
+          )
           .all(...currentBatch, ...currentBatch, limit) as Array<Record<string, unknown>>;
 
         const nextBatch: string[] = [];
         for (const edge of edges) {
           const fromId = String(edge.from_node_id);
           const toId = String(edge.to_node_id);
-          if (!visited.has(fromId) && visited.size < limit) { nextBatch.push(fromId); visited.add(fromId); }
-          if (!visited.has(toId) && visited.size < limit) { nextBatch.push(toId); visited.add(toId); }
+          if (!visited.has(fromId) && visited.size < limit) {
+            nextBatch.push(fromId);
+            visited.add(fromId);
+          }
+          if (!visited.has(toId) && visited.size < limit) {
+            nextBatch.push(toId);
+            visited.add(toId);
+          }
           const edgeId = String(edge.id);
-          if (visited.has(fromId) && visited.has(toId) && !resultEdgeIds.has(edgeId) && resultEdges.length < limit) {
+          if (
+            visited.has(fromId) &&
+            visited.has(toId) &&
+            !resultEdgeIds.has(edgeId) &&
+            resultEdges.length < limit
+          ) {
             resultEdgeIds.add(edgeId);
             resultEdges.push(edge);
           }
         }
 
         for (const nodeId of nextBatch) {
-          const node = native.prepare("SELECT * FROM graph_nodes WHERE id = ?").get(nodeId) as Record<string, unknown> | undefined;
+          const node = native.prepare("SELECT * FROM graph_nodes WHERE id = ?").get(nodeId) as
+            | Record<string, unknown>
+            | undefined;
           if (node) {
             resultNodes.push({ ...node, metadata: safeParseJson(String(node.metadata ?? ""), {}) });
           }
@@ -611,13 +856,26 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       native
-        .prepare("INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .run(id, input.title, input.content, input.tags ?? "", input.source, input.supersedesId ?? null, now, now);
+        .prepare(
+          "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          id,
+          input.title,
+          input.content,
+          input.tags ?? "",
+          input.source,
+          input.supersedesId ?? null,
+          now,
+          now,
+        );
       return id;
     },
 
     async getMemory(id) {
-      const row = native.prepare("SELECT * FROM memories WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+      const row = native.prepare("SELECT * FROM memories WHERE id = ?").get(id) as
+        | Record<string, unknown>
+        | undefined;
       return row ? mapMemoryRow(row) : null;
     },
 
@@ -626,14 +884,18 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       const terms = [...new Set(normalized.split(/\s+/).filter(Boolean))].slice(0, 8);
       if (terms.length === 0) return [];
 
-      const clauses = terms.map(() => "(lower(m.title) LIKE ? ESCAPE '\\' OR lower(m.content) LIKE ? ESCAPE '\\' OR lower(m.tags) LIKE ? ESCAPE '\\')");
+      const clauses = terms.map(
+        () =>
+          "(lower(m.title) LIKE ? ESCAPE '\\' OR lower(m.content) LIKE ? ESCAPE '\\' OR lower(m.tags) LIKE ? ESCAPE '\\')",
+      );
       const termParams = terms.flatMap((term) => {
         const pattern = `%${escapeLikePattern(term)}%`;
         return [pattern, pattern, pattern];
       });
       const phrasePattern = `%${escapeLikePattern(normalized)}%`;
-      const rows = native.prepare(
-        `SELECT m.*
+      const rows = native
+        .prepare(
+          `SELECT m.*
          FROM memories m
          WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
            AND ${clauses.join(" AND ")}
@@ -642,8 +904,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
            WHEN lower(m.title) LIKE ? ESCAPE '\\' THEN 1
            ELSE 2
          END, m.updated_at DESC
-         LIMIT ?`
-      ).all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
+         LIMIT ?`,
+        )
+        .all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
       return rows.map(mapMemoryRow);
     },
 
@@ -653,7 +916,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       native
-        .prepare("INSERT INTO index_runs (id, mode, status, files_scanned, files_updated, chunks_written, embeddings_written, started_at) VALUES (?, ?, 'running', 0, 0, 0, 0, ?)")
+        .prepare(
+          "INSERT INTO index_runs (id, mode, status, files_scanned, files_updated, chunks_written, embeddings_written, started_at) VALUES (?, ?, 'running', 0, 0, 0, 0, ?)",
+        )
         .run(id, input.mode, now);
       return id;
     },
@@ -661,12 +926,30 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async completeIndexRun(id, updates) {
       const sets: string[] = ["finished_at = ?"];
       const params: unknown[] = [new Date().toISOString()];
-      if (updates.status !== undefined) { sets.push("status = ?"); params.push(updates.status); }
-      if (updates.filesScanned !== undefined) { sets.push("files_scanned = ?"); params.push(updates.filesScanned); }
-      if (updates.filesUpdated !== undefined) { sets.push("files_updated = ?"); params.push(updates.filesUpdated); }
-      if (updates.chunksWritten !== undefined) { sets.push("chunks_written = ?"); params.push(updates.chunksWritten); }
-      if (updates.embeddingsWritten !== undefined) { sets.push("embeddings_written = ?"); params.push(updates.embeddingsWritten); }
-      if (updates.errorMessage !== undefined) { sets.push("error_message = ?"); params.push(updates.errorMessage); }
+      if (updates.status !== undefined) {
+        sets.push("status = ?");
+        params.push(updates.status);
+      }
+      if (updates.filesScanned !== undefined) {
+        sets.push("files_scanned = ?");
+        params.push(updates.filesScanned);
+      }
+      if (updates.filesUpdated !== undefined) {
+        sets.push("files_updated = ?");
+        params.push(updates.filesUpdated);
+      }
+      if (updates.chunksWritten !== undefined) {
+        sets.push("chunks_written = ?");
+        params.push(updates.chunksWritten);
+      }
+      if (updates.embeddingsWritten !== undefined) {
+        sets.push("embeddings_written = ?");
+        params.push(updates.embeddingsWritten);
+      }
+      if (updates.errorMessage !== undefined) {
+        sets.push("error_message = ?");
+        params.push(updates.errorMessage);
+      }
       params.push(id);
       native.prepare(`UPDATE index_runs SET ${sets.join(", ")} WHERE id = ?`).run(...params);
     },
@@ -676,8 +959,19 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async insertQueryLog(input) {
       const id = crypto.randomUUID();
       native
-        .prepare("INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .run(id, input.query, input.mode, input.resultCount, input.tokensReturned ?? 0, input.tokensSaved ?? 0, input.filesScanned ?? 0, new Date().toISOString());
+        .prepare(
+          "INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          id,
+          input.query,
+          input.mode,
+          input.resultCount,
+          input.tokensReturned ?? 0,
+          input.tokensSaved ?? 0,
+          input.filesScanned ?? 0,
+          new Date().toISOString(),
+        );
       return id;
     },
 
@@ -791,7 +1085,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       native.exec("DELETE FROM embeddings");
       native.exec("DELETE FROM chunks");
       native.exec("DELETE FROM documents");
-    }
+    },
   };
 }
 
@@ -806,7 +1100,7 @@ function mapDocumentRow(row: Record<string, unknown>) {
     sizeBytes: Number(row.size_bytes),
     mtimeMs: Number(row.mtime_ms),
     createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at)
+    updatedAt: String(row.updated_at),
   };
 }
 
@@ -821,7 +1115,7 @@ function mapChunkRow(row: Record<string, unknown>) {
     contentHash: String(row.content_hash),
     metadata: String(row.metadata ?? "{}"),
     createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at)
+    updatedAt: String(row.updated_at),
   };
 }
 
@@ -833,7 +1127,7 @@ function mapNodeRow(row: Record<string, unknown>) {
     refId: row.ref_id ? String(row.ref_id) : null,
     metadata: String(row.metadata ?? "{}"),
     createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at)
+    updatedAt: String(row.updated_at),
   };
 }
 
@@ -846,7 +1140,7 @@ function mapMemoryRow(row: Record<string, unknown>) {
     source: String(row.source),
     supersedesId: row.supersedes_id ? String(row.supersedes_id) : null,
     createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at)
+    updatedAt: String(row.updated_at),
   };
 }
 
@@ -854,7 +1148,10 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
-function safeParseJson(value: string | undefined, fallback: Record<string, unknown>): Record<string, unknown> {
+function safeParseJson(
+  value: string | undefined,
+  fallback: Record<string, unknown>,
+): Record<string, unknown> {
   if (!value) return fallback;
   try {
     return JSON.parse(value) as Record<string, unknown>;
@@ -871,8 +1168,23 @@ function safeParseJson(value: string | undefined, fallback: Record<string, unkno
  */
 function sanitizeFtsQuery(query: string): string {
   const stopwords = new Set([
-    "a", "an", "are", "does", "extracted", "how", "implement", "implementation", "implemented",
-    "in", "is", "of", "the", "to", "what", "where", "work"
+    "a",
+    "an",
+    "are",
+    "does",
+    "extracted",
+    "how",
+    "implement",
+    "implementation",
+    "implemented",
+    "in",
+    "is",
+    "of",
+    "the",
+    "to",
+    "what",
+    "where",
+    "work",
   ]);
   const codeVerbs: Record<string, string> = {
     created: "create",
@@ -880,10 +1192,11 @@ function sanitizeFtsQuery(query: string): string {
     indexing: "index",
     selected: "select",
     stored: "store",
-    written: "write"
+    written: "write",
   };
-  const terms = (query.match(/[\p{L}\p{N}$]+/gu) ?? [])
-    .filter((t) => t.length > 1 && !stopwords.has(t.toLowerCase()));
+  const terms = (query.match(/[\p{L}\p{N}$]+/gu) ?? []).filter(
+    (t) => t.length > 1 && !stopwords.has(t.toLowerCase()),
+  );
 
   if (terms.length === 0) return "";
 

@@ -1,12 +1,25 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
-  Badge, Button, Card, CardContent, CardHeader, CardTitle,
-  Input, Label, Textarea,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Textarea,
 } from "@openez-graph/ui";
 import { api } from "../../lib/api";
 import {
-  ChevronLeft, FolderOpen, Loader2, CheckCircle2, XCircle, Globe, FileCode2,
+  ChevronLeft,
+  FolderOpen,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Globe,
+  FileCode2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/workspaces/new")({
@@ -44,7 +57,7 @@ function NewWorkspacePage() {
     try {
       const result = await api.validatePath(rootPath);
       setPathValid(result.valid);
-      setPathError(result.valid ? null : result.error ?? "Invalid path");
+      setPathError(result.valid ? null : (result.error ?? "Invalid path"));
     } catch {
       setPathValid(false);
       setPathError("Validation failed");
@@ -61,11 +74,11 @@ function NewWorkspacePage() {
       const result = await api.createWorkspace({
         name: formData.get("name") as string,
         rootPath: formData.get("rootPath") as string,
-        includeGlobs: (formData.get("includeGlobs") as string || DEFAULT_INCLUDE_GLOBS)
+        includeGlobs: ((formData.get("includeGlobs") as string) || DEFAULT_INCLUDE_GLOBS)
           .split("\n")
           .map((s) => s.trim())
           .filter(Boolean),
-        excludeGlobs: (formData.get("excludeGlobs") as string || DEFAULT_EXCLUDE_GLOBS)
+        excludeGlobs: ((formData.get("excludeGlobs") as string) || DEFAULT_EXCLUDE_GLOBS)
           .split("\n")
           .map((s) => s.trim())
           .filter(Boolean),
@@ -107,7 +120,9 @@ function NewWorkspacePage() {
           </CardHeader>
           <CardContent className="space-y-8">
             {error && (
-              <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">{error}</div>
+              <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
+                {error}
+              </div>
             )}
 
             <div className="grid gap-6 sm:grid-cols-2">
@@ -200,7 +215,9 @@ function NewWorkspacePage() {
                     <XCircle className="h-3.5 w-3.5" />
                     Exclude Patterns
                   </span>
-                  <Badge variant="outline" className="ml-2 text-xs px-1 py-0">optional</Badge>
+                  <Badge variant="outline" className="ml-2 text-xs px-1 py-0">
+                    optional
+                  </Badge>
                 </Label>
                 <Textarea
                   id="excludeGlobs"

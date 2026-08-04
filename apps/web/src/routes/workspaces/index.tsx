@@ -5,9 +5,7 @@ import { formatDate } from "../../lib/utils";
 import { workspacesQueryOptions, workspaceQueryOptions } from "../../lib/queries";
 import { PAGE_SIZE, Pagination, paginate } from "../../lib/pagination";
 import { StatusBadge } from "../../components/status-badge";
-import {
-  Button, Card, CardContent, CardHeader, CardTitle,
-} from "@openez-graph/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle } from "@openez-graph/ui";
 import { Plus, FolderOpen, Search, Layers, AlertTriangle } from "lucide-react";
 
 export const Route = createFileRoute("/workspaces/")({
@@ -23,7 +21,12 @@ function WorkspacesPage() {
   const { page: currentPage } = useSearch({ from: "/workspaces/" });
   const { data: result, isLoading, error } = useQuery(workspacesQueryOptions);
 
-  if (isLoading) return <div className="page"><p className="muted">Loading...</p></div>;
+  if (isLoading)
+    return (
+      <div className="page">
+        <p className="muted">Loading...</p>
+      </div>
+    );
 
   if (error || (result && !result.ok)) {
     const err = result && !result.ok ? result : null;
@@ -39,10 +42,8 @@ function WorkspacesPage() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
             <h2 className="text-lg font-medium mb-2">Registry unavailable</h2>
-            <p className="muted text-center mb-4 max-w-md">
-              Could not open the registry database.
-            </p>
-            {err && 'error' in err && (
+            <p className="muted text-center mb-4 max-w-md">Could not open the registry database.</p>
+            {err && "error" in err && (
               <p className="text-sm text-destructive text-center max-w-md">
                 {(err as { error: string }).error}
               </p>
@@ -115,15 +116,21 @@ function WorkspacesPage() {
                         <div className="flex flex-wrap gap-4 text-sm">
                           <div className="flex items-center gap-1.5">
                             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-muted-foreground">{workspace.documentCount ?? 0} docs</span>
+                            <span className="text-muted-foreground">
+                              {workspace.documentCount ?? 0} docs
+                            </span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-muted-foreground">{workspace.chunkCount ?? 0} chunks</span>
+                            <span className="text-muted-foreground">
+                              {workspace.chunkCount ?? 0} chunks
+                            </span>
                           </div>
                           {(workspace.nodeCount ?? 0) > 0 && (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-muted-foreground">{workspace.nodeCount} nodes</span>
+                              <span className="text-muted-foreground">
+                                {workspace.nodeCount} nodes
+                              </span>
                             </div>
                           )}
                         </div>

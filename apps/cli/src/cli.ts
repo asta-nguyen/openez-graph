@@ -4,7 +4,12 @@ import path from "node:path";
 import chokidar from "chokidar";
 import { Command } from "commander";
 
-import { createRegistryRepository, createWorkspaceRepository, writeLocalWorkspaceConfig } from "@openez-graph/db";
+import {
+  createRegistryRepository,
+  createWorkspaceRepository,
+  isSensitiveKey,
+  writeLocalWorkspaceConfig,
+} from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
 const cliDir = path.dirname(fs.realpathSync(process.argv[1]));
@@ -42,7 +47,9 @@ program
 
     if (existing) {
       await writeLocalWorkspaceConfig(existing);
-      console.log(`Workspace '${existing.name}' (${existing.id}) already registered at ${resolvedPath}`);
+      console.log(
+        `Workspace '${existing.name}' (${existing.id}) already registered at ${resolvedPath}`,
+      );
       if (options.index !== false) {
         console.log("Running initial index...");
         const summary = await indexWorkspace({ rootPath: resolvedPath, mode: "incremental" });
@@ -52,7 +59,7 @@ program
     }
 
     const workspace = await registry.ensureWorkspace({
-      rootPath: resolvedPath
+      rootPath: resolvedPath,
     });
     await writeLocalWorkspaceConfig(workspace);
 
@@ -79,7 +86,7 @@ program
 
     if (!workspace) {
       workspace = await registry.ensureWorkspace({
-        rootPath: resolvedPath
+        rootPath: resolvedPath,
       });
       console.log(`Auto-registered workspace '${workspace.name}' (${workspace.id})`);
     }
@@ -111,7 +118,7 @@ program
     const summary = await indexWorkspace({
       workspaceId: workspace.id,
       mode: "full",
-      onProgress: (p) => console.log(`[${p.progress}%] ${p.message}`)
+      onProgress: (p) => console.log(`[${p.progress}%] ${p.message}`),
     });
     console.log(JSON.stringify(summary, null, 2));
   });
@@ -129,7 +136,7 @@ program
     let workspace = await registry.getWorkspaceByPath(resolvedPath);
     if (!workspace) {
       workspace = await registry.ensureWorkspace({
-        rootPath: resolvedPath
+        rootPath: resolvedPath,
       });
       console.log(`Auto-registered workspace '${workspace.name}' (${workspace.id})`);
     }
@@ -149,10 +156,10 @@ program
         "**/build/**",
         "**/coverage/**",
         "**/.turbo/**",
-        "**/.openez/**"
+        "**/.openez/**",
       ],
       ignoreInitial: true,
-      persistent: true
+      persistent: true,
     });
 
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -291,15 +298,97 @@ program
 
     console.log("Registered workspaces:");
     for (const workspace of workspaces) {
-      const statusIcon = workspace.status === "indexed" ? "✓" : workspace.status === "error" ? "✗" : "○";
+      const statusIcon =
+        workspace.status === "indexed" ? "✓" : workspace.status === "error" ? "✗" : "○";
       console.log(`  ${statusIcon} ${workspace.name} (${workspace.id})`);
       console.log(`       ${workspace.rootPath}`);
     }
   });
 
+// ── openez config ──
+
+const EMBEDDING_CONFIG_KEYS = [
+  "embedding.provider",
+  "embedding.openai_api_key",
+  "embedding.openai_base_url",
+  "embedding.openai_model",
+  "embedding.ollama_base_url",
+  "embedding.ollama_model",
+] as const;
+
+const configCmd = program
+  .command("config")
+  .description("Manage embedding configuration stored in the registry DB");
+
+configCmd
+  .command("get [key]")
+  .description("Get a config value (or all if no key given)")
+  .action(async (key?: string) => {
+    const registry = createRegistryRepository();
+    if (key) {
+      const value = await registry.getSetting(key);
+      console.log(isSensitiveKey(key) ? "****" : (value ?? ""));
+    } else {
+      const all = await registry.getAllSettings();
+      if (Object.keys(all).length === 0) {
+        console.log("No config values set. Showing env defaults:");
+      }
+      const { getEmbeddingConfig } = await import("@openez-graph/core");
+      const config = await getEmbeddingConfig();
+      console.log("  Embedding provider:    " + config.provider);
+      console.log("  OpenAI API key:        " + (config.openaiApiKey ? "****" : "not set"));
+      console.log("  OpenAI base URL:       " + (config.openaiBaseUrl ?? "default"));
+      console.log("  OpenAI model:          " + config.openaiModel);
+      console.log("  Ollama base URL:       " + config.ollamaBaseUrl);
+      console.log("  Ollama model:          " + config.ollamaModel);
+      if (Object.keys(all).length > 0) {
+        console.log("");
+        console.log("DB-stored overrides:");
+        for (const [k, v] of Object.entries(all)) {
+          const display = k.includes("api_key") ? "****" : v;
+          console.log(`  ${k} = ${display}`);
+        }
+      }
+    }
+  });
+
+configCmd
+  .command("set <key> <value>")
+  .description("Set a config value. Keys: " + EMBEDDING_CONFIG_KEYS.join(", "))
+  .action(async (key: string, value: string) => {
+    if (!EMBEDDING_CONFIG_KEYS.includes(key as (typeof EMBEDDING_CONFIG_KEYS)[number])) {
+      console.error(`Error: unknown key '${key}'. Valid keys:`);
+      for (const k of EMBEDDING_CONFIG_KEYS) {
+        console.error(`  ${k}`);
+      }
+      process.exit(1);
+    }
+    const registry = createRegistryRepository();
+    await registry.setSetting(key, value);
+    console.log(`Set ${key} = ${key.includes("api_key") ? "****" : value}`);
+  });
+
+configCmd
+  .command("list")
+  .description("List all config values (same as 'config get' without key)")
+  .action(async () => {
+    const registry = createRegistryRepository();
+    const all = await registry.getAllSettings();
+    if (Object.keys(all).length === 0) {
+      console.log("No DB-stored config values. Using env defaults.");
+    } else {
+      for (const [k, v] of Object.entries(all)) {
+        const display = k.includes("api_key") ? "****" : v;
+        console.log(`${k} = ${display}`);
+      }
+    }
+  });
+
 // ── openez setup codex|claude|opencode [path] ──
 
-const setup = program.command("setup").description("Configure editor/agent integrations (codex, claude, opencode, windsurf, devin)");
+const setup = program
+  .command("setup")
+  .description("Configure editor/agent integrations (codex, claude, opencode, windsurf, devin)");
 
 setup
   .command("codex")
@@ -321,7 +410,9 @@ setup
 
 setup
   .command("opencode")
-  .description("Add or update the shared OpenEZ MCP server entry in ~/.config/opencode/opencode.json")
+  .description(
+    "Add or update the shared OpenEZ MCP server entry in ~/.config/opencode/opencode.json",
+  )
   .argument("[path]", "path to the project directory", process.cwd())
   .action(async (targetPath) => {
     const { setupOpenCode } = await import("./setup-opencode");
@@ -330,7 +421,9 @@ setup
 
 setup
   .command("windsurf")
-  .description("Add or update the shared OpenEZ MCP server entry in ~/.codeium/windsurf/mcp_config.json")
+  .description(
+    "Add or update the shared OpenEZ MCP server entry in ~/.codeium/windsurf/mcp_config.json",
+  )
   .argument("[path]", "path to the project directory", process.cwd())
   .action(async (targetPath) => {
     const { setupWindsurf } = await import("./setup-windsurf");

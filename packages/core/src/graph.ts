@@ -5,7 +5,7 @@ import type { CodeContextResult, CodeSymbolContext, GraphNeighborResult } from "
 
 function metadata(node: Record<string, unknown>): Record<string, unknown> {
   return typeof node.metadata === "object" && node.metadata !== null
-    ? node.metadata as Record<string, unknown>
+    ? (node.metadata as Record<string, unknown>)
     : {};
 }
 
@@ -14,7 +14,7 @@ function compactNode(node: Record<string, unknown>): GraphNeighborResult["nodes"
   const result: GraphNeighborResult["nodes"][number] = {
     id: String(node.id),
     type: String(node.type),
-    label: String(node.label)
+    label: String(node.label),
   };
   const filePath = meta.filePath ?? meta.path;
   if (typeof filePath === "string") result.path = filePath;
@@ -39,8 +39,11 @@ export async function graphNeighbors(input: {
   if (!searchLabel) throw new Error("Either nodeId or label is required");
 
   const limit = input.limit ?? 50;
-  const result = await createWorkspaceRepository(workspace.rootPath)
-    .graphNeighbors(searchLabel, input.depth ?? 1, limit);
+  const result = await createWorkspaceRepository(workspace.rootPath).graphNeighbors(
+    searchLabel,
+    input.depth ?? 1,
+    limit,
+  );
   const nodes = result.nodes.map(compactNode);
   const labels = new Map(nodes.map((node) => [node.id, node.label]));
   const edgeTypes = input.edgeTypes?.length ? new Set(input.edgeTypes) : undefined;
@@ -80,25 +83,41 @@ export async function codeContext(input: {
 
   const repo = createWorkspaceRepository(workspace.rootPath);
   const limit = input.limit ?? 50;
-  const neighbors = await repo.graphNeighbors(input.symbolOrPath, input.hops ?? 1, Math.min(limit * 3, 200));
+  const neighbors = await repo.graphNeighbors(
+    input.symbolOrPath,
+    input.hops ?? 1,
+    Math.min(limit * 3, 200),
+  );
   const nodesById = new Map(neighbors.nodes.map((node) => [String(node.id), node]));
   const symbol = neighbors.nodes.find(
-    (node) => node.type === "symbol" && (node.label === input.symbolOrPath || node.id === input.symbolOrPath)
+    (node) =>
+      node.type === "symbol" &&
+      (node.label === input.symbolOrPath || node.id === input.symbolOrPath),
   );
-  const referencedChunkIds = [...new Set(neighbors.nodes
-    .filter((node) => node.type === "symbol" || node.type === "chunk")
-    .map((node) => node.ref_id)
-    .filter((id): id is string => typeof id === "string" && id.length > 0))];
-  const chunkRows = referencedChunkIds.length === 0 ? [] : await repo.queryRaw(
-    `SELECT chunks.id, chunks.content, chunks.heading, chunks.metadata, documents.path
+  const referencedChunkIds = [
+    ...new Set(
+      neighbors.nodes
+        .filter((node) => node.type === "symbol" || node.type === "chunk")
+        .map((node) => node.ref_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  const chunkRows =
+    referencedChunkIds.length === 0
+      ? []
+      : await repo.queryRaw(
+          `SELECT chunks.id, chunks.content, chunks.heading, chunks.metadata, documents.path
      FROM chunks
      INNER JOIN documents ON documents.id = chunks.document_id
      WHERE chunks.id IN (${referencedChunkIds.map(() => "?").join(",")})`,
-    referencedChunkIds
-  );
+          referencedChunkIds,
+        );
   const chunksById = new Map(chunkRows.map((row) => [String(row.id), row]));
 
-  const describeSymbol = (node: Record<string, unknown>, includeSnippet = true): CodeSymbolContext => {
+  const describeSymbol = (
+    node: Record<string, unknown>,
+    includeSnippet = true,
+  ): CodeSymbolContext => {
     const meta = metadata(node);
     const chunk = chunksById.get(String(node.ref_id ?? ""));
     const chunkMeta = parseJson(chunk?.metadata);
@@ -136,38 +155,51 @@ export async function codeContext(input: {
         const chunk = chunksById.get(String(node.ref_id ?? ""));
         if (!chunk) return [];
         const meta = parseJson(chunk.metadata);
-        return [{
-          path: String(chunk.path),
-          startLine: typeof meta.startLine === "number" ? meta.startLine : undefined,
-          endLine: typeof meta.endLine === "number" ? meta.endLine : undefined,
-          heading: chunk.heading ? String(chunk.heading) : undefined,
-          snippet: String(chunk.content)
-        }];
-      })
+        return [
+          {
+            path: String(chunk.path),
+            startLine: typeof meta.startLine === "number" ? meta.startLine : undefined,
+            endLine: typeof meta.endLine === "number" ? meta.endLine : undefined,
+            heading: chunk.heading ? String(chunk.heading) : undefined,
+            snippet: String(chunk.content),
+          },
+        ];
+      }),
   };
 
   const maxTokens = input.maxTokens ?? 4000;
   const selected: CodeContextResult = { files: [], callers: [], callees: [], relatedChunks: [] };
   let usedTokens = countTokens(JSON.stringify(selected));
   let selectedCount = 0;
-  const take = <T>(items: T[]): T[] => items.filter((item) => {
-    if (selectedCount >= limit || usedTokens >= maxTokens) return false;
-    const tokens = countTokens(JSON.stringify(item));
-    if (usedTokens + tokens > maxTokens) return false;
-    usedTokens += tokens;
-    selectedCount += 1;
-    return true;
-  });
+  const take = <T>(items: T[]): T[] =>
+    items.filter((item) => {
+      if (selectedCount >= limit || usedTokens >= maxTokens) return false;
+      const tokens = countTokens(JSON.stringify(item));
+      if (usedTokens + tokens > maxTokens) return false;
+      usedTokens += tokens;
+      selectedCount += 1;
+      return true;
+    });
 
   if (raw.symbol) {
     const budgetedSymbol = {
       ...raw.symbol,
-      snippet: truncateToTokenLimit(raw.symbol.snippet ?? "", Math.max(50, Math.floor(maxTokens / 2)))
+      snippet: truncateToTokenLimit(
+        raw.symbol.snippet ?? "",
+        Math.max(50, Math.floor(maxTokens / 2)),
+      ),
     };
     const symbolTokens = countTokens(JSON.stringify(budgetedSymbol));
-    selected.symbol = symbolTokens + usedTokens <= maxTokens
-      ? budgetedSymbol
-      : { ...budgetedSymbol, snippet: truncateToTokenLimit(budgetedSymbol.snippet, Math.max(0, maxTokens - usedTokens - 40)) };
+    selected.symbol =
+      symbolTokens + usedTokens <= maxTokens
+        ? budgetedSymbol
+        : {
+            ...budgetedSymbol,
+            snippet: truncateToTokenLimit(
+              budgetedSymbol.snippet,
+              Math.max(0, maxTokens - usedTokens - 40),
+            ),
+          };
     usedTokens += countTokens(JSON.stringify(selected.symbol));
     selectedCount += 1;
   }

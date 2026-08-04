@@ -26,7 +26,7 @@ function sourceFromChunk(chunk: ChunkHit, reason: string): QuerySource {
     startLine,
     endLine,
     score: chunk.score,
-    reason
+    reason,
   };
 }
 
@@ -62,11 +62,18 @@ function parseEmbedding(value: unknown): number[] {
   }
 }
 
+const MIN_COSINE_SIMILARITY = 0.3;
+const CODE_FILE_BOOST = 0.05;
+
+function isCodeFile(path: string): boolean {
+  return /\.(ts|tsx|js|jsx|py|go|rs)$/.test(path);
+}
+
 export async function rankStoredEmbeddings(
   rootPath: string,
   provider: Pick<EmbeddingProvider, "provider" | "model">,
   queryEmbedding: number[],
-  limit: number
+  limit: number,
 ): Promise<ChunkHit[]> {
   if (queryEmbedding.length === 0) return [];
 
@@ -81,42 +88,80 @@ export async function rankStoredEmbeddings(
     WHERE embeddings.provider = ?
       AND embeddings.model = ?
       AND embeddings.dimensions = ?`,
-    [provider.provider, embeddingStorageModel(provider), queryEmbedding.length]
+    [provider.provider, embeddingStorageModel(provider), queryEmbedding.length],
   );
 
-  // ponytail: linear scan is enough for local SQLite; use sqlite-vec after profiling proves otherwise.
+  // Linear scan is sufficient for local SQLite; switch to sqlite-vec if profiling proves otherwise.
+  const seenPaths = new Set<string>();
   return results
-    .map((row) => ({
-      id: String(row.id),
-      path: String(row.path),
-      content: String(row.content),
-      score: cosineSimilarity(queryEmbedding, parseEmbedding(row.embedding)),
-      heading: row.heading ? String(row.heading) : null,
-      metadata: safeParseJson(String(row.metadata ?? "{}"), {})
-    }))
+    .map((row) => {
+      const path = String(row.path);
+      const baseScore = cosineSimilarity(queryEmbedding, parseEmbedding(row.embedding));
+      return {
+        id: String(row.id),
+        path,
+        content: String(row.content),
+        score: isCodeFile(path) ? baseScore + CODE_FILE_BOOST : baseScore,
+        heading: row.heading ? String(row.heading) : null,
+        metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+      };
+    })
+    .filter((hit) => hit.score >= MIN_COSINE_SIMILARITY)
     .sort((left, right) => right.score - left.score)
+    .filter((hit) => {
+      if (seenPaths.has(hit.path)) return false;
+      seenPaths.add(hit.path);
+      return true;
+    })
     .slice(0, limit);
 }
 
-async function vectorSearch(
-  rootPath: string,
-  query: string,
-  limit: number
-): Promise<ChunkHit[]> {
-  const provider = getEmbeddingProvider();
-  if (!provider) return [];
+const QUERY_EXPANSIONS: Array<[RegExp, string]> = [
+  [/encrypt|secret|key|password/i, "encrypt decrypt AES cipher key security"],
+  [/similar|distance|vector|number/i, "embedding cosine similarity vector dot product"],
+  [/config|setting|option/i, "config setting registry database store"],
+  [/chunk|split|piece|part/i, "chunk index parse split token"],
+  [/model|inference|AI|LLM/i, "embedding provider model inference"],
+  [/store|save|write|persist/i, "insert store database repository"],
+  [/search|find|query|lookup/i, "search query retrieval FTS vector"],
+  [/index|build|process/i, "index workspace scan parse"],
+];
 
-  const [queryEmbedding] = await provider.embed([
-    formatEmbeddingInput(provider, { content: query }, "query")
-  ]);
-  return rankStoredEmbeddings(rootPath, provider, queryEmbedding ?? [], limit);
+function expandQuery(query: string): string {
+  const expansions = QUERY_EXPANSIONS.filter(([pattern]) => pattern.test(query)).map(
+    ([, expansion]) => expansion,
+  );
+  return expansions.length > 0 ? `${query} ${expansions.join(" ")}` : query;
+}
+
+async function vectorSearch(rootPath: string, query: string, limit: number): Promise<ChunkHit[]> {
+  const provider = await getEmbeddingProvider();
+  if (!provider) {
+    console.log("[retrieval] vector search: disabled (no embedding provider)");
+    return [];
+  }
+
+  console.log(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
+  try {
+    const expandedQuery = expandQuery(query);
+    const [queryEmbedding] = await provider.embed([
+      formatEmbeddingInput(provider, { content: expandedQuery }, "query"),
+    ]);
+    const hits = await rankStoredEmbeddings(rootPath, provider, queryEmbedding ?? [], limit);
+    console.log(`[retrieval] vector search: ${hits.length} hits`);
+    return hits;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`Vector search failed (falling back to FTS): ${msg}`);
+    return [];
+  }
 }
 
 async function graphExpand(
   rootPath: string,
   seedIds: string[],
   depth: number,
-  limit: number
+  limit: number,
 ): Promise<ChunkHit[]> {
   if (seedIds.length === 0) return [];
 
@@ -162,22 +207,25 @@ async function graphExpand(
     INNER JOIN chunks ON chunks.id = candidate_chunks.id
     INNER JOIN documents ON documents.id = chunks.document_id
     ORDER BY candidate_chunks.distance, documents.path`,
-    [...seedIds, depth, ...seedIds, limit * 5]
+    [...seedIds, depth, ...seedIds, limit * 5],
   );
 
   const seenPaths = new Set<string>();
-  return results.map((row) => ({
-    id: String(row.id),
-    path: String(row.path),
-    content: String(row.content),
-    score: Number(row.score ?? 0),
-    heading: row.heading ? String(row.heading) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
-  })).filter((row) => {
-    if (seenPaths.has(row.path)) return false;
-    seenPaths.add(row.path);
-    return true;
-  }).slice(0, limit);
+  return results
+    .map((row) => ({
+      id: String(row.id),
+      path: String(row.path),
+      content: String(row.content),
+      score: Number(row.score ?? 0),
+      heading: row.heading ? String(row.heading) : null,
+      metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+    }))
+    .filter((row) => {
+      if (seenPaths.has(row.path)) return false;
+      seenPaths.add(row.path);
+      return true;
+    })
+    .slice(0, limit);
 }
 
 export async function codeQuery(input: {
@@ -201,15 +249,23 @@ export async function codeQuery(input: {
 
   const repo = createWorkspaceRepository(workspace.rootPath);
 
+  console.log(
+    `[retrieval] query: "${input.query}" | fts_limit=${retrieval.textLimit} vector_limit=${retrieval.vectorLimit}`,
+  );
   const [ftsResults, vectorResults] = await Promise.all([
     repo.fullTextSearch(input.query, retrieval.textLimit),
-    vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit)
+    vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit),
   ]);
+  console.log(`[retrieval] results: fts=${ftsResults.length} vector=${vectorResults.length}`);
 
+  // RRF fusion: FTS weighted 2x, vector weighted 1x. Vector can boost files FTS ranked low.
   let fused = reciprocalRankFusion(
     [ftsResults, vectorResults]
       .filter((results) => results.length > 0)
-      .map((results) => results.map((item) => ({ item, score: item.score })))
+      .map((results) => results.map((item) => ({ item, score: item.score }))),
+    60,
+    [2, 1],
+    (item) => item.path,
   );
 
   if (!input.skipGraphExpand) {
@@ -217,30 +273,38 @@ export async function codeQuery(input: {
       workspace.rootPath,
       fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),
       retrieval.graphHops,
-      retrieval.maxGraphNeighbors
+      retrieval.maxGraphNeighbors,
     );
     const fusedItemsByPath = new Map(fused.map((entry) => [entry.item.path, entry.item]));
 
-    fused = reciprocalRankFusion([
-      fused,
-      graphResults.map((item) => ({ item: fusedItemsByPath.get(item.path) ?? item, score: item.score }))
-    ], 60, [1, 0.25]);
+    fused = reciprocalRankFusion(
+      [
+        fused,
+        graphResults.map((item) => ({
+          item: fusedItemsByPath.get(item.path) ?? item,
+          score: item.score,
+        })),
+      ],
+      60,
+      [1, 0.25],
+      (item) => item.path,
+    );
   }
 
   const selected: ChunkHit[] = [];
   let usedTokens = 0;
-  const chunksPerPath = new Map<string, number>();
+  const seenPaths = new Set<string>();
 
   for (const entry of fused) {
     if (selected.length >= finalLimit) break;
 
     const tokenCount = countTokens(entry.item.content);
     if (usedTokens + tokenCount > maxTokens) continue;
-    if (chunksPerPath.has(entry.item.path)) continue;
+    if (seenPaths.has(entry.item.path)) continue;
 
     selected.push({ ...entry.item, score: entry.score });
     usedTokens += tokenCount;
-    chunksPerPath.set(entry.item.path, (chunksPerPath.get(entry.item.path) ?? 0) + 1);
+    seenPaths.add(entry.item.path);
   }
 
   const sources = selected.map((chunk) => sourceFromChunk(chunk, "retrieved-context"));
@@ -248,15 +312,20 @@ export async function codeQuery(input: {
   const allCandidatePaths = new Set(fused.map((e) => e.item.path));
   const answerContext = selected.map(formatContextBlock).join("\n\n");
   const retrievalTokens = countTokens(JSON.stringify({ answerContext, sources }));
-  const selectedFullFileTokens = uniquePaths.size === 0
-    ? 0
-    : Number((await repo.queryRaw(
-        `SELECT coalesce(sum(chunks.token_count), 0) AS tokens
+  const selectedFullFileTokens =
+    uniquePaths.size === 0
+      ? 0
+      : Number(
+          (
+            await repo.queryRaw(
+              `SELECT coalesce(sum(chunks.token_count), 0) AS tokens
          FROM chunks
          INNER JOIN documents ON documents.id = chunks.document_id
          WHERE documents.path IN (${[...uniquePaths].map(() => "?").join(",")})`,
-        [...uniquePaths]
-      ))[0]?.tokens ?? 0);
+              [...uniquePaths],
+            )
+          )[0]?.tokens ?? 0,
+        );
   const estimatedTokensSaved = Math.max(0, selectedFullFileTokens - retrievalTokens);
   const metrics: CodeQueryResult["metrics"] = {
     retrievalTokens,
@@ -264,7 +333,7 @@ export async function codeQuery(input: {
     estimatedTokensSaved,
     candidateFiles: allCandidatePaths.size,
     selectedFiles: uniquePaths.size,
-    method: "selected-full-files-minus-retrieval-payload"
+    method: "selected-full-files-minus-retrieval-payload",
   };
 
   if (input.recordMetrics !== false) {
@@ -275,7 +344,7 @@ export async function codeQuery(input: {
       tokensReturned: retrievalTokens,
       tokensSaved: estimatedTokensSaved,
       // Legacy column name; this is the number of ranked candidate files.
-      filesScanned: allCandidatePaths.size
+      filesScanned: allCandidatePaths.size,
     });
   }
 
@@ -285,7 +354,10 @@ export async function codeQuery(input: {
 /** @deprecated Use codeQuery. */
 export const memoryQuery = codeQuery;
 
-function safeParseJson(value: string | undefined, fallback: Record<string, unknown>): Record<string, unknown> {
+function safeParseJson(
+  value: string | undefined,
+  fallback: Record<string, unknown>,
+): Record<string, unknown> {
   if (!value) return fallback;
   try {
     return JSON.parse(value) as Record<string, unknown>;

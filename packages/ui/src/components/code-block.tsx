@@ -6,7 +6,7 @@ const CodeBlock = ({ className, children, ...props }: HTMLAttributes<HTMLPreElem
   <pre
     className={cn(
       "rounded-lg border bg-card/50 p-4 overflow-auto text-sm font-mono text-foreground leading-relaxed",
-      className
+      className,
     )}
     {...props}
   >

@@ -83,10 +83,7 @@ function fitTransform(nodes: SimNode[], width: number, height: number) {
     0.1,
     Math.min(
       4,
-      Math.min(
-        (width - 80) / Math.max(1, maxX - minX),
-        (height - 80) / Math.max(1, maxY - minY),
-      ),
+      Math.min((width - 80) / Math.max(1, maxX - minX), (height - 80) / Math.max(1, maxY - minY)),
     ),
   );
 
@@ -177,7 +174,10 @@ export function WorkspaceGraph({
     for (const e of simEdges) {
       const c = getEdgeColor(e.type);
       let bucket = buckets.get(c);
-      if (!bucket) { bucket = []; buckets.set(c, bucket); }
+      if (!bucket) {
+        bucket = [];
+        buckets.set(c, bucket);
+      }
       bucket.push(e);
     }
     edgeBucketsRef.current = buckets;
@@ -192,27 +192,17 @@ export function WorkspaceGraph({
         "link",
         forceLink<SimNode, SimEdge>(simEdges)
           .id((d) => d.id)
-          .distance(
-            (d) =>
-              30 + 60 / Math.max(1, d.source.degree + d.target.degree),
-          )
+          .distance((d) => 30 + 60 / Math.max(1, d.source.degree + d.target.degree))
           .strength(largeGraph ? 0.08 : 0.3),
       )
       .force(
         "charge",
-        largeGraph
-          ? null
-          : forceManyBody().strength(
-              (d) => -30 - (d as SimNode).degree * 2,
-            ),
+        largeGraph ? null : forceManyBody().strength((d) => -30 - (d as SimNode).degree * 2),
       )
       .force("center", forceCenter(w / 2, h / 2))
       .force("x", largeGraph ? null : forceX(w / 2).strength(0.04))
       .force("y", largeGraph ? null : forceY(h / 2).strength(0.04))
-      .force(
-        "collide",
-        largeGraph ? null : forceCollide<SimNode>().radius((d) => d.r + 4),
-      )
+      .force("collide", largeGraph ? null : forceCollide<SimNode>().radius((d) => d.r + 4))
       .alphaDecay(largeGraph ? 0.08 : 0.02);
 
     sim.on("tick.fit", () => {
@@ -221,7 +211,9 @@ export function WorkspaceGraph({
         sim.on("tick.fit", null);
       }
     });
-    sim.on("tick.dirty", () => { dirtyRef.current = true; });
+    sim.on("tick.dirty", () => {
+      dirtyRef.current = true;
+    });
     simRef.current = sim;
     dirtyRef.current = true;
 
@@ -358,7 +350,7 @@ export function WorkspaceGraph({
       if (n.x == null || n.y == null) continue;
       const isSel = n.id === sel;
       const isHov = n.id === hov;
-      const isConnected = !hasHighlight || (highlightSet?.has(n.id) ?? (n.id === highlightId));
+      const isConnected = !hasHighlight || (highlightSet?.has(n.id) ?? n.id === highlightId);
 
       let alpha = 1;
       if (hasHighlight && !isConnected) alpha = 0.1;
@@ -399,7 +391,7 @@ export function WorkspaceGraph({
       const isSel = n.id === sel;
       const isHov = n.id === hov;
       const isHub = n.degree >= hubThreshold;
-      const isConnected = !hasHighlight || (highlightSet?.has(n.id) ?? (n.id === highlightId));
+      const isConnected = !hasHighlight || (highlightSet?.has(n.id) ?? n.id === highlightId);
 
       if (!(isSel || isHov || isHub || showAllLabels)) continue;
       if (hasHighlight && !isConnected && !isSel && !isHov) continue;
@@ -508,10 +500,7 @@ export function WorkspaceGraph({
 
     function onPointerMove(e: PointerEvent) {
       if (
-        Math.hypot(
-          e.clientX - pointerStartRef.current.x,
-          e.clientY - pointerStartRef.current.y,
-        ) > 3
+        Math.hypot(e.clientX - pointerStartRef.current.x, e.clientY - pointerStartRef.current.y) > 3
       ) {
         movedRef.current = true;
       }
@@ -648,7 +637,11 @@ export function WorkspaceGraph({
   }, []);
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: "100%", height: "100%" }} className={className}>
+    <div
+      ref={containerRef}
+      style={{ position: "relative", width: "100%", height: "100%" }}
+      className={className}
+    >
       <canvas
         ref={canvasRef}
         style={{

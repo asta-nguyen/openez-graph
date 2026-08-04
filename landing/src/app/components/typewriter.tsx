@@ -58,11 +58,7 @@ export function Typewriter({ lines, className, speed = 60 }: TypewriterProps) {
         <div key={i} className="flex items-start gap-3">
           <span className="text-primary shrink-0 select-none mt-0.5">$</span>
           <code className="text-foreground text-xs sm:text-sm leading-relaxed">
-            {i < visibleLines
-              ? line
-              : i === visibleLines
-                ? line.slice(0, typingChars)
-                : ""}
+            {i < visibleLines ? line : i === visibleLines ? line.slice(0, typingChars) : ""}
           </code>
         </div>
       ))}
