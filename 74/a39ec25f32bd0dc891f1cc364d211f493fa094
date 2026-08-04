@@ -1,0 +1,32 @@
+CONTRIBUTING.md
+  s_7318f09e541c4d::t_33bb66c2f780b3 1-91
+landing/src/app/layout.tsx
+  s_c85225e04f41df::t_dee604b41ee278 44,61
+README.md
+  s_7318f09e541c4d::t_407288f856b223 117
+  s_7318f09e541c4d::t_33bb66c2f780b3 3,6,8,10,14,18,21,23,26,29,31,33,35-40,42,44-52,54,59-67,70,72,74,76-79,82,84,86-89,91,93,95,98,101,103,105,108-111,114,116,118-120,123,127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "74a39ec25f32bd0dc891f1cc364d211f493fa094",
+  "prompts": {},
+  "sessions": {
+    "s_7318f09e541c4d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fc177-75ad-7c32-b24a-6229d5e07cc0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_c85225e04f41df": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "6dac3a84-621d-4cc2-9856-505c637e5830",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
