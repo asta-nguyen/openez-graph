@@ -408,7 +408,9 @@ configCmd
 
 const setup = program
   .command("setup")
-  .description("Configure editor/agent integrations (codex, claude, opencode, windsurf, devin)");
+  .description(
+    "Configure editor/agent integrations (codex, claude, opencode, windsurf, devin, context7)",
+  );
 
 setup
   .command("codex")
@@ -457,6 +459,16 @@ setup
   .action(async (targetPath) => {
     const { setupDevin } = await import("./setup-devin");
     await setupDevin(targetPath);
+  });
+
+setup
+  .command("context7")
+  .description("Enable Context7 library documentation integration")
+  .option("--api-key <key>", "Context7 API key (skips interactive prompt)")
+  .option("--non-interactive", "Skip all interactive prompts")
+  .action(async (options) => {
+    const { setupContext7 } = await import("./setup-context7");
+    await setupContext7(options);
   });
 
 program.parseAsync(process.argv).catch((error) => {
