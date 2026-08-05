@@ -1,0 +1,21 @@
+README.md
+  s_9532ef2eb0a9d6::t_5697b6ae874cc2 77
+tests/embed-benchmark.test.ts
+  s_9532ef2eb0a9d6::t_d034408c45f24d 249,251-257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "43496c77a4083017b29d7d3f431ee0c1e13c7083",
+  "prompts": {},
+  "sessions": {
+    "s_9532ef2eb0a9d6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "7225da0c-aa35-485c-b77b-fb64633fb7f9",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
