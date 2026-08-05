@@ -1,0 +1,28 @@
+packages/db/src/sqlite/secure-storage.ts
+  s_9532ef2eb0a9d6::t_3f32e27f972740 23,25-26,28,48-69
+  s_9532ef2eb0a9d6::t_f5c132188c4f4d 24,27,30-45
+packages/core/src/retrieval.ts
+  s_9532ef2eb0a9d6::t_9ac15e359a42e8 140,144,151,252,259
+packages/db/src/sqlite/workspace-db.ts
+  s_9532ef2eb0a9d6::t_a2c782d4f27779 62-63
+package.json
+  s_9532ef2eb0a9d6::t_d8f77d7ac47a3c 37
+pnpm-lock.yaml
+  s_9532ef2eb0a9d6::t_0715a825ae0975 54-55,2530-2533,2703-2706,2736-2738,3052-3055,3107-3109,3387-3390,3593-3595,3598-3601,3610-3613,4242-4244,4379-4386,4436-4439,6952-6955,7121-7125,7153-7154,7335-7336,7423-7424,7730-7733,7868,7870-7871,7877-7885,7893-7900,8748-8749,8980-8989,9026-9030,9488
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "69507a22dbb03909f1f7ceea37d05fb534219f43",
+  "prompts": {},
+  "sessions": {
+    "s_9532ef2eb0a9d6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "7225da0c-aa35-485c-b77b-fb64633fb7f9",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
