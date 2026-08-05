@@ -1,0 +1,187 @@
+import module from "node:module";
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+import { createRegistryRepository } from "@openez-graph/db";
+
+export interface ResolvedLibrary {
+  id: string;
+  name: string;
+}
+
+export interface FetchedDocs {
+  content: string;
+  tokens: number;
+}
+
+export interface Context7ClientOptions {
+  binPath?: string;
+  binArgs?: string[];
+  apiKey?: string;
+}
+
+// ESM-safe require.resolve — createRequire needs a file URL.
+const _require =
+  typeof require === "function"
+    ? require
+    : module.createRequire(
+        typeof import.meta !== "undefined" && import.meta.url
+          ? import.meta.url
+          : `file://${__filename}`,
+      );
+
+export class Context7Client {
+  private client: Client | null = null;
+  private startPromise: Promise<void> | null = null;
+  private started = false;
+  private readonly options: Context7ClientOptions;
+
+  constructor(options: Context7ClientOptions = {}) {
+    this.options = options;
+  }
+
+  async ensureStarted(): Promise<void> {
+    if (this.started && this.client) return;
+    if (this.startPromise) return this.startPromise;
+    this.startPromise = this.start();
+    try {
+      await this.startPromise;
+    } finally {
+      this.startPromise = null;
+    }
+  }
+
+  private async start(): Promise<void> {
+    const { bin, args, env } = await this.resolveBinary();
+
+    this.client = new Client({ name: "openez", version: "0.10.0" }, { capabilities: {} });
+
+    const transport = new StdioClientTransport({
+      command: bin,
+      args,
+      env: { ...process.env, ...env } as Record<string, string>,
+      stderr: "pipe",
+    });
+
+    this.client.onclose = () => {
+      this.started = false;
+      this.client = null;
+    };
+
+    await this.client.connect(transport);
+    this.started = true;
+  }
+
+  private async resolveBinary(): Promise<{
+    bin: string;
+    args: string[];
+    env: Record<string, string>;
+  }> {
+    const binPath = this.options.binPath ?? (await this.resolveBinFromConfig());
+    const binArgs = this.options.binArgs ?? [];
+    const apiKey = this.options.apiKey ?? (await this.resolveApiKeyFromConfig());
+
+    const env: Record<string, string> = {};
+    if (apiKey) env.CONTEXT7_API_KEY = apiKey;
+
+    return { bin: binPath, args: binArgs, env };
+  }
+
+  private async resolveBinFromConfig(): Promise<string> {
+    const registry = createRegistryRepository();
+    const configured = await registry.getSetting("context7.bin_path");
+    if (configured) return configured;
+
+    try {
+      const resolved = _require.resolve("@upstash/context7-mcp/bin/context7-mcp.mjs");
+      return resolved;
+    } catch {
+      throw new Error(
+        "Context7 binary not found. Run 'openez setup context7' to install and configure it.",
+      );
+    }
+  }
+
+  private async resolveApiKeyFromConfig(): Promise<string | undefined> {
+    const registry = createRegistryRepository();
+    return (await registry.getSetting("context7.api_key")) ?? undefined;
+  }
+
+  async resolveLibraryId(libraryName: string): Promise<ResolvedLibrary | null> {
+    await this.ensureStarted();
+    if (!this.client) throw new Error("Context7 client not connected");
+
+    const result = await this.client.callTool({
+      name: "resolve-library-id",
+      arguments: { libraryName },
+    });
+
+    const text = this.extractText(result);
+    if (!text) return null;
+
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return { id: String(parsed[0].id), name: String(parsed[0].name ?? libraryName) };
+      }
+      if (parsed.id) {
+        return { id: String(parsed.id), name: String(parsed.name ?? libraryName) };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getLibraryDocs(input: {
+    libraryId: string;
+    topic?: string;
+    tokens?: number;
+  }): Promise<FetchedDocs | null> {
+    await this.ensureStarted();
+    if (!this.client) throw new Error("Context7 client not connected");
+
+    const args: Record<string, unknown> = { libraryId: input.libraryId };
+    if (input.topic) args.topic = input.topic;
+    if (input.tokens) args.tokens = input.tokens;
+
+    const result = await this.client.callTool({
+      name: "query-docs",
+      arguments: args,
+    });
+
+    if (result.isError) return null;
+
+    const text = this.extractText(result);
+    if (!text) return null;
+
+    return {
+      content: text,
+      tokens: 0, // will be computed by caller via countTokens
+    };
+  }
+
+  private extractText(result: unknown): string | null {
+    const r = result as { content?: Array<{ type: string; text?: string }> };
+    if (!r.content || !Array.isArray(r.content)) return null;
+    return (
+      r.content
+        .filter((c) => c.type === "text" && c.text)
+        .map((c) => c.text!)
+        .join("\n") || null
+    );
+  }
+
+  async stop(): Promise<void> {
+    if (this.client) {
+      try {
+        await this.client.close();
+      } catch {
+        // ignore
+      }
+      this.client = null;
+    }
+    this.started = false;
+  }
+}

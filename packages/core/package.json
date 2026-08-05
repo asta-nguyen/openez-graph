@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openez-graph/config": "workspace:*",
     "@openez-graph/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
