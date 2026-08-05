@@ -46,10 +46,10 @@ export default defineConfig({
     "drizzle-orm",
     "dotenv",
     "openai",
-    "ollama"
+    "ollama",
   ],
   banner: {
-    js: "#!/usr/bin/env node"
+    js: "#!/usr/bin/env node",
   },
   onSuccess: async () => {
     // Copy frontend dist into CLI dist/web for bundled web serving
@@ -70,5 +70,5 @@ export default defineConfig({
       cpSync(changelogSrc, changelogDest);
       console.log("✓ Copied CHANGELOG.md → dist/CHANGELOG.md");
     }
-  }
+  },
 });

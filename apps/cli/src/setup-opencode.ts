@@ -50,7 +50,7 @@ export async function setupOpenCode(rootPath: string): Promise<void> {
   mcp[label] = {
     type: "local",
     command: [command, ...args],
-    enabled: true
+    enabled: true,
   };
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");

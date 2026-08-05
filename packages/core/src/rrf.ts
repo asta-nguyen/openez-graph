@@ -6,20 +6,22 @@ export interface RankedItem<T> {
 export function reciprocalRankFusion<T extends { id: string }>(
   resultSets: Array<Array<RankedItem<T>>>,
   k = 60,
-  weights: number[] = []
+  weights: number[] = [],
+  identity: (item: T) => string = (item) => item.id,
 ): Array<RankedItem<T>> {
   const map = new Map<string, RankedItem<T>>();
 
   resultSets.forEach((resultSet, resultSetIndex) => {
     resultSet.forEach((entry, index) => {
-      const existing = map.get(entry.item.id);
+      const key = identity(entry.item);
+      const existing = map.get(key);
       const score = (weights[resultSetIndex] ?? 1) / (k + index + 1);
       if (existing) {
         existing.score += score;
       } else {
-        map.set(entry.item.id, {
+        map.set(key, {
           item: entry.item,
-          score
+          score,
         });
       }
     });

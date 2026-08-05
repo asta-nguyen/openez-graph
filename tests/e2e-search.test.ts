@@ -3,7 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { createRegistryRepository, createWorkspaceRepository, closeAllWorkspaceDbs, closeRegistryDb } from "../packages/db/src/sqlite/index";
+import {
+  createRegistryRepository,
+  createWorkspaceRepository,
+  closeAllWorkspaceDbs,
+  closeRegistryDb,
+} from "../packages/db/src/sqlite/index";
 import { memoryRecall, memoryWrite } from "../packages/core/src/memory";
 import { codeQuery } from "../packages/core/src/retrieval";
 
@@ -47,7 +52,7 @@ export function logout(token: string): void {
   // Invalidate the session token
   console.log("User logged out");
 }
-`
+`,
   );
 
   fs.writeFileSync(
@@ -59,7 +64,7 @@ This module handles user authentication and session management.
 ## Login Flow
 
 The login flow uses the authenticate function to verify credentials.
-`
+`,
   );
 
   const repo = createWorkspaceRepository(tempRoot);
@@ -80,7 +85,8 @@ The login flow uses the authenticate function to verify credentials.
       documentId: authDocId,
       chunkIndex: 0,
       heading: null,
-      content: "export function authenticate(user: string, password: string): boolean { return user === 'admin'; }",
+      content:
+        "export function authenticate(user: string, password: string): boolean { return user === 'admin'; }",
       tokenCount: 20,
       contentHash: "c1",
       metadata: JSON.stringify({ kind: "code", startLine: 1, endLine: 3 }),
@@ -211,14 +217,14 @@ describe("end-to-end search pipeline", () => {
       workspaceId: "test-e2e",
       title: "Storage decision",
       content: "Use SQLite for local storage",
-      tags: ["decision", "storage"]
+      tags: ["decision", "storage"],
     });
     await memoryWrite({
       workspaceId: "test-e2e",
       title: "Storage decision v2",
       content: "Use SQLite WAL for local storage",
       tags: ["decision", "storage"],
-      supersedesId: original.id
+      supersedesId: original.id,
     });
 
     const result = await memoryRecall({ workspaceId: "test-e2e", query: "SQLite storage" });
@@ -230,11 +236,13 @@ describe("end-to-end search pipeline", () => {
   it("rejects a memory version with an unknown predecessor", async () => {
     await setupWorkspaceWithContent();
 
-    await expect(memoryWrite({
-      workspaceId: "test-e2e",
-      title: "Broken version",
-      content: "This should not be stored",
-      supersedesId: "missing-memory"
-    })).rejects.toThrow("Memory 'missing-memory' not found");
+    await expect(
+      memoryWrite({
+        workspaceId: "test-e2e",
+        title: "Broken version",
+        content: "This should not be stored",
+        supersedesId: "missing-memory",
+      }),
+    ).rejects.toThrow("Memory 'missing-memory' not found");
   });
 });
