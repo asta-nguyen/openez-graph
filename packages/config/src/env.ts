@@ -44,7 +44,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_EMBEDDING_MODEL: z.string().default("text-embedding-3-small"),
   OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434"),
-  OLLAMA_EMBEDDING_MODEL: z.string().default("nomic-embed-text")
+  OLLAMA_EMBEDDING_MODEL: z.string().default("bge-m3"),
 });
 
 export type BrainEnv = z.infer<typeof envSchema>;

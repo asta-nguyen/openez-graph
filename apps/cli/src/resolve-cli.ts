@@ -33,7 +33,7 @@ export function resolveCliInvocation(): CliInvocation {
     return {
       command: process.execPath,
       args: [cliPath, "serve", "--mcp"],
-      repoRoot
+      repoRoot,
     };
   }
 
@@ -44,7 +44,7 @@ export function resolveCliInvocation(): CliInvocation {
     return {
       command: process.execPath,
       args: [builtCliPath, "serve", "--mcp"],
-      repoRoot
+      repoRoot,
     };
   }
 
@@ -53,6 +53,6 @@ export function resolveCliInvocation(): CliInvocation {
   return {
     command: tsxPath,
     args: [cliPath, "serve", "--mcp"],
-    repoRoot
+    repoRoot,
   };
 }

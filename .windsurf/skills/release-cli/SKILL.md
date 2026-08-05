@@ -37,6 +37,7 @@ Edit `apps/cli/package.json` — update the `"version"` field only.
 Add a new `## [X.Y.Z] - YYYY-MM-DD` section at the top (below the header block) of `/CHANGELOG.md`.
 
 Use [Keep a Changelog](https://keepachangelog.com/) groups:
+
 - `### Added` — new features, new routes, new UI pages
 - `### Changed` — changes to existing functionality
 - `### Deprecated`
@@ -47,6 +48,7 @@ Use [Keep a Changelog](https://keepachangelog.com/) groups:
 Each entry is one bullet, prefixed with the area in parens when helpful: `- Web index endpoint now runs real indexing (FIX-05)`.
 
 Add a compare link at the bottom of the file:
+
 ```
 [X.Y.Z]: https://github.com/asta-nguyen/openez-graph/compare/<prev-commit-sha>...<current-head-sha>
 ```
@@ -84,6 +86,7 @@ cd apps/cli && npm publish --access public
 ```
 
 If npm requires OTP (2FA), tell the user to run:
+
 ```bash
 cd apps/cli && npm publish --access public --otp=<6-digit-code>
 ```
@@ -104,11 +107,11 @@ git push
 
 ### Version history
 
-| Version | Date | Type | Highlights |
-|---------|------|------|-----------|
-| 0.5.1 | 2026-07-31 | patch | Fast indexing, import path validation |
-| 0.6.0 | 2026-08-01 | minor | FIX-01 to FIX-08 remediation, loopback binding, edge dedup, incremental optimization |
-| 0.6.1 | 2026-08-01 | patch | Syntax-highlighted context blocks, markdown fenced code rendering |
+| Version | Date       | Type  | Highlights                                                                           |
+| ------- | ---------- | ----- | ------------------------------------------------------------------------------------ |
+| 0.5.1   | 2026-07-31 | patch | Fast indexing, import path validation                                                |
+| 0.6.0   | 2026-08-01 | minor | FIX-01 to FIX-08 remediation, loopback binding, edge dedup, incremental optimization |
+| 0.6.1   | 2026-08-01 | patch | Syntax-highlighted context blocks, markdown fenced code rendering                    |
 
 ### Files touched in a release
 

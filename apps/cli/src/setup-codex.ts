@@ -51,7 +51,7 @@ export async function setupCodex(rootPath: string): Promise<void> {
   const entry = {
     command,
     args,
-    startup_timeout_sec: 120
+    startup_timeout_sec: 120,
   };
 
   mcpServers[label] = entry;

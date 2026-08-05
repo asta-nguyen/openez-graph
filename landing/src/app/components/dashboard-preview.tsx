@@ -113,12 +113,8 @@ export function DashboardPreview() {
                 borderRadius: "6px",
                 fontSize: "12px",
                 fontWeight: item.active ? 600 : 400,
-                color: item.active
-                  ? "oklch(0.72 0.14 200)"
-                  : "oklch(0.65 0.01 260)",
-                backgroundColor: item.active
-                  ? "oklch(0.72 0.14 200 / 0.1)"
-                  : "transparent",
+                color: item.active ? "oklch(0.72 0.14 200)" : "oklch(0.65 0.01 260)",
+                backgroundColor: item.active ? "oklch(0.72 0.14 200 / 0.1)" : "transparent",
               }}
             >
               <span style={{ fontSize: "12px", opacity: 0.7 }}>{item.icon}</span>
@@ -230,9 +226,7 @@ export function DashboardPreview() {
           >
             openez
           </span>
-          <span style={{ fontSize: "11px", color: "oklch(0.52 0.02 260)" }}>
-            /openez-graph
-          </span>
+          <span style={{ fontSize: "11px", color: "oklch(0.52 0.02 260)" }}>/openez-graph</span>
         </div>
 
         {/* Full-bleed graph */}

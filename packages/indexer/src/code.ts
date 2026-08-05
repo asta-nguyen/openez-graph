@@ -8,17 +8,23 @@ import type { IndexedChunk } from "./types";
 function getLineRange(node: { getStartLineNumber(): number; getEndLineNumber(): number }) {
   return {
     startLine: node.getStartLineNumber(),
-    endLine: node.getEndLineNumber()
+    endLine: node.getEndLineNumber(),
   };
 }
 
 function codeSearchText(text: string): string {
   const identifiers = text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? [];
-  return [...new Set(identifiers.flatMap((identifier) => identifier
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-    .split(" ")
-    .filter((term) => term.length > 1)))]
+  return [
+    ...new Set(
+      identifiers.flatMap((identifier) =>
+        identifier
+          .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+          .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+          .split(" ")
+          .filter((term) => term.length > 1),
+      ),
+    ),
+  ]
     .slice(0, 256)
     .join(" ");
 }
@@ -26,11 +32,14 @@ function codeSearchText(text: string): string {
 const project = new Project({
   useInMemoryFileSystem: true,
   compilerOptions: {
-    allowJs: true
-  }
+    allowJs: true,
+  },
 });
 
-export function indexCode(content: string, filePath: string): {
+export function indexCode(
+  content: string,
+  filePath: string,
+): {
   chunks: IndexedChunk[];
   importPaths: string[];
   definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }>;
@@ -40,7 +49,12 @@ export function indexCode(content: string, filePath: string): {
   const sourceFile = project.createSourceFile(filePath, content, { overwrite: true });
   try {
     const chunks: IndexedChunk[] = [];
-    const definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }> = [];
+    const definedSymbols: Array<{
+      name: string;
+      type: string;
+      symbolType: string;
+      exported: boolean;
+    }> = [];
     const calledIdentifiers = new Set<string>();
     const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
 
@@ -55,8 +69,8 @@ export function indexCode(content: string, filePath: string): {
     const variableDeclarations = sourceFile.getVariableStatements().flatMap((statement) =>
       statement.getDeclarations().map((declaration) => ({
         declaration,
-        exported: statement.hasExportKeyword()
-      }))
+        exported: statement.hasExportKeyword(),
+      })),
     );
 
     const functions = sourceFile.getFunctions().map((declaration) => ({
@@ -64,7 +78,7 @@ export function indexCode(content: string, filePath: string): {
       name: declaration.getName(),
       type: "function",
       symbolType: "function",
-      exported: declaration.isExported()
+      exported: declaration.isExported(),
     }));
 
     const classes = sourceFile.getClasses().map((declaration) => ({
@@ -72,7 +86,7 @@ export function indexCode(content: string, filePath: string): {
       name: declaration.getName(),
       type: "class",
       symbolType: "class",
-      exported: declaration.isExported()
+      exported: declaration.isExported(),
     }));
 
     const interfaces = sourceFile.getInterfaces().map((declaration) => ({
@@ -80,7 +94,7 @@ export function indexCode(content: string, filePath: string): {
       name: declaration.getName(),
       type: "interface",
       symbolType: "interface",
-      exported: declaration.isExported()
+      exported: declaration.isExported(),
     }));
 
     const typeAliases = sourceFile.getTypeAliases().map((declaration) => ({
@@ -88,7 +102,7 @@ export function indexCode(content: string, filePath: string): {
       name: declaration.getName(),
       type: "type",
       symbolType: "type",
-      exported: declaration.isExported()
+      exported: declaration.isExported(),
     }));
 
     const symbols = [
@@ -101,8 +115,8 @@ export function indexCode(content: string, filePath: string): {
         name: declaration.getName(),
         type: "variable",
         symbolType: "variable",
-        exported
-      }))
+        exported,
+      })),
     ].filter((symbol): symbol is typeof symbol & { name: string } => Boolean(symbol.name));
 
     for (const symbol of symbols) {
@@ -110,7 +124,7 @@ export function indexCode(content: string, filePath: string): {
         name: symbol.name,
         type: symbol.type,
         symbolType: symbol.symbolType,
-        exported: symbol.exported
+        exported: symbol.exported,
       });
 
       const { startLine, endLine } = getLineRange(symbol.declaration);
@@ -126,8 +140,8 @@ export function indexCode(content: string, filePath: string): {
           exported: symbol.exported,
           searchText: codeSearchText(text),
           startLine,
-          endLine
-        }
+          endLine,
+        },
       });
 
       symbol.declaration.getDescendantsOfKind(SyntaxKind.CallExpression).forEach((call) => {
@@ -156,8 +170,8 @@ export function indexCode(content: string, filePath: string): {
             searchText: codeSearchText(slice),
             fallback: true,
             startLine: index + 1,
-            endLine: Math.min(index + 80, lines.length)
-          }
+            endLine: Math.min(index + 80, lines.length),
+          },
         });
       }
     }
@@ -176,7 +190,7 @@ export function indexCode(content: string, filePath: string): {
       importPaths,
       definedSymbols,
       calledIdentifiers: [...calledIdentifiers],
-      callExpressions
+      callExpressions,
     };
   } finally {
     project.removeSourceFile(sourceFile);

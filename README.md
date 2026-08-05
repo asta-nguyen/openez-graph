@@ -41,15 +41,15 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 
 ## MCP tools
 
-| Tool | Purpose |
-| --- | --- |
-| `code_query` | Retrieve ranked code and documentation context |
-| `code_context` | Get graph-adjacent context for a symbol or file |
-| `graph_neighbors` | Inspect nearby graph nodes and edges |
-| `list_workspaces` | List registered workspaces and index status |
-| `memory_recall` | Recall stored technical decisions and notes |
-| `memory_write` | Store a decision or learned constraint |
-| `index_workspace` | Run an incremental or full index |
+| Tool              | Purpose                                         |
+| ----------------- | ----------------------------------------------- |
+| `code_query`      | Retrieve ranked code and documentation context  |
+| `code_context`    | Get graph-adjacent context for a symbol or file |
+| `graph_neighbors` | Inspect nearby graph nodes and edges            |
+| `list_workspaces` | List registered workspaces and index status     |
+| `memory_recall`   | Recall stored technical decisions and notes     |
+| `memory_write`    | Store a decision or learned constraint          |
+| `index_workspace` | Run an incremental or full index                |
 
 Read tools support one or many workspaces. Write and index operations remain scoped to one workspace.
 
@@ -65,16 +65,20 @@ openez list                 # list registered workspaces
 openez serve --mcp          # start the MCP server
 openez serve --web          # start the management UI
 openez setup <agent> [path] # configure an agent integration
+openez config get [key]     # show embedding config (all if no key)
+openez config set <key> <value>  # set an embedding config value
+openez config list          # list all DB-stored config overrides
 ```
 
 Run `openez --help` or `openez <command> --help` for all options.
 
 ## Storage
 
-OpenEZ uses three local artifacts:
+OpenEZ uses four local artifacts:
 
 ```text
-~/.openez/registry.sqlite       registered workspace metadata
+~/.openez/registry.sqlite       registered workspace metadata + global config
+~/.openez/master.key            encryption key for sensitive config (API keys)
 <project>/.openez/index.sqlite  code, chunks, graph, memories, metrics
 <project>/.openez/workspace.json workspace resolution hint
 ```
@@ -89,6 +93,50 @@ The project-local `.openez` directory is generated state and should not be commi
 - Markdown: section-oriented chunks
 
 Embeddings are optional. The default retrieval path works with SQLite full-text search and graph expansion.
+
+### Benchmark: FTS vs Embedding
+
+| Metric           | FTS only | FTS + Embedding (bge-m3) |
+| ---------------- | -------: | -----------------------: |
+| Recall@5         |   91.30% |                   95.65% |
+| Keyword queries  |  100.00% |                  100.00% |
+| Semantic queries |   66.67% |                   83.33% |
+| Avg latency      |     5 ms |                   249 ms |
+
+**FTS-only is the default** — 100% recall on keyword queries, 50x faster. **Embedding adds semantic search with +16.67% semantic recall and no keyword regression** via full RRF fusion. Pipeline: bge-m3 model, query expansion, similarity threshold, code file boost, path dedup, input hash dedup, embedding retry. See [BENCHMARK.md](BENCHMARK.md) for full analysis.
+
+### Embedding configuration
+
+Embedding providers can be configured via CLI or the management UI. Config is stored globally in the registry DB and applies to all workspaces. DB-stored config takes priority over environment variables.
+
+```bash
+# Use local Ollama (bge-m3 recommended for code search)
+openez config set embedding.provider ollama
+openez config set embedding.ollama_model bge-m3
+
+# Or use OpenAI
+openez config set embedding.provider openai
+openez config set embedding.openai_api_key sk-...
+openez config set embedding.openai_model text-embedding-3-small
+
+# View current config (merges DB + env defaults)
+openez config get
+```
+
+Valid config keys:
+
+| Key                         | Description                        |
+| --------------------------- | ---------------------------------- |
+| `embedding.provider`        | `none`, `openai`, or `ollama`      |
+| `embedding.openai_api_key`  | OpenAI API key (encrypted at rest) |
+| `embedding.openai_base_url` | Custom OpenAI-compatible base URL  |
+| `embedding.openai_model`    | OpenAI model name                  |
+| `embedding.ollama_base_url` | Ollama server URL                  |
+| `embedding.ollama_model`    | Ollama model name                  |
+
+API keys are encrypted at rest with AES-256-GCM. The master key is stored at `~/.openez/master.key` with file mode `0600`.
+
+If the embedding provider is unreachable or the API key is invalid, indexing and retrieval automatically fall back to FTS-only mode without crashing.
 
 ## Management UI
 

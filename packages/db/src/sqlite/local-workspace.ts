@@ -21,7 +21,9 @@ export function getLocalWorkspaceConfigPath(rootPath: string): string {
   return path.join(getLocalWorkspaceDir(rootPath), WORKSPACE_CONFIG_FILENAME);
 }
 
-export async function writeLocalWorkspaceConfig(workspace: Pick<RegistryWorkspace, "id" | "name" | "rootPath">): Promise<void> {
+export async function writeLocalWorkspaceConfig(
+  workspace: Pick<RegistryWorkspace, "id" | "name" | "rootPath">,
+): Promise<void> {
   const configPath = getLocalWorkspaceConfigPath(workspace.rootPath);
 
   await fs.mkdir(path.dirname(configPath), { recursive: true });
@@ -32,12 +34,12 @@ export async function writeLocalWorkspaceConfig(workspace: Pick<RegistryWorkspac
         workspaceId: workspace.id,
         rootPath: workspace.rootPath,
         name: workspace.name,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       } satisfies LocalWorkspaceConfig,
       null,
-      2
+      2,
     ) + "\n",
-    "utf8"
+    "utf8",
   );
 
   await ensureGitignoreEntry(workspace.rootPath, OPENEZ_DIRNAME);
@@ -57,9 +59,7 @@ async function ensureGitignoreEntry(rootPath: string, entry: string): Promise<vo
 
   const lines = content.split("\n");
   const pattern = entry.endsWith("/") ? entry : entry + "/";
-  const hasEntry = lines.some(
-    (l) => l.trim() === entry || l.trim() === pattern
-  );
+  const hasEntry = lines.some((l) => l.trim() === entry || l.trim() === pattern);
 
   if (hasEntry) return;
 
@@ -67,7 +67,9 @@ async function ensureGitignoreEntry(rootPath: string, entry: string): Promise<vo
   await fs.writeFile(gitignorePath, content + nl + entry + "/\n", "utf8");
 }
 
-export async function readLocalWorkspaceConfig(rootPath: string): Promise<LocalWorkspaceConfig | null> {
+export async function readLocalWorkspaceConfig(
+  rootPath: string,
+): Promise<LocalWorkspaceConfig | null> {
   const configPath = getLocalWorkspaceConfigPath(rootPath);
 
   try {
@@ -90,7 +92,9 @@ export async function readLocalWorkspaceConfig(rootPath: string): Promise<LocalW
   }
 }
 
-export async function findLocalWorkspaceConfig(startPath: string): Promise<LocalWorkspaceConfig | null> {
+export async function findLocalWorkspaceConfig(
+  startPath: string,
+): Promise<LocalWorkspaceConfig | null> {
   let currentPath = path.resolve(startPath);
 
   try {
