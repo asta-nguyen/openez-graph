@@ -246,11 +246,15 @@ describe("FTS vs Embedding benchmark", () => {
       console.log("  Retrieval Benchmark: FTS vs FTS+Embedding");
       console.log("═══════════════════════════════════════════════════");
 
-      // Query actual file/chunk counts from workspace DB
+      // Query actual file/chunk counts from the same workspace DB that codeQuery uses.
       const { createWorkspaceRepository } = await import("../packages/db/src/sqlite");
-      const wsRepo = createWorkspaceRepository(
-        process.env.OPENEZ_BENCHMARK_WORKSPACE_PATH ?? process.cwd(),
-      );
+      const benchWorkspaceId = process.env.OPENEZ_BENCHMARK_WORKSPACE ?? "openez";
+      const statsRegistry = createRegistryRepository();
+      const workspace = await statsRegistry.getWorkspace(benchWorkspaceId);
+      closeRegistryDb();
+      const wsRootPath =
+        workspace?.rootPath ?? process.env.OPENEZ_BENCHMARK_WORKSPACE_PATH ?? process.cwd();
+      const wsRepo = createWorkspaceRepository(wsRootPath);
       const stats = await wsRepo.queryRaw(
         "SELECT (SELECT count(*) FROM documents) as fileCount, (SELECT count(*) FROM chunks) as chunkCount",
       );
