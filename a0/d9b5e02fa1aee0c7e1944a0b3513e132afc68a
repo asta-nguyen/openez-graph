@@ -1,0 +1,22 @@
+packages/core/src/external-docs/context7-client.ts
+  s_6514757d0e9524::t_11d5b49c4ee5c8 82
+  s_6514757d0e9524::t_bbed10a7f684b5 106-119
+tests/context7-e2e.test.ts
+  s_6514757d0e9524::t_6d0bb40a58b02d 1-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a0d9b5e02fa1aee0c7e1944a0b3513e132afc68a",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
