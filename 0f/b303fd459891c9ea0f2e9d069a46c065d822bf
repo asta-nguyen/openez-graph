@@ -1,0 +1,23 @@
+packages/db/src/sqlite/registry-db.ts
+  s_6514757d0e9524::t_1f2b7f1f707c29 93-121
+tests/context7-cache.test.ts
+  s_6514757d0e9524::t_fd20ff7fb550c3 7
+  s_6514757d0e9524::t_7ead1627d41432 26
+  s_6514757d0e9524::t_881d1c45a67f18 1-6,8-25,27-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0fb303fd459891c9ea0f2e9d069a46c065d822bf",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
