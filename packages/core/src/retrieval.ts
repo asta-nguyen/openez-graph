@@ -137,18 +137,18 @@ function expandQuery(query: string): string {
 async function vectorSearch(rootPath: string, query: string, limit: number): Promise<ChunkHit[]> {
   const provider = await getEmbeddingProvider();
   if (!provider) {
-    console.log("[retrieval] vector search: disabled (no embedding provider)");
+    console.error("[retrieval] vector search: disabled (no embedding provider)");
     return [];
   }
 
-  console.log(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
+  console.error(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
   try {
     const expandedQuery = expandQuery(query);
     const [queryEmbedding] = await provider.embed([
       formatEmbeddingInput(provider, { content: expandedQuery }, "query"),
     ]);
     const hits = await rankStoredEmbeddings(rootPath, provider, queryEmbedding ?? [], limit);
-    console.log(`[retrieval] vector search: ${hits.length} hits`);
+    console.error(`[retrieval] vector search: ${hits.length} hits`);
     return hits;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -249,14 +249,14 @@ export async function codeQuery(input: {
 
   const repo = createWorkspaceRepository(workspace.rootPath);
 
-  console.log(
+  console.error(
     `[retrieval] query: "${input.query}" | fts_limit=${retrieval.textLimit} vector_limit=${retrieval.vectorLimit}`,
   );
   const [ftsResults, vectorResults] = await Promise.all([
     repo.fullTextSearch(input.query, retrieval.textLimit),
     vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit),
   ]);
-  console.log(`[retrieval] results: fts=${ftsResults.length} vector=${vectorResults.length}`);
+  console.error(`[retrieval] results: fts=${ftsResults.length} vector=${vectorResults.length}`);
 
   // RRF fusion: FTS weighted 2x, vector weighted 1x. Vector can boost files FTS ranked low.
   let fused = reciprocalRankFusion(
