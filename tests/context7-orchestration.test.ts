@@ -38,6 +38,9 @@ function makeMockCache(overrides: Partial<DocsCache> = {}): DocsCache {
     },
     async storeDocs() {},
     async recordNameMapping() {},
+    async isNegativeCached() {
+      return false;
+    },
     ...overrides,
   };
 }
@@ -49,7 +52,7 @@ function makeMockClient(overrides: Partial<Context7Client> = {}): Context7Client
       return { id: "/facebook/react", name: "react" };
     },
     async getLibraryDocs(): Promise<FetchedDocs | null> {
-      return { content: "# React\n\nDocs content here.", tokens: 0 };
+      return { content: "# React\n\nDocs content here." };
     },
     async stop() {},
     ...overrides,
@@ -130,6 +133,53 @@ describe("libraryDocs", () => {
     expect(result.hint).toContain("No library found");
   });
 
+  it("caches negative resolution and skips Context7 on subsequent calls", async () => {
+    await enableContext7();
+    let resolveCalled = 0;
+    let negativeMapped = false;
+    const cache = makeMockCache({
+      async isNegativeCached() {
+        return true;
+      },
+      async recordNameMapping() {
+        negativeMapped = true;
+      },
+    });
+    const client = makeMockClient({
+      async resolveLibraryId() {
+        resolveCalled++;
+        return null;
+      },
+    });
+
+    const result = await libraryDocs({ library: "bad-lib", cache, client });
+    expect(result.source).toBe("empty");
+    expect(result.hint).toContain("(cached)");
+    expect(resolveCalled).toBe(0); // Context7 was never contacted
+  });
+
+  it("stores negative cache entry when library is not found", async () => {
+    await enableContext7();
+    let mappedName: string | null = null;
+    let mappedId: string | null = null;
+    const cache = makeMockCache({
+      async recordNameMapping(queryName, libraryId) {
+        mappedName = queryName;
+        mappedId = libraryId;
+      },
+    });
+    const client = makeMockClient({
+      async resolveLibraryId() {
+        return null;
+      },
+    });
+
+    const result = await libraryDocs({ library: "no-such-lib", cache, client });
+    expect(result.source).toBe("empty");
+    expect(mappedName).toBe("no-such-lib");
+    expect(mappedId).toBe(""); // sentinel for negative cache
+  });
+
   it("falls back to stale cache on fetch error", async () => {
     await enableContext7();
     const cache = makeMockCache({
@@ -180,7 +230,7 @@ describe("libraryDocs", () => {
     const cache = makeMockCache();
     const client = makeMockClient({
       async getLibraryDocs() {
-        return { content: longContent, tokens: 0 };
+        return { content: longContent };
       },
     });
 

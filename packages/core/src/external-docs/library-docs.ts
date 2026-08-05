@@ -49,6 +49,13 @@ function getSharedClient(): Context7Client {
   return sharedClient;
 }
 
+export async function disposeSharedClient(): Promise<void> {
+  if (sharedClient) {
+    await sharedClient.stop();
+    sharedClient = null;
+  }
+}
+
 export async function libraryDocs(input: {
   library: string;
   topic?: string;
@@ -93,9 +100,26 @@ export async function libraryDocs(input: {
   }
 
   // 2. Resolve library ID via Context7
+  // Check negative cache first to avoid repeated round-trips for bad names
+  if (!input.noCache && (await cache.isNegativeCached(input.library))) {
+    return {
+      library: input.library,
+      version,
+      topic: input.topic,
+      source: "empty",
+      content: "",
+      tokensReturned: 0,
+      hint: `No library found for '${input.library}' (cached). Try the npm package name or a GitHub path like '/facebook/react'.`,
+    };
+  }
+
   await client.ensureStarted();
   const resolved = await client.resolveLibraryId(input.library);
   if (!resolved) {
+    // Store negative cache entry (sentinel: empty library_id)
+    if (!input.noCache) {
+      await cache.recordNameMapping(input.library, "");
+    }
     return {
       library: input.library,
       version,
@@ -170,6 +194,7 @@ export async function libraryDocs(input: {
     });
   } catch (err) {
     // 6. Network/fetch failure → fall back to stale cache
+    console.warn("[context7] fetch failed, falling back to stale cache:", err);
     const stale = await cache.getDocs({
       libraryId: resolved.id,
       version,

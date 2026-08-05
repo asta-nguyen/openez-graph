@@ -36,6 +36,8 @@ export interface DocsCache {
     version: string;
   }): Promise<CachedDoc | null>;
 
+  isNegativeCached(queryName: string): Promise<boolean>;
+
   storeDocs(input: {
     libraryId: string;
     libraryName: string;
@@ -94,6 +96,7 @@ export function createDocsCache(): DocsCache {
         .get(query) as { library_id: string } | undefined;
 
       if (!mapping) return null;
+      if (mapping.library_id === "") return null; // negative cache sentinel
 
       return this.getDocs({
         libraryId: mapping.library_id,
@@ -101,6 +104,20 @@ export function createDocsCache(): DocsCache {
         topic,
         now: Date.now(),
       });
+    },
+
+    async isNegativeCached(queryName): Promise<boolean> {
+      const mapping = native
+        .prepare(
+          `SELECT library_id, resolved_at FROM library_docs_name_map
+           WHERE query_name = ? AND library_id = ''`,
+        )
+        .get(queryName) as { resolved_at: number } | undefined;
+
+      if (!mapping) return false;
+
+      // Negative cache entries expire after 1 day (86_400_000 ms)
+      return Date.now() - mapping.resolved_at < 86_400_000;
     },
 
     async storeDocs({

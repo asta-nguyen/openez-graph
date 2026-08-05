@@ -121,4 +121,46 @@ describe("Context7Client", () => {
       await client.stop();
     }
   });
+
+  it("times out when callTool exceeds callTimeoutMs", async () => {
+    // Write a slow stub server that delays responses beyond the timeout
+    const slowStubPath = path.join(testDir, ".stub-context7-slow-server.mjs");
+    const SLOW_SERVER_CODE = `
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+
+const server = new Server({ name: "slow-context7", version: "0.0.0" }, { capabilities: { tools: {} } });
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    { name: "resolve-library-id", description: "resolve", inputSchema: { type: "object", properties: { libraryName: { type: "string" } }, required: ["libraryName"] } },
+  ],
+}));
+
+server.setRequestHandler(CallToolRequestSchema, async () => {
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+  return { content: [{ type: "text", text: "slow" }] };
+});
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+`;
+    fs.writeFileSync(slowStubPath, SLOW_SERVER_CODE);
+
+    const client = new Context7Client({
+      binPath: process.execPath,
+      binArgs: [slowStubPath],
+      apiKey: "test-key",
+      callTimeoutMs: 500,
+    });
+
+    try {
+      await client.ensureStarted();
+      await expect(client.resolveLibraryId("react")).rejects.toThrow("timed out");
+    } finally {
+      await client.stop();
+      fs.rmSync(slowStubPath, { force: true });
+    }
+  });
 });

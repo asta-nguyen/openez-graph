@@ -12,13 +12,13 @@ export interface ResolvedLibrary {
 
 export interface FetchedDocs {
   content: string;
-  tokens: number;
 }
 
 export interface Context7ClientOptions {
   binPath?: string;
   binArgs?: string[];
   apiKey?: string;
+  callTimeoutMs?: number;
 }
 
 // ESM-safe require.resolve — createRequire needs a file URL.
@@ -36,6 +36,8 @@ const _require =
 // to the canonical name so the call still proceeds and fails with a clear error.
 const RESOLVE_LIBRARY_ID_CANDIDATES = ["resolve-library-id", "get-library-id", "resolve-library"];
 const QUERY_DOCS_CANDIDATES = ["query-docs", "get-library-docs", "get-docs"];
+
+const DEFAULT_CALL_TIMEOUT_MS = 30_000;
 
 export class Context7Client {
   private client: Client | null = null;
@@ -173,7 +175,7 @@ export class Context7Client {
     await this.ensureStarted();
     if (!this.client) throw new Error("Context7 client not connected");
 
-    const result = await this.client.callTool({
+    const result = await this.callToolWithTimeout({
       name: this.resolveLibraryIdToolName,
       arguments: { libraryName },
     });
@@ -207,7 +209,7 @@ export class Context7Client {
     if (input.topic) args.topic = input.topic;
     if (input.tokens) args.tokens = input.tokens;
 
-    const result = await this.client.callTool({
+    const result = await this.callToolWithTimeout({
       name: this.queryDocsToolName,
       arguments: args,
     });
@@ -219,8 +221,29 @@ export class Context7Client {
 
     return {
       content: text,
-      tokens: 0, // will be computed by caller via countTokens
     };
+  }
+
+  private async callToolWithTimeout(params: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  }): Promise<ReturnType<Client["callTool"]>> {
+    if (!this.client) throw new Error("Context7 client not connected");
+
+    const timeoutMs = this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Context7 call '${params.name}' timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    });
+
+    try {
+      return await Promise.race([this.client.callTool(params), timeoutPromise]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   private extractText(result: unknown): string | null {

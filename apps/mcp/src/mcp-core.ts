@@ -15,6 +15,7 @@ import {
   codeContext,
   codeQuery,
   countTokens,
+  disposeSharedClient,
   graphNeighbors,
   libraryDocs,
   memoryRecall,
@@ -778,6 +779,18 @@ export async function createAndStartMcpServer(options?: McpServerOptions) {
   const server = createMcpServer(options);
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Clean up the Context7 subprocess when the MCP server shuts down.
+  const cleanup = async () => {
+    try {
+      await disposeSharedClient();
+    } catch {
+      // ignore
+    }
+  };
+  process.on("SIGTERM", cleanup);
+  process.on("SIGINT", cleanup);
+  process.on("exit", cleanup);
 }
 
 const WATCH_DEBOUNCE_MS = 2000;
