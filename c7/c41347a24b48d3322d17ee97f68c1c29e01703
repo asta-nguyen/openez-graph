@@ -1,0 +1,20 @@
+docs/superpowers/plans/2026-08-05-context7-library-docs.md
+  s_6514757d0e9524::t_65a083e2e2a2a8 1-2099
+  s_6514757d0e9524::t_c4310a2493f73b 2100-2116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c7c41347a24b48d3322d17ee97f68c1c29e01703",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
