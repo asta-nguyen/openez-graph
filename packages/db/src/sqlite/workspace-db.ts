@@ -59,6 +59,8 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id);
     CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
+    CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash
+      ON embeddings(provider, model, input_hash);
   `);
 
   // Remove duplicate derived vectors before enforcing their logical identity.

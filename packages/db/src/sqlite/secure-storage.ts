@@ -20,15 +20,53 @@ function getMasterKey(): Buffer {
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
   }
 
-  if (fs.existsSync(MASTER_KEY_FILE)) {
-    cachedKey = Buffer.from(fs.readFileSync(MASTER_KEY_FILE, "utf-8").trim(), "hex");
+  // Try to read an existing key first.
+  let keyExists = false;
+  try {
+    const existing = fs.readFileSync(MASTER_KEY_FILE, "utf-8").trim();
+    keyExists = true;
+    cachedKey = Buffer.from(existing, "hex");
     if (cachedKey.length === KEY_LEN) return cachedKey;
+    // File exists but content is malformed — do NOT overwrite, fail explicitly.
+    throw new Error(
+      `Master key file exists but contains invalid data (expected ${KEY_LEN}-byte hex, got ${existing.length} chars). ` +
+        `Back up the file, then delete it only if no encrypted settings need preserving.`,
+    );
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      // File doesn't exist — legitimate first run, fall through to creation.
+    } else if (keyExists) {
+      // Already threw an explicit malformed-key error above; re-throw it.
+      throw err;
+    } else {
+      // Other read errors (permissions, I/O) — surface them.
+      throw err;
+    }
   }
 
-  // Generate new key
-  cachedKey = crypto.randomBytes(KEY_LEN);
-  fs.writeFileSync(MASTER_KEY_FILE, cachedKey.toString("hex"), { encoding: "utf-8", mode: 0o600 });
-  return cachedKey;
+  // Atomically create the key file. O_CREAT|O_EXCL (flag "wx") guarantees
+  // only one process wins; concurrent losers get EEXIST and read the winner's key.
+  const newKey = crypto.randomBytes(KEY_LEN);
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(MASTER_KEY_FILE, "wx", 0o600);
+    fs.writeFileSync(fd, newKey.toString("hex"), { encoding: "utf-8" });
+    cachedKey = newKey;
+    return cachedKey;
+  } catch (err: unknown) {
+    // Another process created the file between our read and our open.
+    // Reload the winning key instead of overwriting it.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EEXIST") {
+      const winner = fs.readFileSync(MASTER_KEY_FILE, "utf-8").trim();
+      cachedKey = Buffer.from(winner, "hex");
+      if (cachedKey.length === KEY_LEN) return cachedKey;
+    }
+    throw err;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
 }
 
 export function encryptValue(plaintext: string): string {
