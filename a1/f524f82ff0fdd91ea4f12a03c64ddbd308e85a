@@ -1,0 +1,42 @@
+packages/core/src/external-docs/docs-cache.ts
+  s_6514757d0e9524::t_f8cef43df93933 39-40
+  s_6514757d0e9524::t_ed0ecf8a37fb7a 99,109-120
+  s_6514757d0e9524::t_101da643a4158e 121-122
+packages/core/src/external-docs/index.ts
+  s_6514757d0e9524::t_0e250045fb16a9 5
+apps/mcp/src/mcp-core.ts
+  s_6514757d0e9524::t_8c295a463f254a 18
+  s_6514757d0e9524::t_5770358832e42b 782-793
+packages/core/src/external-docs/context7-client.ts
+  s_6514757d0e9524::t_d3a8fbf9d8f769 21
+  s_6514757d0e9524::t_468533e4edf7b9 212,227-248
+  s_6514757d0e9524::t_0998e0129ea9d9 178
+  s_6514757d0e9524::t_18b6b57be6e964 40-41
+tests/context7-orchestration.test.ts
+  s_6514757d0e9524::t_605e49a48e1659 55
+  s_6514757d0e9524::t_8cc131d0b703fd 233
+  s_6514757d0e9524::t_4803a47e02afe0 41-43
+  s_6514757d0e9524::t_fe42c648a0090e 136-182
+tests/context7-client.test.ts
+  s_6514757d0e9524::t_56151cd0d1fd07 124-165
+packages/core/src/external-docs/library-docs.ts
+  s_6514757d0e9524::t_178f71a1b7fb31 52-58
+  s_6514757d0e9524::t_21220098ead7f5 103-115,119-122
+  s_6514757d0e9524::t_1302a3f1d75986 197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a1f524f82ff0fdd91ea4f12a03c64ddbd308e85a",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
