@@ -11,16 +11,17 @@ const InteractiveGraph = dynamic(
 );
 
 /**
- * Dashboard frame with sidebar on the left and the 3D interactive
- * knowledge graph as the main content area.
+ * Dashboard frame with sidebar navigation and a graph preview.
  */
 export function DashboardPreview() {
   const navItems = [
     { label: "Overview", icon: "◆", active: true },
     { label: "Workspaces", icon: "⊞", active: false },
+    { label: "Benchmark", icon: "↘", active: false },
     { label: "Query", icon: "⊕", active: false, debug: true },
     { label: "Documents", icon: "⊡", active: false, debug: true },
-    { label: "Jobs", icon: "⬡", active: false, debug: true },
+    { label: "Memories", icon: "◇", active: false, debug: true },
+    { label: "Changelog", icon: "≡", active: false, secondary: true },
     { label: "Settings", icon: "⚙", active: false, secondary: true },
   ];
 
@@ -112,12 +113,8 @@ export function DashboardPreview() {
                 borderRadius: "6px",
                 fontSize: "12px",
                 fontWeight: item.active ? 600 : 400,
-                color: item.active
-                  ? "oklch(0.72 0.14 200)"
-                  : "oklch(0.65 0.01 260)",
-                backgroundColor: item.active
-                  ? "oklch(0.72 0.14 200 / 0.1)"
-                  : "transparent",
+                color: item.active ? "oklch(0.72 0.14 200)" : "oklch(0.65 0.01 260)",
+                backgroundColor: item.active ? "oklch(0.72 0.14 200 / 0.1)" : "transparent",
               }}
             >
               <span style={{ fontSize: "12px", opacity: 0.7 }}>{item.icon}</span>
@@ -195,7 +192,7 @@ export function DashboardPreview() {
           ))}
       </div>
 
-      {/* ── Main content: Interactive 3D graph ── */}
+      {/* ── Main content: graph preview ── */}
       <div
         style={{
           flex: 1,
@@ -229,9 +226,7 @@ export function DashboardPreview() {
           >
             openez
           </span>
-          <span style={{ fontSize: "11px", color: "oklch(0.52 0.02 260)" }}>
-            /openez-graph
-          </span>
+          <span style={{ fontSize: "11px", color: "oklch(0.52 0.02 260)" }}>/openez-graph</span>
         </div>
 
         {/* Full-bleed graph */}

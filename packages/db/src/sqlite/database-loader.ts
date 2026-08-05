@@ -4,13 +4,22 @@ import module from "node:module";
 
 declare const __non_webpack_require__: typeof require | undefined;
 
-const _require: typeof require = typeof __non_webpack_require__ === "function"
-  ? __non_webpack_require__
-  : module.createRequire(
-      typeof import.meta !== "undefined" && import.meta.url
-        ? import.meta.url
-        : `file://${__filename}`
-    );
+function getRequireUrl(): string {
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.url) {
+      return import.meta.url;
+    }
+  } catch {
+    // import.meta not available (CJS)
+  }
+  // CJS fallback
+  return `file://${__filename}`;
+}
+
+const _require: typeof require =
+  typeof __non_webpack_require__ === "function"
+    ? __non_webpack_require__
+    : module.createRequire(getRequireUrl());
 
 let resolvedAddon: string | null | undefined;
 
@@ -22,11 +31,12 @@ interface NativeDatabase {
     get(...params: unknown[]): unknown;
     run(...params: unknown[]): unknown;
   };
+  transaction<T>(fn: () => T): () => T;
 }
 
 type NativeDatabaseConstructor = new (
   filename: string,
-  options?: { nativeBinding?: string }
+  options?: { nativeBinding?: string },
 ) => NativeDatabase;
 
 function tryResolveAddon(): string | null {
@@ -39,7 +49,7 @@ function tryResolveAddon(): string | null {
       "..",
       "build",
       "Release",
-      "better_sqlite3.node"
+      "better_sqlite3.node",
     );
     if (fs.existsSync(addonPath)) {
       resolvedAddon = addonPath;
@@ -56,8 +66,5 @@ function tryResolveAddon(): string | null {
 export function createNativeDatabase(dbPath: string): NativeDatabase {
   const DatabaseConstructor = _require("better-sqlite3") as NativeDatabaseConstructor;
   const nativeBinding = tryResolveAddon();
-  return new DatabaseConstructor(
-    dbPath,
-    nativeBinding ? { nativeBinding } : {}
-  );
+  return new DatabaseConstructor(dbPath, nativeBinding ? { nativeBinding } : {});
 }

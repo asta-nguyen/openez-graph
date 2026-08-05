@@ -9,18 +9,31 @@ import { codeExtensions, configExtensions, markdownExtensions } from "./language
 const DEFAULT_INCLUDE_PATTERNS = [
   ...Array.from(codeExtensions.keys()).map((ext) => `**/*${ext}`),
   ...Array.from(configExtensions.keys()).map((ext) => `**/*${ext}`),
-  ...Array.from(markdownExtensions).map((ext) => `**/*${ext}`)
+  ...Array.from(markdownExtensions).map((ext) => `**/*${ext}`),
 ];
 
 const DEFAULT_EXCLUDE_PATTERNS = [
+  "**/node_modules",
   "**/node_modules/**",
+  "**/.git",
   "**/.git/**",
+  "**/.next",
   "**/.next/**",
+  "**/dist",
   "**/dist/**",
+  "**/build",
   "**/build/**",
+  "**/coverage",
   "**/coverage/**",
+  "**/.turbo",
   "**/.turbo/**",
-  "**/.openez/**"
+  "**/.openez",
+  "**/.openez/**",
+  "**/target",
+  "**/target/**",
+  "**/pnpm-lock.yaml",
+  "**/package-lock.json",
+  "**/yarn.lock",
 ];
 
 function loadGitignore(rootPath: string): string[] {
@@ -35,11 +48,13 @@ function loadGitignore(rootPath: string): string[] {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#"))
-      .map((pattern) => {
-        if (pattern.startsWith("/")) return `${pattern.slice(1)}/**`;
-        if (pattern.endsWith("/")) return `**/${pattern}**`;
-        if (!pattern.includes("/") && !pattern.startsWith("**/")) return `**/${pattern}/**`;
-        return pattern;
+      .flatMap((pattern) => {
+        const hasSlash = pattern.replace(/\/$/, "").includes("/");
+        const clean = pattern.replace(/^\//, "").replace(/\/$/, "");
+        if (hasSlash) {
+          return [clean, `${clean}/**`];
+        }
+        return [clean, `${clean}/**`, `**/${clean}`, `**/${clean}/**`];
       });
   } catch {
     return [];
@@ -61,11 +76,19 @@ export async function scanWorkspaceFiles(input: {
   const ignorePatterns = [
     ...DEFAULT_EXCLUDE_PATTERNS,
     ...gitignorePatterns,
-    ...(input.exclude ? input.exclude.split("\n").filter(Boolean).map((p) => p.trim()) : [])
+    ...(input.exclude
+      ? input.exclude
+          .split("\n")
+          .filter(Boolean)
+          .map((p) => p.trim())
+      : []),
   ];
 
   const includePatterns = input.include
-    ? input.include.split("\n").filter(Boolean).map((p) => p.trim())
+    ? input.include
+        .split("\n")
+        .filter(Boolean)
+        .map((p) => p.trim())
     : DEFAULT_INCLUDE_PATTERNS;
 
   const entries = await fg(includePatterns, {
@@ -74,7 +97,7 @@ export async function scanWorkspaceFiles(input: {
     onlyFiles: true,
     absolute: true,
     followSymbolicLinks: false,
-    dot: false
+    dot: false,
   });
 
   const results = await Promise.all(
@@ -84,9 +107,9 @@ export async function scanWorkspaceFiles(input: {
         absolutePath,
         relativePath: path.relative(rootPath, absolutePath),
         sizeBytes: stat.size,
-        mtimeMs: Math.trunc(stat.mtimeMs)
+        mtimeMs: Math.trunc(stat.mtimeMs),
       } satisfies FileToIndex;
-    })
+    }),
   );
 
   return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));

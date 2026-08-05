@@ -31,8 +31,16 @@ export const workspaces = sqliteTable(
   (table) => ({
     nameUnique: unique().on(table.name),
     rootPathUnique: unique().on(table.rootPath),
-  })
+  }),
 );
+
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
 
 // ── Per-Workspace DB Schema ──
 
@@ -56,7 +64,7 @@ export const documents = sqliteTable(
   },
   (table) => ({
     pathUnique: unique().on(table.path),
-  })
+  }),
 );
 
 export const chunks = sqliteTable("chunks", {
@@ -87,6 +95,7 @@ export const embeddings = sqliteTable("embeddings", {
   model: text("model").notNull(),
   dimensions: integer("dimensions").notNull(),
   embedding: text("embedding").notNull(),
+  inputHash: text("input_hash"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -157,6 +166,9 @@ export const queryLogs = sqliteTable("query_logs", {
   query: text("query").notNull(),
   mode: text("mode").notNull(),
   resultCount: integer("result_count").notNull().default(0),
+  tokensReturned: integer("tokens_returned").notNull().default(0),
+  tokensSaved: integer("tokens_saved").notNull().default(0),
+  filesScanned: integer("files_scanned").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

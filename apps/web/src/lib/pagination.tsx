@@ -5,10 +5,7 @@ export const PAGE_SIZE = 10;
 
 export function paginate<T>(items: T[], currentPage: number): { paged: T[]; totalPages: number } {
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-  const paged = items.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
+  const paged = items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   return { paged, totalPages };
 }
 

@@ -1,5 +1,7 @@
 import { createAndStartMcpServer } from "@openez-graph/mcp";
 
-export async function startMcpServer(defaultPath?: string) {
-  await createAndStartMcpServer({ defaultPath });
+declare const __OPENEZ_BUILD_ID__: string;
+
+export async function startMcpServer(defaultPath: string | undefined, version: string) {
+  await createAndStartMcpServer({ defaultPath, version, build: __OPENEZ_BUILD_ID__ });
 }

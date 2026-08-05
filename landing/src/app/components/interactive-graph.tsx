@@ -26,7 +26,9 @@ function makeNodeTexture(color: string): THREE.CanvasTexture {
   c.width = 64;
   c.height = 64;
   const ctx = c.getContext("2d")!;
-  const cx = 32, cy = 32, r = 28;
+  const cx = 32,
+    cy = 32,
+    r = 28;
   const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   g.addColorStop(0, "#ffffff");
   g.addColorStop(0.1, color);
@@ -46,7 +48,8 @@ function makeLabelCanvas(text: string): { canvas: HTMLCanvasElement; scale: numb
   const fontSize = 12;
   ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
   const textWidth = ctx.measureText(text).width;
-  const px = 8, py = 4;
+  const px = 8,
+    py = 4;
   const w = textWidth + px * 2;
   const h = fontSize + py * 2;
 
@@ -93,7 +96,11 @@ function fibonacciSphere(count: number, radius: number): Float64Array {
   return pos;
 }
 
-function computeEdges(pos: Float64Array, count: number, threshold: number): [number, number, number][] {
+function computeEdges(
+  pos: Float64Array,
+  count: number,
+  threshold: number,
+): [number, number, number][] {
   const edges: [number, number, number][] = [];
   for (let i = 0; i < count; i++) {
     for (let j = i + 1; j < count; j++) {
@@ -173,8 +180,12 @@ export function InteractiveGraph() {
       const edgePositions: number[] = [];
       const edgeColors: number[] = [];
       for (const [si, ti] of edges) {
-        const sx = positions[si * 3], sy = positions[si * 3 + 1], sz = positions[si * 3 + 2];
-        const tx = positions[ti * 3], ty = positions[ti * 3 + 1], tz = positions[ti * 3 + 2];
+        const sx = positions[si * 3],
+          sy = positions[si * 3 + 1],
+          sz = positions[si * 3 + 2];
+        const tx = positions[ti * 3],
+          ty = positions[ti * 3 + 1],
+          tz = positions[ti * 3 + 2];
         edgePositions.push(sx, sy, sz, tx, ty, tz);
         edgeColors.push(0.36, 0.79, 0.76, 0.36, 0.79, 0.76);
       }
@@ -213,11 +224,7 @@ export function InteractiveGraph() {
       const degree = 1 + (i % 10);
       const size = (3 + degree * 0.4) * 0.7;
       sprite.scale.set(size, size, 1);
-      sprite.position.set(
-        positions[i * 3],
-        positions[i * 3 + 1],
-        positions[i * 3 + 2],
-      );
+      sprite.position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
       sprite.userData.index = i;
       sprite.userData.degree = degree;
       sprite.userData.type = typeKey;
@@ -265,7 +272,11 @@ export function InteractiveGraph() {
 
       // Update label visibility
       for (const nl of nodeLabels) {
-        nl.sprite.visible = nl.sprite.userData.label === (idx !== null ? `${TYPE_KEYS[idx % TYPE_KEYS.length]}_${idx.toString().padStart(2, "0")}` : undefined);
+        nl.sprite.visible =
+          nl.sprite.userData.label ===
+          (idx !== null
+            ? `${TYPE_KEYS[idx % TYPE_KEYS.length]}_${idx.toString().padStart(2, "0")}`
+            : undefined);
       }
       if (idx !== null) {
         const label = `${TYPE_KEYS[idx % TYPE_KEYS.length]}_${idx.toString().padStart(2, "0")}`;
@@ -279,11 +290,7 @@ export function InteractiveGraph() {
         const sp = nodeSprites[i];
         const deg = sp.userData.degree as number;
         const base = (3 + deg * 0.4) * 0.7;
-        sp.scale.set(
-          i === idx ? base * 1.3 : base,
-          i === idx ? base * 1.3 : base,
-          1,
-        );
+        sp.scale.set(i === idx ? base * 1.3 : base, i === idx ? base * 1.3 : base, 1);
         sp.material.opacity = i === idx ? 1 : 0.85;
       }
     }
@@ -390,7 +397,8 @@ export function InteractiveGraph() {
           onClick={zoomIn}
           aria-label="Zoom in"
           style={{
-            width: 32, height: 32,
+            width: 32,
+            height: 32,
             border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 6,
             background: "rgba(0,0,0,0.5)",
@@ -412,7 +420,8 @@ export function InteractiveGraph() {
           onClick={zoomOut}
           aria-label="Zoom out"
           style={{
-            width: 32, height: 32,
+            width: 32,
+            height: 32,
             border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 6,
             background: "rgba(0,0,0,0.5)",

@@ -48,8 +48,9 @@ export async function setupOpenCode(rootPath: string): Promise<void> {
   const mcp = config.mcp as Record<string, unknown>;
 
   mcp[label] = {
-    command,
-    args
+    type: "local",
+    command: [command, ...args],
+    enabled: true,
   };
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");

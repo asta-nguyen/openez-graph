@@ -1,6 +1,17 @@
 import { defineConfig } from "tsup";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
+
+function getBuildId() {
+  try {
+    const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
+    const dirty = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim();
+    return `${sha}${dirty ? "-dirty" : ""}`;
+  } catch {
+    return "unknown";
+  }
+}
 
 export default defineConfig({
   entry: ["src/cli.ts"],
@@ -12,6 +23,7 @@ export default defineConfig({
   sourcemap: false,
   minify: false,
   splitting: false,
+  define: { __OPENEZ_BUILD_ID__: JSON.stringify(getBuildId()) },
   // better-sqlite3 is a native module — must remain external
   external: ["better-sqlite3"],
   // Bundle everything else (workspace packages + npm deps)
@@ -34,10 +46,10 @@ export default defineConfig({
     "drizzle-orm",
     "dotenv",
     "openai",
-    "ollama"
+    "ollama",
   ],
   banner: {
-    js: "#!/usr/bin/env node"
+    js: "#!/usr/bin/env node",
   },
   onSuccess: async () => {
     // Copy frontend dist into CLI dist/web for bundled web serving
@@ -50,5 +62,13 @@ export default defineConfig({
     } else {
       console.log("⚠ Frontend dist not found — run 'pnpm --filter @openez-graph/web build' first");
     }
-  }
+
+    // Copy CHANGELOG.md into dist for bundled changelog serving
+    const changelogSrc = path.resolve(__dirname, "../../CHANGELOG.md");
+    const changelogDest = path.resolve(__dirname, "dist/CHANGELOG.md");
+    if (existsSync(changelogSrc)) {
+      cpSync(changelogSrc, changelogDest);
+      console.log("✓ Copied CHANGELOG.md → dist/CHANGELOG.md");
+    }
+  },
 });

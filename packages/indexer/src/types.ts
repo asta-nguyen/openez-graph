@@ -29,4 +29,5 @@ export interface IndexWorkspaceSummary {
   filesUpdated: number;
   chunksWritten: number;
   embeddingsWritten: number;
+  embeddingFailures: number;
 }

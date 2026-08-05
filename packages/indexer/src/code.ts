@@ -8,143 +8,191 @@ import type { IndexedChunk } from "./types";
 function getLineRange(node: { getStartLineNumber(): number; getEndLineNumber(): number }) {
   return {
     startLine: node.getStartLineNumber(),
-    endLine: node.getEndLineNumber()
+    endLine: node.getEndLineNumber(),
   };
 }
 
-export function indexCode(content: string, filePath: string): {
+function codeSearchText(text: string): string {
+  const identifiers = text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? [];
+  return [
+    ...new Set(
+      identifiers.flatMap((identifier) =>
+        identifier
+          .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+          .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+          .split(" ")
+          .filter((term) => term.length > 1),
+      ),
+    ),
+  ]
+    .slice(0, 256)
+    .join(" ");
+}
+
+const project = new Project({
+  useInMemoryFileSystem: true,
+  compilerOptions: {
+    allowJs: true,
+  },
+});
+
+export function indexCode(
+  content: string,
+  filePath: string,
+): {
   chunks: IndexedChunk[];
   importPaths: string[];
   definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }>;
   calledIdentifiers: string[];
   callExpressions: Array<{ callerName: string; calleeName: string }>;
 } {
-  const project = new Project({
-    useInMemoryFileSystem: true,
-    compilerOptions: {
-      allowJs: true
-    }
-  });
-
   const sourceFile = project.createSourceFile(filePath, content, { overwrite: true });
-  const chunks: IndexedChunk[] = [];
-  const definedSymbols: Array<{ name: string; type: string; symbolType: string; exported: boolean }> = [];
-  const calledIdentifiers = new Set<string>();
-  const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
+  try {
+    const chunks: IndexedChunk[] = [];
+    const definedSymbols: Array<{
+      name: string;
+      type: string;
+      symbolType: string;
+      exported: boolean;
+    }> = [];
+    const calledIdentifiers = new Set<string>();
+    const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
 
-  sourceFile.getImportDeclarations().forEach((declaration) => {
-    declaration.getDescendantsOfKind(SyntaxKind.Identifier).forEach((identifier) => {
-      if (identifier.getText()) {
-        calledIdentifiers.add(identifier.getText());
-      }
+    sourceFile.getImportDeclarations().forEach((declaration) => {
+      declaration.getDescendantsOfKind(SyntaxKind.Identifier).forEach((identifier) => {
+        if (identifier.getText()) {
+          calledIdentifiers.add(identifier.getText());
+        }
+      });
     });
-  });
 
-  const variableDeclarations = sourceFile.getVariableStatements().flatMap((statement) =>
-    statement.getDeclarations().map((declaration) => ({
+    const variableDeclarations = sourceFile.getVariableStatements().flatMap((statement) =>
+      statement.getDeclarations().map((declaration) => ({
+        declaration,
+        exported: statement.hasExportKeyword(),
+      })),
+    );
+
+    const functions = sourceFile.getFunctions().map((declaration) => ({
       declaration,
-      exported: statement.hasExportKeyword()
-    }))
-  );
+      name: declaration.getName(),
+      type: "function",
+      symbolType: "function",
+      exported: declaration.isExported(),
+    }));
 
-  const declarations = [
-    ...sourceFile.getFunctions(),
-    ...sourceFile.getClasses(),
-    ...sourceFile.getInterfaces(),
-    ...sourceFile.getTypeAliases(),
-    ...sourceFile.getEnums()
-  ];
+    const classes = sourceFile.getClasses().map((declaration) => ({
+      declaration,
+      name: declaration.getName(),
+      type: "class",
+      symbolType: "class",
+      exported: declaration.isExported(),
+    }));
 
-  declarations.forEach((declaration) => {
-    const name = "getName" in declaration ? declaration.getName() : undefined;
-    const text = declaration.getText().trim();
-    if (!name || !text) {
-      return;
-    }
+    const interfaces = sourceFile.getInterfaces().map((declaration) => ({
+      declaration,
+      name: declaration.getName(),
+      type: "interface",
+      symbolType: "interface",
+      exported: declaration.isExported(),
+    }));
 
-    const symbolType = declaration.getKindName().toLowerCase();
-    const exported = "hasExportKeyword" in declaration ? declaration.hasExportKeyword() : false;
-    const lineRange = getLineRange(declaration);
+    const typeAliases = sourceFile.getTypeAliases().map((declaration) => ({
+      declaration,
+      name: declaration.getName(),
+      type: "type",
+      symbolType: "type",
+      exported: declaration.isExported(),
+    }));
 
-    definedSymbols.push({ name, type: symbolType, symbolType, exported });
-    chunks.push({
-      heading: name,
-      content: text,
-      tokenCount: countTokens(text),
-      contentHash: hashContent(text),
-      symbolName: name,
-      symbolType,
-      metadata: {
-        kind: "code",
-        symbolName: name,
-        symbolType,
-        exported,
-        ...lineRange
-      }
-    });
-
-    declaration.getDescendantsOfKind(SyntaxKind.CallExpression).forEach((callExpression) => {
-      const expression = callExpression.getExpression();
-      const calledName = expression.getText();
-      if (calledName) {
-        calledIdentifiers.add(calledName);
-        callExpressions.push({ callerName: name, calleeName: calledName.split(".").pop() ?? calledName });
-      }
-    });
-  });
-
-  variableDeclarations.forEach(({ declaration, exported }) => {
-    const name = declaration.getName();
-    const text = declaration.getText().trim();
-    if (!name || !text || !exported) {
-      return;
-    }
-
-    const lineRange = getLineRange(declaration);
-    definedSymbols.push({ name, symbolType: "variable", type: "variable", exported });
-    chunks.push({
-      heading: name,
-      content: text,
-      tokenCount: countTokens(text),
-      contentHash: hashContent(text),
-      symbolName: name,
-      symbolType: "variable",
-      metadata: {
-        kind: "code",
-        symbolName: name,
+    const symbols = [
+      ...functions,
+      ...classes,
+      ...interfaces,
+      ...typeAliases,
+      ...variableDeclarations.map(({ declaration, exported }) => ({
+        declaration,
+        name: declaration.getName(),
+        type: "variable",
         symbolType: "variable",
         exported,
-        ...lineRange
-      }
-    });
-  });
+      })),
+    ].filter((symbol): symbol is typeof symbol & { name: string } => Boolean(symbol.name));
 
-  if (chunks.length === 0) {
-    const lines = content.split("\n");
-    for (let index = 0; index < lines.length; index += 80) {
-      const slice = lines.slice(index, index + 80).join("\n").trim();
-      if (!slice) {
-        continue;
-      }
+    for (const symbol of symbols) {
+      definedSymbols.push({
+        name: symbol.name,
+        type: symbol.type,
+        symbolType: symbol.symbolType,
+        exported: symbol.exported,
+      });
+
+      const { startLine, endLine } = getLineRange(symbol.declaration);
+      const text = symbol.declaration.getText();
       chunks.push({
-        content: slice,
-        tokenCount: countTokens(slice),
-        contentHash: hashContent(slice),
+        content: text,
+        tokenCount: countTokens(text),
+        contentHash: hashContent(text),
         metadata: {
           kind: "code",
-          fallback: true,
-          startLine: index + 1,
-          endLine: Math.min(index + 80, lines.length)
+          symbolName: symbol.name,
+          symbolType: symbol.symbolType,
+          exported: symbol.exported,
+          searchText: codeSearchText(text),
+          startLine,
+          endLine,
+        },
+      });
+
+      symbol.declaration.getDescendantsOfKind(SyntaxKind.CallExpression).forEach((call) => {
+        const expression = call.getExpression();
+        const calleeName = expression.getText();
+        if (calleeName) {
+          calledIdentifiers.add(calleeName);
+          callExpressions.push({ callerName: symbol.name, calleeName });
         }
       });
     }
-  }
 
-  return {
-    chunks,
-    importPaths: sourceFile.getImportDeclarations().map((declaration) => declaration.getModuleSpecifierValue()),
-    definedSymbols,
-    calledIdentifiers: [...calledIdentifiers],
-    callExpressions
-  };
+    if (chunks.length === 0) {
+      const lines = content.split("\n");
+      for (let index = 0; index < lines.length; index += 80) {
+        const slice = lines.slice(index, index + 80).join("\n");
+        if (!slice.trim()) {
+          continue;
+        }
+        chunks.push({
+          content: slice,
+          tokenCount: countTokens(slice),
+          contentHash: hashContent(slice),
+          metadata: {
+            kind: "code",
+            searchText: codeSearchText(slice),
+            fallback: true,
+            startLine: index + 1,
+            endLine: Math.min(index + 80, lines.length),
+          },
+        });
+      }
+    }
+
+    const importPaths = sourceFile.getImportDeclarations().flatMap((declaration) => {
+      try {
+        const value = declaration.getModuleSpecifierValue();
+        return typeof value === "string" && value.length > 0 ? [value] : [];
+      } catch {
+        return [];
+      }
+    });
+
+    return {
+      chunks,
+      importPaths,
+      definedSymbols,
+      calledIdentifiers: [...calledIdentifiers],
+      callExpressions,
+    };
+  } finally {
+    project.removeSourceFile(sourceFile);
+  }
 }

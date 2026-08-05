@@ -20,14 +20,22 @@
     "mcp": "pnpm --filter @openez-graph/cli openez serve --mcp",
     "worker": "pnpm --filter @openez-graph/worker worker",
     "benchmark:query": "pnpm --filter @openez-graph/worker benchmark:query",
+    "benchmark:retrieval": "pnpm --filter @openez-graph/worker benchmark:retrieval",
     "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .prettierignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .prettierignore",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^24.0.0",
-    "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "concurrently": "^10.0.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.0",
     "tsx": "^4.19.0",
     "turbo": "^2.0.0",
     "typescript": "^5.8.0",
@@ -38,7 +46,19 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "concurrently": "^9.2.1",
     "server-only": "^0.0.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser": "2.3.0",
+      "brace-expansion": "5.0.8",
+      "fast-uri": "3.1.4",
+      "postcss": "8.5.18",
+      "qs": "6.15.2",
+      "sharp": "0.35.3"
+    }
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,md,yml,yaml}": "prettier --write"
   }
 }

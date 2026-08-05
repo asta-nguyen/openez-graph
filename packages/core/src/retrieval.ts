@@ -1,10 +1,11 @@
 import { getBrainSettings } from "@openez-graph/config";
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
-import { getEmbeddingProvider } from "./embeddings";
+import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
+import type { EmbeddingProvider } from "./embeddings";
 import { reciprocalRankFusion } from "./rrf";
 import { countTokens } from "./tokenizer";
-import type { MemoryQueryResult, QuerySource } from "./types";
+import type { CodeQueryResult, QuerySource } from "./types";
 
 interface ChunkHit {
   id: string;
@@ -25,7 +26,7 @@ function sourceFromChunk(chunk: ChunkHit, reason: string): QuerySource {
     startLine,
     endLine,
     score: chunk.score,
-    reason
+    reason,
   };
 }
 
@@ -37,47 +38,130 @@ function formatContextBlock(chunk: ChunkHit): string {
   return `[source: ${chunk.path}:${startLine}-${endLine} | score: ${chunk.score.toFixed(3)}]\n${chunk.content}`;
 }
 
-async function vectorSearch(
-  rootPath: string,
-  query: string,
-  limit: number
-): Promise<ChunkHit[]> {
-  const provider = getEmbeddingProvider();
-  if (!provider) return [];
+export function cosineSimilarity(left: number[], right: number[]): number {
+  if (left.length === 0 || left.length !== right.length) return 0;
 
-  const [queryEmbedding] = await provider.embed([query]);
-  const queryDimensions = queryEmbedding.length;
-  const embeddingJson = JSON.stringify(queryEmbedding);
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    dot += left[index] * right[index];
+    leftNorm += left[index] * left[index];
+    rightNorm += right[index] * right[index];
+  }
+
+  return leftNorm === 0 || rightNorm === 0 ? 0 : dot / Math.sqrt(leftNorm * rightNorm);
+}
+
+function parseEmbedding(value: unknown): number[] {
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "number") ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+const MIN_COSINE_SIMILARITY = 0.3;
+const CODE_FILE_BOOST = 0.05;
+
+function isCodeFile(path: string): boolean {
+  return /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|py|go|rs)$/.test(path);
+}
+
+export async function rankStoredEmbeddings(
+  rootPath: string,
+  provider: Pick<EmbeddingProvider, "provider" | "model">,
+  queryEmbedding: number[],
+  limit: number,
+): Promise<ChunkHit[]> {
+  if (queryEmbedding.length === 0) return [];
 
   const repo = createWorkspaceRepository(rootPath);
   const results = await repo.queryRaw(
     `SELECT
       chunks.id, chunks.content, chunks.heading, chunks.metadata,
-      documents.path
+      documents.path, embeddings.embedding
     FROM embeddings
     INNER JOIN chunks ON chunks.id = embeddings.chunk_id
     INNER JOIN documents ON documents.id = chunks.document_id
-    WHERE embeddings.model = ?
-      AND embeddings.dimensions = ?
-    ORDER BY abs(length(embeddings.embedding) - ?) ASC
-    LIMIT ?`,
-    [provider.model, queryDimensions, embeddingJson.length, limit]
+    WHERE embeddings.provider = ?
+      AND embeddings.model = ?
+      AND embeddings.dimensions = ?`,
+    [provider.provider, embeddingStorageModel(provider), queryEmbedding.length],
   );
 
-  return results.map((row) => ({
-    id: String(row.id),
-    path: String(row.path),
-    content: String(row.content),
-    score: 0.5,
-    heading: row.heading ? String(row.heading) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
-  }));
+  // Linear scan is sufficient for local SQLite; switch to sqlite-vec if profiling proves otherwise.
+  const seenPaths = new Set<string>();
+  return results
+    .map((row) => {
+      const path = String(row.path);
+      const baseScore = cosineSimilarity(queryEmbedding, parseEmbedding(row.embedding));
+      return {
+        id: String(row.id),
+        path,
+        content: String(row.content),
+        score: isCodeFile(path) ? baseScore + CODE_FILE_BOOST : baseScore,
+        heading: row.heading ? String(row.heading) : null,
+        metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+      };
+    })
+    .filter((hit) => hit.score >= MIN_COSINE_SIMILARITY)
+    .sort((left, right) => right.score - left.score)
+    .filter((hit) => {
+      if (seenPaths.has(hit.path)) return false;
+      seenPaths.add(hit.path);
+      return true;
+    })
+    .slice(0, limit);
+}
+
+const QUERY_EXPANSIONS: Array<[RegExp, string]> = [
+  [/encrypt|secret|key|password/i, "encrypt decrypt AES cipher key security"],
+  [/similar|distance|vector|number/i, "embedding cosine similarity vector dot product"],
+  [/config|setting|option/i, "config setting registry database store"],
+  [/chunk|split|piece|part/i, "chunk index parse split token"],
+  [/model|inference|AI|LLM/i, "embedding provider model inference"],
+  [/store|save|write|persist/i, "insert store database repository"],
+  [/search|find|query|lookup/i, "search query retrieval FTS vector"],
+  [/index|build|process/i, "index workspace scan parse"],
+];
+
+function expandQuery(query: string): string {
+  const expansions = QUERY_EXPANSIONS.filter(([pattern]) => pattern.test(query)).map(
+    ([, expansion]) => expansion,
+  );
+  return expansions.length > 0 ? `${query} ${expansions.join(" ")}` : query;
+}
+
+async function vectorSearch(rootPath: string, query: string, limit: number): Promise<ChunkHit[]> {
+  try {
+    const provider = await getEmbeddingProvider();
+    if (!provider) {
+      console.error("[retrieval] vector search: disabled (no embedding provider)");
+      return [];
+    }
+
+    console.error(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
+    const expandedQuery = expandQuery(query);
+    const [queryEmbedding] = await provider.embed([
+      formatEmbeddingInput(provider, { content: expandedQuery }, "query"),
+    ]);
+    const hits = await rankStoredEmbeddings(rootPath, provider, queryEmbedding ?? [], limit);
+    console.error(`[retrieval] vector search: ${hits.length} hits`);
+    return hits;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`Vector search failed (falling back to FTS): ${msg}`);
+    return [];
+  }
 }
 
 async function graphExpand(
   rootPath: string,
   seedIds: string[],
-  limit: number
+  depth: number,
+  limit: number,
 ): Promise<ChunkHit[]> {
   if (seedIds.length === 0) return [];
 
@@ -85,53 +169,73 @@ async function graphExpand(
   const placeholders = seedIds.map(() => "?").join(",");
 
   const results = await repo.queryRaw(
-    `WITH seed_nodes AS (
-      SELECT id, ref_id
+    `WITH RECURSIVE walk(node_id, depth) AS (
+      SELECT id, 0
       FROM graph_nodes
       WHERE type = 'chunk'
         AND ref_id IN (${placeholders})
-    ),
-    neighbor_nodes AS (
-      SELECT DISTINCT
+      UNION
+      SELECT
         CASE
-          WHEN graph_edges.from_node_id = seed_nodes.id THEN graph_edges.to_node_id
+          WHEN graph_edges.from_node_id = walk.node_id THEN graph_edges.to_node_id
           ELSE graph_edges.from_node_id
-        END AS node_id
-      FROM graph_edges
-      INNER JOIN seed_nodes
-        ON graph_edges.from_node_id = seed_nodes.id
-        OR graph_edges.to_node_id = seed_nodes.id
+        END,
+        walk.depth + 1
+      FROM walk
+      INNER JOIN graph_edges
+        ON graph_edges.from_node_id = walk.node_id
+        OR graph_edges.to_node_id = walk.node_id
+      WHERE walk.depth < ?
+    ),
+    candidate_chunks AS (
+      SELECT chunks.id, MIN(walk.depth) AS distance
+      FROM walk
+      INNER JOIN graph_nodes ON graph_nodes.id = walk.node_id
+      INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+      WHERE graph_nodes.type = 'chunk'
+        AND walk.depth > 0
+        AND chunks.id NOT IN (${placeholders})
+      GROUP BY chunks.id
+      ORDER BY distance
       LIMIT ?
     )
     SELECT
       chunks.id, chunks.content, chunks.heading, chunks.metadata,
       documents.path,
-      0.15 AS score
-    FROM graph_nodes
-    INNER JOIN neighbor_nodes ON neighbor_nodes.node_id = graph_nodes.id
-    INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+      1.0 / (candidate_chunks.distance + 1) AS score
+    FROM candidate_chunks
+    INNER JOIN chunks ON chunks.id = candidate_chunks.id
     INNER JOIN documents ON documents.id = chunks.document_id
-    WHERE graph_nodes.type = 'chunk'`,
-    [...seedIds, limit]
+    ORDER BY candidate_chunks.distance, documents.path`,
+    [...seedIds, depth, ...seedIds, limit * 5],
   );
 
-  return results.map((row) => ({
-    id: String(row.id),
-    path: String(row.path),
-    content: String(row.content),
-    score: Number(row.score ?? 0.15),
-    heading: row.heading ? String(row.heading) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
-  }));
+  const seenPaths = new Set<string>();
+  return results
+    .map((row) => ({
+      id: String(row.id),
+      path: String(row.path),
+      content: String(row.content),
+      score: Number(row.score ?? 0),
+      heading: row.heading ? String(row.heading) : null,
+      metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+    }))
+    .filter((row) => {
+      if (seenPaths.has(row.path)) return false;
+      seenPaths.add(row.path);
+      return true;
+    })
+    .slice(0, limit);
 }
 
-export async function memoryQuery(input: {
+export async function codeQuery(input: {
   workspaceId: string;
   query: string;
   limit?: number;
   maxTokens?: number;
   skipGraphExpand?: boolean;
-}): Promise<MemoryQueryResult> {
+  recordMetrics?: boolean;
+}): Promise<CodeQueryResult> {
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
   if (!workspace) {
@@ -145,57 +249,115 @@ export async function memoryQuery(input: {
 
   const repo = createWorkspaceRepository(workspace.rootPath);
 
+  console.error(
+    `[retrieval] query: "${input.query}" | fts_limit=${retrieval.textLimit} vector_limit=${retrieval.vectorLimit}`,
+  );
   const [ftsResults, vectorResults] = await Promise.all([
     repo.fullTextSearch(input.query, retrieval.textLimit),
-    vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit)
+    vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit),
   ]);
+  console.error(`[retrieval] results: fts=${ftsResults.length} vector=${vectorResults.length}`);
 
-  let fused = reciprocalRankFusion([
-    ftsResults.map((item) => ({ item, score: item.score })),
-    vectorResults.map((item) => ({ item, score: item.score }))
-  ]);
+  // RRF fusion: FTS weighted 2x, vector weighted 1x. Vector can boost files FTS ranked low.
+  let fused = reciprocalRankFusion(
+    [ftsResults, vectorResults]
+      .filter((results) => results.length > 0)
+      .map((results) => results.map((item) => ({ item, score: item.score }))),
+    60,
+    [2, 1],
+    (item) => item.path,
+  );
 
   if (!input.skipGraphExpand) {
     const graphResults = await graphExpand(
       workspace.rootPath,
-      fused.slice(0, finalLimit).map((entry) => entry.item.id),
-      retrieval.maxGraphNeighbors
+      fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),
+      retrieval.graphHops,
+      retrieval.maxGraphNeighbors,
     );
+    const fusedItemsByPath = new Map(fused.map((entry) => [entry.item.path, entry.item]));
 
-    fused = reciprocalRankFusion([
-      fused,
-      graphResults.map((item) => ({ item, score: item.score }))
-    ]);
+    fused = reciprocalRankFusion(
+      [
+        fused,
+        graphResults.map((item) => ({
+          item: fusedItemsByPath.get(item.path) ?? item,
+          score: item.score,
+        })),
+      ],
+      60,
+      [1, 0.25],
+      (item) => item.path,
+    );
   }
 
   const selected: ChunkHit[] = [];
   let usedTokens = 0;
+  const seenPaths = new Set<string>();
 
   for (const entry of fused) {
     if (selected.length >= finalLimit) break;
 
     const tokenCount = countTokens(entry.item.content);
     if (usedTokens + tokenCount > maxTokens) continue;
+    if (seenPaths.has(entry.item.path)) continue;
 
-    selected.push(entry.item);
+    selected.push({ ...entry.item, score: entry.score });
     usedTokens += tokenCount;
+    seenPaths.add(entry.item.path);
   }
 
   const sources = selected.map((chunk) => sourceFromChunk(chunk, "retrieved-context"));
-
-  await repo.insertQueryLog({
-    query: input.query,
-    mode: "memory_query",
-    resultCount: selected.length
-  });
-
-  return {
-    answerContext: selected.map(formatContextBlock).join("\n\n"),
-    sources
+  const uniquePaths = new Set(selected.map((s) => s.path));
+  const allCandidatePaths = new Set(fused.map((e) => e.item.path));
+  const answerContext = selected.map(formatContextBlock).join("\n\n");
+  const retrievalTokens = countTokens(JSON.stringify({ answerContext, sources }));
+  const selectedFullFileTokens =
+    uniquePaths.size === 0
+      ? 0
+      : Number(
+          (
+            await repo.queryRaw(
+              `SELECT coalesce(sum(chunks.token_count), 0) AS tokens
+         FROM chunks
+         INNER JOIN documents ON documents.id = chunks.document_id
+         WHERE documents.path IN (${[...uniquePaths].map(() => "?").join(",")})`,
+              [...uniquePaths],
+            )
+          )[0]?.tokens ?? 0,
+        );
+  const estimatedTokensSaved = Math.max(0, selectedFullFileTokens - retrievalTokens);
+  const metrics: CodeQueryResult["metrics"] = {
+    retrievalTokens,
+    selectedFullFileTokens,
+    estimatedTokensSaved,
+    candidateFiles: allCandidatePaths.size,
+    selectedFiles: uniquePaths.size,
+    method: "selected-full-files-minus-retrieval-payload",
   };
+
+  if (input.recordMetrics !== false) {
+    await repo.insertQueryLog({
+      query: input.query,
+      mode: "code_query",
+      resultCount: selected.length,
+      tokensReturned: retrievalTokens,
+      tokensSaved: estimatedTokensSaved,
+      // Legacy column name; this is the number of ranked candidate files.
+      filesScanned: allCandidatePaths.size,
+    });
+  }
+
+  return { answerContext, sources, metrics };
 }
 
-function safeParseJson(value: string | undefined, fallback: Record<string, unknown>): Record<string, unknown> {
+/** @deprecated Use codeQuery. */
+export const memoryQuery = codeQuery;
+
+function safeParseJson(
+  value: string | undefined,
+  fallback: Record<string, unknown>,
+): Record<string, unknown> {
   if (!value) return fallback;
   try {
     return JSON.parse(value) as Record<string, unknown>;

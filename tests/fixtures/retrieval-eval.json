@@ -1,0 +1,62 @@
+[
+  {
+    "query": "where is workspace indexing implemented?",
+    "expectedPaths": ["packages/indexer/src/index-workspace.ts"]
+  },
+  {
+    "query": "how does the retrieval pipeline work?",
+    "expectedPaths": ["packages/core/src/retrieval.ts"]
+  },
+  {
+    "query": "where are embeddings written?",
+    "expectedPaths": ["packages/indexer/src/index-workspace.ts"]
+  },
+  { "query": "how does codeQuery work?", "expectedPaths": ["packages/core/src/retrieval.ts"] },
+  { "query": "what starts the queue worker?", "expectedPaths": ["apps/worker/src/index.ts"] },
+  {
+    "query": "where is the embedding provider selected?",
+    "expectedPaths": ["packages/core/src/embeddings.ts"]
+  },
+  { "query": "how does vector search run?", "expectedPaths": ["packages/core/src/retrieval.ts"] },
+  {
+    "query": "where is the MCP server implemented?",
+    "expectedPaths": ["apps/mcp/src/mcp-core.ts"]
+  },
+  {
+    "query": "where is the SQLite workspace registry opened?",
+    "expectedPaths": ["packages/db/src/sqlite/registry-db.ts"]
+  },
+  {
+    "query": "how is markdown split into chunks?",
+    "expectedPaths": ["packages/indexer/src/markdown.ts"]
+  },
+  {
+    "query": "where are TypeScript symbols extracted?",
+    "expectedPaths": ["packages/indexer/src/code.ts"]
+  },
+  {
+    "query": "how are YAML JSON and TOML configs chunked?",
+    "expectedPaths": ["packages/indexer/src/languages.ts"]
+  },
+  {
+    "query": "where is the local workspace hint written?",
+    "expectedPaths": ["packages/db/src/sqlite/local-workspace.ts"]
+  },
+  { "query": "how does Codex MCP setup work?", "expectedPaths": ["apps/cli/src/setup-codex.ts"] },
+  {
+    "query": "where are graph neighbors traversed?",
+    "expectedPaths": ["packages/db/src/sqlite/repository.ts", "packages/core/src/graph.ts"]
+  },
+  {
+    "query": "how is the FTS5 chunk index synchronized?",
+    "expectedPaths": ["packages/db/src/sqlite/workspace-db.ts"]
+  },
+  {
+    "query": "how does MCP resolve a workspace path?",
+    "expectedPaths": ["apps/mcp/src/mcp-core.ts"]
+  },
+  {
+    "query": "where is text truncated to a token budget?",
+    "expectedPaths": ["packages/core/src/tokenizer.ts"]
+  }
+]

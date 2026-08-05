@@ -47,6 +47,9 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     sqlite.exec(ddl);
   }
 
+  migrateQueryLogColumns(sqlite);
+  migrateEmbeddingColumns(sqlite);
+
   sqlite.exec(`
     CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
     CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
@@ -56,7 +59,156 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id);
     CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
     CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
+    CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash
+      ON embeddings(provider, model, input_hash);
   `);
+
+  // Remove duplicate derived vectors before enforcing their logical identity.
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      DELETE FROM embeddings
+      WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY chunk_id, provider, model
+            ORDER BY (input_hash IS NOT NULL) DESC, created_at DESC, id
+          ) AS row_number
+          FROM embeddings
+        )
+        WHERE row_number = 1
+      );
+    `);
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model
+      ON embeddings(chunk_id, provider, model)
+    `);
+  })();
+
+  // Partial unique index to enable ON CONFLICT upserts for non-symbol nodes.
+  // Symbols allow duplicate names across files and are handled separately.
+  try {
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label
+      ON graph_nodes(type, label) WHERE type != 'symbol'
+    `);
+  } catch {
+    // Non-fatal if legacy duplicates exist
+  }
+
+  // Clean legacy duplicates and install the logical-edge constraint atomically.
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      DELETE FROM graph_edges
+      WHERE id NOT IN (
+        SELECT MIN(id) FROM graph_edges
+        GROUP BY from_node_id, to_node_id, type
+      );
+    `);
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type
+      ON graph_edges(from_node_id, to_node_id, type)
+    `);
+  })();
+
+  // FTS5 includes file and symbol context because code queries often name either one.
+  sqlite.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+      chunk_id UNINDEXED,
+      path,
+      heading,
+      language,
+      search_text,
+      content,
+      tokenize = 'porter unicode61'
+    );
+  `);
+
+  const ftsColumns = sqlite.prepare("PRAGMA table_info(chunks_fts)").all() as Array<{
+    name: string;
+  }>;
+  if (!ftsColumns.some((column) => column.name === "search_text")) {
+    sqlite.exec(`
+      DROP TRIGGER IF EXISTS chunks_fts_insert;
+      DROP TRIGGER IF EXISTS chunks_fts_delete;
+      DROP TRIGGER IF EXISTS chunks_fts_update;
+      DROP TABLE chunks_fts;
+      CREATE VIRTUAL TABLE chunks_fts USING fts5(
+        chunk_id UNINDEXED,
+        path,
+        heading,
+        language,
+        search_text,
+        content,
+        tokenize = 'porter unicode61'
+      );
+    `);
+  }
+
+  // Triggers to keep FTS table in sync with chunks
+  sqlite.exec(`
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
+    BEGIN
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''),
+        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
+      FROM documents WHERE documents.id = new.document_id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
+    BEGIN
+      DELETE FROM chunks_fts WHERE chunk_id = old.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
+    BEGIN
+      DELETE FROM chunks_fts WHERE chunk_id = old.id;
+      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+      SELECT new.id, documents.path, coalesce(new.heading, ''),
+        coalesce(documents.language, ''), coalesce(json_extract(new.metadata, '$.searchText'), ''), new.content
+      FROM documents WHERE documents.id = new.document_id;
+    END;
+  `);
+
+  sqlite.exec(`
+    INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content)
+    SELECT chunks.id, documents.path, coalesce(chunks.heading, ''),
+      coalesce(documents.language, ''), coalesce(json_extract(chunks.metadata, '$.searchText'), ''), chunks.content
+    FROM chunks
+    INNER JOIN documents ON documents.id = chunks.document_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM chunks_fts WHERE chunks_fts.chunk_id = chunks.id
+    );
+  `);
+}
+
+function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const columns = new Set(
+    (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+
+  if (!columns.has("tokens_returned")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN tokens_returned INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("tokens_saved")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN tokens_saved INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("files_scanned")) {
+    sqlite.exec("ALTER TABLE query_logs ADD COLUMN files_scanned INTEGER NOT NULL DEFAULT 0");
+  }
+}
+
+function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const columns = new Set(
+    (sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+
+  if (!columns.has("input_hash")) {
+    sqlite.exec("ALTER TABLE embeddings ADD COLUMN input_hash TEXT");
+  }
 }
 
 function getWorkspaceTableDefinitions(): string[] {
@@ -92,6 +244,7 @@ function getWorkspaceTableDefinitions(): string[] {
       model TEXT NOT NULL,
       dimensions INTEGER NOT NULL,
       embedding TEXT NOT NULL,
+      input_hash TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_nodes (
@@ -141,6 +294,9 @@ function getWorkspaceTableDefinitions(): string[] {
       query TEXT NOT NULL,
       mode TEXT NOT NULL,
       result_count INTEGER NOT NULL DEFAULT 0,
+      tokens_returned INTEGER NOT NULL DEFAULT 0,
+      tokens_saved INTEGER NOT NULL DEFAULT 0,
+      files_scanned INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS memories (
@@ -152,6 +308,6 @@ function getWorkspaceTableDefinitions(): string[] {
       supersedes_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`
+    )`,
   ];
 }

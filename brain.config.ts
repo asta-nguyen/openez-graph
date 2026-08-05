@@ -27,7 +27,7 @@ const config: BrainConfig = {
         "turbo.json",
         "vitest.config.*",
         // Optional but valuable
-        "prisma/schema.prisma"
+        "prisma/schema.prisma",
       ],
       exclude: [
         // Generated output - DO NOT INDEX
@@ -61,22 +61,25 @@ const config: BrainConfig = {
         // Cache directories
         ".cache/**",
         "__pycache__/**",
-        "*.pyc"
-      ]
-    }
+        "*.pyc",
+        // Benchmark inputs/results must not leak answers into retrieval evaluation.
+        "BENCHMARK.md",
+        "tests/fixtures/retrieval-eval.json",
+      ],
+    },
   ],
   chunking: {
-    targetTokens: 700,
-    overlapTokens: 100
+    targetTokens: 1024,
+    overlapTokens: 128,
   },
   retrieval: {
     vectorLimit: 20,
     textLimit: 20,
-    graphHops: 1,
+    graphHops: 2,
     maxGraphNeighbors: 20,
     finalLimit: 12,
-    maxContextTokens: 8000
-  }
+    maxContextTokens: 8000,
+  },
 };
 
 export default config;
