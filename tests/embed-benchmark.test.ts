@@ -301,6 +301,9 @@ describe("FTS vs Embedding benchmark", () => {
 
       expect(ftsOnly.total).toBe(evalSet.length);
       expect(withEmbed.total).toBe(evalSet.length);
+      // Guard the actual benchmark outcome, not just bookkeeping:
+      expect(withEmbed.recall).toBeGreaterThanOrEqual(ftsOnly.recall - 0.02);
+      expect(withEmbed.semanticRecall).toBeGreaterThanOrEqual(ftsOnly.semanticRecall);
     },
     120000,
   );
