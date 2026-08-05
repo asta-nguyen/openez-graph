@@ -209,13 +209,37 @@ describe("FTS vs Embedding benchmark", () => {
   let savedRegistryEnv: string | undefined;
   let savedProvider: string | null = null;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     // Isolate from the user's real registry DB to avoid mutating it.
     if (process.env.OPENEZ_RUN_BENCHMARK !== "1") return;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openez-bench-"));
     tempRegistryPath = path.join(tempDir, "registry.sqlite");
     savedRegistryEnv = process.env.AI_MEMORY_REGISTRY_DB_PATH;
     process.env.AI_MEMORY_REGISTRY_DB_PATH = tempRegistryPath;
+
+    // Register the benchmark workspace into the temp registry so codeQuery can resolve it.
+    closeRegistryDb();
+    const benchId = process.env.OPENEZ_BENCHMARK_WORKSPACE ?? "openez";
+    const benchRoot = process.env.OPENEZ_BENCHMARK_WORKSPACE_PATH ?? process.cwd();
+    const reg = createRegistryRepository();
+    reg.createWorkspace({ id: benchId, name: benchId, rootPath: path.resolve(benchRoot) });
+
+    // Copy embedding config from the real registry so the benchmark uses the same provider.
+    const savedEnv = process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    closeRegistryDb();
+    const realReg = createRegistryRepository();
+    const realSettings = await realReg.getAllSettings();
+    closeRegistryDb();
+    process.env.AI_MEMORY_REGISTRY_DB_PATH = savedEnv;
+    closeRegistryDb();
+    const tempReg = createRegistryRepository();
+    for (const [k, v] of Object.entries(realSettings)) {
+      if (k.startsWith("embedding.")) {
+        tempReg.setSetting(k, v);
+      }
+    }
+    closeRegistryDb();
   });
 
   afterAll(() => {
