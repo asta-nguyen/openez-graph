@@ -1,0 +1,14 @@
+{
+  "SessionStart": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".devin/hooks/superpowers-session-start.sh",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}

@@ -50,6 +50,9 @@
   "dependencies": {
     "better-sqlite3": "^12.10.0"
   },
+  "optionalDependencies": {
+    "@upstash/context7-mcp": "^3.2.5"
+  },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@hono/node-server": "^2.0.12",

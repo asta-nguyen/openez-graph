@@ -41,15 +41,16 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 
 ## MCP tools
 
-| Tool              | Purpose                                         |
-| ----------------- | ----------------------------------------------- |
-| `code_query`      | Retrieve ranked code and documentation context  |
-| `code_context`    | Get graph-adjacent context for a symbol or file |
-| `graph_neighbors` | Inspect nearby graph nodes and edges            |
-| `list_workspaces` | List registered workspaces and index status     |
-| `memory_recall`   | Recall stored technical decisions and notes     |
-| `memory_write`    | Store a decision or learned constraint          |
-| `index_workspace` | Run an incremental or full index                |
+| Tool              | Purpose                                              |
+| ----------------- | ---------------------------------------------------- |
+| `code_query`      | Retrieve ranked code and documentation context       |
+| `code_context`    | Get graph-adjacent context for a symbol or file      |
+| `graph_neighbors` | Inspect nearby graph nodes and edges                 |
+| `list_workspaces` | List registered workspaces and index status          |
+| `memory_recall`   | Recall stored technical decisions and notes          |
+| `memory_write`    | Store a decision or learned constraint               |
+| `index_workspace` | Run an incremental or full index                     |
+| `library_docs`    | Fetch third-party library docs via Context7 (opt-in) |
 
 Read tools support one or many workspaces. Write and index operations remain scoped to one workspace.
 
@@ -65,6 +66,7 @@ openez list                 # list registered workspaces
 openez serve --mcp          # start the MCP server
 openez serve --web          # start the management UI
 openez setup <agent> [path] # configure an agent integration
+openez setup context7       # enable Context7 library docs integration
 openez config get [key]     # show embedding config (all if no key)
 openez config set <key> <value>  # set an embedding config value
 openez config list          # list all DB-stored config overrides

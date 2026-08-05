@@ -20,6 +20,10 @@ export interface RetrievalConfig {
   maxContextTokens: number;
 }
 
+export interface ExternalDocsConfig {
+  maxTokens: number;
+}
+
 export interface GlobalSettings {
   chunking: ChunkingConfig;
   retrieval: RetrievalConfig;
@@ -29,6 +33,7 @@ export interface BrainConfig {
   workspaces?: BrainWorkspaceConfig[];
   chunking?: ChunkingConfig;
   retrieval?: RetrievalConfig;
+  externalDocs?: ExternalDocsConfig;
 }
 
 export function getDefaultSettings(): GlobalSettings {

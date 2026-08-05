@@ -90,5 +90,34 @@ function initializeRegistrySchema(sqlite: ReturnType<typeof createNativeDatabase
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS library_docs_cache (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      library_id       TEXT NOT NULL,
+      library_name     TEXT NOT NULL,
+      version          TEXT NOT NULL,
+      topic            TEXT,
+      content          TEXT NOT NULL,
+      content_hash     TEXT NOT NULL,
+      tokens           INTEGER NOT NULL,
+      fetched_at       INTEGER NOT NULL,
+      expires_at       INTEGER NOT NULL,
+      hit_count        INTEGER NOT NULL DEFAULT 0,
+      last_accessed_at INTEGER NOT NULL,
+      UNIQUE(library_id, version, topic)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_library_docs_expires
+      ON library_docs_cache(expires_at);
+
+    CREATE INDEX IF NOT EXISTS idx_library_docs_lookup
+      ON library_docs_cache(library_id, version, topic);
+
+    CREATE TABLE IF NOT EXISTS library_docs_name_map (
+      query_name   TEXT NOT NULL,
+      library_id   TEXT NOT NULL,
+      resolved_at  INTEGER NOT NULL,
+      PRIMARY KEY (query_name, library_id)
+    );
   `);
 }
