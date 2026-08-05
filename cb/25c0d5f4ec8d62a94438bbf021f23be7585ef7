@@ -1,0 +1,23 @@
+.superpowers/sdd/2026-08-05-context7-library-docs/fix-1-report.md
+  s_6514757d0e9524::t_2bbd6daea2d15d 1-62
+packages/core/src/external-docs/context7-client.ts
+  s_6514757d0e9524::t_9fd5111c217bef 85-122
+  s_6514757d0e9524::t_3c0363b182b154 34-39
+  s_6514757d0e9524::t_739c4229c6d081 45-46,81,177,211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "cb25c0d5f4ec8d62a94438bbf021f23be7585ef7",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
