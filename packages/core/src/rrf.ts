@@ -13,12 +13,13 @@ export function reciprocalRankFusion<T extends { id: string }>(
 
   resultSets.forEach((resultSet, resultSetIndex) => {
     resultSet.forEach((entry, index) => {
-      const existing = map.get(identity(entry.item));
+      const key = identity(entry.item);
+      const existing = map.get(key);
       const score = (weights[resultSetIndex] ?? 1) / (k + index + 1);
       if (existing) {
         existing.score += score;
       } else {
-        map.set(identity(entry.item), {
+        map.set(key, {
           item: entry.item,
           score,
         });

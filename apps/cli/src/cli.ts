@@ -326,8 +326,24 @@ configCmd
   .action(async (key?: string) => {
     const registry = createRegistryRepository();
     if (key) {
-      const value = await registry.getSetting(key);
-      console.log(isSensitiveKey(key) ? "****" : (value ?? ""));
+      const { getEmbeddingConfig } = await import("@openez-graph/core");
+      const config = await getEmbeddingConfig();
+      const configMap: Record<string, string | undefined> = {
+        "embedding.provider": config.provider,
+        "embedding.openai_api_key": config.openaiApiKey || undefined,
+        "embedding.openai_base_url": config.openaiBaseUrl,
+        "embedding.openai_model": config.openaiModel,
+        "embedding.ollama_base_url": config.ollamaBaseUrl,
+        "embedding.ollama_model": config.ollamaModel,
+      };
+      const value = configMap[key];
+      if (value === undefined || value === "") {
+        console.log("not set");
+      } else if (isSensitiveKey(key)) {
+        console.log("****");
+      } else {
+        console.log(value);
+      }
     } else {
       const all = await registry.getAllSettings();
       if (Object.keys(all).length === 0) {

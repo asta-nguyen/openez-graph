@@ -27,9 +27,7 @@ function isRetryableError(error: unknown): boolean {
       ? Number((error as { status?: unknown }).status)
       : Number.NaN;
   return (
-    RETRYABLE_PATTERNS.some((pattern) =>
-      message.toLowerCase().includes(pattern.toLowerCase()),
-    ) ||
+    RETRYABLE_PATTERNS.some((pattern) => message.toLowerCase().includes(pattern.toLowerCase())) ||
     status === 429 ||
     (status >= 500 && status < 600) ||
     /\b5\d{2}\b/.test(message)
@@ -53,8 +51,8 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3, baseDelayMs =
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  // unreachable — handled by throw in loop
-  throw new Error("withRetry exhausted");
+  // Unreachable: the loop always returns or throws.
+  return undefined as unknown as T;
 }
 
 export interface EmbeddingProvider {

@@ -559,7 +559,11 @@ app.put("/api/settings/embedding", async (c) => {
     for (const [key, value] of Object.entries(body)) {
       if (!VALID_KEYS[key]) continue;
       if (typeof value !== "string") continue;
-      if (value.trim() === "") continue;
+      if (value.trim() === "") {
+        await registry.deleteSetting(key);
+        updated.push(key);
+        continue;
+      }
       if (key === "embedding.provider" && !VALID_PROVIDERS.has(value.trim())) {
         return c.json(
           {
