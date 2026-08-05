@@ -1,0 +1,27 @@
+CHANGELOG.md
+  s_9532ef2eb0a9d6::t_19a766456fcde1 128
+  s_9532ef2eb0a9d6::t_e3772fd06b52f4 9-35,129
+  s_9532ef2eb0a9d6::t_1677472aad9a30 8
+tests/embed-benchmark.test.ts
+  s_9532ef2eb0a9d6::t_48e301b0cbb510 212
+  s_9532ef2eb0a9d6::t_41dcb607442fec 219-225,242
+  s_9532ef2eb0a9d6::t_375af71fc12861 226-241
+apps/cli/package.json
+  s_9532ef2eb0a9d6::t_92f76c02f8e17d 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5d9e5e90efc06230b1bf970718b78426e5de68eb",
+  "prompts": {},
+  "sessions": {
+    "s_9532ef2eb0a9d6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "7225da0c-aa35-485c-b77b-fb64633fb7f9",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
