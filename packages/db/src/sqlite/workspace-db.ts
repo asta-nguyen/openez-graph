@@ -68,8 +68,14 @@ function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabas
     sqlite.exec(`
       DELETE FROM embeddings
       WHERE id NOT IN (
-        SELECT MIN(id) FROM embeddings
-        GROUP BY chunk_id, provider, model
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY chunk_id, provider, model
+            ORDER BY (input_hash IS NOT NULL) DESC, created_at DESC, id
+          ) AS row_number
+          FROM embeddings
+        )
+        WHERE row_number = 1
       );
     `);
     sqlite.exec(`

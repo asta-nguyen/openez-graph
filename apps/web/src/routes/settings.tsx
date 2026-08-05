@@ -150,8 +150,12 @@ function EmbeddingConfigForm() {
     saveMutation.mutate(updates);
   };
 
-  if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+  if (isLoading || !config) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {isLoading ? "Loading..." : "Unable to load embedding configuration."}
+      </p>
+    );
   }
 
   return (

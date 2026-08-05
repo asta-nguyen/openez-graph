@@ -220,7 +220,7 @@ export function createRegistryRepository(): RegistryRepository {
       const row = native.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
         | { value: string }
         | undefined;
-      if (!row?.value) return null;
+      if (!row) return null;
       if (isSensitiveKey(key)) {
         try {
           return decryptValue(row.value);
