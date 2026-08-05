@@ -135,14 +135,14 @@ function expandQuery(query: string): string {
 }
 
 async function vectorSearch(rootPath: string, query: string, limit: number): Promise<ChunkHit[]> {
-  const provider = await getEmbeddingProvider();
-  if (!provider) {
-    console.error("[retrieval] vector search: disabled (no embedding provider)");
-    return [];
-  }
-
-  console.error(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
   try {
+    const provider = await getEmbeddingProvider();
+    if (!provider) {
+      console.error("[retrieval] vector search: disabled (no embedding provider)");
+      return [];
+    }
+
+    console.error(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
     const expandedQuery = expandQuery(query);
     const [queryEmbedding] = await provider.embed([
       formatEmbeddingInput(provider, { content: expandedQuery }, "query"),

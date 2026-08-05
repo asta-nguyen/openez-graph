@@ -419,7 +419,60 @@ async function writeEmbeddingsToRepo(
     }
   }
   const toEmbed = rowsToEmbed.filter((entry) => !existingHashes.has(entry.hash));
-  if (toEmbed.length === 0) return { written: 0, failedBatches: 0 };
+  const skipped = rowsToEmbed.filter((entry) => existingHashes.has(entry.hash));
+
+  // Reuse existing embeddings for skipped chunks: copy the vector so each chunk
+  // has its own embedding row and appears in vector search results.
+  let reusedWritten = 0;
+  if (skipped.length > 0) {
+    const hashToVector = new Map<string, { embedding: string; dimensions: number }>();
+    const uniqueHashes = [...new Set(skipped.map((entry) => entry.hash))];
+    for (let i = 0; i < uniqueHashes.length; i += LOOKUP_BATCH_SIZE) {
+      const batch = uniqueHashes.slice(i, i + LOOKUP_BATCH_SIZE);
+      const placeholders = batch.map(() => "?").join(",");
+      const rows = await repo.queryRaw(
+        `SELECT input_hash, embedding, dimensions FROM embeddings
+         WHERE provider = ? AND model = ? AND input_hash IN (${placeholders})
+         GROUP BY input_hash`,
+        [provider.provider, embeddingStorageModel(provider), ...batch],
+      );
+      for (const row of rows) {
+        if (row.input_hash) {
+          hashToVector.set(String(row.input_hash), {
+            embedding: String(row.embedding),
+            dimensions: Number(row.dimensions),
+          });
+        }
+      }
+    }
+    const reuseInputs: Array<{
+      chunkId: string;
+      provider: string;
+      model: string;
+      dimensions: number;
+      embedding: string;
+      inputHash: string;
+    }> = [];
+    for (const entry of skipped) {
+      const existing = hashToVector.get(entry.hash);
+      if (existing) {
+        reuseInputs.push({
+          chunkId: entry.chunk.id,
+          provider: provider.provider,
+          model: embeddingStorageModel(provider),
+          dimensions: existing.dimensions,
+          embedding: existing.embedding,
+          inputHash: entry.hash,
+        });
+      }
+    }
+    if (reuseInputs.length > 0) {
+      await repo.insertEmbeddings(reuseInputs);
+      reusedWritten = reuseInputs.length;
+    }
+  }
+
+  if (toEmbed.length === 0) return { written: reusedWritten, failedBatches: 0 };
 
   const BATCH_SIZE = 50;
   let totalWritten = 0;
@@ -476,7 +529,7 @@ async function writeEmbeddingsToRepo(
     }
   }
 
-  return { written: totalWritten, failedBatches };
+  return { written: totalWritten + reusedWritten, failedBatches };
 }
 
 interface ParseTask {
