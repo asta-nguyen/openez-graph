@@ -22,8 +22,17 @@ const RETRYABLE_PATTERNS = [
 
 function isRetryableError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return RETRYABLE_PATTERNS.some((pattern) =>
-    message.toLowerCase().includes(pattern.toLowerCase()),
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? Number((error as { status?: unknown }).status)
+      : Number.NaN;
+  return (
+    RETRYABLE_PATTERNS.some((pattern) =>
+      message.toLowerCase().includes(pattern.toLowerCase()),
+    ) ||
+    status === 429 ||
+    (status >= 500 && status < 600) ||
+    /\b5\d{2}\b/.test(message)
   );
 }
 

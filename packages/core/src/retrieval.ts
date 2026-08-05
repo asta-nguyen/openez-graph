@@ -66,7 +66,7 @@ const MIN_COSINE_SIMILARITY = 0.3;
 const CODE_FILE_BOOST = 0.05;
 
 function isCodeFile(path: string): boolean {
-  return /\.(ts|tsx|js|jsx|py|go|rs)$/.test(path);
+  return /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|py|go|rs)$/.test(path);
 }
 
 export async function rankStoredEmbeddings(
