@@ -78,8 +78,8 @@ const features = [
   },
   {
     icon: Search,
-    title: "FTS + Graph Retrieval",
-    desc: "Full-text search across all chunks, expanded through graph neighbor traversal. Optional embedding reranking — no vector database required for the default path.",
+    title: "Hybrid RAG Retrieval",
+    desc: "Full-text search fused with optional vector embeddings (bge-m3 / OpenAI) via Reciprocal Rank Fusion. 95.65% recall@5. Graph expansion follows call/import edges — no external vector DB required.",
   },
   {
     icon: Network,
@@ -207,7 +207,7 @@ export default async function LandingPage() {
                 }}
               >
                 <Star className="h-3 w-3" />
-                OpenEZ Graph v0.9.1 · local-first
+                OpenEZ Graph v0.10.0 · local-first RAG
               </div>
 
               <h1
