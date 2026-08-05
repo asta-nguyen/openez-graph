@@ -1,0 +1,22 @@
+apps/mcp/src/mcp-core.ts
+  s_6514757d0e9524::t_060b552bad1feb 92-99
+  s_6514757d0e9524::t_b3147f2b23abcd 19
+  s_6514757d0e9524::t_728befe0c1bd4b 524-556
+  s_6514757d0e9524::t_c1418c99753b9b 750-764
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "bf2197e41cca15e854804fd27a9402fe7e5de3d8",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
