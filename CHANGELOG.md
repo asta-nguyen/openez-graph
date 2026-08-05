@@ -5,6 +5,15 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `library_docs` MCP tool for fetching third-party library documentation via Context7
+- `openez setup context7` command to enable and configure Context7 integration
+- SQLite TTL cache for library docs in the global registry DB
+- Stale cache fallback when Context7 fetch fails
+
 ## [0.10.0] - 2026-08-05
 
 ### Fixed

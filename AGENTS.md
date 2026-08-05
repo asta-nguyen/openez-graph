@@ -104,6 +104,14 @@ openez setup codex    # or claude, opencode, windsurf
 
 This configures MCP server access. After setup, the agent automatically sees `code_query`, `code_context`, `graph_neighbors`, `memory_write`, `memory_recall`, `index_workspace`, and `list_workspaces` as available tools.
 
+### Context7 (Library Docs)
+
+```bash
+openez setup context7   # enable library docs lookup via Context7
+```
+
+This is independent of agent setup. Run it once to enable the `library_docs` MCP tool.
+
 ## MCP Expectations
 
 MCP should be multi-workspace aware.
@@ -112,6 +120,17 @@ MCP should be multi-workspace aware.
 - `memory_write` and `index_workspace` remain single-workspace operations
 - `list_workspaces` should expose the registered workspace inventory
 - `workspaceId` is the canonical internal key
+
+| Tool              | Purpose                                                      |
+| ----------------- | ------------------------------------------------------------ |
+| `code_query`      | Retrieve ranked code and documentation context               |
+| `code_context`    | Get graph-adjacent context for a symbol or file              |
+| `graph_neighbors` | Inspect nearby graph nodes and edges                         |
+| `list_workspaces` | List registered workspaces and index status                  |
+| `memory_recall`   | Recall stored technical decisions and notes                  |
+| `memory_write`    | Store a decision or learned constraint                       |
+| `index_workspace` | Run an incremental or full index                             |
+| `library_docs`    | Fetch third-party library docs via Context7 (opt-in, cached) |
 
 ## Indexing Expectations
 

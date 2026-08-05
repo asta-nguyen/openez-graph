@@ -80,6 +80,9 @@ const config: BrainConfig = {
     finalLimit: 12,
     maxContextTokens: 8000,
   },
+  externalDocs: {
+    maxTokens: 8000,
+  },
 };
 
 export default config;
