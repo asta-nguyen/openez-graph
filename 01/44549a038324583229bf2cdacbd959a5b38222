@@ -1,0 +1,30 @@
+README.md
+  s_6514757d0e9524::t_4a951b7ffd8552 53
+  s_6514757d0e9524::t_51c165e576e8f3 69
+  s_6514757d0e9524::t_6194f2ec0d8589 44-52
+packages/config/src/types.ts
+  s_6514757d0e9524::t_b1e036cf6e981a 23-26,36
+CHANGELOG.md
+  s_6514757d0e9524::t_a6d59476ecd737 8-16
+AGENTS.md
+  s_6514757d0e9524::t_b41521871c4581 124-134
+  s_6514757d0e9524::t_ca769388077f27 107-114
+brain.config.ts
+  s_6514757d0e9524::t_b79fa2f9cdc65b 83-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0144549a038324583229bf2cdacbd959a5b38222",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
