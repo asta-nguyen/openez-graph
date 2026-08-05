@@ -79,7 +79,7 @@ export class Context7Client {
     env: Record<string, string>;
   }> {
     const binPath = this.options.binPath ?? (await this.resolveBinFromConfig());
-    const binArgs = this.options.binArgs ?? [];
+    const binArgs = this.options.binArgs ?? (await this.resolveBinArgsFromConfig());
     const apiKey = this.options.apiKey ?? (await this.resolveApiKeyFromConfig());
 
     const env: Record<string, string> = {};
@@ -101,6 +101,20 @@ export class Context7Client {
         "Context7 binary not found. Run 'openez setup context7' to install and configure it.",
       );
     }
+  }
+
+  private async resolveBinArgsFromConfig(): Promise<string[]> {
+    const registry = createRegistryRepository();
+    const configured = await registry.getSetting("context7.bin_args");
+    if (configured) {
+      try {
+        const parsed = JSON.parse(configured);
+        return Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
   }
 
   private async resolveApiKeyFromConfig(): Promise<string | undefined> {
