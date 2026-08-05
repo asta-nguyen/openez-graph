@@ -31,11 +31,19 @@ const _require =
           : `file://${__filename}`,
       );
 
+// Candidate tool names for each known role, in preference order. The first
+// name returned by the server's tools/list is used; if none match we fall back
+// to the canonical name so the call still proceeds and fails with a clear error.
+const RESOLVE_LIBRARY_ID_CANDIDATES = ["resolve-library-id", "get-library-id", "resolve-library"];
+const QUERY_DOCS_CANDIDATES = ["query-docs", "get-library-docs", "get-docs"];
+
 export class Context7Client {
   private client: Client | null = null;
   private startPromise: Promise<void> | null = null;
   private started = false;
   private readonly options: Context7ClientOptions;
+  private resolveLibraryIdToolName = RESOLVE_LIBRARY_ID_CANDIDATES[0];
+  private queryDocsToolName = QUERY_DOCS_CANDIDATES[0];
 
   constructor(options: Context7ClientOptions = {}) {
     this.options = options;
@@ -70,7 +78,46 @@ export class Context7Client {
     };
 
     await this.client.connect(transport);
+    await this.discoverToolNames();
     this.started = true;
+  }
+
+  private async discoverToolNames(): Promise<void> {
+    if (!this.client) return;
+    let availableNames: string[] = [];
+    try {
+      const { tools } = await this.client.listTools();
+      availableNames = (tools ?? []).map((t) => t.name);
+    } catch (err) {
+      console.error("[context7] tools/list failed; falling back to canonical tool names:", err);
+      return;
+    }
+
+    this.resolveLibraryIdToolName = this.pickToolName(
+      availableNames,
+      RESOLVE_LIBRARY_ID_CANDIDATES,
+    );
+    this.queryDocsToolName = this.pickToolName(availableNames, QUERY_DOCS_CANDIDATES);
+
+    if (!RESOLVE_LIBRARY_ID_CANDIDATES.includes(this.resolveLibraryIdToolName)) {
+      console.error(
+        `[context7] expected a resolve-library-id tool (tried ${RESOLVE_LIBRARY_ID_CANDIDATES.join(", ")}) but server did not list it; available tools: ${availableNames.join(", ") || "(none)"}`,
+      );
+    }
+    if (!QUERY_DOCS_CANDIDATES.includes(this.queryDocsToolName)) {
+      console.error(
+        `[context7] expected a query-docs tool (tried ${QUERY_DOCS_CANDIDATES.join(", ")}) but server did not list it; available tools: ${availableNames.join(", ") || "(none)"}`,
+      );
+    }
+  }
+
+  private pickToolName(available: string[], candidates: string[]): string {
+    for (const candidate of candidates) {
+      if (available.includes(candidate)) return candidate;
+    }
+    // Fall back to the canonical (first) candidate so the call proceeds and
+    // fails naturally with a clear error from the server.
+    return candidates[0];
   }
 
   private async resolveBinary(): Promise<{
@@ -127,7 +174,7 @@ export class Context7Client {
     if (!this.client) throw new Error("Context7 client not connected");
 
     const result = await this.client.callTool({
-      name: "resolve-library-id",
+      name: this.resolveLibraryIdToolName,
       arguments: { libraryName },
     });
 
@@ -161,7 +208,7 @@ export class Context7Client {
     if (input.tokens) args.tokens = input.tokens;
 
     const result = await this.client.callTool({
-      name: "query-docs",
+      name: this.queryDocsToolName,
       arguments: args,
     });
 
