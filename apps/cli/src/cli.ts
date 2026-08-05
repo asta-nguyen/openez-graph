@@ -361,7 +361,7 @@ configCmd
         console.log("");
         console.log("DB-stored overrides:");
         for (const [k, v] of Object.entries(all)) {
-          const display = k.includes("api_key") ? "****" : v;
+          const display = isSensitiveKey(k) ? "****" : v;
           console.log(`  ${k} = ${display}`);
         }
       }
@@ -385,7 +385,7 @@ configCmd
       process.exit(1);
     }
     await registry.setSetting(key, value);
-    console.log(`Set ${key} = ${key.includes("api_key") ? "****" : value}`);
+    console.log(`Set ${key} = ${isSensitiveKey(key) ? "****" : value}`);
   });
 
 configCmd
@@ -398,7 +398,7 @@ configCmd
       console.log("No DB-stored config values. Using env defaults.");
     } else {
       for (const [k, v] of Object.entries(all)) {
-        const display = k.includes("api_key") ? "****" : v;
+        const display = isSensitiveKey(k) ? "****" : v;
         console.log(`${k} = ${display}`);
       }
     }
