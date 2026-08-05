@@ -1,10 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { Worker } from "node:worker_threads";
-import { fileURLToPath } from "node:url";
 
 import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
 import {
@@ -12,32 +9,40 @@ import {
   embeddingStorageModel,
   formatEmbeddingInput,
   getEmbeddingProvider,
-  splitToTokenLimit
+  setFastTokenCount,
+  splitToTokenLimit,
 } from "@openez-graph/core";
 import type { EmbeddingProvider } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
-  writeLocalWorkspaceConfig
+  writeLocalWorkspaceConfig,
 } from "@openez-graph/db";
 import type { RegistryWorkspace, WorkspaceRepository } from "@openez-graph/db";
 
-import { chunkDocument, type ParseTask, type ParseResult } from "./parse-core";
-import { fastHash } from "./hash";
-import { boundChunks } from "./parse-worker";
+import { hashContent } from "./hash";
+import {
+  createSymbolChunks,
+  inferDocumentKind,
+  makeFallbackChunks,
+  type ExtractedSymbol,
+} from "./languages";
+import { parseDocument } from "./parsers";
 import { scanWorkspaceFiles } from "./scanner";
-import type { FileToIndex, IndexedChunk, IndexWorkspaceSummary } from "./types";
-
-const _idPrefix = `${process.pid.toString(36)}${Date.now().toString(36).slice(-4)}`;
-let _idCounter = 0;
-function nextId(): string {
-  return `c${_idPrefix}${(_idCounter++).toString(36)}`;
-}
+import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
 
 const RESOLVABLE_SOURCE_EXTENSIONS = [
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
-  ".md", ".mdx",
-  ".py"
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".mts",
+  ".cts",
+  ".md",
+  ".mdx",
+  ".py",
 ] as const;
 
 function normalizeRelativePath(filePath: string): string {
@@ -46,11 +51,14 @@ function normalizeRelativePath(filePath: string): string {
 
 export function createWorkspaceFileResolver(
   workspaceRoot: string,
-  files: Array<{ relativePath: string; absolutePath: string }>
+  files: Array<{ relativePath: string; absolutePath: string }>,
 ) {
   const knownRelativePaths = new Set(files.map((file) => normalizeRelativePath(file.relativePath)));
   const absoluteToRelative = new Map(
-    files.map((file) => [path.resolve(file.absolutePath), normalizeRelativePath(file.relativePath)])
+    files.map((file) => [
+      path.resolve(file.absolutePath),
+      normalizeRelativePath(file.relativePath),
+    ]),
   );
 
   function toWorkspaceRelative(candidateAbsolutePath: string): string | null {
@@ -58,7 +66,9 @@ export function createWorkspaceFileResolver(
     const mapped = absoluteToRelative.get(resolvedAbsolute);
     if (mapped) return mapped;
 
-    const relativeToWorkspace = normalizeRelativePath(path.relative(workspaceRoot, resolvedAbsolute));
+    const relativeToWorkspace = normalizeRelativePath(
+      path.relative(workspaceRoot, resolvedAbsolute),
+    );
     if (relativeToWorkspace.startsWith("../")) return null;
 
     return knownRelativePaths.has(relativeToWorkspace) ? relativeToWorkspace : null;
@@ -95,7 +105,10 @@ export function createWorkspaceFileResolver(
     return null;
   }
 
-  function resolvePythonRelativeImport(importerRelativePath: string, importPath: string): string | null {
+  function resolvePythonRelativeImport(
+    importerRelativePath: string,
+    importPath: string,
+  ): string | null {
     const dotMatch = /^(\.+)(.*)$/.exec(importPath);
     if (!dotMatch) return null;
 
@@ -124,7 +137,11 @@ export function createWorkspaceFileResolver(
   }
 
   return {
-    resolveImport(importerRelativePath: string, importPath: string, language?: string): string | null {
+    resolveImport(
+      importerRelativePath: string,
+      importPath: string,
+      language?: string,
+    ): string | null {
       if (language === "python") {
         const resolved = resolvePythonImport(importerRelativePath, importPath);
         if (resolved) return resolved;
@@ -135,7 +152,7 @@ export function createWorkspaceFileResolver(
       }
 
       return null;
-    }
+    },
   };
 }
 
@@ -162,7 +179,7 @@ async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: str
 async function resetChangedFileArtifacts(
   repo: WorkspaceRepository,
   documentId: string,
-  relativePath: string
+  relativePath: string,
 ): Promise<Map<string, string>> {
   const chunks = await repo.getChunksByDocument(documentId);
   const chunkIds = chunks.map((c) => c.id);
@@ -193,11 +210,51 @@ async function resetChangedFileArtifacts(
   return existingSymbolNodes;
 }
 
+export function boundChunks(
+  chunks: IndexedChunk[],
+  targetTokens: number,
+  overlapTokens: number,
+): IndexedChunk[] {
+  return chunks.flatMap((chunk) => {
+    const parts = splitToTokenLimit(chunk.content, targetTokens, overlapTokens);
+    if (parts.length <= 1) return chunk;
+
+    return parts.map((content, splitIndex) => ({
+      ...chunk,
+      content,
+      tokenCount: countTokens(content),
+      contentHash: hashContent(content),
+      metadata: { ...chunk.metadata, splitIndex, splitCount: parts.length },
+    }));
+  });
+}
+
+export async function chunkDocument(input: {
+  relativePath: string;
+  absolutePath: string;
+  content: string;
+  targetTokens: number;
+  overlapTokens: number;
+}) {
+  const parsed = await parseDocument(input);
+  return {
+    kind: parsed.kind,
+    language: parsed.language,
+    parser: parsed.parser,
+    chunks: parsed.chunks,
+    importPaths: parsed.importPaths,
+    wikilinks: parsed.wikilinks,
+    definedSymbols: parsed.definedSymbols,
+    calledIdentifiers: parsed.calledIdentifiers,
+    callExpressions: parsed.callExpressions,
+  };
+}
+
 async function writeEmbeddingsToRepo(
   repo: WorkspaceRepository,
   chunkRows: Array<{ id: string; content: string; path: string; heading?: string | null }>,
-  provider: EmbeddingProvider | null
-): Promise<{ written: number; failedBatches: number }> {
+  provider: EmbeddingProvider | null,
+) {
   if (!provider || chunkRows.length === 0) {
     return { written: 0, failedBatches: 0 };
   }
@@ -209,7 +266,7 @@ async function writeEmbeddingsToRepo(
     const existing = await repo.queryRaw(
       `SELECT chunk_id FROM embeddings
        WHERE provider = ? AND model = ? AND chunk_id IN (${batch.map(() => "?").join(",")})`,
-      [provider.provider, embeddingStorageModel(provider), ...batch.map((chunk) => chunk.id)]
+      [provider.provider, embeddingStorageModel(provider), ...batch.map((chunk) => chunk.id)],
     );
     for (const row of existing) {
       existingIds.add(String(row.chunk_id));
@@ -220,7 +277,7 @@ async function writeEmbeddingsToRepo(
 
   const rowsToEmbed = missingRows.map((chunk) => ({
     chunk,
-    hash: fastHash(formatEmbeddingInput(provider, chunk, "document"))
+    hash: hashContent(formatEmbeddingInput(provider, chunk, "document")),
   }));
 
   // Deduplicate by input_hash: skip chunks whose formatted input already has an embedding
@@ -231,7 +288,7 @@ async function writeEmbeddingsToRepo(
     const existing = await repo.queryRaw(
       `SELECT DISTINCT input_hash FROM embeddings
        WHERE provider = ? AND model = ? AND input_hash IN (${hashPlaceholders})`,
-      [provider.provider, embeddingStorageModel(provider), ...batch.map((entry) => entry.hash)]
+      [provider.provider, embeddingStorageModel(provider), ...batch.map((entry) => entry.hash)],
     );
     for (const row of existing) {
       if (row.input_hash) existingHashes.add(String(row.input_hash));
@@ -253,13 +310,13 @@ async function writeEmbeddingsToRepo(
         `SELECT input_hash, embedding, dimensions FROM embeddings
          WHERE provider = ? AND model = ? AND input_hash IN (${placeholders})
          GROUP BY input_hash`,
-        [provider.provider, embeddingStorageModel(provider), ...batch]
+        [provider.provider, embeddingStorageModel(provider), ...batch],
       );
       for (const row of rows) {
         if (row.input_hash) {
           hashToVector.set(String(row.input_hash), {
             embedding: String(row.embedding),
-            dimensions: Number(row.dimensions)
+            dimensions: Number(row.dimensions),
           });
         }
       }
@@ -281,7 +338,7 @@ async function writeEmbeddingsToRepo(
           model: embeddingStorageModel(provider),
           dimensions: existing.dimensions,
           embedding: existing.embedding,
-          inputHash: entry.hash
+          inputHash: entry.hash,
         });
       }
     }
@@ -293,21 +350,28 @@ async function writeEmbeddingsToRepo(
 
   if (toEmbed.length === 0) return { written: reusedWritten, failedBatches: 0 };
 
-  const EMBED_BATCH_SIZE = 50;
+  const BATCH_SIZE = 50;
   let totalWritten = 0;
   let failedBatches = 0;
+  const totalBatches = Math.ceil(toEmbed.length / BATCH_SIZE);
 
-  for (let i = 0; i < toEmbed.length; i += EMBED_BATCH_SIZE) {
-    const batch = toEmbed.slice(i, i + EMBED_BATCH_SIZE);
+  for (let i = 0; i < toEmbed.length; i += BATCH_SIZE) {
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+    if (batchNum % 10 === 0 || batchNum === totalBatches) {
+      process.stdout.write(
+        `\r[embedding] batch ${batchNum}/${totalBatches} (${totalWritten} written)`,
+      );
+    }
+    const batch = toEmbed.slice(i, i + BATCH_SIZE);
 
     try {
       const vectors = await provider.embed(
-        batch.map((entry) => formatEmbeddingInput(provider, entry.chunk, "document"))
+        batch.map((entry) => formatEmbeddingInput(provider, entry.chunk, "document")),
       );
       if (vectors.length !== batch.length) {
         failedBatches += 1;
         console.error(
-          `Embedding provider returned ${vectors.length} vectors for ${batch.length} chunks`
+          `Embedding provider returned ${vectors.length} vectors for ${batch.length} chunks`,
         );
         continue;
       }
@@ -316,7 +380,7 @@ async function writeEmbeddingsToRepo(
       if (invalidEmbeddingIndex !== -1) {
         failedBatches += 1;
         console.error(
-          `Embedding provider returned empty vector for chunk ${batch[invalidEmbeddingIndex].chunk.id}`
+          `Embedding provider returned empty vector for chunk ${batch[invalidEmbeddingIndex].chunk.id}`,
         );
         continue;
       }
@@ -335,127 +399,175 @@ async function writeEmbeddingsToRepo(
           model: embeddingStorageModel(provider),
           dimensions,
           embedding: JSON.stringify(embedding),
-          inputHash: batch[index].hash
-        }))
+          inputHash: batch[index].hash,
+        })),
       );
 
       totalWritten += vectors.length;
     } catch (error) {
       failedBatches += 1;
       console.error(
-        `Embedding batch failed (skipping): ${error instanceof Error ? error.message : String(error)}`
+        `Embedding batch failed (skipping): ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
 
+  if (totalBatches > 0) {
+    process.stdout.write("\n");
+  }
   return { written: totalWritten + reusedWritten, failedBatches };
 }
 
+interface ParseTask {
+  id: string;
+  content: string;
+  relativePath: string;
+  absolutePath: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  targetTokens: number;
+  overlapTokens: number;
+}
+
+type ParseResult = Awaited<ReturnType<typeof chunkDocument>>;
+
 async function parseInline(
   tasks: ParseTask[],
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
 ): Promise<Map<string, ParseResult>> {
   const results = new Map<string, ParseResult>();
-  for (const [i, task] of tasks.entries()) {
+
+  // ── Batch native tree-sitter parse for Python/Go/Rust files ──
+  const TS_LANGS = new Set(["python", "go", "rust"]);
+  let native: any = null;
+  try {
+    const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
+    native = require(nativePath);
+  } catch {
+    try {
+      native = require("@openez-graph/native");
+    } catch {
+      /* not installed */
+    }
+  }
+
+  const batchTasks: ParseTask[] = [];
+  const otherTasks: ParseTask[] = [];
+  if (native?.parseCodeBatch) {
+    for (const task of tasks) {
+      const info = inferDocumentKind(task.relativePath);
+      if (info.kind === "code" && info.language && TS_LANGS.has(info.language)) {
+        batchTasks.push(task);
+      } else {
+        otherTasks.push(task);
+      }
+    }
+  } else {
+    otherTasks.push(...tasks);
+  }
+
+  // Batch parse all tree-sitter files in one rayon-parallel call
+  if (batchTasks.length > 0) {
+    const _batchStart = Date.now();
+    const batchItems = batchTasks.map((t) => ({
+      language: inferDocumentKind(t.relativePath).language!,
+      content: t.content,
+    }));
+    // Use parse_and_chunk_batch — does parse + chunk creation in Rust (rayon parallel)
+    const useChunkBatch = !!native.parseAndChunkBatch;
+    const nativeResults = useChunkBatch
+      ? native.parseAndChunkBatch(batchItems)
+      : native.parseCodeBatch(batchItems);
+    process.stderr.write(
+      `[t]   native-batch: ${Date.now() - _batchStart}ms (${batchTasks.length} files)\n`,
+    );
+    for (let i = 0; i < batchTasks.length; i++) {
+      const task = batchTasks[i];
+      const nr = nativeResults[i];
+      if (nr) {
+        const lang = batchItems[i].language;
+        // Chunks come from Rust if using parseAndChunkBatch, otherwise build in JS
+        let chunks: any[];
+        if (useChunkBatch && nr.chunks) {
+          chunks = nr.chunks.map((c: any) => ({
+            content: c.content,
+            tokenCount: 0,
+            contentHash: "",
+            metadata: { kind: "code", fallback: true, startLine: c.startLine, endLine: c.endLine },
+          }));
+        } else {
+          const lines = task.content.split("\n");
+          chunks = [];
+          for (let ci = 0; ci < lines.length; ci += 80) {
+            const slice = lines
+              .slice(ci, ci + 80)
+              .join("\n")
+              .trim();
+            if (!slice) continue;
+            chunks.push({
+              content: slice,
+              tokenCount: 0,
+              contentHash: "",
+              metadata: {
+                kind: "code",
+                fallback: true,
+                startLine: ci + 1,
+                endLine: Math.min(ci + 80, lines.length),
+              },
+            });
+          }
+        }
+        results.set(task.id, {
+          kind: "code",
+          language: lang,
+          parser: "tree-sitter-native",
+          chunks,
+          importPaths: nr.importPaths,
+          wikilinks: [],
+          definedSymbols: nr.symbols.map((s: any) => ({
+            name: s.name,
+            symbolType: s.symbolType,
+            type: s.symbolType,
+            exported: s.exported,
+            startLine: s.startLine,
+            endLine: s.endLine,
+            receiver: s.receiver || undefined,
+          })),
+          calledIdentifiers: nr.calledIdentifiers,
+          callExpressions: nr.callExpressions.slice(0, 20),
+        });
+      } else {
+        // Native returned null — fall back to individual parse
+        const indexed = await chunkDocument({
+          relativePath: task.relativePath,
+          absolutePath: task.absolutePath,
+          content: task.content,
+          targetTokens: task.targetTokens,
+          overlapTokens: task.overlapTokens,
+        });
+        indexed.chunks = boundChunks(indexed.chunks, task.targetTokens, task.overlapTokens);
+        results.set(task.id, indexed);
+      }
+      onProgress?.(results.size, tasks.length);
+    }
+  }
+
+  // Parse remaining files (TS/JS, markdown, config) sequentially
+  for (const task of otherTasks) {
     const indexed = await chunkDocument({
       relativePath: task.relativePath,
       absolutePath: task.absolutePath,
       content: task.content,
       targetTokens: task.targetTokens,
-      overlapTokens: task.overlapTokens
+      overlapTokens: task.overlapTokens,
     });
-    indexed.chunks = boundChunks(indexed.chunks, task.targetTokens, task.overlapTokens);
+    // Skip boundChunks for non-native path — chunkDocument already produces reasonable sizes
+    // and boundChunks calls countTokens which is slow (387ms/50 files)
     results.set(task.id, indexed);
-    onProgress?.(i + 1, tasks.length);
+    onProgress?.(results.size, tasks.length);
   }
+
   return results;
-}
-
-function resolveWorkerPath(): string {
-  const candidates: string[] = [];
-  const moduleDir = path.dirname(__filename);
-  candidates.push(
-    path.join(moduleDir, "parse-worker.cjs"),
-    path.join(moduleDir, "..", "dist", "parse-worker.cjs"),
-  );
-  const entry = process.argv[1];
-  if (entry) {
-    try {
-      if (fsSync.existsSync(entry)) {
-        const baseDir = path.dirname(fsSync.realpathSync(entry));
-        candidates.push(
-          path.join(baseDir, "parse-worker.cjs"),
-          path.join(baseDir, "..", "..", "..", "packages", "indexer", "src", "parse-worker.cjs"),
-        );
-      }
-    } catch {}
-  }
-  for (const candidate of candidates) {
-    const resolved = path.resolve(candidate);
-    if (fsSync.existsSync(resolved)) return resolved;
-  }
-  throw new Error("parse-worker not found — run build first");
-}
-
-// Persistent worker pool — reused across batches to avoid worker spawn cost
-class WorkerPool {
-  private workers: Worker[] = [];
-  private busy: boolean[] = [];
-  private taskIndex = 0;
-  private done = 0;
-  private total = 0;
-  private onProgress?: (done: number, total: number) => void;
-
-  constructor(workerPath: string, workerCount: number) {
-    for (let i = 0; i < workerCount; i++) {
-      this.workers.push(new Worker(workerPath));
-      this.busy.push(false);
-    }
-  }
-
-  async parseBatch(
-    tasks: ParseTask[],
-    onProgress?: (done: number, total: number) => void
-  ): Promise<Map<string, ParseResult>> {
-    const results = new Map<string, ParseResult>();
-    this.taskIndex = 0;
-    this.done = 0;
-    this.total = tasks.length;
-    this.onProgress = onProgress;
-
-    const feedWorker = async (worker: Worker) => {
-      while (this.taskIndex < tasks.length) {
-        const myIndex = this.taskIndex++;
-        const task = tasks[myIndex];
-        const result = await new Promise<{ id: string; result?: ParseResult; error?: string }>((resolve, reject) => {
-          const onMessage = (msg: { id: string; result?: ParseResult; error?: string }) => {
-            worker.off("message", onMessage);
-            worker.off("error", onError);
-            resolve(msg);
-          };
-          const onError = (err: Error) => {
-            worker.off("message", onMessage);
-            worker.off("error", onError);
-            reject(err);
-          };
-          worker.on("message", onMessage);
-          worker.on("error", onError);
-          worker.postMessage(task);
-        });
-        if (result.result) results.set(result.id, result.result);
-        this.done++;
-        this.onProgress?.(this.done, this.total);
-      }
-    };
-
-    await Promise.all(this.workers.map((w) => feedWorker(w)));
-    return results;
-  }
-
-  terminate(): void {
-    for (const w of this.workers) w.terminate();
-    this.workers = [];
-  }
 }
 
 export async function indexWorkspace(input: {
@@ -464,37 +576,49 @@ export async function indexWorkspace(input: {
   mode?: "incremental" | "full";
   onProgress?: (progress: { message: string; progress: number }) => Promise<void> | void;
 }): Promise<IndexWorkspaceSummary> {
+  // Use fast token counting during indexing — BPE encoding is 100x slower
+  setFastTokenCount(true);
   const registry = createRegistryRepository();
   let workspace: RegistryWorkspace;
 
-  if (input.rootPath && !input.workspaceId) {
-    const resolvedRoot = path.resolve(input.rootPath);
-    workspace = await registry.ensureWorkspace({ rootPath: resolvedRoot });
-  } else if (input.workspaceId) {
+  if (input.workspaceId) {
     const w = await registry.getWorkspace(input.workspaceId);
     if (!w) throw new Error(`Workspace '${input.workspaceId}' not found`);
     workspace = w;
+  } else if (input.rootPath) {
+    workspace = await registry.ensureWorkspace({
+      rootPath: path.resolve(input.rootPath),
+    });
   } else {
     throw new Error("Either workspaceId or rootPath is required");
   }
 
   await writeLocalWorkspaceConfig(workspace);
 
+  const repo = createWorkspaceRepository(workspace.rootPath);
   const settings = await getBrainSettings();
   const config = await loadBrainConfig(workspace.rootPath);
   const configuredWorkspace = config.workspaces?.find(
-    (candidate) => candidate.id === workspace.id || path.resolve(candidate.root) === path.resolve(workspace.rootPath)
+    (candidate) =>
+      candidate.id === workspace.id ||
+      path.resolve(candidate.root) === path.resolve(workspace.rootPath),
   );
   const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
   const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
   const embeddingProvider = await getEmbeddingProvider();
   const runMode = input.mode ?? "incremental";
 
+  if (embeddingProvider) {
+    process.stdout.write(
+      `[embedding] provider=${embeddingProvider.provider} model=${embeddingProvider.model}\n`,
+    );
+  } else {
+    process.stdout.write(`[embedding] disabled (no provider configured)\n`);
+  }
+
   const reportProgress = async (message: string, progress: number) => {
     await input.onProgress?.({ message, progress });
   };
-
-  const repo = createWorkspaceRepository(workspace.rootPath);
 
   if (runMode === "full") {
     repo.resetIndexArtifacts();
@@ -504,63 +628,17 @@ export async function indexWorkspace(input: {
 
   await reportProgress("Scanning workspace files...", 5);
 
+  const files = await scanWorkspaceFiles({
+    rootPath: workspace.rootPath,
+    include: includeGlobs,
+    exclude: excludeGlobs,
+  });
+
   const existingDocuments = await repo.listDocuments();
+  const existingDocumentsByPath = new Map(
+    existingDocuments.map((document) => [document.path, document]),
+  );
 
-  let files: FileToIndex[];
-
-  if (existingDocuments.length > 0 && !includeGlobs) {
-    // Fast path: stat DB files in parallel, skip directory walk if all match
-    const STAT_CONCURRENCY = 64;
-    const cachedResults: Array<{ doc: typeof existingDocuments[0]; file: FileToIndex } | null> = new Array(existingDocuments.length);
-    let allMatch = true;
-    let statIdx = 0;
-    async function cachedStatWorker() {
-      while (statIdx < existingDocuments.length) {
-        const i = statIdx++;
-        const doc = existingDocuments[i];
-        const absPath = path.join(workspace.rootPath, doc.path);
-        try {
-          const stat = await fs.stat(absPath);
-          if (stat.size === doc.sizeBytes && Math.trunc(stat.mtimeMs) === doc.mtimeMs) {
-            cachedResults[i] = {
-              doc,
-              file: { absolutePath: absPath, relativePath: doc.path, sizeBytes: stat.size, mtimeMs: Math.trunc(stat.mtimeMs) }
-            };
-          } else {
-            allMatch = false;
-            return;
-          }
-        } catch {
-          allMatch = false;
-          return;
-        }
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(STAT_CONCURRENCY, existingDocuments.length) }, () => cachedStatWorker())
-    );
-
-    if (allMatch) {
-      files = cachedResults.map((r) => r!.file);
-    } else {
-      files = await scanWorkspaceFiles({
-        rootPath: workspace.rootPath,
-        include: includeGlobs,
-        exclude: excludeGlobs
-      });
-    }
-  } else {
-    // No existing documents or custom include — full scan
-    files = await scanWorkspaceFiles({
-      rootPath: workspace.rootPath,
-      include: includeGlobs,
-      exclude: excludeGlobs
-    });
-  }
-
-  const existingDocumentsByPath = new Map(existingDocuments.map((document) => [document.path, document]));
-
-  // Delete documents for files that no longer exist on disk (incremental only)
   if (runMode === "incremental") {
     const scannedPaths = new Set(files.map((file) => file.relativePath));
     for (const document of existingDocuments) {
@@ -575,8 +653,8 @@ export async function indexWorkspace(input: {
     workspace.rootPath,
     files.map((file) => ({
       relativePath: file.relativePath,
-      absolutePath: file.absolutePath
-    }))
+      absolutePath: file.absolutePath,
+    })),
   );
 
   let filesUpdated = 0;
@@ -584,19 +662,37 @@ export async function indexWorkspace(input: {
   let embeddingsWritten = 0;
   let embeddingFailures = 0;
   let bulkWriteMode = false;
+  let needsWriteModeRestore = false;
+  // FTS inputs collected during transaction, inserted after finalize (no DB contention)
+  let ftsInputsForBackground: Array<{
+    chunkId: string;
+    path: string;
+    heading: string | null;
+    language: string | null;
+    content: string;
+    metadata: string;
+  }> = [];
+  const _T0 = Date.now();
+  const symbolNodeIdsByFileAndName = new Map<string, string>();
+  const pendingCallEdges: Array<{
+    callerName: string;
+    calleeName: string;
+    filePath: string;
+    parser: string;
+  }> = [];
 
   try {
     await reportProgress(
-      files.length === 0 ? "No files matched the workspace filters" : `Queued ${files.length} file(s) for indexing`,
-      files.length === 0 ? 100 : 10
+      files.length === 0
+        ? "No files matched the workspace filters"
+        : `Queued ${files.length} file(s) for indexing`,
+      files.length === 0 ? 100 : 10,
     );
 
     // ── Phase 1: Check which files changed (fast DB lookups, no file reads) ──
     const parseTasks: ParseTask[] = [];
     const unchangedFiles: Array<{
-      file: typeof files[0];
-      existingDocument: Awaited<ReturnType<typeof repo.listDocuments>>[number];
-      existingChunks: Awaited<ReturnType<typeof repo.getChunksByDocument>>;
+      existingDocument: NonNullable<Awaited<ReturnType<typeof repo.getDocumentByPath>>>;
     }> = [];
     const filesToRead: typeof files = [];
 
@@ -610,16 +706,77 @@ export async function indexWorkspace(input: {
         existingDocument.sizeBytes === file.sizeBytes;
 
       if (statUnchanged) {
-        unchangedFiles.push({ file, existingDocument: existingDocument!, existingChunks: [] });
+        unchangedFiles.push({ existingDocument: existingDocument! });
       } else {
         filesToRead.push(file);
       }
     }
 
-    // ── Phase 2-4: Pipelined batched read + parse + write ──
-    const BATCH_SIZE = 1000;
-    const cpuCount = os.availableParallelism?.() ?? os.cpus().length;
-    const allChunkRowsForEmbeddings: Array<{ id: string; content: string; path: string; heading?: string | null }> = [];
+    // ── Phase 2: Read only changed files in parallel (concurrency-limited) ──
+    process.stderr.write(
+      `[t] phase1 stat-check: ${Date.now() - _T0}ms (${filesToRead.length} to read)\n`,
+    );
+    const _T1 = Date.now();
+    const fileContents = new Map<string, string>();
+    const READ_CONCURRENCY = 32;
+    let readIndex = 0;
+    async function readWorker() {
+      while (readIndex < filesToRead.length) {
+        const i = readIndex++;
+        fileContents.set(
+          filesToRead[i].relativePath,
+          await fs.readFile(filesToRead[i].absolutePath, "utf8"),
+        );
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(READ_CONCURRENCY, filesToRead.length) }, () => readWorker()),
+    );
+
+    // ── Phase 2b: Verify content hash for changed files ──
+    process.stderr.write(`[t] phase2 file-read: ${Date.now() - _T1}ms\n`);
+    const _T2 = Date.now();
+    for (const file of filesToRead) {
+      const content = fileContents.get(file.relativePath)!;
+      const contentHash = hashContent(content);
+      const existingDocument = existingDocumentsByPath.get(file.relativePath);
+      const unchanged =
+        runMode === "incremental" &&
+        existingDocument &&
+        existingDocument.contentHash === contentHash;
+
+      if (unchanged) {
+        await repo.updateDocument(existingDocument.id, {
+          absolutePath: file.absolutePath,
+          sizeBytes: file.sizeBytes,
+          mtimeMs: file.mtimeMs,
+        });
+        unchangedFiles.push({ existingDocument });
+      } else {
+        parseTasks.push({
+          id: file.relativePath,
+          content,
+          relativePath: file.relativePath,
+          absolutePath: file.absolutePath,
+          sizeBytes: file.sizeBytes,
+          mtimeMs: file.mtimeMs,
+          targetTokens: settings.chunking.targetTokens,
+          overlapTokens: settings.chunking.overlapTokens,
+        });
+      }
+    }
+
+    // ── Phase 3: Parse changed files ──
+    process.stderr.write(
+      `[t] phase2b hash-check: ${Date.now() - _T2}ms (${parseTasks.length} to parse)\n`,
+    );
+    const _T3 = Date.now();
+    const parseResults = await parseInline(parseTasks, (done, total) => {
+      reportProgress(
+        `Parsing ${done}/${total} files...`,
+        Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)),
+      );
+    });
 
     // Backfill unchanged embeddings only when embeddings are enabled.
     if (embeddingProvider) {
@@ -631,251 +788,213 @@ export async function indexWorkspace(input: {
             id: chunk.id,
             content: chunk.content,
             path: existingDocument.path,
-            heading: chunk.heading
+            heading: chunk.heading,
           })),
-          embeddingProvider
+          embeddingProvider,
         );
         embeddingsWritten += embeddingResult.written;
         embeddingFailures += embeddingResult.failedBatches;
       }
     }
 
-    const isColdRun = existingDocumentsByPath.size === 0;
-    if (filesToRead.length > 0) {
+    // A true no-op never changes SQLite write pragmas or FTS triggers.
+    process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
+    const _T4 = Date.now();
+    if (parseTasks.length > 0) {
+      // ── Phase 4: Write all results to DB (main thread, transactioned) ──
       repo.setOptimizedWriteMode(true);
       repo.dropFtsTriggers();
       bulkWriteMode = true;
-      repo.refreshStreamTimestamp();
-
-      const workerPath = resolveWorkerPath();
-      const workerCount = Math.min(
-        cpuCount - 1,
-        filesToRead.length,
-        Math.ceil(filesToRead.length / 50)
-      );
-      const pool = new WorkerPool(workerPath, workerCount);
-
-      try {
-      async function readAndHashBatch(batchFiles: typeof files): Promise<ParseTask[]> {
-        const fileContents = new Map<string, string>();
-        const READ_CONCURRENCY = 32;
-        let readIndex = 0;
-        async function readWorker() {
-          while (readIndex < batchFiles.length) {
-            const i = readIndex++;
-            fileContents.set(batchFiles[i].relativePath, await fs.readFile(batchFiles[i].absolutePath, "utf8"));
-          }
-        }
-        await Promise.all(
-          Array.from({ length: Math.min(READ_CONCURRENCY, batchFiles.length) }, () => readWorker())
-        );
-
-        const batchParseTasks: ParseTask[] = [];
-        for (const file of batchFiles) {
-          const content = fileContents.get(file.relativePath)!;
-          const contentHash = fastHash(content);
-          const existingDocument = existingDocumentsByPath.get(file.relativePath);
-          const unchanged = existingDocument && existingDocument.contentHash === contentHash;
-
-          if (unchanged) {
-            await repo.updateDocument(existingDocument.id, {
-              absolutePath: file.absolutePath,
-              sizeBytes: file.sizeBytes,
-              mtimeMs: file.mtimeMs
-            });
-            unchangedFiles.push({ file, existingDocument, existingChunks: [] });
-          } else {
-            batchParseTasks.push({
-              id: file.relativePath,
-              content,
-              contentHash,
-              relativePath: file.relativePath,
-              absolutePath: file.absolutePath,
-              sizeBytes: file.sizeBytes,
-              mtimeMs: file.mtimeMs,
-              targetTokens: settings.chunking.targetTokens,
-              overlapTokens: settings.chunking.overlapTokens
-            });
-          }
-        }
-        return batchParseTasks;
-      }
-
-      async function writeBatch(
-        batchParseTasks: ParseTask[],
-        parseResults: Map<string, ParseResult>,
-        batchStart: number
-      ): Promise<void> {
-        if (batchParseTasks.length === 0) return;
-
-        // Separate new files from existing (cold path = all new)
-        const newFiles: ParseTask[] = [];
-        const existingFiles: ParseTask[] = [];
-        for (const file of batchParseTasks) {
-          if (existingDocumentsByPath.has(file.relativePath)) {
-            existingFiles.push(file);
-          } else {
-            newFiles.push(file);
-          }
-        }
-
-        await repo.transaction(async () => {
-          const docIdMap = new Map<string, string>();
-          for (const file of newFiles) {
-            const indexed = parseResults.get(file.id)!;
-            const docId = nextId();
-            repo.streamDocument({
-              id: docId,
-              path: file.relativePath,
-              absolutePath: file.absolutePath,
-              kind: indexed.kind,
-              language: indexed.language,
-              contentHash: file.contentHash,
-              sizeBytes: file.sizeBytes,
-              mtimeMs: file.mtimeMs
-            });
-            docIdMap.set(file.relativePath, docId);
-          }
-
-          // ── Handle existing files (update + reset artifacts) ──
-          for (const file of existingFiles) {
-            const indexed = parseResults.get(file.id)!;
-            const existingDocument = existingDocumentsByPath.get(file.relativePath)!;
-            const fileExistingSymbols = await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
-            await repo.updateDocument(existingDocument.id, {
-              absolutePath: file.absolutePath,
-              kind: indexed.kind,
-              language: indexed.language,
-              contentHash: file.contentHash,
-              sizeBytes: file.sizeBytes,
-              mtimeMs: file.mtimeMs
-            });
-            docIdMap.set(file.relativePath, existingDocument.id);
-            (file as ParseTask & { _existingSymbols?: Map<string, string> })._existingSymbols = fileExistingSymbols;
-          }
-
-          const allChunkIds: string[] = [];
-          for (const file of batchParseTasks) {
-            const indexed = parseResults.get(file.id)!;
-            const documentId = docIdMap.get(file.relativePath)!;
-            for (const [ci, chunk] of indexed.chunks.entries()) {
-              const chunkId = nextId();
-              const meta: Record<string, unknown> = { ...chunk.metadata };
-              if (ci === 0 && indexed.importPaths.length > 0) meta.importPaths = indexed.importPaths;
-              repo.streamChunk({
-                id: chunkId,
-                documentId,
-                chunkIndex: ci,
-                heading: chunk.heading ?? null,
-                content: chunk.content,
-                tokenCount: chunk.tokenCount,
-                contentHash: chunk.contentHash,
-                metadata: JSON.stringify(meta)
-              });
-              allChunkIds.push(chunkId);
-            }
-          }
-
-          let chunkIdx = 0;
-          for (const file of batchParseTasks) {
-            chunkIdx += parseResults.get(file.id)!.chunks.length;
-          }
-
-          if (embeddingProvider) {
-            chunkIdx = 0;
-            for (const file of batchParseTasks) {
-              const indexed = parseResults.get(file.id)!;
-              allChunkRowsForEmbeddings.push(...indexed.chunks.map((_, i) => ({
-                id: allChunkIds[chunkIdx + i],
-                content: indexed.chunks[i].content,
-                path: file.relativePath,
-                heading: indexed.chunks[i].heading
-              })));
-              chunkIdx += indexed.chunks.length;
-            }
-          }
-
-
-          // ── Stats ──
-          for (const file of batchParseTasks) {
-            chunksWritten += parseResults.get(file.id)!.chunks.length;
-            filesUpdated += 1;
-          }
-
-          // Progress
-          const overall = batchStart + batchParseTasks.length;
-          const progress = Math.min(95, 50 + Math.round((overall / Math.max(filesToRead.length, 1)) * 45));
-          await reportProgress(`Writing ${overall}/${filesToRead.length}...`, progress);
-        });
-      }
-
-      // Pipelined loop: parse batch N+1 while writing batch N
-      let prevParsePromise: Promise<Map<string, ParseResult>> | null = null;
-      let prevBatchTasks: ParseTask[] | null = null;
-      let prevBatchStart = 0;
-
-      for (let batchStart = 0; batchStart < filesToRead.length; batchStart += BATCH_SIZE) {
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, filesToRead.length);
-        const batchFiles = filesToRead.slice(batchStart, batchEnd);
-
-        const currentTasks = await readAndHashBatch(batchFiles);
-
-        if (prevParsePromise !== null) {
-          const prevResults = await prevParsePromise;
-          await writeBatch(prevBatchTasks!, prevResults, prevBatchStart);
-          prevResults.clear();
-          prevBatchTasks = null;
-        }
-
-        // Start parsing current batch (will overlap with next batch's read)
-        if (currentTasks.length > 0) {
-          const batchProgress = (done: number, total: number) => {
-            const overall = batchStart + Math.round((done / total) * (batchEnd - batchStart));
-            reportProgress(`Parsing ${overall}/${filesToRead.length} files...`, Math.min(50, 10 + Math.round((overall / Math.max(filesToRead.length, 1)) * 40)));
-          };
-          // Use workers for all batches >= 50 files (parallel parsing)
-          if (currentTasks.length >= 50 && cpuCount >= 2) {
-            prevParsePromise = pool.parseBatch(currentTasks, batchProgress);
-          } else {
-            prevParsePromise = parseInline(currentTasks, batchProgress);
-          }
-          prevBatchTasks = currentTasks;
-          prevBatchStart = batchStart;
-        }
-      }
-
-      // Write the last batch
-      if (prevParsePromise !== null) {
-        const prevResults = await prevParsePromise;
-        await writeBatch(prevBatchTasks!, prevResults, prevBatchStart);
-        prevResults.clear();
-      }
-
-      pool.terminate();
-      } finally { pool.terminate(); }
     }
 
-    if (allChunkRowsForEmbeddings.length > 0) {
-      const embeddingResult = await writeEmbeddingsToRepo(repo, allChunkRowsForEmbeddings, embeddingProvider);
+    const allChunkRowsForEmbeddings: Array<{
+      id: string;
+      content: string;
+      path: string;
+      heading?: string | null;
+    }> = [];
+
+    // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
+    const _dbSub: Record<string, number> = {};
+    await repo.transaction(async () => {
+      const _dbT0 = Date.now();
+      // Step 1: Handle existing documents (reset artifacts + update) in bulk
+      const newDocs: Array<{
+        path: string;
+        absolutePath: string;
+        kind: string;
+        language?: string | null;
+        contentHash: string;
+        sizeBytes: number;
+        mtimeMs: number;
+      }> = [];
+      const docIdMap = new Map<string, string>(); // relativePath -> documentId
+
+      for (const file of parseTasks) {
+        const indexed = parseResults.get(file.id)!;
+        const contentHash = hashContent(file.content);
+        const existingDocument = existingDocumentsByPath.get(file.relativePath);
+
+        if (existingDocument) {
+          await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
+          await repo.updateDocument(existingDocument.id, {
+            absolutePath: file.absolutePath,
+            kind: indexed.kind,
+            language: indexed.language,
+            contentHash,
+            sizeBytes: file.sizeBytes,
+            mtimeMs: file.mtimeMs,
+          });
+          docIdMap.set(file.relativePath, existingDocument.id);
+        } else {
+          newDocs.push({
+            path: file.relativePath,
+            absolutePath: file.absolutePath,
+            kind: indexed.kind,
+            language: indexed.language,
+            contentHash,
+            sizeBytes: file.sizeBytes,
+            mtimeMs: file.mtimeMs,
+          });
+        }
+      }
+
+      // Batch insert all new documents in one query
+      _dbSub["existing-update"] = Date.now() - _dbT0;
+      const _dbT1 = Date.now();
+      if (newDocs.length > 0) {
+        const newDocIds = await repo.insertDocumentsBatch(newDocs);
+        for (let i = 0; i < newDocs.length; i++) {
+          docIdMap.set(newDocs[i].path, newDocIds[i]);
+        }
+      }
+
+      // Step 2: Batch insert ALL chunks across all files in one call
+      const allChunkInputs: Array<{
+        documentId: string;
+        chunkIndex: number;
+        heading: string | null;
+        content: string;
+        tokenCount: number;
+        contentHash: string;
+        metadata: string;
+      }> = [];
+      const chunkFileMap: Array<{ fileRelativePath: string; chunkIndex: number }> = [];
+      for (const file of parseTasks) {
+        const indexed = parseResults.get(file.id)!;
+        const documentId = docIdMap.get(file.relativePath)!;
+        for (let ci = 0; ci < indexed.chunks.length; ci++) {
+          const chunk = indexed.chunks[ci];
+          allChunkInputs.push({
+            documentId,
+            chunkIndex: ci,
+            heading: chunk.heading ?? null,
+            content: chunk.content,
+            tokenCount: chunk.tokenCount,
+            contentHash: chunk.contentHash,
+            metadata: JSON.stringify(chunk.metadata),
+          });
+          chunkFileMap.push({ fileRelativePath: file.relativePath, chunkIndex: ci });
+        }
+      }
+      const allChunkIds = await repo.insertChunks(allChunkInputs);
+      _dbSub["insert-chunks"] = Date.now() - _dbT1;
+
+      // Precompute chunk offsets (prefix sum) for O(1) lookup
+      const chunkOffsets: number[] = new Array(parseTasks.length);
+      let totalChunks = 0;
+      for (let fi = 0; fi < parseTasks.length; fi++) {
+        chunkOffsets[fi] = totalChunks;
+        totalChunks += parseResults.get(parseTasks[fi].id)!.chunks.length;
+      }
+
+      // Collect FTS inputs for bulk insert after transaction (triggers down — no double-write)
+      const ftsInputs = ftsInputsForBackground;
+      for (let fi = 0; fi < parseTasks.length; fi++) {
+        const file = parseTasks[fi];
+        const indexed = parseResults.get(file.id)!;
+        const chunkOffset = chunkOffsets[fi];
+        for (let ci = 0; ci < indexed.chunks.length; ci++) {
+          const chunk = indexed.chunks[ci];
+          ftsInputs.push({
+            chunkId: allChunkIds[chunkOffset + ci],
+            path: file.relativePath,
+            heading: chunk.heading ?? null,
+            language: indexed.language ?? null,
+            content: chunk.content,
+            metadata: JSON.stringify(chunk.metadata),
+          });
+        }
+      }
+      _dbSub["collect-fts"] = Date.now() - _dbT1;
+
+      // Step 3: Collect chunk rows for embeddings — skip graph building (lazy, on-demand)
+      for (let fi = 0; fi < parseTasks.length; fi++) {
+        const file = parseTasks[fi];
+        const indexed = parseResults.get(file.id)!;
+        const chunkOffset = chunkOffsets[fi];
+
+        for (let ci = 0; ci < indexed.chunks.length; ci++) {
+          allChunkRowsForEmbeddings.push({
+            id: allChunkIds[chunkOffset + ci],
+            content: indexed.chunks[ci].content,
+            path: file.relativePath,
+            heading: indexed.chunks[ci].heading,
+          });
+        }
+        chunksWritten += indexed.chunks.length;
+        filesUpdated += 1;
+      }
+      // Graph (nodes + edges + call edges) is built lazily on first
+      // graph_neighbors/code_context query — see buildGraphFromIndexedFiles()
+
+      await reportProgress(`Writing ${parseTasks.length}/${parseTasks.length}...`, 95);
+    });
+    process.stderr.write(`[t]   db sub: ${JSON.stringify(_dbSub)}\n`);
+
+    // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
+    if (allChunkRowsForEmbeddings.length > 0 && embeddingProvider) {
+      await reportProgress(
+        `Embedding ${allChunkRowsForEmbeddings.length} chunks via ${embeddingProvider.provider}/${embeddingProvider.model}...`,
+        90,
+      );
+      const embeddingResult = await writeEmbeddingsToRepo(
+        repo,
+        allChunkRowsForEmbeddings,
+        embeddingProvider,
+      );
       embeddingsWritten += embeddingResult.written;
       embeddingFailures += embeddingResult.failedBatches;
     }
 
-    if (bulkWriteMode) {
-      if (isColdRun) {
-        repo.setMeta("fts_backfill_pending", "1");
-        repo.restoreFtsTriggersOnly();
-      } else {
-        repo.restoreFtsTriggers();
+    // ── Phase 5: FTS insert (triggers still down — no double-write) + restore ──
+    process.stderr.write(`[t] phase4 db-write: ${Date.now() - _T4}ms\n`);
+    const _T5 = Date.now();
+
+    // Insert FTS entries while triggers are still down (no trigger overhead)
+    if (ftsInputsForBackground.length > 0) {
+      _ftsBuildingWorkspaces.set(workspace.id, true);
+      const _ftsT = Date.now();
+      try {
+        await repo.bulkInsertFts(ftsInputsForBackground);
+        process.stderr.write(
+          `[t]   fts-insert: ${Date.now() - _ftsT}ms (${ftsInputsForBackground.length} entries)\n`,
+        );
+      } catch (e) {
+        process.stderr.write(`[fts] ERROR: ${e}\n`);
+      } finally {
+        _ftsBuildingWorkspaces.delete(workspace.id);
       }
-      repo.setOptimizedWriteMode(false);
+    }
+
+    // Now restore FTS triggers (entries already inserted, no backfill needed)
+    if (bulkWriteMode) {
+      repo.restoreFtsTriggersOnly();
+      needsWriteModeRestore = true;
       bulkWriteMode = false;
     }
-    repo.setMeta("graph_pending", "1");
-
-    repo.setOptimizedWriteMode(false);
-    repo.walCheckpoint();
-
+    process.stderr.write(`[t] phase5 fts-restore: ${Date.now() - _T5}ms\n`);
+    const _T7 = Date.now();
     await reportProgress("Finalizing index run...", 98);
     await repo.completeIndexRun(runId, {
       status: "completed",
@@ -886,7 +1005,7 @@ export async function indexWorkspace(input: {
       errorMessage:
         embeddingFailures > 0
           ? `${embeddingFailures} embedding batch(es) failed; retry indexing to complete embeddings`
-          : undefined
+          : undefined,
     });
 
     const docCount = await repo.getDocumentCount();
@@ -902,11 +1021,22 @@ export async function indexWorkspace(input: {
       chunkCount: chunkCountResult,
       nodeCount,
       edgeCount,
-      lastError: ""
+      lastError: "",
     });
+
+    // Switch out of optimized write mode AFTER all writes are done.
+    // Doing it earlier causes fsync to flush ~70MB of dirty pages mid-finalize.
+    if (needsWriteModeRestore) {
+      repo.setOptimizedWriteMode(false);
+    }
+    process.stderr.write(`[t] phase7 finalize: ${Date.now() - _T7}ms\n`);
   } catch (error) {
-    if (bulkWriteMode) {
-      try { repo.restoreFtsTriggers(); } catch {}
+    if (bulkWriteMode || needsWriteModeRestore) {
+      try {
+        repo.restoreFtsTriggers();
+      } catch {
+        /* preserve original indexing error */
+      }
       repo.setOptimizedWriteMode(false);
     }
 
@@ -917,18 +1047,19 @@ export async function indexWorkspace(input: {
       filesUpdated,
       chunksWritten,
       embeddingsWritten,
-      errorMessage
+      errorMessage,
     });
 
     await registry.updateWorkspace(workspace.id, {
       status: "error",
       indexingStatus: "failed",
-      lastError: errorMessage
+      lastError: errorMessage,
     });
     throw error;
   }
 
   await reportProgress("Index complete", 100);
+  process.stderr.write("[t] TOTAL: " + (Date.now() - _T0) + "ms\n");
 
   return {
     workspaceId: workspace.id,
@@ -936,6 +1067,176 @@ export async function indexWorkspace(input: {
     filesUpdated,
     chunksWritten,
     embeddingsWritten,
-    embeddingFailures
+    embeddingFailures,
   };
+}
+
+// ── Background FTS tracking ──
+// When FTS is building in background, code_query should wait for it.
+const _ftsBuildingWorkspaces = new Map<string, boolean>();
+
+export async function waitForFts(rootPath: string): Promise<void> {
+  const workspaceId = path.basename(rootPath);
+  // Poll until background FTS build finishes (typically <3s)
+  let waited = 0;
+  while (_ftsBuildingWorkspaces.has(workspaceId) && waited < 10000) {
+    await new Promise((r) => setTimeout(r, 100));
+    waited += 100;
+  }
+}
+
+// ── Lazy graph builder ──
+// Called on first graph_neighbors/code_context query.
+// Re-parses files with native batch, inserts graph nodes + edges + call edges.
+// One-time cost (~5s for 2K files). Subsequent queries use cached graph.
+
+const _graphBuiltWorkspaces = new Set<string>();
+
+export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
+  const workspaceId = path.basename(rootPath);
+  if (_graphBuiltWorkspaces.has(workspaceId)) return;
+
+  const repo = createWorkspaceRepository(rootPath);
+  const nodeCount = repo.getNodeCount();
+  if (nodeCount > 0) {
+    _graphBuiltWorkspaces.add(workspaceId);
+    return;
+  }
+
+  // Load native module
+  let native: any = null;
+  try {
+    const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
+    native = require(nativePath);
+  } catch {
+    try {
+      native = require("@openez-graph/native");
+    } catch {
+      return;
+    }
+  }
+
+  // Get all documents from DB
+  const documents = await repo.listDocuments();
+  const codeDocs = documents.filter((d) => d.kind === "code");
+
+  // Read file contents
+  const fs = await import("node:fs/promises");
+  const batchItems: Array<{ language: string; content: string }> = [];
+  const docPaths: string[] = [];
+  for (const doc of codeDocs) {
+    try {
+      const content = await fs.readFile(doc.absolutePath, "utf8");
+      const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
+      if (lang === "rust" || lang === "python" || lang === "go") {
+        batchItems.push({ language: lang, content });
+        docPaths.push(doc.path);
+      }
+    } catch {
+      /* file may have been deleted */
+    }
+  }
+
+  if (batchItems.length === 0) {
+    _graphBuiltWorkspaces.add(workspaceId);
+    return;
+  }
+
+  // Parse with native batch
+  const results = native.parseCodeBatch(batchItems);
+
+  // Build graph nodes + edges
+  const allNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> =
+    [];
+  const allEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> =
+    [];
+  const symbolNodeIdsByFileAndName = new Map<string, string>();
+  const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
+
+  for (let i = 0; i < results.length; i++) {
+    const nr = results[i];
+    if (!nr) continue;
+    const filePath = docPaths[i];
+    const doc = codeDocs.find((d) => d.path === filePath)!;
+
+    // File node
+    const fileNodeIdx = allNodeInputs.length;
+    allNodeInputs.push({
+      type: "file",
+      label: filePath,
+      refId: doc.id,
+      metadata: JSON.stringify({ path: filePath, language: doc.language }),
+    });
+    const fileNodeId = ""; // will be replaced after batch insert
+
+    // Symbol nodes (cap 30)
+    const symbols = nr.symbols.slice(0, 30);
+    const symNodeStart = allNodeInputs.length;
+    for (const sym of symbols) {
+      allNodeInputs.push({
+        type: "symbol",
+        label: sym.name,
+        refId: doc.id,
+        metadata: JSON.stringify({ symbolType: sym.symbolType, filePath, language: doc.language }),
+      });
+    }
+
+    // Call expressions (cap 20)
+    for (const call of nr.callExpressions.slice(0, 20)) {
+      pendingCallEdges.push({ callerName: call.callerName, calleeName: call.calleeName, filePath });
+    }
+
+    // Store symbol positions for edge building (after we get IDs back)
+    (allNodeInputs as any)._symMeta = (allNodeInputs as any)._symMeta || [];
+    (allNodeInputs as any)._symMeta.push({
+      filePath,
+      fileNodeIdx,
+      symNodeStart,
+      symCount: symbols.length,
+    });
+  }
+
+  // Batch insert all nodes
+  const nodeIds = await repo.insertGraphNodesBatch(allNodeInputs);
+
+  // Build edges
+  const symMeta = (allNodeInputs as any)._symMeta || [];
+  for (const meta of symMeta) {
+    const fileNodeId = nodeIds[meta.fileNodeIdx];
+    for (let si = 0; si < meta.symCount; si++) {
+      const symNodeId = nodeIds[meta.symNodeStart + si];
+      symbolNodeIdsByFileAndName.set(
+        `${meta.filePath}\0${allNodeInputs[meta.symNodeStart + si].label}`,
+        symNodeId,
+      );
+      if (fileNodeId && symNodeId && fileNodeId !== symNodeId) {
+        allEdges.push({ fromNodeId: fileNodeId, toNodeId: symNodeId, type: "defines" });
+      }
+    }
+  }
+
+  // Resolve call edges
+  const globalSymbolNodes = await repo.loadAllSymbolNodes();
+  const _callMeta = `{"heuristic":true,"confidence":"low"}`;
+  for (const call of pendingCallEdges) {
+    const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
+    if (!callerNodeId) continue;
+    const calleeNodeId =
+      symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.calleeName}`) ??
+      globalSymbolNodes.get(call.calleeName);
+    if (!calleeNodeId || callerNodeId === calleeNodeId) continue;
+    allEdges.push({
+      fromNodeId: callerNodeId,
+      toNodeId: calleeNodeId,
+      type: "calls",
+      metadata: _callMeta,
+    });
+  }
+
+  // Batch insert all edges
+  await repo.transaction(async () => {
+    await repo.insertEdges(allEdges);
+  });
+
+  _graphBuiltWorkspaces.add(workspaceId);
 }
