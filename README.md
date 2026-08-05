@@ -74,7 +74,7 @@ Run `openez --help` or `openez <command> --help` for all options.
 
 ## Storage
 
-OpenEZ uses three local artifacts:
+OpenEZ uses four local artifacts:
 
 ```text
 ~/.openez/registry.sqlite       registered workspace metadata + global config
