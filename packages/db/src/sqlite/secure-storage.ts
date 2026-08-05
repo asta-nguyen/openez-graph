@@ -12,6 +12,14 @@ const PREFIX = "enc:";
 
 let cachedKey: Buffer | null = null;
 
+function ensureKeyFilePermissions(filePath: string): void {
+  const stat = fs.statSync(filePath);
+  const mode = stat.mode & 0o777;
+  if (mode !== 0o600) {
+    fs.chmodSync(filePath, 0o600);
+  }
+}
+
 function getMasterKey(): Buffer {
   if (cachedKey) return cachedKey;
 
@@ -23,6 +31,7 @@ function getMasterKey(): Buffer {
   // Try to read an existing key first.
   let keyExists = false;
   try {
+    ensureKeyFilePermissions(MASTER_KEY_FILE);
     const existing = fs.readFileSync(MASTER_KEY_FILE, "utf-8").trim();
     keyExists = true;
     cachedKey = Buffer.from(existing, "hex");
@@ -59,6 +68,7 @@ function getMasterKey(): Buffer {
     // Reload the winning key instead of overwriting it.
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EEXIST") {
+      ensureKeyFilePermissions(MASTER_KEY_FILE);
       const winner = fs.readFileSync(MASTER_KEY_FILE, "utf-8").trim();
       cachedKey = Buffer.from(winner, "hex");
       if (cachedKey.length === KEY_LEN) return cachedKey;
