@@ -1,0 +1,34 @@
+packages/core/src/external-docs/library-docs.ts
+  s_9532ef2eb0a9d6::t_9cfb1cb7f420eb 117
+apps/cli/src/setup-context7.ts
+  s_9532ef2eb0a9d6::t_bfec0ca7a72a92 35,37-40
+  s_9532ef2eb0a9d6::t_077f916f37ef44 46-55
+  s_9532ef2eb0a9d6::t_53caee92a194c5 65-69
+  s_9532ef2eb0a9d6::t_58b0d30535a7b7 41,80-81
+  s_9532ef2eb0a9d6::t_b5a3c93c07a070 56
+  s_9532ef2eb0a9d6::t_c43271a0881c46 70
+  s_9532ef2eb0a9d6::t_d2483ca8146576 82
+packages/core/src/external-docs/context7-client.ts
+  s_9532ef2eb0a9d6::t_e9131e90b30bf6 182,188
+  s_9532ef2eb0a9d6::t_8fa559e50e5d2b 146-155
+  s_9532ef2eb0a9d6::t_7756909f4adb48 228-231
+  s_9532ef2eb0a9d6::t_07728946ba0cee 194-196,207-215
+packages/core/src/external-docs/docs-cache.ts
+  s_9532ef2eb0a9d6::t_c0792f1e758cf2 170-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8611fa4b1604f8382e0b7987be9442d76be3c3ab",
+  "prompts": {},
+  "sessions": {
+    "s_9532ef2eb0a9d6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "7225da0c-aa35-485c-b77b-fb64633fb7f9",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
