@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import { codeQuery } from "../packages/core/src/retrieval";
 import { closeRegistryDb, createRegistryRepository } from "../packages/db/src/sqlite";
@@ -202,6 +205,37 @@ async function runEval(): Promise<{
 }
 
 describe("FTS vs Embedding benchmark", () => {
+  let tempRegistryPath: string | null = null;
+  let savedRegistryEnv: string | undefined;
+  let savedProvider: string | null = null;
+
+  beforeAll(() => {
+    // Isolate from the user's real registry DB to avoid mutating it.
+    if (process.env.OPENEZ_RUN_BENCHMARK !== "1") return;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openez-bench-"));
+    tempRegistryPath = path.join(tempDir, "registry.sqlite");
+    savedRegistryEnv = process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    process.env.AI_MEMORY_REGISTRY_DB_PATH = tempRegistryPath;
+  });
+
+  afterAll(() => {
+    // Restore env and clean up temp DB.
+    if (savedRegistryEnv !== undefined) {
+      process.env.AI_MEMORY_REGISTRY_DB_PATH = savedRegistryEnv;
+    } else {
+      delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    }
+    closeRegistryDb();
+    if (tempRegistryPath) {
+      const dir = path.dirname(tempRegistryPath);
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  });
+
   it.skipIf(process.env.OPENEZ_RUN_BENCHMARK !== "1")(
     "compares FTS-only vs FTS+embedding retrieval",
     async () => {
@@ -231,13 +265,17 @@ describe("FTS vs Embedding benchmark", () => {
       );
       console.log("");
 
+      // Snapshot the original provider so we can restore it even if the test aborts.
+      const registry = createRegistryRepository();
+      savedProvider = await registry.getSetting("embedding.provider");
+      closeRegistryDb();
+
       // Run with embedding enabled (current config)
       const withEmbed = await runEval();
 
       // Disable embedding, close DB to pick up change
-      const registry = createRegistryRepository();
-      const savedProvider = await registry.getSetting("embedding.provider");
-      await registry.setSetting("embedding.provider", "none");
+      const disableRegistry = createRegistryRepository();
+      await disableRegistry.setSetting("embedding.provider", "none");
       closeRegistryDb();
 
       let ftsOnly;

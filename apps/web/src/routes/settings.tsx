@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { embeddingConfigQueryOptions, settingsEnvQueryOptions } from "../lib/queries";
 import { api } from "../lib/api";
 import {
@@ -112,17 +112,16 @@ function EmbeddingConfigForm() {
   const [openaiModel, setOpenaiModel] = useState("text-embedding-3-small");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
   const [ollamaModel, setOllamaModel] = useState("bge-m3");
-  const [initialized, setInitialized] = useState(false);
 
-  if (config && !initialized) {
+  useEffect(() => {
+    if (!config) return;
     setProvider(config.provider);
     setOpenaiApiKey(config.openaiApiKey === "****" ? "" : config.openaiApiKey);
     setOpenaiBaseUrl(config.openaiBaseUrl);
     setOpenaiModel(config.openaiModel);
     setOllamaBaseUrl(config.ollamaBaseUrl);
     setOllamaModel(config.ollamaModel);
-    setInitialized(true);
-  }
+  }, [config]);
 
   const saveMutation = useMutation({
     mutationFn: (input: Record<string, string>) => api.updateEmbeddingConfig(input),
@@ -130,6 +129,8 @@ function EmbeddingConfigForm() {
       queryClient.invalidateQueries({ queryKey: ["settings", "embedding"] });
     },
   });
+
+  const markDirty = () => saveMutation.reset();
 
   const handleSave = () => {
     const updates: Record<string, string> = {};
@@ -162,7 +163,14 @@ function EmbeddingConfigForm() {
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="provider">Embedding Provider</Label>
-        <Select id="provider" value={provider} onChange={(e) => setProvider(e.target.value)}>
+        <Select
+          id="provider"
+          value={provider}
+          onChange={(e) => {
+            markDirty();
+            setProvider(e.target.value);
+          }}
+        >
           <option value="none">none (disabled — FTS only)</option>
           <option value="openai">OpenAI</option>
           <option value="ollama">Ollama (local)</option>
@@ -180,7 +188,10 @@ function EmbeddingConfigForm() {
                 config?.openaiApiKey === "****" ? "•••• (stored, type to replace)" : "sk-..."
               }
               value={openaiApiKey}
-              onChange={(e) => setOpenaiApiKey(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setOpenaiApiKey(e.target.value);
+              }}
             />
           </div>
           <div className="space-y-2">
@@ -189,7 +200,10 @@ function EmbeddingConfigForm() {
               id="openai-base"
               placeholder="https://api.openai.com/v1"
               value={openaiBaseUrl}
-              onChange={(e) => setOpenaiBaseUrl(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setOpenaiBaseUrl(e.target.value);
+              }}
             />
           </div>
           <div className="space-y-2">
@@ -198,7 +212,10 @@ function EmbeddingConfigForm() {
               id="openai-model"
               placeholder="text-embedding-3-small"
               value={openaiModel}
-              onChange={(e) => setOpenaiModel(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setOpenaiModel(e.target.value);
+              }}
             />
           </div>
         </div>
@@ -212,7 +229,10 @@ function EmbeddingConfigForm() {
               id="ollama-url"
               placeholder="http://localhost:11434"
               value={ollamaBaseUrl}
-              onChange={(e) => setOllamaBaseUrl(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setOllamaBaseUrl(e.target.value);
+              }}
             />
           </div>
           <div className="space-y-2">
@@ -221,7 +241,10 @@ function EmbeddingConfigForm() {
               id="ollama-model"
               placeholder="bge-m3"
               value={ollamaModel}
-              onChange={(e) => setOllamaModel(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setOllamaModel(e.target.value);
+              }}
             />
           </div>
         </div>
