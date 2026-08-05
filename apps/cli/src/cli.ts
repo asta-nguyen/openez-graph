@@ -364,6 +364,10 @@ configCmd
       process.exit(1);
     }
     const registry = createRegistryRepository();
+    if (key === "embedding.provider" && !["none", "openai", "ollama"].includes(value)) {
+      console.error("Error: embedding.provider must be one of: none, openai, ollama");
+      process.exit(1);
+    }
     await registry.setSetting(key, value);
     console.log(`Set ${key} = ${key.includes("api_key") ? "****" : value}`);
   });
