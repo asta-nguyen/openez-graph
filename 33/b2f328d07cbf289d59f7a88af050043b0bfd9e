@@ -1,0 +1,20 @@
+docs/superpowers/specs/2026-08-05-context7-library-docs-design.md
+  s_6514757d0e9524::t_1961cbac941030 1-420
+  s_6514757d0e9524::t_854f79f2e4e4af 421-447
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "33b2f328d07cbf289d59f7a88af050043b0bfd9e",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
