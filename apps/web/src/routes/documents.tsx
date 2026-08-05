@@ -18,10 +18,8 @@ import {
 import { formatDate } from "../lib/utils";
 import { PAGE_SIZE, Pagination } from "../lib/pagination";
 
-
 export const Route = createFileRoute("/documents")({
-  loader: ({ context }) =>
-    context.queryClient.ensureQueryData(documentsQueryOptions(1, PAGE_SIZE)),
+  loader: ({ context }) => context.queryClient.ensureQueryData(documentsQueryOptions(1, PAGE_SIZE)),
   component: DocumentsPage,
   validateSearch: (search: Record<string, string | undefined>) => ({
     page: Math.max(1, parseInt(search.page ?? "", 10) || 1),
@@ -51,9 +49,7 @@ function DocumentsPage() {
     <div className="page">
       <div>
         <h1>Documents</h1>
-        <p className="muted">
-          Indexed document inventory ordered by latest update.
-        </p>
+        <p className="muted">Indexed document inventory ordered by latest update.</p>
       </div>
 
       <Card>
@@ -83,16 +79,14 @@ function DocumentsPage() {
                       <TableCell>{document.path}</TableCell>
                       <TableCell>{document.kind}</TableCell>
                       <TableCell>{document.language ?? "-"}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(document.updatedAt)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(document.updatedAt)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                basePath="/documents"
-              />
+              <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/documents" />
             </>
           )}
         </CardContent>

@@ -3,10 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  closeAllWorkspaceDbs,
-  createWorkspaceRepository,
-} from "../packages/db/src/sqlite/index";
+import { closeAllWorkspaceDbs, createWorkspaceRepository } from "../packages/db/src/sqlite/index";
 
 let tempRoot: string;
 
@@ -128,9 +125,13 @@ describe("createWorkspaceRepository", () => {
     await repo.insertEdge({ fromNodeId: nodeB, toNodeId: nodeC, type: "calls" });
 
     const neighbors = await repo.graphNeighbors("funcA", 1);
-    expect(neighbors.nodes.map((node) => node.label)).toEqual(expect.arrayContaining(["funcA", "funcB"]));
+    expect(neighbors.nodes.map((node) => node.label)).toEqual(
+      expect.arrayContaining(["funcA", "funcB"]),
+    );
     expect(neighbors.nodes.map((node) => node.label)).not.toContain("funcC");
-    expect((await repo.graphNeighbors(nodeA, 0)).nodes.map((node) => node.label)).toEqual(["funcA"]);
+    expect((await repo.graphNeighbors(nodeA, 0)).nodes.map((node) => node.label)).toEqual([
+      "funcA",
+    ]);
   });
 
   it("deduplicates legacy edges before installing the unique index", async () => {
@@ -139,7 +140,8 @@ describe("createWorkspaceRepository", () => {
     const nodeB = await repo.upsertGraphNode({ type: "function", label: "legacyB" });
 
     await repo.executeRaw("DROP INDEX idx_graph_edges_from_to_type");
-    const insertSql = "INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata) VALUES (?, ?, ?, 'calls', 1, '{}')";
+    const insertSql =
+      "INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata) VALUES (?, ?, ?, 'calls', 1, '{}')";
     await repo.executeRaw(insertSql, ["legacy-edge-1", nodeA, nodeB]);
     await repo.executeRaw(insertSql, ["legacy-edge-2", nodeA, nodeB]);
     expect(await repo.getEdgeCount()).toBe(2);
@@ -147,9 +149,11 @@ describe("createWorkspaceRepository", () => {
     closeAllWorkspaceDbs();
     const reopened = createWorkspaceRepository(tempRoot);
     expect(await reopened.getEdgeCount()).toBe(1);
-    expect(await reopened.queryRaw(
-      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_graph_edges_from_to_type'"
-    )).toEqual([{ name: "idx_graph_edges_from_to_type" }]);
+    expect(
+      await reopened.queryRaw(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_graph_edges_from_to_type'",
+      ),
+    ).toEqual([{ name: "idx_graph_edges_from_to_type" }]);
   });
 
   it("fullTextSearch finds chunks by content", async () => {
@@ -190,10 +194,17 @@ describe("createWorkspaceRepository", () => {
       language: "typescript",
       contentHash: "writer",
       sizeBytes: 10,
-      mtimeMs: 1
+      mtimeMs: 1,
     });
     await repo.insertChunks([
-      { documentId: docId, chunkIndex: 0, content: "function writeData() {}", tokenCount: 5, contentHash: "writer-chunk", metadata: "{}" }
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        content: "function writeData() {}",
+        tokenCount: 5,
+        contentHash: "writer-chunk",
+        metadata: "{}",
+      },
     ]);
 
     expect(await repo.fullTextSearch("written?", 5)).toHaveLength(1);
@@ -208,7 +219,7 @@ describe("createWorkspaceRepository", () => {
       language: "markdown",
       contentHash: "legacy",
       sizeBytes: 10,
-      mtimeMs: 1
+      mtimeMs: 1,
     });
 
     await repo.executeRaw("DROP TRIGGER chunks_fts_insert");
@@ -216,7 +227,14 @@ describe("createWorkspaceRepository", () => {
     await repo.executeRaw("DROP TRIGGER chunks_fts_update");
     await repo.executeRaw("DROP TABLE chunks_fts");
     await repo.insertChunks([
-      { documentId: docId, chunkIndex: 0, content: "legacy searchable content", tokenCount: 3, contentHash: "chunk", metadata: "{}" }
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        content: "legacy searchable content",
+        tokenCount: 3,
+        contentHash: "chunk",
+        metadata: "{}",
+      },
     ]);
 
     closeAllWorkspaceDbs();
@@ -255,6 +273,8 @@ describe("createWorkspaceRepository", () => {
 
     expect(memId).toBeTruthy();
     expect((await repo.getMemory(memId))?.title).toBe("Decision: use SQLite");
-    expect((await repo.searchMemories("SQLite storage", 10)).map((memory) => memory.id)).toEqual([memId]);
+    expect((await repo.searchMemories("SQLite storage", 10)).map((memory) => memory.id)).toEqual([
+      memId,
+    ]);
   });
 });

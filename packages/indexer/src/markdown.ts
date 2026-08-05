@@ -54,7 +54,13 @@ export function indexMarkdown(input: {
 }): { chunks: IndexedChunk[]; wikilinks: string[] } {
   const lines = input.content.split("\n");
   const headingState: HeadingState = { path: [], depth: 0 };
-  const sections: Array<{ heading?: string; content: string; startLine: number; endLine: number; headingPath: string[] }> = [];
+  const sections: Array<{
+    heading?: string;
+    content: string;
+    startLine: number;
+    endLine: number;
+    headingPath: string[];
+  }> = [];
   const wikilinks = new Set<string>();
   const slugger = new GithubSlugger();
 
@@ -73,7 +79,7 @@ export function indexMarkdown(input: {
       content,
       startLine: sectionStartLine,
       endLine: lineNumber,
-      headingPath: [...headingState.path]
+      headingPath: [...headingState.path],
     });
     buffer = [];
   };
@@ -113,14 +119,14 @@ export function indexMarkdown(input: {
           headingPath: section.headingPath,
           startLine: section.startLine,
           endLine: section.endLine,
-          splitIndex
-        }
+          splitIndex,
+        },
       });
     });
   });
 
   return {
     chunks,
-    wikilinks: [...wikilinks]
+    wikilinks: [...wikilinks],
   };
 }

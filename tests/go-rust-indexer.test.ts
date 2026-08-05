@@ -42,7 +42,7 @@ import . "example.com/helpers"
     expect(result.importPaths).toEqual([
       "example.com/api",
       "example.com/driver",
-      "example.com/helpers"
+      "example.com/helpers",
     ]);
   });
 
@@ -62,13 +62,17 @@ func readFile(path string) {}
 func parseData(d []byte) {}
 func handle(n int) {}
 `);
-    expect(result.calledIdentifiers).toEqual(expect.arrayContaining(["readFile", "parseData", "handle"]));
+    expect(result.calledIdentifiers).toEqual(
+      expect.arrayContaining(["readFile", "parseData", "handle"]),
+    );
     expect(result.calledIdentifiers).not.toContain("for");
-    expect(result.callExpressions).toEqual(expect.arrayContaining([
-      { callerName: "process", calleeName: "readFile" },
-      { callerName: "process", calleeName: "parseData" },
-      { callerName: "process", calleeName: "handle" }
-    ]));
+    expect(result.callExpressions).toEqual(
+      expect.arrayContaining([
+        { callerName: "process", calleeName: "readFile" },
+        { callerName: "process", calleeName: "parseData" },
+        { callerName: "process", calleeName: "handle" },
+      ]),
+    );
   });
 
   it("extracts method receiver", () => {
@@ -94,7 +98,7 @@ func (s *Server) listen() {}
     expect(listenSymbol?.receiver).toBe("s *Server");
     expect(result.callExpressions).toContainEqual({
       callerName: "Server::Start",
-      calleeName: "Server::listen"
+      calleeName: "Server::listen",
     });
   });
 
@@ -173,10 +177,12 @@ fn read_file(path: &str) {}
 fn parse_data(d: &[u8]) {}
 `);
     expect(result.calledIdentifiers).toEqual(expect.arrayContaining(["read_file", "parse_data"]));
-    expect(result.callExpressions).toEqual(expect.arrayContaining([
-      { callerName: "process", calleeName: "read_file" },
-      { callerName: "process", calleeName: "parse_data" }
-    ]));
+    expect(result.callExpressions).toEqual(
+      expect.arrayContaining([
+        { callerName: "process", calleeName: "read_file" },
+        { callerName: "process", calleeName: "parse_data" },
+      ]),
+    );
   });
 
   it("extracts impl trait for type", () => {

@@ -53,9 +53,28 @@ export interface RegistryRepository {
   }): Promise<RegistryWorkspace>;
   updateWorkspace(
     id: string,
-    updates: Partial<Pick<RegistryWorkspace, "status" | "indexingStatus" | "graphStatus" | "lastIndexedAt" | "lastGraphBuiltAt" | "documentCount" | "chunkCount" | "nodeCount" | "edgeCount" | "lastError">>
+    updates: Partial<
+      Pick<
+        RegistryWorkspace,
+        | "status"
+        | "indexingStatus"
+        | "graphStatus"
+        | "lastIndexedAt"
+        | "lastGraphBuiltAt"
+        | "documentCount"
+        | "chunkCount"
+        | "nodeCount"
+        | "edgeCount"
+        | "lastError"
+      >
+    >,
   ): Promise<void>;
   deleteWorkspace(id: string): Promise<void>;
+
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
+  deleteSetting(key: string): Promise<void>;
+  getAllSettings(): Promise<Record<string, string>>;
 }
 
 export interface WorkspaceRepository {
@@ -122,45 +141,51 @@ export interface WorkspaceRepository {
       contentHash: string;
       sizeBytes: number;
       mtimeMs: number;
-    }>
+    }>,
   ): Promise<void>;
 
   deleteDocument(id: string): Promise<void>;
-  listDocuments(): Promise<Array<{
-    id: string;
-    path: string;
-    absolutePath: string;
-    kind: string;
-    language: string | null;
-    contentHash: string;
-    sizeBytes: number;
-    mtimeMs: number;
-    createdAt: string;
-    updatedAt: string;
-  }>>;
+  listDocuments(): Promise<
+    Array<{
+      id: string;
+      path: string;
+      absolutePath: string;
+      kind: string;
+      language: string | null;
+      contentHash: string;
+      sizeBytes: number;
+      mtimeMs: number;
+      createdAt: string;
+      updatedAt: string;
+    }>
+  >;
 
-  getChunksByDocument(documentId: string): Promise<Array<{
-    id: string;
-    documentId: string;
-    chunkIndex: number;
-    heading: string | null;
-    content: string;
-    tokenCount: number;
-    contentHash: string;
-    metadata: string;
-    createdAt: string;
-    updatedAt: string;
-  }>>;
+  getChunksByDocument(documentId: string): Promise<
+    Array<{
+      id: string;
+      documentId: string;
+      chunkIndex: number;
+      heading: string | null;
+      content: string;
+      tokenCount: number;
+      contentHash: string;
+      metadata: string;
+      createdAt: string;
+      updatedAt: string;
+    }>
+  >;
 
-  insertChunks(inputs: Array<{
-    documentId: string;
-    chunkIndex: number;
-    heading?: string | null;
-    content: string;
-    tokenCount: number;
-    contentHash: string;
-    metadata: string;
-  }>): Promise<string[]>;
+  insertChunks(
+    inputs: Array<{
+      documentId: string;
+      chunkIndex: number;
+      heading?: string | null;
+      content: string;
+      tokenCount: number;
+      contentHash: string;
+      metadata: string;
+    }>,
+  ): Promise<string[]>;
 
   deleteChunksByDocument(documentId: string): Promise<void>;
 
@@ -171,12 +196,14 @@ export interface WorkspaceRepository {
     metadata?: string;
   }): Promise<string>;
 
-  insertGraphNodesBatch(inputs: Array<{
-    type: string;
-    label: string;
-    refId?: string;
-    metadata?: string;
-  }>): Promise<string[]>;
+  insertGraphNodesBatch(
+    inputs: Array<{
+      type: string;
+      label: string;
+      refId?: string;
+      metadata?: string;
+    }>,
+  ): Promise<string[]>;
 
   getGraphNode(id: string): Promise<{
     id: string;
@@ -188,7 +215,10 @@ export interface WorkspaceRepository {
     updatedAt: string;
   } | null>;
 
-  findGraphNode(type: string, label: string): Promise<{
+  findGraphNode(
+    type: string,
+    label: string,
+  ): Promise<{
     id: string;
     type: string;
     label: string;
@@ -201,10 +231,20 @@ export interface WorkspaceRepository {
   deleteGraphNodesByRefId(refId: string): Promise<void>;
 
   /** Find a file-type graph node by its label (relative path). */
-  findFileNode(relativePath: string): Promise<{ id: string; type: string; label: string; refId: string | null; metadata: string } | null>;
+  findFileNode(relativePath: string): Promise<{
+    id: string;
+    type: string;
+    label: string;
+    refId: string | null;
+    metadata: string;
+  } | null>;
 
   /** Get all symbol nodes whose metadata.filePath matches the given relative path. */
-  getSymbolNodesByFilePath(filePath: string): Promise<Array<{ id: string; type: string; label: string; refId: string | null; metadata: string }>>;
+  getSymbolNodesByFilePath(
+    filePath: string,
+  ): Promise<
+    Array<{ id: string; type: string; label: string; refId: string | null; metadata: string }>
+  >;
 
   /** Delete outgoing edges from a specific node, optionally filtered by edge types. */
   deleteOutgoingEdges(nodeId: string, types?: string[]): void;
@@ -226,36 +266,50 @@ export interface WorkspaceRepository {
     metadata?: string;
   }): Promise<string>;
 
-  insertEdges(inputs: Array<{
-    fromNodeId: string;
-    toNodeId: string;
-    type: string;
-    weight?: number;
-    metadata?: string;
-  }>): Promise<void>;
+  insertEdges(
+    inputs: Array<{
+      fromNodeId: string;
+      toNodeId: string;
+      type: string;
+      weight?: number;
+      metadata?: string;
+    }>,
+  ): Promise<void>;
 
   deleteEdgesByNodeIds(nodeIds: string[]): Promise<void>;
 
-  insertEmbeddings(inputs: Array<{
-    chunkId: string;
-    provider: string;
-    model: string;
-    dimensions: number;
-    embedding: string;
-  }>): Promise<void>;
+  insertEmbeddings(
+    inputs: Array<{
+      chunkId: string;
+      provider: string;
+      model: string;
+      dimensions: number;
+      embedding: string;
+      inputHash?: string | null;
+    }>,
+  ): Promise<void>;
 
   deleteEmbeddingsByChunkIds(chunkIds: string[]): Promise<void>;
 
-  fullTextSearch(query: string, limit: number): Promise<Array<{
-    id: string;
-    path: string;
-    content: string;
-    score: number;
-    heading: string | null;
-    metadata: Record<string, unknown>;
-  }>>;
+  fullTextSearch(
+    query: string,
+    limit: number,
+  ): Promise<
+    Array<{
+      id: string;
+      path: string;
+      content: string;
+      score: number;
+      heading: string | null;
+      metadata: Record<string, unknown>;
+    }>
+  >;
 
-  graphNeighbors(label: string, depth: number, limit?: number): Promise<{
+  graphNeighbors(
+    label: string,
+    depth: number,
+    limit?: number,
+  ): Promise<{
     nodes: Array<Record<string, unknown>>;
     edges: Array<Record<string, unknown>>;
   }>;
@@ -280,10 +334,17 @@ export interface WorkspaceRepository {
       chunksWritten: number;
       embeddingsWritten: number;
       errorMessage?: string;
-    }
+    },
   ): Promise<void>;
 
-  insertQueryLog(input: { query: string; mode: string; resultCount: number; tokensReturned?: number; tokensSaved?: number; filesScanned?: number }): Promise<string>;
+  insertQueryLog(input: {
+    query: string;
+    mode: string;
+    resultCount: number;
+    tokensReturned?: number;
+    tokensSaved?: number;
+    filesScanned?: number;
+  }): Promise<string>;
 
   executeRaw(sqlQuery: string, params?: unknown[]): Promise<unknown>;
   queryRaw(sqlQuery: string, params?: unknown[]): Promise<Array<Record<string, unknown>>>;

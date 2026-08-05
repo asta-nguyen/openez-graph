@@ -69,19 +69,24 @@ openez setup codex              # wire up Codex
 openez setup opencode           # wire up OpenCode
 openez setup windsurf           # wire up Windsurf / Devin Desktop
 openez setup devin              # wire up Devin CLI
+openez config get [key]         # show embedding config (all if no key)
+openez config set <key> <value> # set embedding config value
+openez config list              # list all DB-stored config overrides
 ```
+
+Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.openai_base_url`, `embedding.openai_model`, `embedding.ollama_base_url`, `embedding.ollama_model`. API keys are encrypted at rest with AES-256-GCM.
 
 ## MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `list_workspaces` | List all registered workspaces |
-| `code_query` | Hybrid FTS/vector search + graph expansion over indexed code and docs |
-| `code_context` | Get budgeted symbol context with callers, callees, and related files |
-| `graph_neighbors` | Traverse graph edges from a node or label |
-| `memory_recall` | Recall active memory entries and technical decisions |
-| `memory_write` | Write a memory entry (notes, decisions, patterns) |
-| `index_workspace` | Trigger indexing for a workspace |
+| Tool              | Description                                                           |
+| ----------------- | --------------------------------------------------------------------- |
+| `list_workspaces` | List all registered workspaces                                        |
+| `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs |
+| `code_context`    | Get budgeted symbol context with callers, callees, and related files  |
+| `graph_neighbors` | Traverse graph edges from a node or label                             |
+| `memory_recall`   | Recall active memory entries and technical decisions                  |
+| `memory_write`    | Write a memory entry (notes, decisions, patterns)                     |
+| `index_workspace` | Trigger indexing for a workspace                                      |
 
 `memory_query` is accepted as a deprecated compatibility alias for `code_query`, but is not advertised to new clients.
 
@@ -96,29 +101,36 @@ openez setup devin              # wire up Devin CLI
 
 ## Supported languages
 
-| Language | Indexing depth |
-|----------|---------------|
+| Language                | Indexing depth                                         |
+| ----------------------- | ------------------------------------------------------ |
 | TypeScript / JavaScript | Richest — `ts-morph` symbol extraction, imports, calls |
-| Python | Basic top-level symbol extraction |
-| Go | Basic top-level symbol extraction |
-| Rust | Basic top-level symbol extraction |
-| YAML / JSON / TOML | Structure-aware chunking |
-| Markdown | Section-oriented chunking |
+| Python                  | Basic top-level symbol extraction                      |
+| Go                      | Basic top-level symbol extraction                      |
+| Rust                    | Basic top-level symbol extraction                      |
+| YAML / JSON / TOML      | Structure-aware chunking                               |
+| Markdown                | Section-oriented chunking                              |
 
 ## Retrieval quality
 
-Benchmarked on 18 real queries against the openez codebase itself (118 files, 640 chunks):
+Benchmarked on 23 queries (17 keyword + 6 semantic) against the openez codebase (128 files, 810 chunks):
 
-| Metric | Value |
-|--------|-------|
-| Recall@5 | 94.44% |
-| MRR | 0.6565 |
-| Avg latency | 38.68 ms |
-| p50 latency | 18.65 ms |
-| Duplicate path rate | 0% |
-| Quality gate | PASS |
+| Metric           | FTS only | FTS + Embedding (bge-m3) |
+| ---------------- | -------: | -----------------------: |
+| Recall@5         |   91.30% |                   95.65% |
+| Keyword queries  |  100.00% |                  100.00% |
+| Semantic queries |   66.67% |                   83.33% |
+| Avg latency      |     5 ms |                   249 ms |
 
-FTS5 with BM25 ranking handles 94% of queries in under 40ms — no embeddings needed for the default path. Embeddings (OpenAI/Ollama) are optional semantic fallback for queries without direct keyword overlap.
+**FTS-only is the default** — 100% recall on keyword queries, 50x faster. **Embedding adds semantic search with +16.67% semantic recall and no keyword regression** via full RRF fusion (FTS weight 2x, vector weight 1x).
+
+```bash
+# Enable Ollama embeddings (bge-m3 recommended for code search)
+openez config set embedding.provider ollama
+openez config set embedding.ollama_model bge-m3
+openez reindex .
+```
+
+See [BENCHMARK.md](https://github.com/asta-nguyen/openez-graph/blob/main/BENCHMARK.md) for full analysis.
 
 ## Web dashboard
 
@@ -127,6 +139,7 @@ openez serve --web
 ```
 
 Opens a full web dashboard at `http://localhost:17881` with:
+
 - Workspace overview (documents, chunks, nodes, edges)
 - Graph explorer with force-directed layout
 - Query interface for memory retrieval

@@ -2,29 +2,15 @@ import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { GraphClient } from "../../../components/graph/GraphClient";
 import { StatusBadge } from "../../../components/status-badge";
-import {
-  workspaceQueryOptions,
-  workspaceGraphQueryOptions,
-} from "../../../lib/queries";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@openez-graph/ui";
+import { workspaceQueryOptions, workspaceGraphQueryOptions } from "../../../lib/queries";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@openez-graph/ui";
 import { ChevronLeft } from "lucide-react";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/graph")({
   loader: async ({ context, params }) => {
     await Promise.all([
-      context.queryClient.ensureQueryData(
-        workspaceQueryOptions(params.workspaceId),
-      ),
-      context.queryClient.ensureQueryData(
-        workspaceGraphQueryOptions(params.workspaceId),
-      ),
+      context.queryClient.ensureQueryData(workspaceQueryOptions(params.workspaceId)),
+      context.queryClient.ensureQueryData(workspaceGraphQueryOptions(params.workspaceId)),
     ]);
   },
   component: WorkspaceGraphPage,
@@ -32,9 +18,7 @@ export const Route = createFileRoute("/workspaces/$workspaceId/graph")({
 
 function WorkspaceGraphPage() {
   const { workspaceId } = useParams({ from: "/workspaces/$workspaceId/graph" });
-  const { data: workspaceResult } = useQuery(
-    workspaceQueryOptions(workspaceId),
-  );
+  const { data: workspaceResult } = useQuery(workspaceQueryOptions(workspaceId));
   const { data: graphData } = useQuery(workspaceGraphQueryOptions(workspaceId));
 
   if (!workspaceResult?.ok) {

@@ -69,9 +69,7 @@ function sampleText(
 
   // Draw all text white first
   cctx.fillStyle = "white";
-  lines.forEach((line, i) =>
-    cctx.fillText(line, W / 2, startY + i * lineHeight),
-  );
+  lines.forEach((line, i) => cctx.fillText(line, W / 2, startY + i * lineHeight));
 
   // Draw gradient part in red to mark those pixels.
   // Handles substrings (e.g. "EZ" inside "OPENEZ"), not just whole words.
@@ -140,7 +138,7 @@ function sampleText(
 }
 
 /* ── Shaders — clean push-repel hover (Codrops/sanprieto style) ── */
-const VERT = /* glsl */`
+const VERT = /* glsl */ `
   precision highp float;
 
   uniform float uTime;
@@ -961,7 +959,7 @@ const VERT = /* glsl */`
   }
 `;
 
-const FRAG = /* glsl */`
+const FRAG = /* glsl */ `
   precision highp float;
   uniform sampler2D uTexture;
   uniform vec3 uGlowColor;
@@ -1042,16 +1040,13 @@ export function ParticleText({
 
     const setupScene = () => {
       const CW = container.clientWidth || 800;
-      const { positions: targets, isGradient, canvasW, canvasH, bboxH } =
-        sampleText(
-          text,
-          gradientPart,
-          particleCount,
-          fontSize,
-          weight,
-          CW,
-          fontFamily,
-        );
+      const {
+        positions: targets,
+        isGradient,
+        canvasW,
+        canvasH,
+        bboxH,
+      } = sampleText(text, gradientPart, particleCount, fontSize, weight, CW, fontFamily);
 
       const SCALE = 4;
       const textScreenH = Math.ceil(bboxH / SCALE);
@@ -1059,9 +1054,7 @@ export function ParticleText({
       const textScreenHFitted = textScreenH + padY * 2;
       // If fillContainer, use the container's full height so the canvas
       // covers the entire footer — no edge cropping on hover.
-      const CH = fillContainer
-        ? container.clientHeight || textScreenHFitted
-        : textScreenHFitted;
+      const CH = fillContainer ? container.clientHeight || textScreenHFitted : textScreenHFitted;
       if (!fillContainer) setContainerHeight(textScreenHFitted);
 
       // Vertical alignment: shift text targets up when "top" so the wordmark
@@ -1167,10 +1160,7 @@ export function ParticleText({
       }
 
       const geom = new THREE.BufferGeometry();
-      geom.setAttribute(
-        "position",
-        new THREE.BufferAttribute(new Float32Array(count * 3), 3),
-      );
+      geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
       geom.setAttribute("aTarget", new THREE.BufferAttribute(targets, 3));
       geom.setAttribute("aOrigin", new THREE.BufferAttribute(origins, 3));
       geom.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
@@ -1219,10 +1209,7 @@ export function ParticleText({
         const { halfW, halfH } = getViewSize();
         // Standard screen→world mapping. Text targets are already shifted
         // in world space, so no offset needed here.
-        uniforms.uCursor.value.set(
-          (nx - 0.5) * 2 * halfW,
-          -(ny - 0.5) * 2 * halfH,
-        );
+        uniforms.uCursor.value.set((nx - 0.5) * 2 * halfW, -(ny - 0.5) * 2 * halfH);
         cursorPresent = true;
       };
       const onMouseLeave = () => {

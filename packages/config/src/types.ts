@@ -35,7 +35,7 @@ export function getDefaultSettings(): GlobalSettings {
   return {
     chunking: {
       targetTokens: 1024,
-      overlapTokens: 100
+      overlapTokens: 128,
     },
     retrieval: {
       vectorLimit: 20,
@@ -43,7 +43,7 @@ export function getDefaultSettings(): GlobalSettings {
       graphHops: 1,
       maxGraphNeighbors: 15,
       finalLimit: 10,
-      maxContextTokens: 4000
-    }
+      maxContextTokens: 4000,
+    },
   };
 }

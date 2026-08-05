@@ -16,7 +16,7 @@ describe("config indexing", () => {
   });
 
   it("marks TOML array tables", () => {
-    const chunks = indexConfig("[package]\nname = \"app\"\n[[bin]]\nname = \"cli\"\n", "toml");
+    const chunks = indexConfig('[package]\nname = "app"\n[[bin]]\nname = "cli"\n', "toml");
 
     expect(chunks.map((chunk) => chunk.heading)).toEqual(["package", "bin"]);
     expect(chunks[1].metadata.arrayTable).toBe(true);

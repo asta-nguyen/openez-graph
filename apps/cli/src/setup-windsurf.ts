@@ -49,7 +49,7 @@ export async function setupWindsurf(rootPath: string): Promise<void> {
 
   mcpServers[label] = {
     command,
-    args
+    args,
   };
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");

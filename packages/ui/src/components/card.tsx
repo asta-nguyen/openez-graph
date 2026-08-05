@@ -3,7 +3,10 @@ import { type HTMLAttributes } from "react";
 import { cn } from "../lib/cn";
 
 const Card = ({ className, ...props }: HTMLAttributes<HTMLElement>) => (
-  <section className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)} {...props} />
+  <section
+    className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)}
+    {...props}
+  />
 );
 
 const CardHeader = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (

@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateRetrieval, parseRetrievalCases, summarizeQuality } from "../packages/indexer/src/retrieval-eval";
+import {
+  evaluateRetrieval,
+  parseRetrievalCases,
+  summarizeQuality,
+} from "../packages/indexer/src/retrieval-eval";
 
 describe("retrieval evaluation", () => {
   it("parses legacy strings and quality cases", () => {
     expect(parseRetrievalCases(["query", { query: "target", expectedPaths: ["a.ts"] }])).toEqual([
       { query: "query" },
-      { query: "target", expectedPaths: ["a.ts"] }
+      { query: "target", expectedPaths: ["a.ts"] },
     ]);
   });
 

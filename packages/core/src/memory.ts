@@ -23,17 +23,13 @@ export async function memoryWrite(input: {
     content: input.content,
     tags: (input.tags ?? []).join(","),
     source: input.source ?? "agent",
-    supersedesId: input.supersedesId
+    supersedesId: input.supersedesId,
   });
 
   return { id, ...input };
 }
 
-export async function memoryRecall(input: {
-  workspaceId: string;
-  query: string;
-  limit?: number;
-}) {
+export async function memoryRecall(input: { workspaceId: string; query: string; limit?: number }) {
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
   if (!workspace) {
@@ -45,7 +41,10 @@ export async function memoryRecall(input: {
   return {
     memories: memories.map((memory) => ({
       ...memory,
-      tags: memory.tags.split(",").map((tag) => tag.trim()).filter(Boolean)
-    }))
+      tags: memory.tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    })),
   };
 }
