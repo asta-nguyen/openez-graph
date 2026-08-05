@@ -11,5 +11,9 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
-  return <Badge variant={statusVariants[status] ?? "outline"} className={className}>{status}</Badge>;
+  return (
+    <Badge variant={statusVariants[status] ?? "outline"} className={className}>
+      {status}
+    </Badge>
+  );
 }

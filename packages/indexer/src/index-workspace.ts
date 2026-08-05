@@ -171,17 +171,20 @@ async function resetChangedFileArtifacts(
     await repo.deleteEmbeddingsByChunkIds(chunkIds);
   }
 
+  // Delete old chunk graph nodes only (preserve symbol nodes)
+  repo.deleteChunkNodesByChunkIds(chunkIds);
+
   // Find file node and delete its outgoing edges (will be rebuilt)
   const fileNode = await repo.findFileNode(relativePath);
   if (fileNode) {
-    repo.deleteOutgoingEdges(fileNode.id, ["defines", "imports", "mentions"]);
+    repo.deleteOutgoingEdges(fileNode.id, ["contains", "defines", "imports", "mentions"]);
   }
 
   // Get existing symbol nodes for this file, delete their outgoing edges (will be rebuilt)
   const symbolNodes = await repo.getSymbolNodesByFilePath(relativePath);
   const existingSymbolNodes = new Map<string, string>();
   for (const sym of symbolNodes) {
-    repo.deleteOutgoingEdges(sym.id, ["calls"]);
+    repo.deleteOutgoingEdges(sym.id, ["represented_by", "calls"]);
     existingSymbolNodes.set(sym.label, sym.id);
   }
 
@@ -194,56 +197,158 @@ async function writeEmbeddingsToRepo(
   repo: WorkspaceRepository,
   chunkRows: Array<{ id: string; content: string; path: string; heading?: string | null }>,
   provider: EmbeddingProvider | null
-) {
+): Promise<{ written: number; failedBatches: number }> {
   if (!provider || chunkRows.length === 0) {
-    return 0;
+    return { written: 0, failedBatches: 0 };
   }
 
-  const existing = await repo.queryRaw(
-    `SELECT chunk_id FROM embeddings
-     WHERE provider = ? AND model = ? AND chunk_id IN (${chunkRows.map(() => "?").join(",")})`,
-    [provider.provider, embeddingStorageModel(provider), ...chunkRows.map((chunk) => chunk.id)]
-  );
-  const existingIds = new Set(existing.map((row) => String(row.chunk_id)));
+  const existingIds = new Set<string>();
+  const LOOKUP_BATCH_SIZE = 500;
+  for (let i = 0; i < chunkRows.length; i += LOOKUP_BATCH_SIZE) {
+    const batch = chunkRows.slice(i, i + LOOKUP_BATCH_SIZE);
+    const existing = await repo.queryRaw(
+      `SELECT chunk_id FROM embeddings
+       WHERE provider = ? AND model = ? AND chunk_id IN (${batch.map(() => "?").join(",")})`,
+      [provider.provider, embeddingStorageModel(provider), ...batch.map((chunk) => chunk.id)]
+    );
+    for (const row of existing) {
+      existingIds.add(String(row.chunk_id));
+    }
+  }
   const missingRows = chunkRows.filter((chunk) => !existingIds.has(chunk.id));
-  if (missingRows.length === 0) return 0;
+  if (missingRows.length === 0) return { written: 0, failedBatches: 0 };
 
-  try {
-    const vectors = await provider.embed(
-      missingRows.map((chunk) => formatEmbeddingInput(provider, chunk, "document"))
+  const rowsToEmbed = missingRows.map((chunk) => ({
+    chunk,
+    hash: fastHash(formatEmbeddingInput(provider, chunk, "document"))
+  }));
+
+  // Deduplicate by input_hash: skip chunks whose formatted input already has an embedding
+  const existingHashes = new Set<string>();
+  for (let i = 0; i < rowsToEmbed.length; i += LOOKUP_BATCH_SIZE) {
+    const batch = rowsToEmbed.slice(i, i + LOOKUP_BATCH_SIZE);
+    const hashPlaceholders = batch.map(() => "?").join(",");
+    const existing = await repo.queryRaw(
+      `SELECT DISTINCT input_hash FROM embeddings
+       WHERE provider = ? AND model = ? AND input_hash IN (${hashPlaceholders})`,
+      [provider.provider, embeddingStorageModel(provider), ...batch.map((entry) => entry.hash)]
     );
-    if (vectors.length !== missingRows.length) {
-      console.error(`Embedding provider returned ${vectors.length} vectors for ${missingRows.length} chunks`);
-      return 0;
+    for (const row of existing) {
+      if (row.input_hash) existingHashes.add(String(row.input_hash));
     }
-    const invalidEmbeddingIndex = vectors.findIndex((embedding) => embedding.length === 0);
-
-    if (invalidEmbeddingIndex !== -1) {
-      console.error(`Embedding provider returned empty vector for chunk ${missingRows[invalidEmbeddingIndex].id}`);
-      return 0;
-    }
-
-    const dimensions = vectors[0]?.length ?? 0;
-    if (vectors.some((embedding) => embedding.length !== dimensions)) {
-      console.error("Embedding provider returned mixed dimensions");
-      return 0;
-    }
-
-    await repo.insertEmbeddings(
-      vectors.map((embedding, index) => ({
-        chunkId: missingRows[index].id,
-        provider: provider.provider,
-        model: embeddingStorageModel(provider),
-        dimensions,
-        embedding: JSON.stringify(embedding)
-      }))
-    );
-
-    return vectors.length;
-  } catch (error) {
-    console.error(`Embedding failed (skipping): ${error instanceof Error ? error.message : String(error)}`);
-    return 0;
   }
+  const toEmbed = rowsToEmbed.filter((entry) => !existingHashes.has(entry.hash));
+  const skipped = rowsToEmbed.filter((entry) => existingHashes.has(entry.hash));
+
+  // Reuse existing embeddings for skipped chunks: copy the vector so each chunk
+  // has its own embedding row and appears in vector search results.
+  let reusedWritten = 0;
+  if (skipped.length > 0) {
+    const hashToVector = new Map<string, { embedding: string; dimensions: number }>();
+    const uniqueHashes = [...new Set(skipped.map((entry) => entry.hash))];
+    for (let i = 0; i < uniqueHashes.length; i += LOOKUP_BATCH_SIZE) {
+      const batch = uniqueHashes.slice(i, i + LOOKUP_BATCH_SIZE);
+      const placeholders = batch.map(() => "?").join(",");
+      const rows = await repo.queryRaw(
+        `SELECT input_hash, embedding, dimensions FROM embeddings
+         WHERE provider = ? AND model = ? AND input_hash IN (${placeholders})
+         GROUP BY input_hash`,
+        [provider.provider, embeddingStorageModel(provider), ...batch]
+      );
+      for (const row of rows) {
+        if (row.input_hash) {
+          hashToVector.set(String(row.input_hash), {
+            embedding: String(row.embedding),
+            dimensions: Number(row.dimensions)
+          });
+        }
+      }
+    }
+    const reuseInputs: Array<{
+      chunkId: string;
+      provider: string;
+      model: string;
+      dimensions: number;
+      embedding: string;
+      inputHash: string;
+    }> = [];
+    for (const entry of skipped) {
+      const existing = hashToVector.get(entry.hash);
+      if (existing) {
+        reuseInputs.push({
+          chunkId: entry.chunk.id,
+          provider: provider.provider,
+          model: embeddingStorageModel(provider),
+          dimensions: existing.dimensions,
+          embedding: existing.embedding,
+          inputHash: entry.hash
+        });
+      }
+    }
+    if (reuseInputs.length > 0) {
+      await repo.insertEmbeddings(reuseInputs);
+      reusedWritten = reuseInputs.length;
+    }
+  }
+
+  if (toEmbed.length === 0) return { written: reusedWritten, failedBatches: 0 };
+
+  const EMBED_BATCH_SIZE = 50;
+  let totalWritten = 0;
+  let failedBatches = 0;
+
+  for (let i = 0; i < toEmbed.length; i += EMBED_BATCH_SIZE) {
+    const batch = toEmbed.slice(i, i + EMBED_BATCH_SIZE);
+
+    try {
+      const vectors = await provider.embed(
+        batch.map((entry) => formatEmbeddingInput(provider, entry.chunk, "document"))
+      );
+      if (vectors.length !== batch.length) {
+        failedBatches += 1;
+        console.error(
+          `Embedding provider returned ${vectors.length} vectors for ${batch.length} chunks`
+        );
+        continue;
+      }
+      const invalidEmbeddingIndex = vectors.findIndex((embedding) => embedding.length === 0);
+
+      if (invalidEmbeddingIndex !== -1) {
+        failedBatches += 1;
+        console.error(
+          `Embedding provider returned empty vector for chunk ${batch[invalidEmbeddingIndex].chunk.id}`
+        );
+        continue;
+      }
+
+      const dimensions = vectors[0]?.length ?? 0;
+      if (vectors.some((embedding) => embedding.length !== dimensions)) {
+        failedBatches += 1;
+        console.error("Embedding provider returned mixed dimensions");
+        continue;
+      }
+
+      await repo.insertEmbeddings(
+        vectors.map((embedding, index) => ({
+          chunkId: batch[index].chunk.id,
+          provider: provider.provider,
+          model: embeddingStorageModel(provider),
+          dimensions,
+          embedding: JSON.stringify(embedding),
+          inputHash: batch[index].hash
+        }))
+      );
+
+      totalWritten += vectors.length;
+    } catch (error) {
+      failedBatches += 1;
+      console.error(
+        `Embedding batch failed (skipping): ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  return { written: totalWritten + reusedWritten, failedBatches };
 }
 
 async function parseInline(
@@ -382,7 +487,7 @@ export async function indexWorkspace(input: {
   );
   const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
   const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
-  const embeddingProvider = getEmbeddingProvider();
+  const embeddingProvider = await getEmbeddingProvider();
   const runMode = input.mode ?? "incremental";
 
   const reportProgress = async (message: string, progress: number) => {
@@ -390,6 +495,10 @@ export async function indexWorkspace(input: {
   };
 
   const repo = createWorkspaceRepository(workspace.rootPath);
+
+  if (runMode === "full") {
+    repo.resetIndexArtifacts();
+  }
 
   const runId = await repo.createIndexRun({ mode: runMode });
 
@@ -451,12 +560,14 @@ export async function indexWorkspace(input: {
 
   const existingDocumentsByPath = new Map(existingDocuments.map((document) => [document.path, document]));
 
-  // Delete documents for files that no longer exist on disk
-  const scannedPaths = new Set(files.map((file) => file.relativePath));
-  for (const document of existingDocuments) {
-    if (!scannedPaths.has(document.path)) {
-      await resetDocumentArtifacts(repo, document.id);
-      await repo.deleteDocument(document.id);
+  // Delete documents for files that no longer exist on disk (incremental only)
+  if (runMode === "incremental") {
+    const scannedPaths = new Set(files.map((file) => file.relativePath));
+    for (const document of existingDocuments) {
+      if (!scannedPaths.has(document.path)) {
+        await resetDocumentArtifacts(repo, document.id);
+        await repo.deleteDocument(document.id);
+      }
     }
   }
 
@@ -471,6 +582,7 @@ export async function indexWorkspace(input: {
   let filesUpdated = 0;
   let chunksWritten = 0;
   let embeddingsWritten = 0;
+  let embeddingFailures = 0;
   let bulkWriteMode = false;
 
   try {
@@ -492,6 +604,7 @@ export async function indexWorkspace(input: {
       const existingDocument = existingDocumentsByPath.get(file.relativePath);
       // Fast path: skip file read if mtime and size match (incremental only)
       const statUnchanged =
+        runMode === "incremental" &&
         existingDocument &&
         existingDocument.mtimeMs === file.mtimeMs &&
         existingDocument.sizeBytes === file.sizeBytes;
@@ -512,7 +625,7 @@ export async function indexWorkspace(input: {
     if (embeddingProvider) {
       for (const { existingDocument } of unchangedFiles) {
         const existingChunks = await repo.getChunksByDocument(existingDocument.id);
-        embeddingsWritten += await writeEmbeddingsToRepo(
+        const embeddingResult = await writeEmbeddingsToRepo(
           repo,
           existingChunks.map((chunk) => ({
             id: chunk.id,
@@ -522,6 +635,8 @@ export async function indexWorkspace(input: {
           })),
           embeddingProvider
         );
+        embeddingsWritten += embeddingResult.written;
+        embeddingFailures += embeddingResult.failedBatches;
       }
     }
 
@@ -645,7 +760,7 @@ export async function indexWorkspace(input: {
             const documentId = docIdMap.get(file.relativePath)!;
             for (const [ci, chunk] of indexed.chunks.entries()) {
               const chunkId = nextId();
-              const meta = { ...chunk.metadata };
+              const meta: Record<string, unknown> = { ...chunk.metadata };
               if (ci === 0 && indexed.importPaths.length > 0) meta.importPaths = indexed.importPaths;
               repo.streamChunk({
                 id: chunkId,
@@ -741,7 +856,9 @@ export async function indexWorkspace(input: {
     }
 
     if (allChunkRowsForEmbeddings.length > 0) {
-      embeddingsWritten += await writeEmbeddingsToRepo(repo, allChunkRowsForEmbeddings, embeddingProvider);
+      const embeddingResult = await writeEmbeddingsToRepo(repo, allChunkRowsForEmbeddings, embeddingProvider);
+      embeddingsWritten += embeddingResult.written;
+      embeddingFailures += embeddingResult.failedBatches;
     }
 
     if (bulkWriteMode) {
@@ -765,7 +882,11 @@ export async function indexWorkspace(input: {
       filesScanned: files.length,
       filesUpdated,
       chunksWritten,
-      embeddingsWritten
+      embeddingsWritten,
+      errorMessage:
+        embeddingFailures > 0
+          ? `${embeddingFailures} embedding batch(es) failed; retry indexing to complete embeddings`
+          : undefined
     });
 
     const docCount = await repo.getDocumentCount();
@@ -814,6 +935,7 @@ export async function indexWorkspace(input: {
     filesScanned: files.length,
     filesUpdated,
     chunksWritten,
-    embeddingsWritten
+    embeddingsWritten,
+    embeddingFailures
   };
 }

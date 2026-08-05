@@ -69,7 +69,7 @@
 - **Read path:** `packages/core/src/retrieval.ts:56-63` (`parseEmbedding` — `JSON.parse` per row per query)
 - **Issue:** JSON string is larger than BLOB and slower to parse for cosine similarity.
 - **Fix:** Store as Float32Array BLOB. Consider `sqlite-vec` extension for real vector index.
-- **Caveat:** `retrieval.ts:87` already comments: *"linear scan is enough for local SQLite; use sqlite-vec after profiling proves otherwise."* This is an intentional decision, not an oversight. Profile first.
+- **Caveat:** `retrieval.ts:87` already comments: _"linear scan is enough for local SQLite; use sqlite-vec after profiling proves otherwise."_ This is an intentional decision, not an oversight. Profile first.
 - **AGENTS.md constraint:** Project is SQLite-first, local-first, low-setup. `sqlite-vec` adds native extension dependency — evaluate tradeoff.
 
 ## Already handled (no action needed)

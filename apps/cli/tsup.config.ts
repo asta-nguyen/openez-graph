@@ -21,12 +21,11 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   sourcemap: false,
-  minify: true,
+  minify: false,
   splitting: false,
   define: { __OPENEZ_BUILD_ID__: JSON.stringify(getBuildId()) },
-  // bun:sqlite is built-in to Bun — no external needed
-  // gpt-tokenizer is external — its 965KB BPE vocab is only needed for retrieval, not indexing
-  external: ["bun:sqlite", "gpt-tokenizer"],
+  // better-sqlite3 is a native module — must remain external
+  external: ["better-sqlite3", "bun:sqlite"],
   // Bundle everything else (workspace packages + npm deps)
   noExternal: [
     "@openez-graph/config",
@@ -42,14 +41,15 @@ export default defineConfig({
     "zod",
     "fast-glob",
     "github-slugger",
+    "ts-morph",
+    "gpt-tokenizer",
     "drizzle-orm",
     "dotenv",
     "openai",
     "ollama",
-    "oxc-parser"
   ],
   banner: {
-    js: "#!/usr/bin/env node"
+    js: "#!/usr/bin/env node",
   },
   onSuccess: async () => {
     // Copy frontend dist into CLI dist/web for bundled web serving
@@ -70,33 +70,5 @@ export default defineConfig({
       cpSync(changelogSrc, changelogDest);
       console.log("✓ Copied CHANGELOG.md → dist/CHANGELOG.md");
     }
-
-    // Copy package.json into dist/apps/cli/ for runtime version lookup
-    const pkgSrc = path.resolve(__dirname, "package.json");
-    const pkgDest = path.resolve(__dirname, "dist/apps/cli/package.json");
-    if (existsSync(pkgSrc)) {
-      mkdirSync(path.dirname(pkgDest), { recursive: true });
-      cpSync(pkgSrc, pkgDest);
-      console.log("✓ Copied package.json → dist/apps/cli/package.json");
-    }
-
-    // Copy prebuilt SQLite templates into dist for fast init
-    const templateSrc = path.resolve(__dirname, "../../packages/db/template.sqlite");
-    const templateDest = path.resolve(__dirname, "dist/template.sqlite");
-    if (existsSync(templateSrc)) {
-      cpSync(templateSrc, templateDest);
-      console.log("✓ Copied template.sqlite → dist/template.sqlite");
-    } else {
-      console.log("⚠ template.sqlite not found — run 'bun packages/db/scripts/build-template.ts' first");
-    }
-
-    const regTemplateSrc = path.resolve(__dirname, "../../packages/db/registry-template.sqlite");
-    const regTemplateDest = path.resolve(__dirname, "dist/registry-template.sqlite");
-    if (existsSync(regTemplateSrc)) {
-      cpSync(regTemplateSrc, regTemplateDest);
-      console.log("✓ Copied registry-template.sqlite → dist/registry-template.sqlite");
-    } else {
-      console.log("⚠ registry-template.sqlite not found — run 'bun packages/db/scripts/build-template.ts' first");
-    }
-  }
+  },
 });

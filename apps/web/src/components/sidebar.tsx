@@ -126,11 +126,7 @@ export function AppSidebar() {
             <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
               <SidebarMenuButton asChild size="lg" tooltip="OpenEZ Graph">
                 <Link to="/" className="flex items-center gap-3">
-                  <img
-                    src="/logo.png"
-                    alt="OpenEZ Graph"
-                    className="h-8 w-8 rounded-lg"
-                  />
+                  <img src="/logo.png" alt="OpenEZ Graph" className="h-8 w-8 rounded-lg" />
                   <div className="flex flex-col gap-0 group-data-[collapsible=icon]:hidden">
                     <span
                       className="text-sm font-black tracking-tight"

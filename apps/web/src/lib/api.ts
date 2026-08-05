@@ -146,7 +146,13 @@ export interface WorkspaceGraphData {
 
 export interface QueryResult {
   answerContext: string;
-  sources: Array<{ path: string; startLine?: number; endLine?: number; score: number; reason: string }>;
+  sources: Array<{
+    path: string;
+    startLine?: number;
+    endLine?: number;
+    score: number;
+    reason: string;
+  }>;
   graphNodes: Array<{ id: string; type: string; label: string; metadata: Record<string, unknown> }>;
   graphEdges: Array<{ from_node_id: string; to_node_id: string; type: string }>;
   error: string | null;
@@ -161,16 +167,33 @@ export interface IndexWorkspaceResult {
   status: "completed";
 }
 
+export interface EmbeddingConfigResponse {
+  provider: string;
+  openaiApiKey: string;
+  openaiBaseUrl: string;
+  openaiModel: string;
+  ollamaBaseUrl: string;
+  ollamaModel: string;
+  dbOverrides: string[];
+}
+
 export const api = {
   getDashboard: () => request<DashboardSnapshot>("/dashboard"),
   listWorkspaces: () => request<{ ok: boolean; data: WorkspaceListItem[] }>("/workspaces"),
-  getWorkspace: (id: string) => request<{ ok: boolean; data: WorkspaceDetail | null }>(`/workspaces/${id}`),
-  createWorkspace: (input: { name: string; rootPath: string; includeGlobs?: string[]; excludeGlobs?: string[] }) =>
+  getWorkspace: (id: string) =>
+    request<{ ok: boolean; data: WorkspaceDetail | null }>(`/workspaces/${id}`),
+  createWorkspace: (input: {
+    name: string;
+    rootPath: string;
+    includeGlobs?: string[];
+    excludeGlobs?: string[];
+  }) =>
     request<{ success: boolean; workspace?: WorkspaceListItem; error?: string }>("/workspaces", {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  deleteWorkspace: (id: string) => request<{ success: boolean; error?: string }>(`/workspaces/${id}`, { method: "DELETE" }),
+  deleteWorkspace: (id: string) =>
+    request<{ success: boolean; error?: string }>(`/workspaces/${id}`, { method: "DELETE" }),
   getWorkspaceGraph: (id: string) => request<WorkspaceGraphData>(`/workspaces/${id}/graph`),
   getDocuments: (params: { limit?: number; offset?: number } = {}) => {
     const qs = new URLSearchParams();
@@ -204,7 +227,13 @@ export const api = {
     return request<{ items: MemoryRow[]; totalCount: number }>(`/memories?${qs}`);
   },
   getMemory: (id: string) => request<{ ok: boolean; data: MemoryRow | null }>(`/memories/${id}`),
-  createMemory: (input: { title: string; content: string; tags?: string[]; source?: string; supersedesId?: string }) =>
+  createMemory: (input: {
+    title: string;
+    content: string;
+    tags?: string[];
+    source?: string;
+    supersedesId?: string;
+  }) =>
     request<{ ok: boolean; data: MemoryRow | null }>(`/memories`, {
       method: "POST",
       body: JSON.stringify(input),
@@ -212,4 +241,19 @@ export const api = {
   deleteMemory: (id: string) => request<{ ok: boolean }>(`/memories/${id}`, { method: "DELETE" }),
   getMetrics: (workspaceId?: string) =>
     request<QueryMetrics>(workspaceId ? `/metrics?workspaceId=${workspaceId}` : "/metrics"),
+  getEmbeddingConfig: () => request<EmbeddingConfigResponse>("/settings/embedding"),
+  updateEmbeddingConfig: (
+    input: Partial<{
+      "embedding.provider": string;
+      "embedding.openai_api_key": string;
+      "embedding.openai_base_url": string;
+      "embedding.openai_model": string;
+      "embedding.ollama_base_url": string;
+      "embedding.ollama_model": string;
+    }>,
+  ) =>
+    request<{ ok: boolean; updated: string[] }>("/settings/embedding", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
 };

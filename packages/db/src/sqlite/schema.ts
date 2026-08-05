@@ -1,11 +1,13 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
+// ── Global Registry DB Schema ──
+
 export const workspaces = sqliteTable(
   "workspaces",
   {
     id: text("id").primaryKey(),
-    name: text("name").notNull().unique(),
+    name: text("name").notNull(),
     rootPath: text("root_path").notNull(),
     includeGlobs: text("include_globs").notNull().default(""),
     excludeGlobs: text("exclude_globs").notNull().default(""),
@@ -19,46 +21,84 @@ export const workspaces = sqliteTable(
     nodeCount: integer("node_count").notNull().default(0),
     edgeCount: integer("edge_count").notNull().default(0),
     lastError: text("last_error"),
-    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-    updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
   },
-  (table) => [unique("idx_workspaces_root_path").on(table.rootPath)],
+  (table) => ({
+    nameUnique: unique().on(table.name),
+    rootPathUnique: unique().on(table.rootPath),
+  }),
 );
 
-export const documents = sqliteTable("documents", {
-  id: text("id").primaryKey(),
-  path: text("path").notNull().unique(),
-  absolutePath: text("absolute_path").notNull(),
-  kind: text("kind").notNull(),
-  language: text("language"),
-  contentHash: text("content_hash").notNull(),
-  sizeBytes: integer("size_bytes").notNull(),
-  mtimeMs: integer("mtime_ms").notNull(),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
+
+// ── Per-Workspace DB Schema ──
+
+export const documents = sqliteTable(
+  "documents",
+  {
+    id: text("id").primaryKey(),
+    path: text("path").notNull(),
+    absolutePath: text("absolute_path").notNull(),
+    kind: text("kind").notNull(),
+    language: text("language"),
+    contentHash: text("content_hash").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    mtimeMs: integer("mtime_ms").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => ({
+    pathUnique: unique().on(table.path),
+  }),
+);
 
 export const chunks = sqliteTable("chunks", {
   id: text("id").primaryKey(),
-  documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  documentId: text("document_id")
+    .notNull()
+    .references(() => documents.id, { onDelete: "cascade" }),
   chunkIndex: integer("chunk_index").notNull(),
   heading: text("heading"),
   content: text("content").notNull(),
   tokenCount: integer("token_count").notNull(),
   contentHash: text("content_hash").notNull(),
   metadata: text("metadata").notNull().default("{}"),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
 
 export const embeddings = sqliteTable("embeddings", {
   id: text("id").primaryKey(),
-  chunkId: text("chunk_id").notNull().references(() => chunks.id, { onDelete: "cascade" }),
+  chunkId: text("chunk_id")
+    .notNull()
+    .references(() => chunks.id, { onDelete: "cascade" }),
   provider: text("provider").notNull(),
   model: text("model").notNull(),
   dimensions: integer("dimensions").notNull(),
   embedding: text("embedding").notNull(),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  inputHash: text("input_hash"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
 
 export const graphNodes = sqliteTable("graph_nodes", {
@@ -67,18 +107,28 @@ export const graphNodes = sqliteTable("graph_nodes", {
   label: text("label").notNull(),
   refId: text("ref_id"),
   metadata: text("metadata").notNull().default("{}"),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
 
 export const graphEdges = sqliteTable("graph_edges", {
   id: text("id").primaryKey(),
-  fromNodeId: text("from_node_id").notNull().references(() => graphNodes.id, { onDelete: "cascade" }),
-  toNodeId: text("to_node_id").notNull().references(() => graphNodes.id, { onDelete: "cascade" }),
+  fromNodeId: text("from_node_id")
+    .notNull()
+    .references(() => graphNodes.id, { onDelete: "cascade" }),
+  toNodeId: text("to_node_id")
+    .notNull()
+    .references(() => graphNodes.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
   weight: integer("weight").notNull().default(1),
   metadata: text("metadata").notNull().default("{}"),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
 
 export const indexRuns = sqliteTable("index_runs", {
@@ -91,7 +141,9 @@ export const indexRuns = sqliteTable("index_runs", {
   embeddingsWritten: integer("embeddings_written").notNull().default(0),
   errorMessage: text("error_message"),
   stats: text("stats").default("{}"),
-  startedAt: text("started_at").notNull().default(sql`(datetime('now'))`),
+  startedAt: text("started_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
   finishedAt: text("finished_at"),
 });
 
@@ -103,7 +155,9 @@ export const graphRuns = sqliteTable("graph_runs", {
   edgesCreated: integer("edges_created").notNull().default(0),
   errorMessage: text("error_message"),
   stats: text("stats").default("{}"),
-  startedAt: text("started_at").notNull().default(sql`(datetime('now'))`),
+  startedAt: text("started_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
   finishedAt: text("finished_at"),
 });
 
@@ -115,7 +169,9 @@ export const queryLogs = sqliteTable("query_logs", {
   tokensReturned: integer("tokens_returned").notNull().default(0),
   tokensSaved: integer("tokens_saved").notNull().default(0),
   filesScanned: integer("files_scanned").notNull().default(0),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });
 
 export const memories = sqliteTable("memories", {
@@ -125,11 +181,10 @@ export const memories = sqliteTable("memories", {
   tags: text("tags").notNull().default(""),
   source: text("source").notNull(),
   supersedesId: text("supersedes_id"),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
-});
-
-export const indexMeta = sqliteTable("index_meta", {
-  key: text("key").primaryKey(),
-  value: text("value").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
 });

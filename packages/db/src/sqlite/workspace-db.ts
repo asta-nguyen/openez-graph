@@ -75,6 +75,14 @@ export function getWorkspaceNativeDb(rootPath: string) {
   return dbCache.get(rootPath)!.sqlite;
 }
 
+export function closeWorkspaceDb(rootPath: string) {
+  const entry = dbCache.get(rootPath);
+  if (entry) {
+    try { entry.sqlite.close(); } catch {}
+    dbCache.delete(rootPath);
+  }
+}
+
 export function closeAllWorkspaceDbs() {
   for (const entry of dbCache.values()) {
     try { entry.sqlite.close(); } catch {}
@@ -93,6 +101,8 @@ export function getFullWorkspaceDdl(): string {
     "CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id)",
     "CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type)",
     "CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)",
+    "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol'",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type)",
     "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, content, tokenize = 'porter unicode61')",
@@ -123,11 +133,15 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     }
 
     migrateQueryLogColumns(sqlite);
+    migrateEmbeddingColumns(sqlite);
+    migrateEmbeddingDedup(sqlite);
     return;
   }
 
   sqlite.exec(getFullWorkspaceDdl());
   migrateQueryLogColumns(sqlite);
+  migrateEmbeddingColumns(sqlite);
+  migrateEmbeddingDedup(sqlite);
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
@@ -144,6 +158,47 @@ function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>)
   if (!columns.has("files_scanned")) {
     sqlite.exec("ALTER TABLE query_logs ADD COLUMN files_scanned INTEGER NOT NULL DEFAULT 0");
   }
+}
+
+function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const columns = new Set(
+    (sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string }>).map((row) => row.name)
+  );
+
+  if (!columns.has("input_hash")) {
+    sqlite.exec("ALTER TABLE embeddings ADD COLUMN input_hash TEXT");
+  }
+}
+
+function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // Ensure the provider/model/hash lookup index exists for fast duplicate detection.
+  sqlite.exec(
+    "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)"
+  );
+  sqlite.exec(
+    "CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)"
+  );
+
+  // Remove duplicate derived vectors before enforcing their logical identity.
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      DELETE FROM embeddings
+      WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY chunk_id, provider, model
+            ORDER BY (input_hash IS NOT NULL) DESC, created_at DESC, id
+          ) AS row_number
+          FROM embeddings
+        )
+        WHERE row_number = 1
+      );
+    `);
+    sqlite.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model
+      ON embeddings(chunk_id, provider, model)
+    `);
+  })();
 }
 
 function getWorkspaceTableDefinitions(): string[] {
@@ -179,6 +234,7 @@ function getWorkspaceTableDefinitions(): string[] {
       model TEXT NOT NULL,
       dimensions INTEGER NOT NULL,
       embedding TEXT NOT NULL,
+      input_hash TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_nodes (

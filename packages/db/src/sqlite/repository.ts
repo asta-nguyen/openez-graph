@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 
 import { getRegistryDb, getRegistryNativeDb } from "./registry-db";
 import * as schema from "./schema";
+import { decryptValue, encryptValue, isSensitiveKey } from "./secure-storage";
 import type { RegistryRepository, RegistryWorkspace, WorkspaceRepository } from "./types";
 import { getWorkspaceDb, getWorkspaceNativeDb } from "./workspace-db";
 
@@ -185,6 +186,54 @@ export function createRegistryRepository(): RegistryRepository {
 
     async deleteWorkspace(id: string): Promise<void> {
       db.delete(schema.workspaces).where(eq(schema.workspaces.id, id)).run();
+    },
+
+    async getSetting(key: string): Promise<string | null> {
+      const row = native.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
+      if (!row) return null;
+      if (isSensitiveKey(key)) {
+        try {
+          return decryptValue(row.value);
+        } catch {
+          return null;
+        }
+      }
+      return row.value;
+    },
+
+    async setSetting(key: string, value: string): Promise<void> {
+      const stored = isSensitiveKey(key) ? encryptValue(value) : value;
+      const now = new Date().toISOString();
+      native
+        .prepare(
+          `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+                  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+        )
+        .run(key, stored, now);
+    },
+
+    async deleteSetting(key: string): Promise<void> {
+      native.prepare("DELETE FROM settings WHERE key = ?").run(key);
+    },
+
+    async getAllSettings(): Promise<Record<string, string>> {
+      const rows = native.prepare("SELECT key, value FROM settings").all() as Array<{
+        key: string;
+        value: string;
+      }>;
+      const result: Record<string, string> = {};
+      for (const row of rows) {
+        if (isSensitiveKey(row.key)) {
+          try {
+            result[row.key] = decryptValue(row.value);
+          } catch {
+            // Skip undecryptable values
+          }
+        } else {
+          result[row.key] = row.value;
+        }
+      }
+      return result;
     }
   };
 }
@@ -280,7 +329,13 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
        ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`
     ),
     insertEmbedding: native.prepare(
-      "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      `INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(chunk_id, provider, model) DO UPDATE SET
+         dimensions = excluded.dimensions,
+         embedding = excluded.embedding,
+         input_hash = excluded.input_hash,
+         created_at = excluded.created_at`
     ),
     insertFtsRow: native.prepare(
       "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text, content) VALUES (?, ?, ?, ?, ?, ?)"
@@ -561,7 +616,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async insertEmbeddings(inputs) {
       const now = new Date().toISOString();
       for (const input of inputs) {
-        stmts.insertEmbedding.run(crypto.randomUUID(), input.chunkId, input.provider, input.model, input.dimensions, input.embedding, now);
+        stmts.insertEmbedding.run(crypto.randomUUID(), input.chunkId, input.provider, input.model, input.dimensions, input.embedding, input.inputHash ?? null, now);
       }
     },
 

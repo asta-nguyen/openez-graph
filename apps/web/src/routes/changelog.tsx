@@ -115,8 +115,13 @@ function parseChangelog(content: string): ChangelogSection[] {
   }
 
   for (let i = 0; i < positions.length; i++) {
-    const end = i + 1 < positions.length ? content.indexOf("## ", positions[i + 1].start - 200) : content.length;
-    const body = content.slice(positions[i].start, end > positions[i].start ? end : content.length).trim();
+    const end =
+      i + 1 < positions.length
+        ? content.indexOf("## ", positions[i + 1].start - 200)
+        : content.length;
+    const body = content
+      .slice(positions[i].start, end > positions[i].start ? end : content.length)
+      .trim();
 
     const groups: ChangelogGroup[] = [];
     const groupRegex = new RegExp(`^###\\s+(${groupLabels.join("|")})\\s*$`, "gm");
@@ -128,15 +133,29 @@ function parseChangelog(content: string): ChangelogSection[] {
     }
 
     if (groupPositions.length === 0) {
-      const items = body.split("\n").filter((l) => l.trim().startsWith("-")).map((l) => l.trim().slice(1).trim());
+      const items = body
+        .split("\n")
+        .filter((l) => l.trim().startsWith("-"))
+        .map((l) => l.trim().slice(1).trim());
       if (items.length > 0) {
         groups.push({ label: "Changes", items });
       }
     } else {
       for (let j = 0; j < groupPositions.length; j++) {
-        const groupEnd = j + 1 < groupPositions.length ? body.indexOf("### ", groupPositions[j + 1].start - 10) : body.length;
-        const groupBody = body.slice(groupPositions[j].start, groupEnd > groupPositions[j].start ? groupEnd : body.length).trim();
-        const items = groupBody.split("\n").filter((l) => l.trim().startsWith("-")).map((l) => l.trim().slice(1).trim());
+        const groupEnd =
+          j + 1 < groupPositions.length
+            ? body.indexOf("### ", groupPositions[j + 1].start - 10)
+            : body.length;
+        const groupBody = body
+          .slice(
+            groupPositions[j].start,
+            groupEnd > groupPositions[j].start ? groupEnd : body.length,
+          )
+          .trim();
+        const items = groupBody
+          .split("\n")
+          .filter((l) => l.trim().startsWith("-"))
+          .map((l) => l.trim().slice(1).trim());
         if (items.length > 0) {
           groups.push({ label: groupPositions[j].label, items });
         }

@@ -4,8 +4,18 @@ import { ArrowRight, TrendingDown } from "lucide-react";
 import { formatDate } from "../lib/utils";
 import { dashboardQueryOptions, metricsQueryOptions } from "../lib/queries";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-  Badge, Card, CardContent, CardHeader, CardTitle, buttonVariants,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Badge,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  buttonVariants,
 } from "@openez-graph/ui";
 
 export const Route = createFileRoute("/")({
@@ -16,13 +26,22 @@ export const Route = createFileRoute("/")({
   component: OverviewPage,
 });
 
-
 function OverviewPage() {
   const { data: snapshot, isLoading, error } = useQuery(dashboardQueryOptions);
   const { data: metrics } = useQuery(metricsQueryOptions(snapshot?.workspace?.id));
 
-  if (isLoading) return <div className="page"><p className="muted">Loading...</p></div>;
-  if (error) return <div className="page"><p className="text-destructive">{error.message}</p></div>;
+  if (isLoading)
+    return (
+      <div className="page">
+        <p className="muted">Loading...</p>
+      </div>
+    );
+  if (error)
+    return (
+      <div className="page">
+        <p className="text-destructive">{error.message}</p>
+      </div>
+    );
   if (!snapshot) return null;
 
   return (
@@ -35,31 +54,46 @@ function OverviewPage() {
       <section className="-mx-6 border-y bg-muted/20 px-6 py-5">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <Badge variant="secondary" className="mb-3">Live code_query telemetry</Badge>
+            <Badge variant="secondary" className="mb-3">
+              Live code_query telemetry
+            </Badge>
             <h2 className="text-lg font-semibold">Measured agent context</h2>
-            <p className="muted mt-1 text-sm">Actual serialized MCP responses compared with the indexed full files they replace.</p>
+            <p className="muted mt-1 text-sm">
+              Actual serialized MCP responses compared with the indexed full files they replace.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
             <div>
               <div className="text-xs text-muted-foreground">Queries</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{metrics?.totalQueries ?? 0}</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">
+                {metrics?.totalQueries ?? 0}
+              </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Response tokens</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{(metrics?.totalTokensReturned ?? 0).toLocaleString()}</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">
+                {(metrics?.totalTokensReturned ?? 0).toLocaleString()}
+              </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Context avoided</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{(metrics?.totalTokensSaved ?? 0).toLocaleString()}</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">
+                {(metrics?.totalTokensSaved ?? 0).toLocaleString()}
+              </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Candidate files</div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{metrics?.totalFilesScanned ?? 0}</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">
+                {metrics?.totalFilesScanned ?? 0}
+              </div>
             </div>
           </div>
 
-          <Link to="/benchmark" className={buttonVariants({ variant: "outline", className: "shrink-0" })}>
+          <Link
+            to="/benchmark"
+            className={buttonVariants({ variant: "outline", className: "shrink-0" })}
+          >
             Method details <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -71,11 +105,26 @@ function OverviewPage() {
             <CardTitle>Index state</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <div className="stat"><span>Documents</span><strong>{snapshot.stats.documents}</strong></div>
-            <div className="stat"><span>Chunks</span><strong>{snapshot.stats.chunks}</strong></div>
-            <div className="stat"><span>Graph nodes</span><strong>{snapshot.stats.graphNodes}</strong></div>
-            <div className="stat"><span>Graph edges</span><strong>{snapshot.stats.graphEdges}</strong></div>
-            <div className="stat"><span>Memories</span><strong>{snapshot.stats.memories}</strong></div>
+            <div className="stat">
+              <span>Documents</span>
+              <strong>{snapshot.stats.documents}</strong>
+            </div>
+            <div className="stat">
+              <span>Chunks</span>
+              <strong>{snapshot.stats.chunks}</strong>
+            </div>
+            <div className="stat">
+              <span>Graph nodes</span>
+              <strong>{snapshot.stats.graphNodes}</strong>
+            </div>
+            <div className="stat">
+              <span>Graph edges</span>
+              <strong>{snapshot.stats.graphEdges}</strong>
+            </div>
+            <div className="stat">
+              <span>Memories</span>
+              <strong>{snapshot.stats.memories}</strong>
+            </div>
           </CardContent>
         </Card>
 
@@ -101,7 +150,9 @@ function OverviewPage() {
                     <TableRow key={run.id}>
                       <TableCell>{run.mode}</TableCell>
                       <TableCell>{run.status}</TableCell>
-                      <TableCell>{run.filesUpdated}/{run.filesScanned}</TableCell>
+                      <TableCell>
+                        {run.filesUpdated}/{run.filesScanned}
+                      </TableCell>
                       <TableCell>{formatDate(run.startedAt)}</TableCell>
                     </TableRow>
                   ))}
@@ -174,23 +225,32 @@ function OverviewPage() {
             <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
               <div>
                 <div className="text-xs text-muted-foreground">Total queries</div>
-                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.totalQueries}</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">
+                  {metrics.totalQueries}
+                </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Tokens returned</div>
-                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.totalTokensReturned.toLocaleString()}</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">
+                  {metrics.totalTokensReturned.toLocaleString()}
+                </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Estimated context avoided</div>
-                <div className="mt-1 text-xl font-semibold tabular-nums text-emerald-600">{metrics.totalTokensSaved.toLocaleString()}</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums text-emerald-600">
+                  {metrics.totalTokensSaved.toLocaleString()}
+                </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Avg tokens/query</div>
-                <div className="mt-1 text-xl font-semibold tabular-nums">{metrics.avgTokensPerQuery.toLocaleString()}</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">
+                  {metrics.avgTokensPerQuery.toLocaleString()}
+                </div>
               </div>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              Context avoided is an estimate: token count of selected full files minus the serialized MCP response, floored at zero.
+              Context avoided is an estimate: token count of selected full files minus the
+              serialized MCP response, floored at zero.
             </p>
             {metrics.recentQueries.length > 0 && (
               <Table className="mt-4">
@@ -206,10 +266,14 @@ function OverviewPage() {
                 <TableBody>
                   {metrics.recentQueries.map((q) => (
                     <TableRow key={q.id}>
-                      <TableCell className="font-medium max-w-[200px] truncate">{q.query}</TableCell>
+                      <TableCell className="font-medium max-w-[200px] truncate">
+                        {q.query}
+                      </TableCell>
                       <TableCell>{q.resultCount}</TableCell>
                       <TableCell>{q.tokensReturned.toLocaleString()}</TableCell>
-                      <TableCell className="text-emerald-600">{q.tokensSaved.toLocaleString()}</TableCell>
+                      <TableCell className="text-emerald-600">
+                        {q.tokensSaved.toLocaleString()}
+                      </TableCell>
                       <TableCell>{q.filesScanned}</TableCell>
                     </TableRow>
                   ))}

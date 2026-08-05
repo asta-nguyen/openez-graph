@@ -9,7 +9,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createMcpServer } from "../apps/mcp/src/mcp-core";
 import { countTokens } from "../packages/core/src/tokenizer";
-import { closeAllWorkspaceDbs, closeRegistryDb, createRegistryRepository, createWorkspaceRepository } from "../packages/db/src/sqlite";
+import {
+  closeAllWorkspaceDbs,
+  closeRegistryDb,
+  createRegistryRepository,
+  createWorkspaceRepository,
+} from "../packages/db/src/sqlite";
 import { indexWorkspace } from "../packages/indexer/src";
 
 let tempRoot: string;
@@ -33,14 +38,21 @@ afterEach(() => {
 
 async function createIndexedWorkspace(id: string, rootPath: string) {
   fs.mkdirSync(path.join(rootPath, "src"), { recursive: true });
-  fs.writeFileSync(path.join(rootPath, "src", "target.ts"), "export function target(value: string) { return value.toUpperCase(); }\n");
+  fs.writeFileSync(
+    path.join(rootPath, "src", "target.ts"),
+    "export function target(value: string) { return value.toUpperCase(); }\n",
+  );
   fs.writeFileSync(
     path.join(rootPath, "src", "caller.ts"),
-    `import { target } from './target';\n${Array.from({ length: 24 }, (_, index) =>
-      `export function caller${index || ""}() { return target('hello-${index}'); }`
-    ).join("\n")}\n`
+    `import { target } from './target';\n${Array.from(
+      { length: 24 },
+      (_, index) => `export function caller${index || ""}() { return target('hello-${index}'); }`,
+    ).join("\n")}\n`,
   );
-  fs.writeFileSync(path.join(rootPath, "README.md"), "# Target workflow\n\nThe caller invokes the target transformation.\n");
+  fs.writeFileSync(
+    path.join(rootPath, "README.md"),
+    "# Target workflow\n\nThe caller invokes the target transformation.\n",
+  );
 
   const workspace = await createRegistryRepository().createWorkspace({ id, name: id, rootPath });
   await indexWorkspace({ workspaceId: workspace.id, mode: "full" });
@@ -63,9 +75,11 @@ async function startSourceMcp(defaultPath: string) {
     args: ["apps/mcp/src/server.ts", "--path", defaultPath],
     cwd: process.cwd(),
     env: Object.fromEntries(
-      Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
     ),
-    stderr: "pipe"
+    stderr: "pipe",
   });
   await client.connect(transport);
   await client.close();
@@ -95,10 +109,12 @@ describe("MCP agent contracts", () => {
     await createIndexedWorkspace("minimum-budget", tempRoot);
     const { client, server } = await connectClient(tempRoot);
     try {
-      await expect(client.callTool({
-        name: "code_query",
-        arguments: { query: "target", maxTokens: 1 }
-      })).rejects.toThrow();
+      await expect(
+        client.callTool({
+          name: "code_query",
+          arguments: { query: "target", maxTokens: 1 },
+        }),
+      ).rejects.toThrow();
     } finally {
       await client.close();
       await server.close();
@@ -115,21 +131,35 @@ describe("MCP agent contracts", () => {
       const { client, server } = await connectClient(tempRoot);
       try {
         expect(client.getServerVersion()?.version).toBe("test+test");
-        const text = textResult(await client.callTool({
-          name: "code_query",
-          arguments: { workspaceIds: [first.id, second.id, third.id], query: "target transformation", maxTokens: 300 }
-        }));
-        const body = JSON.parse(text) as { metrics: { responseTokens: number; tokenBudget: number } };
+        const text = textResult(
+          await client.callTool({
+            name: "code_query",
+            arguments: {
+              workspaceIds: [first.id, second.id, third.id],
+              query: "target transformation",
+              maxTokens: 300,
+            },
+          }),
+        );
+        const body = JSON.parse(text) as {
+          metrics: { responseTokens: number; tokenBudget: number };
+        };
 
         expect(countTokens(text)).toBeLessThanOrEqual(300);
         expect(body.metrics).toMatchObject({ responseTokens: countTokens(text), tokenBudget: 300 });
-        const firstLog = await createWorkspaceRepository(tempRoot).queryRaw("SELECT tokens_returned FROM query_logs ORDER BY created_at DESC LIMIT 1");
-        const secondLog = await createWorkspaceRepository(secondRoot).queryRaw("SELECT tokens_returned FROM query_logs ORDER BY created_at DESC LIMIT 1");
-        const thirdLog = await createWorkspaceRepository(thirdRoot).queryRaw("SELECT tokens_returned FROM query_logs ORDER BY created_at DESC LIMIT 1");
+        const firstLog = await createWorkspaceRepository(tempRoot).queryRaw(
+          "SELECT tokens_returned FROM query_logs ORDER BY created_at DESC LIMIT 1",
+        );
+        const secondLog = await createWorkspaceRepository(secondRoot).queryRaw(
+          "SELECT tokens_returned FROM query_logs ORDER BY created_at DESC LIMIT 1",
+        );
+        const thirdLog = await createWorkspaceRepository(thirdRoot).queryRaw(
+          "SELECT tokens_returned FROM query_logs ORDER BY created_at DESC LIMIT 1",
+        );
         expect(
-          Number(firstLog[0]?.tokens_returned)
-          + Number(secondLog[0]?.tokens_returned)
-          + Number(thirdLog[0]?.tokens_returned)
+          Number(firstLog[0]?.tokens_returned) +
+            Number(secondLog[0]?.tokens_returned) +
+            Number(thirdLog[0]?.tokens_returned),
         ).toBe(countTokens(text));
       } finally {
         await client.close();
@@ -146,10 +176,12 @@ describe("MCP agent contracts", () => {
     await createIndexedWorkspace("graph", tempRoot);
     const { client, server } = await connectClient(tempRoot);
     try {
-      const text = textResult(await client.callTool({
-        name: "graph_neighbors",
-        arguments: { label: "target", depth: 2, limit: 20, maxTokens: 500 }
-      }));
+      const text = textResult(
+        await client.callTool({
+          name: "graph_neighbors",
+          arguments: { label: "target", depth: 2, limit: 20, maxTokens: 500 },
+        }),
+      );
       const body = JSON.parse(text) as {
         metrics: { truncated: boolean };
         results: Array<{ result: { nodes: Array<Record<string, unknown>> } }>;
@@ -169,17 +201,26 @@ describe("MCP agent contracts", () => {
     await createIndexedWorkspace("context", tempRoot);
     const { client, server } = await connectClient(tempRoot);
     try {
-      const text = textResult(await client.callTool({
-        name: "code_context",
-        arguments: { symbolOrPath: "target", maxTokens: 1200 }
-      }));
+      const text = textResult(
+        await client.callTool({
+          name: "code_context",
+          arguments: { symbolOrPath: "target", maxTokens: 1200 },
+        }),
+      );
       const body = JSON.parse(text) as {
-        results: Array<{ result: { symbol?: { snippet?: string }; callers: Array<{ symbol?: string; path?: string }> } }>;
+        results: Array<{
+          result: {
+            symbol?: { snippet?: string };
+            callers: Array<{ symbol?: string; path?: string }>;
+          };
+        }>;
       };
       const context = body.results[0]?.result;
 
       expect(context?.symbol?.snippet).toContain("function target");
-      expect(context?.callers).toContainEqual(expect.objectContaining({ symbol: "caller", path: "src/caller.ts" }));
+      expect(context?.callers).toContainEqual(
+        expect.objectContaining({ symbol: "caller", path: "src/caller.ts" }),
+      );
       expect(countTokens(text)).toBeLessThanOrEqual(1200);
     } finally {
       await client.close();

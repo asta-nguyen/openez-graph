@@ -10,8 +10,8 @@ const theme = {
     ...entry,
     style: Object.fromEntries(
       Object.entries(entry.style ?? {}).filter(
-        ([key]) => key !== "background" && key !== "backgroundColor"
-      )
+        ([key]) => key !== "background" && key !== "backgroundColor",
+      ),
     ),
   })),
 };
@@ -26,7 +26,8 @@ interface ContextBlock {
 
 function parseContextBlocks(raw: string): ContextBlock[] {
   const blocks: ContextBlock[] = [];
-  const regex = /\[source:\s*(.+?):(\d+|\?)-(\d+|\?)\s*\|\s*score:\s*([\d.]+)\]\n([\s\S]*?)(?=\n\[source:|$)/g;
+  const regex =
+    /\[source:\s*(.+?):(\d+|\?)-(\d+|\?)\s*\|\s*score:\s*([\d.]+)\]\n([\s\S]*?)(?=\n\[source:|$)/g;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(raw)) !== null) {
     blocks.push({
@@ -148,17 +149,19 @@ export function ContextBlocks({ raw }: { raw: string }) {
                 {block.score}
               </Badge>
             </div>
-            {segments
-              ? segments.map((segment, j) =>
-                  segment.fenced ? (
-                    <div key={j} className="bg-muted/30 border-y border-border/50">
-                      <HighlightedCode code={segment.code} language={segment.language} />
-                    </div>
-                  ) : (
-                    <HighlightedCode key={j} code={segment.code} language="markdown" />
-                  )
-                )
-              : <HighlightedCode code={block.code} language={language} />}
+            {segments ? (
+              segments.map((segment, j) =>
+                segment.fenced ? (
+                  <div key={j} className="bg-muted/30 border-y border-border/50">
+                    <HighlightedCode code={segment.code} language={segment.language} />
+                  </div>
+                ) : (
+                  <HighlightedCode key={j} code={segment.code} language="markdown" />
+                ),
+              )
+            ) : (
+              <HighlightedCode code={block.code} language={language} />
+            )}
           </div>
         );
       })}
