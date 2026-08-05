@@ -16,6 +16,7 @@ import {
   codeQuery,
   countTokens,
   graphNeighbors,
+  libraryDocs,
   memoryRecall,
   memoryWrite,
   truncateToTokenLimit,
@@ -86,6 +87,14 @@ const indexWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
   mode: z.enum(["incremental", "full"]).optional(),
+});
+
+const libraryDocsSchema = z.object({
+  library: z.string().trim().min(1),
+  topic: z.string().trim().optional(),
+  version: z.string().trim().optional(),
+  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
+  noCache: z.boolean().optional(),
 });
 
 const MCP_CATCHUP_INTERVAL_MS = Number(process.env.OPENEZ_MCP_CATCHUP_INTERVAL_MS ?? 5000);
@@ -512,6 +521,39 @@ export function createMcpServer(options?: McpServerOptions) {
           required: [],
         },
       },
+      {
+        name: "library_docs",
+        description:
+          "Fetch up-to-date documentation for a third-party library (React, Next.js, Tailwind, etc.) via Context7. Use when the user asks about a library not in the local code index, or when local code_query returns nothing relevant. Returns token-budgeted doc chunks. Cached locally with TTL — repeated calls are instant and work offline. Requires `openez setup context7` to be enabled.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            library: {
+              type: "string",
+              description:
+                "Library name (e.g. 'react', 'next.js') or GitHub path (e.g. '/facebook/react')",
+            },
+            topic: {
+              type: "string",
+              description: "Focus docs on a specific topic (e.g. 'hooks', 'routing')",
+            },
+            version: {
+              type: "string",
+              description: "Library version (default: 'latest')",
+            },
+            maxTokens: {
+              type: "number",
+              minimum: MIN_RESPONSE_TOKENS,
+              description: "Maximum tokens for the response",
+            },
+            noCache: {
+              type: "boolean",
+              description: "Bypass cache and fetch fresh docs from Context7",
+            },
+          },
+          required: ["library"],
+        },
+      },
     ],
   }));
 
@@ -704,6 +746,21 @@ export function createMcpServer(options?: McpServerOptions) {
         const workspace = await resolver.resolveWriteWorkspace(input);
         const summary = await indexWorkspace({ workspaceId: workspace.id, mode: input.mode });
         return jsonResponse(summary);
+      }
+      case "library_docs": {
+        const input = libraryDocsSchema.parse(request.params.arguments ?? {});
+        try {
+          const result = await libraryDocs(input);
+          return jsonResponse(result, input.maxTokens ?? 8000);
+        } catch (err) {
+          if (err instanceof Error && err.name === "Context7DisabledError") {
+            return {
+              content: [{ type: "text", text: err.message }],
+              isError: true,
+            };
+          }
+          throw err;
+        }
       }
       default:
         throw new Error(`Unknown tool: ${request.params.name}`);
