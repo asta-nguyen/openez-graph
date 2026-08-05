@@ -1,0 +1,33 @@
+tests/embed-benchmark.test.ts
+  s_9532ef2eb0a9d6::t_4e2d8b77c6e80f 1-4,208-238,268-272,277-278
+apps/web/src/server/index.ts
+  s_9532ef2eb0a9d6::t_ae1c7cfbd8b791 562-566
+apps/web/src/routes/settings.tsx
+  s_9532ef2eb0a9d6::t_21a344205690da 133-134,166-173,191-192
+  s_9532ef2eb0a9d6::t_94947354dc3dd9 3
+  s_9532ef2eb0a9d6::t_f04da8f52c65fa 116-117,124
+  s_9532ef2eb0a9d6::t_a9b9cc6101961c 193-194
+  s_9532ef2eb0a9d6::t_85f0b6cd76fcb2 203-206,215-218,232-235,244-247
+packages/core/src/embeddings.ts
+  s_9532ef2eb0a9d6::t_9ef7a7c78dcef2 54-55
+apps/cli/src/cli.ts
+  s_9532ef2eb0a9d6::t_bf5dbaa28cdf5f 329-346
+packages/core/src/rrf.ts
+  s_9532ef2eb0a9d6::t_7c9ab2b7db6194 16-17,22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "bf7cd05c9b31f0359acd8981291a01b8cc9a7a01",
+  "prompts": {},
+  "sessions": {
+    "s_9532ef2eb0a9d6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "7225da0c-aa35-485c-b77b-fb64633fb7f9",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
