@@ -5,6 +5,34 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-08-05
+
+### Fixed
+
+- MCP stdio corruption: retrieval diagnostics now write to `stderr` instead of `stdout`, preserving JSON-RPC framing for `code_query` calls
+- `lint-staged` downgraded from v17 to v16.4.0 for Node.js 20 compatibility (v17 requires Node >=22.22.1)
+- Master key race condition: atomic exclusive file creation (`O_CREAT|O_EXCL`) prevents concurrent processes from generating different keys
+- Master key malformed-file handling: invalid key content now throws an explicit error instead of silently overwriting the file
+- Master key file permissions: existing key files are now `chmod`-ed to `0o600` on read if permissions are too open
+- Embedding dedup: chunks skipped by `input_hash` match now receive a copied embedding row so they appear in vector search results
+- Embedding dedup legacy cleanup: `ROW_NUMBER()` ordering (newest, non-null `input_hash` first) replaces `MIN(id)` to preserve the most useful embedding
+- Composite index `(provider, model, input_hash)` added to speed up embedding dedup lookups on large workspaces
+- `vectorSearch` now wraps `getEmbeddingProvider()` in the same `try` block so initialization failures fall back to FTS instead of aborting `codeQuery`
+- Web API `PUT /api/settings/embedding` validates `embedding.provider` against `none`, `openai`, `ollama` (returns 400 for invalid values)
+- Web API clearing a setting (empty value) now deletes the DB override instead of skipping it, restoring env/default fallback
+- CLI `config get <key>` resolves the effective DB-plus-environment value and prints `not set` when absent
+- CLI sensitive-key masking uses `isSensitiveKey()` consistently across all `config` commands
+- Settings UI syncs external config to form state via `useEffect` instead of setState-during-render; form updates after save refetch
+- Settings UI resets the "Saved!" indicator when any field is edited after a successful save
+- RRF `identity()` function computed once per entry instead of twice (get + set)
+- Benchmark test isolated from the user's real registry DB via temp `AI_MEMORY_REGISTRY_DB_PATH`
+- Benchmark stats workspace path resolved from registry instead of `cwd` to match `codeQuery`
+- `withRetry` dead code replaced with a type-safe unreachable return
+
+### Changed
+
+- README storage section updated from three to four local artifacts (added `master.key`)
+
 ## [0.9.0] - 2026-08-02
 
 ### Added
@@ -97,6 +125,8 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[0.10.0]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD
+[0.9.1]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD
 [0.9.0]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD
 [0.8.0]: https://github.com/asta-nguyen/openez-graph/compare/a7ce4df...849060b
 [0.7.0]: https://github.com/asta-nguyen/openez-graph/compare/9b7cc78...a7ce4df
