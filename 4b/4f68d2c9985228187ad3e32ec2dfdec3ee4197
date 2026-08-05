@@ -1,0 +1,141 @@
+.agents/skills/superpowers-using-superpowers/references/pi-tools.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-16
+.agents/skills/superpowers-brainstorming/scripts/server.cjs
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-723
+.agents/skills/superpowers-using-superpowers/references/gemini-tools.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-63
+.agents/skills/superpowers-brainstorming/scripts/start-server.sh
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-209
+.agents/skills/superpowers-brainstorming/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-151
+  s_7e64bbef0f0ab1::t_ede8bca88e37ba 152
+.agents/skills/superpowers-subagent-driven-development/scripts/sdd-workspace
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-40
+.agents/skills/superpowers-systematic-debugging/test-academic.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-14
+.agents/skills/superpowers-receiving-code-review/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-205
+  s_7e64bbef0f0ab1::t_37f767e039eb0d 206-208
+.agents/skills/superpowers-writing-plans/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-175
+.agents/skills/superpowers-writing-skills/testing-skills-with-subagents.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-384
+  s_7e64bbef0f0ab1::t_e785c159325161 385-387
+.agents/skills/superpowers-using-superpowers/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-62
+.agents/skills/superpowers-brainstorming/scripts/stop-server.sh
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-120
+.agents/skills/superpowers-writing-plans/plan-document-reviewer-prompt.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-49
+.agents/skills/superpowers-requesting-code-review/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-95
+  s_7e64bbef0f0ab1::t_2d34518edb97c6 96-98
+.agents/skills/superpowers-brainstorming/visual-companion.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-298
+  s_7e64bbef0f0ab1::t_14bea107ab62e0 299-301
+.agents/skills/superpowers-systematic-debugging/condition-based-waiting-example.ts
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-158
+.agents/skills/superpowers-subagent-driven-development/implementer-prompt.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-142
+.agents/skills/superpowers-systematic-debugging/condition-based-waiting.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-115
+  s_7e64bbef0f0ab1::t_3cfebc6e611307 116-118
+.agents/skills/superpowers-systematic-debugging/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-283
+  s_7e64bbef0f0ab1::t_4892903c2cee95 284-286
+.agents/skills/superpowers-test-driven-development/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-320
+  s_7e64bbef0f0ab1::t_087a3da256a782 321-323
+.agents/skills/superpowers-verification-before-completion/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-120
+  s_7e64bbef0f0ab1::t_5a1b18eea96971 121-123
+.agents/skills/superpowers-writing-skills/examples/CLAUDE_MD_TESTING.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-200
+.agents/skills/superpowers-writing-skills/render-graphs.js
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-168
+  s_7e64bbef0f0ab1::t_575c137f26b961 169-171
+.agents/skills/superpowers-systematic-debugging/test-pressure-3.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-75
+.agents/skills/superpowers-subagent-driven-development/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-503
+  s_7e64bbef0f0ab1::t_3e5ca527846c0f 504-506
+.agents/skills/superpowers-writing-skills/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-677
+  s_7e64bbef0f0ab1::t_613b7fdf4413ee 678-680
+.agents/skills/superpowers-brainstorming/spec-document-reviewer-prompt.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-49
+.agents/skills/superpowers-using-git-worktrees/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-167
+  s_7e64bbef0f0ab1::t_0440f37e481af6 168-170
+.devin/hooks.v1.json
+  s_7e64bbef0f0ab1::t_9410203303b4b7 1-14
+.agents/skills/superpowers-systematic-debugging/root-cause-tracing.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-169
+  s_7e64bbef0f0ab1::t_11a2cfe5911e71 170-172
+.agents/skills/superpowers-writing-skills/graphviz-conventions.dot
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-172
+.agents/skills/superpowers-test-driven-development/writing-good-tests.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-198
+.agents/skills/superpowers-requesting-code-review/code-reviewer.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-172
+  s_7e64bbef0f0ab1::t_3b92d413dbf319 173
+.agents/skills/superpowers-systematic-debugging/defense-in-depth.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-122
+  s_7e64bbef0f0ab1::t_5a2679f80250a3 123-125
+.agents/skills/superpowers-systematic-debugging/CREATION-LOG.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-119
+  s_7e64bbef0f0ab1::t_9125c334414c72 120-122
+.agents/skills/superpowers-systematic-debugging/test-pressure-2.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-75
+.agents/skills/superpowers-using-superpowers/references/codex-tools.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-39
+.agents/skills/superpowers-finishing-a-development-branch/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-201
+.devin/hooks/superpowers-session-start.sh
+  s_7e64bbef0f0ab1::t_cbc98e2ae3d23d 1-46
+.agents/skills/superpowers-subagent-driven-development/task-reviewer-prompt.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-186
+.agents/skills/superpowers-subagent-driven-development/scripts/task-brief
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-41
+.agents/skills/superpowers-dispatching-parallel-agents/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-177
+.agents/skills/superpowers-subagent-driven-development/re-review-prompt.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-107
+.agents/skills/superpowers-systematic-debugging/find-polluter.sh
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-72
+.agents/skills/superpowers-writing-skills/persuasion-principles.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-187
+  s_7e64bbef0f0ab1::t_34edaf533b3de7 188-190
+.agents/skills/superpowers-systematic-debugging/test-pressure-1.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-65
+.agents/skills/superpowers-executing-plans/SKILL.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-70
+.agents/skills/superpowers-using-superpowers/references/antigravity-tools.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-23
+.agents/skills/superpowers-subagent-driven-development/scripts/review-package
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-46
+.agents/skills/superpowers-writing-skills/anthropic-best-practices.md
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-1150
+  s_7e64bbef0f0ab1::t_e941046e83e6aa 1151-1153
+.agents/skills/superpowers-brainstorming/scripts/helper.js
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-166
+  s_7e64bbef0f0ab1::t_1751048b73e151 167-169
+.agents/skills/superpowers-brainstorming/scripts/frame-template.html
+  s_7e64bbef0f0ab1::t_92db6feac59d07 1-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4b4f68d2c9985228187ad3e32ec2dfdec3ee4197",
+  "prompts": {},
+  "sessions": {
+    "s_7e64bbef0f0ab1": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "northern-helper",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
