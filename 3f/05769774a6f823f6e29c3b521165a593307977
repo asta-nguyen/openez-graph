@@ -1,0 +1,23 @@
+packages/db/src/sqlite/secure-storage.ts
+  s_9532ef2eb0a9d6::t_9ba2c4e878b6cb 15-22,34,71
+packages/core/src/retrieval.ts
+  s_9532ef2eb0a9d6::t_0bb2f08cc11264 139-145
+packages/indexer/src/index-workspace.ts
+  s_9532ef2eb0a9d6::t_356544ae5279cd 422-475,532
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3f05769774a6f823f6e29c3b521165a593307977",
+  "prompts": {},
+  "sessions": {
+    "s_9532ef2eb0a9d6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "7225da0c-aa35-485c-b77b-fb64633fb7f9",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
