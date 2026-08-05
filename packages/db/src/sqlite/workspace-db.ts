@@ -26,7 +26,9 @@ export function resolveBundledFile(filename: string): string | null {
     path.join(process.cwd(), "apps", "cli", "dist", filename),
   ];
   for (const c of candidates) {
-    try { if (fs.existsSync(c)) return c; } catch {}
+    try {
+      if (fs.existsSync(c)) return c;
+    } catch {}
   }
   return null;
 }
@@ -47,12 +49,15 @@ function getWorkspaceDbRaw(rootPath: string) {
         if (!fs.existsSync(dbPath)) fs.renameSync(tmpPath, dbPath);
         else fs.unlinkSync(tmpPath);
       } catch {
-        try { fs.unlinkSync(tmpPath); } catch {}
+        try {
+          fs.unlinkSync(tmpPath);
+        } catch {}
       }
     }
   }
 
   const sqlite = createNativeDatabase(dbPath);
+  sqlite.pragma("page_size = 16384");
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   return { sqlite, db: drizzle(sqlite as any, { schema }) };
@@ -78,58 +83,107 @@ export function getWorkspaceNativeDb(rootPath: string) {
 export function closeWorkspaceDb(rootPath: string) {
   const entry = dbCache.get(rootPath);
   if (entry) {
-    try { entry.sqlite.close(); } catch {}
+    try {
+      entry.sqlite.close();
+    } catch {}
     dbCache.delete(rootPath);
   }
 }
 
 export function closeAllWorkspaceDbs() {
   for (const entry of dbCache.values()) {
-    try { entry.sqlite.close(); } catch {}
+    try {
+      entry.sqlite.close();
+    } catch {}
   }
   dbCache.clear();
 }
 
 export function getFullWorkspaceDdl(): string {
-  return [
-    ...getWorkspaceTableDefinitions(),
-    "CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)",
-    "CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash)",
-    "CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type)",
-    "CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label)",
-    "CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id)",
-    "CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id)",
-    "CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type)",
-    "CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)",
-    "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol'",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type)",
-    "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, content, tokenize = 'porter unicode61')",
-  ].join(";\n") + ";";
+  return (
+    [
+      ...getWorkspaceTableDefinitions(),
+      "CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)",
+      "CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash)",
+      "CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type)",
+      "CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label)",
+      "CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id)",
+      "CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id)",
+      "CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type)",
+      "CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)",
+      "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol'",
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type)",
+      "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61')",
+    ].join(";\n") + ";"
+  );
 }
 
 export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
-  const tableExists = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='documents'").get() as { c: number }).c > 0;
+  const tableExists =
+    (
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='documents'")
+        .get() as { c: number }
+    ).c > 0;
 
   if (tableExists) {
-    const hasIndexMeta = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='index_meta'").get() as { c: number }).c > 0;
+    const hasIndexMeta =
+      (
+        sqlite
+          .prepare(
+            "SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='index_meta'",
+          )
+          .get() as { c: number }
+      ).c > 0;
     if (!hasIndexMeta) {
-      sqlite.exec(`CREATE TABLE IF NOT EXISTS index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+      sqlite.exec(
+        `CREATE TABLE IF NOT EXISTS index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+      );
     }
 
-    const hasFts = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='chunks_fts'").get() as { c: number }).c > 0;
+    const hasFts =
+      (
+        sqlite
+          .prepare(
+            "SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='chunks_fts'",
+          )
+          .get() as { c: number }
+      ).c > 0;
     if (!hasFts) {
-      sqlite.exec(`CREATE VIRTUAL TABLE chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, content, tokenize = 'porter unicode61')`);
+      sqlite.exec(
+        `CREATE VIRTUAL TABLE chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61')`,
+      );
     }
 
-    const hasTypeLabelIdx = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_graph_nodes_type_label'").get() as { c: number }).c > 0;
+    const hasTypeLabelIdx =
+      (
+        sqlite
+          .prepare(
+            "SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_graph_nodes_type_label'",
+          )
+          .get() as { c: number }
+      ).c > 0;
     if (!hasTypeLabelIdx) {
-      try { sqlite.exec(`CREATE UNIQUE INDEX idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol'`); } catch {}
+      try {
+        sqlite.exec(
+          `CREATE UNIQUE INDEX idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol'`,
+        );
+      } catch {}
     }
-    const hasEdgeIdx = (sqlite.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_graph_edges_from_to_type'").get() as { c: number }).c > 0;
+    const hasEdgeIdx =
+      (
+        sqlite
+          .prepare(
+            "SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_graph_edges_from_to_type'",
+          )
+          .get() as { c: number }
+      ).c > 0;
     if (!hasEdgeIdx) {
-      sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type)`);
+      sqlite.exec(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type)`,
+      );
     }
 
     migrateQueryLogColumns(sqlite);
@@ -146,7 +200,9 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
   const columns = new Set(
-    (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map((row) => row.name)
+    (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
   );
 
   if (!columns.has("tokens_returned")) {
@@ -162,7 +218,9 @@ function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>)
 
 function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
   const columns = new Set(
-    (sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string }>).map((row) => row.name)
+    (sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
   );
 
   if (!columns.has("input_hash")) {
@@ -173,11 +231,18 @@ function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>
 function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) {
   // Ensure the provider/model/hash lookup index exists for fast duplicate detection.
   sqlite.exec(
-    "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)"
+    "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
   );
-  sqlite.exec(
-    "CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)"
-  );
+  sqlite.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
+
+  // Skip dedup on empty table — window function is expensive even with 0 rows.
+  const count = (sqlite.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number }).c;
+  if (count === 0) {
+    sqlite.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
+    );
+    return;
+  }
 
   // Remove duplicate derived vectors before enforcing their logical identity.
   sqlite.transaction(() => {
@@ -302,6 +367,6 @@ function getWorkspaceTableDefinitions(): string[] {
     `CREATE TABLE IF NOT EXISTS index_meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
-    )`
+    )`,
   ];
 }
