@@ -553,12 +553,21 @@ app.put("/api/settings/embedding", async (c) => {
       "embedding.ollama_base_url": true,
       "embedding.ollama_model": true,
     };
+    const VALID_PROVIDERS = new Set(["none", "openai", "ollama"]);
     const registry = createRegistryRepository();
     const updated: string[] = [];
     for (const [key, value] of Object.entries(body)) {
       if (!VALID_KEYS[key]) continue;
       if (typeof value !== "string") continue;
       if (value.trim() === "") continue;
+      if (key === "embedding.provider" && !VALID_PROVIDERS.has(value.trim())) {
+        return c.json(
+          {
+            error: `Invalid embedding provider '${value}'. Must be one of: none, openai, ollama.`,
+          },
+          400,
+        );
+      }
       await registry.setSetting(key, value);
       updated.push(key);
     }
