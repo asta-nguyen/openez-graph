@@ -1,0 +1,30 @@
+apps/cli/src/cli.ts
+  s_6514757d0e9524::t_a0810317aec41e 464-471
+  s_6514757d0e9524::t_871f530410ef18 411
+  s_6514757d0e9524::t_d24bab3d77f812 412-413,472-473
+apps/cli/src/setup-context7.ts
+  s_6514757d0e9524::t_ed91a2edb5c740 4,9-17
+  s_6514757d0e9524::t_ce861946ff9d26 52,62
+  s_6514757d0e9524::t_982e0d78f01d00 1-3,5-7,18-51,53-61,63-84
+  s_6514757d0e9524::t_86cfafa4d9119e 8
+apps/cli/package.json
+  s_6514757d0e9524::t_bd4303e0c62adb 53-55
+pnpm-lock.yaml
+  s_6514757d0e9524::t_d2e2d1ccf9a10c 126-129,332,356,375,2410-2412,2416-2418,2434-2442,2464-2469,2478-2483,2505-2512,2785-2788,4712-4714,6847-6852,6858-6862,6875-6892,6918-6923,6932-6942,6968-6987,7272-7274,7408,7412,9378-9380
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7ab15a0232833d12c58c9168d408785e56ee05c3",
+  "prompts": {},
+  "sessions": {
+    "s_6514757d0e9524": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "powerful-agustinia",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
