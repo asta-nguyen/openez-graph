@@ -114,7 +114,7 @@ export async function libraryDocs(input: {
   }
 
   await client.ensureStarted();
-  const resolved = await client.resolveLibraryId(input.library);
+  const resolved = await client.resolveLibraryId(input.library, input.topic);
   if (!resolved) {
     // Store negative cache entry (sentinel: empty library_id)
     if (!input.noCache) {

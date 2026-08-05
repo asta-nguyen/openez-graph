@@ -167,6 +167,13 @@ export function createDocsCache(): DocsCache {
 
     async recordNameMapping(queryName, libraryId): Promise<void> {
       const now = Date.now();
+      // When recording a positive mapping, clear any prior negative cache entry
+      // for the same query_name so isNegativeCached doesn't block future calls.
+      if (libraryId !== "") {
+        native
+          .prepare("DELETE FROM library_docs_name_map WHERE query_name = ? AND library_id = ''")
+          .run(queryName);
+      }
       native
         .prepare(
           `INSERT INTO library_docs_name_map (query_name, library_id, resolved_at)

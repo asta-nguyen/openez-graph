@@ -143,8 +143,16 @@ export class Context7Client {
     if (configured) return configured;
 
     try {
-      const resolved = _require.resolve("@upstash/context7-mcp/bin/context7-mcp.mjs");
-      return resolved;
+      const candidates = [
+        "@upstash/context7-mcp/dist/index.js",
+        "@upstash/context7-mcp/bin/context7-mcp.mjs",
+      ];
+      for (const candidate of candidates) {
+        try {
+          return _require.resolve(candidate);
+        } catch {}
+      }
+      throw new Error("not found");
     } catch {
       throw new Error(
         "Context7 binary not found. Run 'openez setup context7' to install and configure it.",
@@ -171,18 +179,21 @@ export class Context7Client {
     return (await registry.getSetting("context7.api_key")) ?? undefined;
   }
 
-  async resolveLibraryId(libraryName: string): Promise<ResolvedLibrary | null> {
+  async resolveLibraryId(libraryName: string, query?: string): Promise<ResolvedLibrary | null> {
     await this.ensureStarted();
     if (!this.client) throw new Error("Context7 client not connected");
 
     const result = await this.callToolWithTimeout({
       name: this.resolveLibraryIdToolName,
-      arguments: { libraryName },
+      arguments: { libraryName, query: query ?? libraryName },
     });
 
     const text = this.extractText(result);
     if (!text) return null;
 
+    // Context7 returns text format, not JSON:
+    // "Available Libraries:\n\n- Title: React\n- Context7-compatible library ID: /reactjs/react.dev\n..."
+    // Try JSON first (in case format changes), then fall back to text parsing.
     try {
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -193,6 +204,15 @@ export class Context7Client {
       }
       return null;
     } catch {
+      // Not JSON — parse text format
+      const idMatch = text.match(/Context7-compatible library ID:\s*(\S+)/);
+      if (idMatch) {
+        const titleMatch = text.match(/Title:\s*(.+)/);
+        return {
+          id: idMatch[1],
+          name: titleMatch ? titleMatch[1].trim() : libraryName,
+        };
+      }
       return null;
     }
   }
@@ -205,8 +225,10 @@ export class Context7Client {
     await this.ensureStarted();
     if (!this.client) throw new Error("Context7 client not connected");
 
-    const args: Record<string, unknown> = { libraryId: input.libraryId };
-    if (input.topic) args.topic = input.topic;
+    const args: Record<string, unknown> = {
+      libraryId: input.libraryId,
+      query: input.topic ?? "documentation",
+    };
     if (input.tokens) args.tokens = input.tokens;
 
     const result = await this.callToolWithTimeout({

@@ -32,25 +32,28 @@ export async function setupContext7(options: {
 }): Promise<void> {
   const registry = createRegistryRepository();
 
-  // 1. API key
+  // 1. API key (optional — Context7 works without it, just lower rate limits)
   let apiKey = options.apiKey;
-  if (!apiKey) {
-    if (options.nonInteractive) {
-      console.error("Error: --api-key is required in non-interactive mode.");
-      process.exit(1);
-    }
-    apiKey = await prompt("Enter your Context7 API key (get one at https://context7.com): ");
-    if (!apiKey) {
-      console.error("Error: API key is required.");
-      process.exit(1);
-    }
+  if (!apiKey && !options.nonInteractive) {
+    apiKey =
+      (await prompt(
+        "Enter your Context7 API key (optional — press Enter for anonymous mode, get one at https://context7.com): ",
+      )) || undefined;
   }
 
   // 2. Try to resolve the context7-mcp binary
   let binPath: string | null = null;
-  try {
-    binPath = _require.resolve("@upstash/context7-mcp/bin/context7-mcp.mjs");
-  } catch {
+  const candidatePaths = [
+    "@upstash/context7-mcp/dist/index.js",
+    "@upstash/context7-mcp/bin/context7-mcp.mjs",
+  ];
+  for (const candidate of candidatePaths) {
+    try {
+      binPath = _require.resolve(candidate);
+      break;
+    } catch {}
+  }
+  if (!binPath) {
     if (!options.nonInteractive) {
       const install = await prompt(
         "Could not find @upstash/context7-mcp. Install it globally now? (y/n): ",
@@ -59,7 +62,12 @@ export async function setupContext7(options: {
         console.log("Installing @upstash/context7-mcp globally...");
         try {
           execSync("npm install -g @upstash/context7-mcp", { stdio: "inherit" });
-          binPath = _require.resolve("@upstash/context7-mcp/bin/context7-mcp.mjs");
+          for (const candidate of candidatePaths) {
+            try {
+              binPath = _require.resolve(candidate);
+              break;
+            } catch {}
+          }
         } catch {
           console.error("Warning: global install failed. You may need to install it manually.");
         }
@@ -69,14 +77,18 @@ export async function setupContext7(options: {
 
   // 3. Store config
   await registry.setSetting("context7.enabled", "true");
-  await registry.setSetting("context7.api_key", apiKey);
+  if (apiKey) {
+    await registry.setSetting("context7.api_key", apiKey);
+  }
   await registry.setSetting("context7.cache_ttl_days", "7");
   if (binPath) {
     await registry.setSetting("context7.bin_path", binPath);
   }
 
   console.log("Context7 enabled.");
-  console.log("  API key: stored securely");
+  console.log(
+    `  API key: ${apiKey ? "stored securely" : "anonymous mode (no key — lower rate limits)"}`,
+  );
   console.log(`  Binary: ${binPath ?? "not found (will auto-resolve from node_modules)"}`);
   console.log("  Cache TTL: 7 days");
   console.log("");
