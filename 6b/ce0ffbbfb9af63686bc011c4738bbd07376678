@@ -1,0 +1,118 @@
+packages/indexer/src/tree-sitter/loader.ts
+  s_45f03c1b65d48f::t_bac18bd042c18d 124
+  s_45f03c1b65d48f::t_1d6e93c1414b70 68-69
+  s_45f03c1b65d48f::t_4b43d73ed2f5db 53,56-60
+  s_45f03c1b65d48f::t_736da8ed9cd6c4 1-4,6-52,54-55,61-67,70-90,92-105,107-123,125-134
+  s_45f03c1b65d48f::t_7e6bf28b202e08 5
+  s_45f03c1b65d48f::t_d6ceb60811d164 91
+  s_45f03c1b65d48f::t_3633826a8cafa9 106
+packages/indexer/src/parsers/ts-morph-parser.ts
+  s_45f03c1b65d48f::t_8ef263ed258364 1-12,14-22,24-28
+  s_45f03c1b65d48f::t_72e6f8a9937699 23
+  s_45f03c1b65d48f::t_c6aac43db12674 13
+packages/indexer/package.json
+  s_45f03c1b65d48f::t_112ff5f5f7d14e 26-27
+  s_45f03c1b65d48f::t_c19ac990939046 21-23
+packages/indexer/src/tree-sitter/parse.ts
+  s_45f03c1b65d48f::t_6b278b141284ed 222-223,227-230
+  s_45f03c1b65d48f::t_b789935a0d593f 1
+  s_45f03c1b65d48f::t_a798fd59a51565 136-138,147-155
+  s_45f03c1b65d48f::t_e60333cfecfae5 167-177
+  s_45f03c1b65d48f::t_08213dfa40ce5b 20-23,30-31
+  s_45f03c1b65d48f::t_4107cfa54ffcdc 178-180
+  s_45f03c1b65d48f::t_e48fcbfd576f5a 181-186
+  s_45f03c1b65d48f::t_e7096b0b9643e2 2-19,24-26,28-29,32-36,38-63,65-71,73-75,77-82,84-113,115-135,139-146,156-166,187-214,216-220,232-233,242-282
+  s_45f03c1b65d48f::t_8b572e78ea5759 27,37,64,72,76,83,114,215
+  s_45f03c1b65d48f::t_26f40b470cd077 221,224-226,231,234-241
+packages/indexer/src/languages.ts
+  s_45f03c1b65d48f::t_28228f4b1670ce 8
+  s_45f03c1b65d48f::t_d27258c5f78e5a 1066
+  s_45f03c1b65d48f::t_c271e35225297e 1098
+packages/indexer/src/tree-sitter/index.ts
+  s_45f03c1b65d48f::t_4da11949476f27 1-4
+tests/tree-sitter-parser.test.ts
+  s_45f03c1b65d48f::t_8f816843d5c649 1-379
+CHANGELOG.md
+  s_aea4f934248459::t_6cf7f486214977 8-28
+  s_aea4f934248459::t_13c887eb16b21a 149
+packages/indexer/src/parsers/fallback-parser.ts
+  s_45f03c1b65d48f::t_944dd3f157f580 16
+  s_45f03c1b65d48f::t_138a0982040ac7 1-15,17-42
+packages/indexer/src/parsers/config-parser.ts
+  s_45f03c1b65d48f::t_3b47ea30600f2d 1-10,12-26
+  s_45f03c1b65d48f::t_ec87370b0c6407 11
+packages/indexer/src/tree-sitter/configs.ts
+  s_45f03c1b65d48f::t_fa7ffbb429a676 180-194
+  s_45f03c1b65d48f::t_9e587c24a0a356 222
+  s_45f03c1b65d48f::t_6d4e729f9dbf6f 1,58,177,278
+  s_45f03c1b65d48f::t_ce0c542322f993 217
+  s_45f03c1b65d48f::t_b6d8eea5ecfc83 329-341
+  s_45f03c1b65d48f::t_3221261c38c1f2 2-57,59-76,81,85-89,92-176,178-179,195-216,218-221,223-277,279-328,342-376
+  s_45f03c1b65d48f::t_bec7f70cdb014f 77-80,82-84,90-91
+packages/indexer/src/parsers/parser-registry.ts
+  s_45f03c1b65d48f::t_e378485799b822 48
+  s_45f03c1b65d48f::t_5097db585655d3 1-47,49-51
+apps/cli/tsup.config.ts
+  s_45f03c1b65d48f::t_0384a922d1ae66 27
+  s_45f03c1b65d48f::t_98ac2d630f0f40 28-36
+landing/src/app/page.tsx
+  s_aea4f934248459::t_0460359041a47d 77,407
+  s_aea4f934248459::t_4c05d7567e3e16 408
+README.md
+  s_aea4f934248459::t_e9f4fc4c32b3fd 91
+tests/parser-registry.test.ts
+  s_45f03c1b65d48f::t_47ef1962ff6bc1 16
+  s_45f03c1b65d48f::t_5b8f56096e18e7 1-15,17-157
+packages/indexer/src/parsers/markdown-parser.ts
+  s_45f03c1b65d48f::t_c298afecb92d66 1-10,12-30
+  s_45f03c1b65d48f::t_3ab6d5dcb36bf2 11
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_45f03c1b65d48f::t_919b0c3cd3a8ee 1-34,36-76
+  s_45f03c1b65d48f::t_26ad5a12bd5890 35
+  s_45f03c1b65d48f::t_de829df255a51c 77
+packages/indexer/src/parsers/types.ts
+  s_45f03c1b65d48f::t_aa3e25ace694bf 1-3,20-30,32-53,60
+  s_45f03c1b65d48f::t_764d863976602b 54-59
+  s_45f03c1b65d48f::t_0dec59992a5b61 4-19,31
+  s_45f03c1b65d48f::t_8bdfa5e50fca45 61-63
+apps/cli/package.json
+  s_aea4f934248459::t_cee17a8f54d105 3
+  s_45f03c1b65d48f::t_d75288c5a369cd 51,55
+  s_45f03c1b65d48f::t_01d0b18fc88892 52-54
+packages/indexer/src/index-workspace.ts
+  s_45f03c1b65d48f::t_7753c088eba7ea 23
+  s_45f03c1b65d48f::t_16aaa8ef2d458c 754-755,767-768
+  s_45f03c1b65d48f::t_391ba1dddeb358 24
+  s_45f03c1b65d48f::t_3c8f8dd9023555 233,235-243
+  s_45f03c1b65d48f::t_ba21dbd182232f 836-840
+  s_45f03c1b65d48f::t_c42242cb246c6b 898-901,907-912
+  s_45f03c1b65d48f::t_e3eac36c2934cc 521-526
+packages/indexer/src/parsers/index.ts
+  s_45f03c1b65d48f::t_5fddc998b1e02b 1-7
+pnpm-lock.yaml
+  s_45f03c1b65d48f::t_cfd6821842e2bf 77-88,399-407,417-419,3891-3898,4626-4649,4927-4929,8387-8390,9234-9248,9523-9524
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6bce0ffbbfb9af63686bc011c4738bbd07376678",
+  "prompts": {},
+  "sessions": {
+    "s_45f03c1b65d48f": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "heather-bergamot",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_aea4f934248459": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "a6dd7e9f-c45f-4ed0-ad06-92e1974b41e0",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
