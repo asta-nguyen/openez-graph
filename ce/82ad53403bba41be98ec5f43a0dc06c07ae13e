@@ -1,0 +1,21 @@
+docs/superpowers/specs/2026-08-06-fix-fast-indexing-critical-design.md
+  s_68752cfbc34913::t_939032438f8749 57-61
+  s_68752cfbc34913::t_618632edfc1e45 1-56,62-176
+  s_68752cfbc34913::t_1eb4d0f99c80f5 177-191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ce82ad53403bba41be98ec5f43a0dc06c07ae13e",
+  "prompts": {},
+  "sessions": {
+    "s_68752cfbc34913": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "incredible-sawfish",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
