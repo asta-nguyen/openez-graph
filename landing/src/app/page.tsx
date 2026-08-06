@@ -124,6 +124,19 @@ export default async function LandingPage() {
     }
   } catch {}
 
+  let cliVersion = "0.11.1";
+  try {
+    const res = await fetch("https://registry.npmjs.org/@openez-graph/cli/latest", {
+      next: { revalidate: 3600 },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.version === "string") {
+        cliVersion = data.version;
+      }
+    }
+  } catch {}
+
   return (
     <>
       <div className="scanline" />
@@ -207,7 +220,7 @@ export default async function LandingPage() {
                 }}
               >
                 <Star className="h-3 w-3" />
-                OpenEZ Graph v0.10.0 · local-first RAG
+                OpenEZ Graph v{cliVersion} · local-first RAG
               </div>
 
               <h1
