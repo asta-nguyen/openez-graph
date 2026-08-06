@@ -341,7 +341,7 @@ function DeleteWorkspaceDialog({
                     ? "Workspace removed, but with warnings:"
                     : "Workspace was removed from the registry, but the data directory could not be fully deleted:"}
                 </p>
-                <ul className="text-sm text-destructive list-disc list-inside space-y-1">
+                <ul className="text-sm text-destructive list-disc list-inside space-y-1 break-words">
                   {report.warnings.map((w, i) => (
                     <li key={i}>{w}</li>
                   ))}
@@ -355,10 +355,10 @@ function DeleteWorkspaceDialog({
               </>
             ) : (
               <>
-                <p className="text-sm">
+                <p className="text-sm break-words">
                   Delete <span className="font-medium">{workspace.name}</span>? The registry entry
-                  and <code className="text-xs">{workspace.rootPath}/.openez</code> will be
-                  permanently deleted. Project source code is not touched.
+                  and <code className="text-xs break-all">{workspace.rootPath}/.openez</code> will
+                  be permanently deleted. Project source code is not touched.
                 </p>
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </>
