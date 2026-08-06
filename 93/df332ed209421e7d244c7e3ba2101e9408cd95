@@ -1,0 +1,29 @@
+apps/web/src/lib/api.ts
+  s_a138ca8fa23431::t_90fa78fbdfc303 197-208
+apps/mcp/src/mcp-core.ts
+  s_a138ca8fa23431::t_d8cc157abb7f0f 744-747
+apps/web/src/routes/workspaces/index.tsx
+  s_a138ca8fa23431::t_1026026bf32670 140-161,163-169,172,175,177-207,209-214,216-226
+  s_a138ca8fa23431::t_4d7b362c6e4fac 25-28
+  s_a138ca8fa23431::t_6075952736e7d3 49,52-60
+  s_a138ca8fa23431::t_b264c48c220237 339-365,374,376-381
+  s_a138ca8fa23431::t_048fd8a021a5ed 238-239
+  s_a138ca8fa23431::t_c8914d4d891e44 236-237
+  s_a138ca8fa23431::t_c9d08f7091f8c1 337-338
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "93df332ed209421e7d244c7e3ba2101e9408cd95",
+  "prompts": {},
+  "sessions": {
+    "s_a138ca8fa23431": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wobbly-caraway",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
