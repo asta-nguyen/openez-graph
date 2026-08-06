@@ -24,7 +24,6 @@ const serverDir = getDirname();
 import {
   countWorkspaceDocuments,
   countWorkspaceMemories,
-  deleteRegistryWorkspace,
   deleteWorkspaceMemory,
   ensureRegistryWorkspace,
   getLatestGraphRun,
@@ -42,10 +41,15 @@ import {
   listWorkspaceMemories,
   resolveRegistryDbPath,
   searchWorkspaceMemories,
+  setRegistryWorkspacePinned,
 } from "./sqlite";
 
 import { codeQuery } from "@openez-graph/core";
-import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
+import {
+  createRegistryRepository,
+  createWorkspaceRepository,
+  removeWorkspace,
+} from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
 const app = new Hono();
@@ -97,6 +101,7 @@ function mapWorkspace(ws: {
   nodeCount: number;
   edgeCount: number;
   lastError?: string;
+  pinnedAt?: string;
   createdAt: string;
   updatedAt: string;
 }) {
@@ -116,6 +121,7 @@ function mapWorkspace(ws: {
     nodeCount: ws.nodeCount,
     edgeCount: ws.edgeCount,
     lastError: ws.lastError ?? null,
+    pinnedAt: ws.pinnedAt ?? null,
     createdAt: new Date(ws.createdAt),
     updatedAt: new Date(ws.updatedAt),
   };
@@ -315,14 +321,33 @@ app.post("/api/workspaces", async (c) => {
   }
 });
 
-app.delete("/api/workspaces/:id", (c) => {
+app.delete("/api/workspaces/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    deleteRegistryWorkspace(id);
-    return c.json({ success: true });
+    const report = await removeWorkspace({ id });
+    if (!report) return c.json({ success: false, error: "Workspace not found" }, 404);
+    return c.json({ success: true, report });
   } catch (err) {
     console.error("Failed to delete workspace:", err);
     return c.json({ success: false, error: "Failed to delete workspace" });
+  }
+});
+
+app.patch("/api/workspaces/:id/pin", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json<{ pinned?: boolean }>();
+    if (typeof body.pinned !== "boolean") {
+      return c.json({ success: false, error: "pinned (boolean) is required" }, 400);
+    }
+    if (!getRegistryWorkspace(id)) {
+      return c.json({ success: false, error: "Workspace not found" }, 404);
+    }
+    setRegistryWorkspacePinned(id, body.pinned);
+    return c.json({ success: true });
+  } catch (err) {
+    console.error("Failed to pin workspace:", err);
+    return c.json({ success: false, error: "Failed to pin workspace" });
   }
 });
 

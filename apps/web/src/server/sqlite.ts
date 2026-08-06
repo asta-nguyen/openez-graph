@@ -52,6 +52,7 @@ export interface WebRegistryWorkspace {
   nodeCount: number;
   edgeCount: number;
   lastError?: string;
+  pinnedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -166,11 +167,25 @@ function initializeRegistrySchema(db: SqliteDb) {
       node_count INTEGER NOT NULL DEFAULT 0,
       edge_count INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
+      pinned_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_root_path ON workspaces(root_path);
   `);
+  migrateRegistryColumns(db);
+}
+
+function migrateRegistryColumns(db: SqliteDb) {
+  const columns = new Set(
+    (db.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+
+  if (!columns.has("pinned_at")) {
+    db.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+  }
 }
 
 export function getRegistryDb(): SqliteDb {
@@ -182,6 +197,11 @@ export function getRegistryDb(): SqliteDb {
   }
 
   return registryDb;
+}
+
+export function closeRegistryDb() {
+  registryDb?.close();
+  registryDb = null;
 }
 
 function resolveWorkspaceDbPath(rootPath: string): string {
@@ -360,6 +380,7 @@ function mapWorkspace(row: Record<string, unknown>): WebRegistryWorkspace {
     nodeCount: Number(row.node_count ?? 0),
     edgeCount: Number(row.edge_count ?? 0),
     lastError: row.last_error ? String(row.last_error) : undefined,
+    pinnedAt: row.pinned_at ? String(row.pinned_at) : undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -367,7 +388,9 @@ function mapWorkspace(row: Record<string, unknown>): WebRegistryWorkspace {
 
 export function listRegistryWorkspaces(): WebRegistryWorkspace[] {
   const rows = getRegistryDb()
-    .prepare("SELECT * FROM workspaces ORDER BY created_at DESC")
+    .prepare(
+      "SELECT * FROM workspaces ORDER BY (pinned_at IS NULL), pinned_at DESC, created_at DESC",
+    )
     .all() as Array<Record<string, unknown>>;
   return rows.map(mapWorkspace);
 }
@@ -502,8 +525,10 @@ export function updateRegistryWorkspace(
     .run(...values);
 }
 
-export function deleteRegistryWorkspace(id: string) {
-  getRegistryDb().prepare("DELETE FROM workspaces WHERE id = ?").run(id);
+export function setRegistryWorkspacePinned(id: string, pinned: boolean) {
+  getRegistryDb()
+    .prepare("UPDATE workspaces SET pinned_at = ? WHERE id = ?")
+    .run(pinned ? new Date().toISOString() : null, id);
 }
 
 function mapRunRow(row: Record<string, unknown>, kind: "index" | "graph"): WebRunRow {
