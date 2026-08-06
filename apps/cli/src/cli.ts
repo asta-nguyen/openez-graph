@@ -312,7 +312,7 @@ program
 // ── openez remove [path] ──
 
 function confirmDestructive(prompt: string): Promise<boolean> {
-  if (!process.stdin.isTTY) return Promise.resolve(false);
+  if (!process.stdin.isTTY) return Promise.reject(new Error("Confirmation required; rerun with --yes."));
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
     rl.question(`${prompt} [y/N] `, (answer) => {
