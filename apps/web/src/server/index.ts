@@ -341,8 +341,8 @@ app.delete("/api/workspaces/:id", async (c) => {
 app.patch("/api/workspaces/:id/pin", async (c) => {
   try {
     const id = c.req.param("id");
-    const body = await c.req.json<{ pinned?: boolean }>();
-    if (typeof body.pinned !== "boolean") {
+    const body = await c.req.json<{ pinned?: boolean }>().catch(() => null);
+    if (typeof body?.pinned !== "boolean") {
       return c.json({ success: false, error: "pinned (boolean) is required" }, 400);
     }
     if (!getRegistryWorkspace(id)) {
