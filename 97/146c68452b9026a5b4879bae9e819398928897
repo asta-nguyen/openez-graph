@@ -1,0 +1,32 @@
+apps/web/src/server/index.ts
+  s_cf5c2e414f8ef6::t_e7f58e095c44df 44,48-52
+  s_cf5c2e414f8ef6::t_6558327a9cd889 324,327-329,336-350
+  s_cf5c2e414f8ef6::t_010b04c48f9533 124
+  s_cf5c2e414f8ef6::t_5018ac2539016e 104
+  s_cf5c2e414f8ef6::t_9ec7e4d69d4f22 351-353
+apps/web/src/server/sqlite.ts
+  s_cf5c2e414f8ef6::t_12897823977b84 170,176-188
+  s_cf5c2e414f8ef6::t_967541bb4f70fe 55
+  s_cf5c2e414f8ef6::t_7b34295383aa1a 202-206
+  s_cf5c2e414f8ef6::t_118a731bc67599 391-393
+  s_cf5c2e414f8ef6::t_5f83c4c9a3352a 528-531
+  s_cf5c2e414f8ef6::t_fe4a56d95bbd9f 383
+tests/web-workspaces-endpoint.test.ts
+  s_cf5c2e414f8ef6::t_c2a16eb6bef348 1-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "97146c68452b9026a5b4879bae9e819398928897",
+  "prompts": {},
+  "sessions": {
+    "s_cf5c2e414f8ef6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wiry-shock",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
