@@ -1,0 +1,29 @@
+AGENTS.md
+  s_cf5c2e414f8ef6::t_9e42ae90dbe844 112
+  s_cf5c2e414f8ef6::t_1e2eaf17b0d473 105
+apps/mcp/src/mcp-core.ts
+  s_cf5c2e414f8ef6::t_ace24e36533106 27
+  s_cf5c2e414f8ef6::t_0ebfc5d07d6d26 734
+  s_cf5c2e414f8ef6::t_b3b75da04da275 729-733,735-753
+  s_cf5c2e414f8ef6::t_6f056d9e903534 92-94,96-97
+  s_cf5c2e414f8ef6::t_312036a7fe2cfc 95
+  s_cf5c2e414f8ef6::t_f68a876d439737 522-535
+tests/mcp-tools.test.ts
+  s_cf5c2e414f8ef6::t_e45f8735a5db9f 231-282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d3e50d7c1344dd06786a19fbb452919cec16b167",
+  "prompts": {},
+  "sessions": {
+    "s_cf5c2e414f8ef6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wiry-shock",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
