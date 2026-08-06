@@ -1,0 +1,20 @@
+apps/web/src/routes/workspaces/index.tsx
+  s_a138ca8fa23431::t_059372dbedba0b 344
+  s_a138ca8fa23431::t_e0ed2726e1e80c 358,360-361
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "56dde1bb9981c8194dc39108d87f0873f1007574",
+  "prompts": {},
+  "sessions": {
+    "s_a138ca8fa23431": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wobbly-caraway",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
