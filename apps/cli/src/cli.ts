@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import readline from "node:readline";
 
 import chokidar from "chokidar";
 import { Command } from "commander";
@@ -7,7 +8,9 @@ import { Command } from "commander";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
+  getLocalWorkspaceDir,
   isSensitiveKey,
+  removeWorkspace,
   writeLocalWorkspaceConfig,
 } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
@@ -300,8 +303,78 @@ program
     for (const workspace of workspaces) {
       const statusIcon =
         workspace.status === "indexed" ? "✓" : workspace.status === "error" ? "✗" : "○";
-      console.log(`  ${statusIcon} ${workspace.name} (${workspace.id})`);
+      const pinMarker = workspace.pinnedAt ? " 📌" : "";
+      console.log(`  ${statusIcon}${pinMarker} ${workspace.name} (${workspace.id})`);
       console.log(`       ${workspace.rootPath}`);
+    }
+  });
+
+// ── openez remove [path] ──
+
+function confirmDestructive(prompt: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return Promise.reject(new Error("Confirmation required; rerun with --yes."));
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`${prompt} [y/N] `, (answer) => {
+      rl.close();
+      const normalized = answer.trim().toLowerCase();
+      resolve(normalized === "y" || normalized === "yes");
+    });
+  });
+}
+
+program
+  .command("remove")
+  .alias("rm")
+  .description("Remove a workspace from the registry and delete its .openez data directory")
+  .argument("[path]", "path to the workspace directory", process.cwd())
+  .option("--id <workspaceId>", "workspace id (takes precedence over path)")
+  .option("-y, --yes", "skip confirmation prompt")
+  .action(async (targetPath, options) => {
+    const registry = createRegistryRepository();
+    const resolvedPath = path.resolve(targetPath);
+    const workspace = options.id
+      ? await registry.getWorkspace(options.id)
+      : await registry.getWorkspaceByPath(resolvedPath);
+
+    if (!workspace) {
+      console.error(`Error: no registered workspace found for ${options.id ?? resolvedPath}`);
+      process.exit(1);
+    }
+
+    const dataDir = getLocalWorkspaceDir(workspace.rootPath);
+    console.log(`Workspace: ${workspace.name} (${workspace.id})`);
+    console.log(`  Path:     ${workspace.rootPath}`);
+    console.log(`  Data dir: ${dataDir}`);
+    console.log(`  Indexed:  ${workspace.documentCount} docs, ${workspace.chunkCount} chunks`);
+    console.log(
+      "This removes the registry entry and deletes the data directory. Source code is not touched.",
+    );
+
+    if (!options.yes) {
+      const confirmed = await confirmDestructive("Proceed?");
+      if (!confirmed) {
+        console.log("Aborted.");
+        return;
+      }
+    }
+
+    const report = await removeWorkspace({ id: workspace.id });
+    if (!report) {
+      console.error(`Error: workspace '${workspace.id}' no longer exists in the registry.`);
+      process.exit(1);
+    }
+
+    if (report.unregistered) {
+      console.log(`✓ Unregistered workspace ${report.workspaceId}`);
+    } else {
+      console.log(`✗ Workspace ${report.workspaceId} could not be unregistered (see warnings)`);
+    }
+    if (report.dataDirRemoved) {
+      console.log(`✓ Deleted ${report.dataDirPath}`);
+    }
+    for (const warning of report.warnings) {
+      console.log(`! ${warning}`);
     }
   });
 

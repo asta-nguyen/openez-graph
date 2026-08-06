@@ -5,6 +5,39 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-08-06
+
+### Added
+
+- `openez remove` CLI command with confirmation prompt, indexed-data summary, and `--yes`/`--id` options
+- `remove_workspace` MCP tool with `confirm: true` guard and watcher cleanup
+- Pin/unpin toggle on workspaces page with in-flight disable and error display
+- Delete confirmation dialog with ARIA dialog semantics (role, aria-modal, aria-labelledby), focus trap, Escape-to-close, and focus restore
+- `pin_order` monotonic column for deterministic pinned-workspace ordering regardless of wall-clock resolution
+- Delete dialog surfaces partial-failure warnings (data dir not removed) instead of silently closing
+- Indexed doc/chunk counts shown in CLI remove confirmation screen
+
+### Changed
+
+- Workspace removal now closes the native DB handle before deleting `.openez`, preventing EBUSY on Windows
+- Removal order changed: close DB → delete data dir → unregister, so failed cleanup stays retryable
+- `pathExists` in remove-workspace only catches ENOENT; other stat errors are reported as warnings
+- MCP `remove_workspace` resolves relative paths with `path.resolve` for consistency with CLI and other MCP tools
+- Pin/delete action buttons are now siblings of the workspace link instead of nested inside it (valid HTML)
+- Web server delete handler closes cached workspace DB handle before removal
+- Race-safe registry column migration (try/catch + re-check on ALTER TABLE)
+- Registry DB cache cleared on initialization failure
+
+### Fixed
+
+- `closeWorkspaceDb` now calls `.close()` on the native better-sqlite3 handle instead of only dropping the cache entry
+- Delete mutation throws on `{ success: false }` responses, preventing dialog close on server-side failure
+- Pin mutation throws on `{ success: false }` responses, preventing silent failure
+- Delete handler returns HTTP 500 on catch instead of implicit 200
+- Pin handler validates request body with safe `.catch()` for malformed JSON
+- Dialog text overflow with long workspace paths (break-all on code, break-words on paragraphs)
+- MCP auto-sync watcher closed when its workspace is removed, preventing stale reindex attempts
+
 ## [0.11.1] - 2026-08-06
 
 ### Fixed
@@ -154,6 +187,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[0.12.0]: https://github.com/asta-nguyen/openez-graph/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/asta-nguyen/openez-graph/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/asta-nguyen/openez-graph/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD

@@ -24,6 +24,7 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
   findLocalWorkspaceConfig,
+  removeWorkspace,
 } from "@openez-graph/db";
 import { indexWorkspace } from "@openez-graph/indexer";
 
@@ -86,6 +87,12 @@ const indexWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
   mode: z.enum(["incremental", "full"]).optional(),
+});
+
+const removeWorkspaceSchema = z.object({
+  workspaceId: z.string().optional(),
+  path: z.string().optional(),
+  confirm: z.boolean().optional(),
 });
 
 const MCP_CATCHUP_INTERVAL_MS = Number(process.env.OPENEZ_MCP_CATCHUP_INTERVAL_MS ?? 5000);
@@ -512,6 +519,20 @@ export function createMcpServer(options?: McpServerOptions) {
           required: [],
         },
       },
+      {
+        name: "remove_workspace",
+        description:
+          "Remove a workspace from the registry and delete its .openez data directory. Destructive and irreversible: call only with confirm: true after explicit user approval.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceId: { type: "string" },
+            path: { type: "string" },
+            confirm: { type: "boolean" },
+          },
+          required: ["confirm"],
+        },
+      },
     ],
   }));
 
@@ -705,6 +726,37 @@ export function createMcpServer(options?: McpServerOptions) {
         const summary = await indexWorkspace({ workspaceId: workspace.id, mode: input.mode });
         return jsonResponse(summary);
       }
+      case "remove_workspace": {
+        const input = removeWorkspaceSchema.parse(request.params.arguments ?? {});
+        if (input.confirm !== true) {
+          return jsonResponse({
+            error:
+              "remove_workspace permanently deletes the registry entry and the workspace's .openez data directory. Requires confirm: true.",
+            hint: "Ask the user for approval, then call remove_workspace again with confirm: true.",
+          });
+        }
+        if (input.workspaceId && input.path) {
+          return jsonResponse({ error: "Pass either workspaceId or path, not both." });
+        }
+        if (!input.workspaceId && !input.path) {
+          return jsonResponse({ error: "Pass an explicit workspaceId or path." });
+        }
+        const report = await removeWorkspace({
+          id: input.workspaceId,
+          rootPath: input.path ? path.resolve(input.path) : undefined,
+        });
+        if (!report) {
+          return jsonResponse({
+            error: "Workspace not found",
+            workspaceId: input.workspaceId,
+            path: input.path,
+          });
+        }
+        // Stop the opt-in auto-sync watcher if it was watching this workspace,
+        // preventing stale reindex attempts against the deleted workspace.
+        stopWatcherForWorkspace(report.workspaceId);
+        return jsonResponse(report);
+      }
       default:
         throw new Error(`Unknown tool: ${request.params.name}`);
     }
@@ -722,6 +774,15 @@ export async function createAndStartMcpServer(options?: McpServerOptions) {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
+
+// ── Watcher state (module-scoped so remove_workspace can close it) ──
+interface ActiveWatcher {
+  watcher: ReturnType<typeof chokidar.watch>;
+  workspaceId: string;
+  rootPath: string;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+}
+let activeWatcher: ActiveWatcher | null = null;
 
 const WATCH_DEBOUNCE_MS = 2000;
 const WATCH_ENABLED = ["1", "true", "yes"].includes(
@@ -776,16 +837,20 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
   }
 
   // Start file watcher for opt-in auto-sync.
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const watcher = chokidar.watch(resolvedRoot, {
     ignored: WATCH_IGNORE_PATTERNS,
     ignoreInitial: true,
     persistent: true,
   });
 
+  activeWatcher = { watcher, workspaceId: workspace.id, rootPath: resolvedRoot, debounceTimer };
+
   const triggerReindex = () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(async () => {
+    const current = activeWatcher;
+    if (!current) return;
+    if (current.debounceTimer) clearTimeout(current.debounceTimer);
+    current.debounceTimer = setTimeout(async () => {
       try {
         await indexWorkspace({ workspaceId: workspace!.id, mode: "incremental" });
       } catch {
@@ -802,5 +867,14 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
       `OpenEZ MCP auto-sync watcher disabled: ${error instanceof Error ? error.message : String(error)}`,
     );
     void watcher.close();
+    activeWatcher = null;
   });
+}
+
+function stopWatcherForWorkspace(workspaceId: string): void {
+  if (activeWatcher && activeWatcher.workspaceId === workspaceId) {
+    if (activeWatcher.debounceTimer) clearTimeout(activeWatcher.debounceTimer);
+    void activeWatcher.watcher.close();
+    activeWatcher = null;
+  }
 }
