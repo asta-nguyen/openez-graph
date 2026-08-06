@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -91,7 +90,7 @@ export function createRegistryRepository(): RegistryRepository {
   return {
     async listWorkspaces(): Promise<RegistryWorkspace[]> {
       const rows = db.select().from(schema.workspaces).all();
-      return rows.map(mapWorkspaceRow);
+      return rows.map(mapWorkspaceRow).sort(compareWorkspaces);
     },
 
     async getWorkspace(id: string): Promise<RegistryWorkspace | null> {
@@ -253,6 +252,24 @@ export function createRegistryRepository(): RegistryRepository {
       db.delete(schema.workspaces).where(eq(schema.workspaces.id, id)).run();
     },
 
+    async setPinned(id: string, pinned: boolean): Promise<void> {
+      if (pinned) {
+        // Assign a monotonic pin_order so ordering is deterministic even when
+        // multiple workspaces are pinned within the same millisecond.
+        const maxRow = native
+          .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
+          .get() as { max_order: number | null } | undefined;
+        const nextOrder = (maxRow?.max_order ?? 0) + 1;
+        native
+          .prepare("UPDATE workspaces SET pinned_at = ?, pin_order = ? WHERE id = ?")
+          .run(new Date().toISOString(), nextOrder, id);
+      } else {
+        native
+          .prepare("UPDATE workspaces SET pinned_at = NULL, pin_order = NULL WHERE id = ?")
+          .run(id);
+      }
+    },
+
     async getSetting(key: string): Promise<string | null> {
       const row = native.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
         | { value: string }
@@ -322,14 +339,34 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     nodeCount: row.nodeCount,
     edgeCount: row.edgeCount,
     lastError: row.lastError ?? undefined,
+    pinnedAt: row.pinnedAt ?? undefined,
+    pinOrder: row.pinOrder ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-function getNativeWorkspaceDb(rootPath: string): { native: NativeDatabase } {
+function compareWorkspaces(a: RegistryWorkspace, b: RegistryWorkspace): number {
+  if (a.pinnedAt && !b.pinnedAt) return -1;
+  if (!a.pinnedAt && b.pinnedAt) return 1;
+  if (a.pinnedAt && b.pinnedAt) {
+    // Use monotonic pin_order as the primary tiebreaker (deterministic
+    // regardless of wall-clock resolution), then pinned_at as a fallback.
+    const aOrder = a.pinOrder ?? -Infinity;
+    const bOrder = b.pinOrder ?? -Infinity;
+    if (aOrder !== bOrder) return bOrder - aOrder;
+    if (a.pinnedAt !== b.pinnedAt) return b.pinnedAt.localeCompare(a.pinnedAt);
+  }
+  return b.createdAt.localeCompare(a.createdAt);
+}
+
+function getNativeWorkspaceDb(rootPath: string): {
+  db: ReturnType<typeof getWorkspaceDb>;
+  native: NativeDatabase;
+} {
+  const db = getWorkspaceDb(rootPath);
   const native = getWorkspaceNativeDb(rootPath);
-  return { native };
+  return { db, native };
 }
 
 function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
@@ -368,11 +405,11 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     docByPath: native.prepare("SELECT * FROM documents WHERE path = ?"),
     docById: native.prepare("SELECT * FROM documents WHERE id = ?"),
     insertDoc: native.prepare(
-      "INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO documents (path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ),
     chunksByDoc: native.prepare("SELECT * FROM chunks WHERE document_id = ? ORDER BY chunk_index"),
     insertChunk: native.prepare(
-      "INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO chunks (document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ),
     deleteChunksByDoc: native.prepare("DELETE FROM chunks WHERE document_id = ?"),
     nodeByTypeLabel: native.prepare("SELECT * FROM graph_nodes WHERE type = ? AND label = ?"),
@@ -380,11 +417,11 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       "SELECT * FROM graph_nodes WHERE type = ? AND label = ? AND ref_id = ?",
     ),
     insertNode: native.prepare(
-      "INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO graph_nodes (type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
     ),
     // Single-query upsert for non-symbol nodes (type, label is unique via partial index)
     upsertNodeByTypeLabel: native.prepare(
-      `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO graph_nodes (type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET ref_id = COALESCE(excluded.ref_id, graph_nodes.ref_id), metadata = excluded.metadata, updated_at = excluded.updated_at
        RETURNING id`,
     ),
@@ -395,13 +432,13 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       "DELETE FROM graph_nodes WHERE ref_id = ? OR ref_id IN (SELECT id FROM chunks WHERE document_id = ?)",
     ),
     insertEdge: native.prepare(
-      `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO graph_edges (from_node_id, to_node_id, type, weight, metadata, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
     ),
     insertEmbedding: native.prepare(
-      `INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO embeddings (chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(chunk_id, provider, model) DO UPDATE SET
          dimensions = excluded.dimensions,
          embedding = excluded.embedding,
@@ -457,10 +494,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     },
 
     async insertDocument(input) {
-      const id = input.id ?? crypto.randomUUID();
       const now = new Date().toISOString();
-      stmts.insertDoc.run(
-        id,
+      const result = stmts.insertDoc.run(
         input.path,
         input.absolutePath,
         input.kind,
@@ -471,7 +506,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         now,
         now,
       );
-      return id;
+      return String(result.lastInsertRowid);
     },
 
     async insertDocumentsBatch(
@@ -487,16 +522,14 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     ): Promise<string[]> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const ids: string[] = inputs.map(() => crypto.randomUUID());
+      const ids: string[] = [];
       const BATCH = 500;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
         const params: unknown[] = [];
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
+        for (const item of batch) {
           params.push(
-            ids[i + j],
             item.path,
             item.absolutePath,
             item.kind,
@@ -508,11 +541,16 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
             now,
           );
         }
-        native
+        const result = native
           .prepare(
-            `INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES ${placeholders}`,
+            `INSERT INTO documents (path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES ${placeholders}`,
           )
           .run(...params);
+        // SQLite assigns sequential rowids — reconstruct them from lastInsertRowid.
+        const lastId = Number(result.lastInsertRowid);
+        for (let j = batch.length - 1; j >= 0; j--) {
+          ids[i + j] = String(lastId - (batch.length - 1 - j));
+        }
       }
       return ids;
     },
@@ -569,16 +607,14 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     async insertChunks(inputs) {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const ids: string[] = inputs.map(() => crypto.randomUUID());
+      const ids: string[] = [];
       const BATCH = 2000;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
         const params: unknown[] = [];
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
+        for (const item of batch) {
           params.push(
-            ids[i + j],
             item.documentId,
             item.chunkIndex,
             item.heading ?? null,
@@ -590,11 +626,15 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
             now,
           );
         }
-        native
+        const result = native
           .prepare(
-            `INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
+            `INSERT INTO chunks (document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
           )
           .run(...params);
+        const lastId = Number(result.lastInsertRowid);
+        for (let j = batch.length - 1; j >= 0; j--) {
+          ids[i + j] = String(lastId - (batch.length - 1 - j));
+        }
       }
       return ids;
     },
@@ -627,6 +667,25 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       }
     },
 
+    /** Insert FTS entries for all chunks via INSERT...SELECT. Avoids passing 100k+ params through JS. */
+    bulkInsertFtsFromChunks(): number {
+      // Drop and recreate FTS table — cheaper than DELETE + INSERT for large datasets
+      // because FTS5 doesn't need to process deletion tombstones.
+      native.exec("DROP TABLE IF EXISTS chunks_fts");
+      native.exec(
+        "CREATE VIRTUAL TABLE chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61')",
+      );
+      const result = native
+        .prepare(
+          `INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
+           SELECT c.id, d.path, coalesce(c.heading, ''), coalesce(d.language, ''), substr(c.content, 1, 400)
+           FROM chunks c
+           INNER JOIN documents d ON d.id = c.document_id`,
+        )
+        .run();
+      return result.changes;
+    },
+
     async deleteChunksByDocument(documentId: string) {
       stmts.deleteChunksByDoc.run(documentId);
     },
@@ -652,10 +711,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
             return String(existing.id);
           }
         }
-        const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        stmts.insertNode.run(
-          id,
+        const result = stmts.insertNode.run(
           input.type,
           input.label,
           input.refId ?? null,
@@ -663,14 +720,12 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           now,
           now,
         );
-        return id;
+        return String(result.lastInsertRowid);
       }
 
       // Non-symbol nodes: (type, label) is unique — use ON CONFLICT ... RETURNING (one query)
-      const id = crypto.randomUUID();
       const now = new Date().toISOString();
       const row = stmts.upsertNodeByTypeLabel.get(
-        id,
         input.type,
         input.label,
         input.refId ?? null,
@@ -686,29 +741,25 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     ): Promise<string[]> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const ids: string[] = inputs.map(() => crypto.randomUUID());
+      const ids: string[] = new Array(inputs.length);
       const BATCH = 2000;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?)").join(",");
         const params: unknown[] = [];
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
-          params.push(
-            ids[i + j],
-            item.type,
-            item.label,
-            item.refId ?? null,
-            item.metadata ?? "{}",
-            now,
-            now,
-          );
+        for (const item of batch) {
+          params.push(item.type, item.label, item.refId ?? null, item.metadata ?? "{}", now, now);
         }
-        native
+        // Use RETURNING to get actual IDs back — reliable with ON CONFLICT.
+        const rows = native
           .prepare(
-            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders} ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET metadata = excluded.metadata, updated_at = excluded.updated_at`,
+            `INSERT INTO graph_nodes (type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders} ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET metadata = excluded.metadata, updated_at = excluded.updated_at RETURNING id`,
           )
-          .run(...params);
+          .all(...params) as Array<{ id: number }>;
+        // RETURNING gives one row per input (insert or update), in order.
+        for (let j = 0; j < rows.length; j++) {
+          ids[i + j] = String(rows[j].id);
+        }
       }
       return ids;
     },
@@ -723,23 +774,14 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?)").join(",");
         const params: unknown[] = [];
         for (const item of batch) {
-          const id = crypto.randomUUID();
-          params.push(
-            id,
-            item.type,
-            item.label,
-            item.refId ?? null,
-            item.metadata ?? "{}",
-            now,
-            now,
-          );
+          params.push(item.type, item.label, item.refId ?? null, item.metadata ?? "{}", now, now);
         }
         const rows = native
           .prepare(
-            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders}
+            `INSERT INTO graph_nodes (type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders}
              ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET ref_id = COALESCE(excluded.ref_id, graph_nodes.ref_id), metadata = excluded.metadata, updated_at = excluded.updated_at
              RETURNING id, label`,
           )
@@ -813,9 +855,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Graph Edge Operations ──
 
     async insertEdge(input) {
-      const id = crypto.randomUUID();
-      stmts.insertEdge.run(
-        id,
+      const result = stmts.insertEdge.run(
         input.fromNodeId,
         input.toNodeId,
         input.type,
@@ -823,7 +863,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         input.metadata ?? "{}",
         new Date().toISOString(),
       );
-      return id;
+      return String(result.lastInsertRowid);
     },
 
     async insertEdges(
@@ -840,11 +880,10 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       const BATCH = 2000;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?)").join(",");
         const params: unknown[] = [];
         for (const item of batch) {
           params.push(
-            crypto.randomUUID(),
             item.fromNodeId,
             item.toNodeId,
             item.type,
@@ -855,7 +894,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         }
         native
           .prepare(
-            `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders} ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
+            `INSERT INTO graph_edges (from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders} ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
           )
           .run(...params);
       }
@@ -877,7 +916,6 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       const now = new Date().toISOString();
       for (const input of inputs) {
         stmts.insertEmbedding.run(
-          crypto.randomUUID(),
           input.chunkId,
           input.provider,
           input.model,
@@ -1020,14 +1058,12 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Memory Operations ──
 
     async insertMemory(input) {
-      const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      native
+      const result = native
         .prepare(
-          "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO memories (title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .run(
-          id,
           input.title,
           input.content,
           input.tags ?? "",
@@ -1036,7 +1072,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           now,
           now,
         );
-      return id;
+      return String(result.lastInsertRowid);
     },
 
     async getMemory(id) {
@@ -1080,14 +1116,13 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Index Run Operations ──
 
     async createIndexRun(input) {
-      const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      native
+      const result = native
         .prepare(
-          "INSERT INTO index_runs (id, mode, status, files_scanned, files_updated, chunks_written, embeddings_written, started_at) VALUES (?, ?, 'running', 0, 0, 0, 0, ?)",
+          "INSERT INTO index_runs (mode, status, files_scanned, files_updated, chunks_written, embeddings_written, started_at) VALUES (?, 'running', 0, 0, 0, 0, ?)",
         )
-        .run(id, input.mode, now);
-      return id;
+        .run(input.mode, now);
+      return String(result.lastInsertRowid);
     },
 
     async completeIndexRun(id, updates) {
@@ -1124,13 +1159,11 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     // ── Query Log Operations ──
 
     async insertQueryLog(input) {
-      const id = crypto.randomUUID();
-      native
+      const result = native
         .prepare(
-          "INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO query_logs (query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .run(
-          id,
           input.query,
           input.mode,
           input.resultCount,
@@ -1139,7 +1172,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           input.filesScanned ?? 0,
           new Date().toISOString(),
         );
-      return id;
+      return String(result.lastInsertRowid);
     },
 
     // ── Raw SQL queries ──
@@ -1179,11 +1212,9 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         native.pragma("locking_mode = EXCLUSIVE");
         native.pragma("journal_mode = MEMORY");
       } else {
-        // Switch back to WAL + NORMAL for query-safe access.
-        // Use PASSIVE checkpoint — doesn't block or fsync, lets OS flush async.
-        native.pragma("journal_mode = WAL");
-        native.exec("PRAGMA wal_checkpoint(PASSIVE)");
-        native.pragma("locking_mode = NORMAL");
+        // Don't switch journal_mode or locking_mode — those force checkpoint/fsync.
+        // MEMORY journal + EXCLUSIVE lock aren't persisted; next DB open uses
+        // WAL + NORMAL (the persisted defaults from workspace-db.ts).
         native.pragma("synchronous = NORMAL");
         native.pragma("cache_size = -2000");
         native.pragma("temp_store = DEFAULT");

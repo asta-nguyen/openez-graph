@@ -3,9 +3,15 @@
 let _encode: ((text: string) => number[]) | null = null;
 let _decode: ((tokens: number[]) => string) | null = null;
 let _loadFailed = false;
+let _fastMode = false;
+
+/** Skip BPE encoding — use length/4 approximation. Call during indexing for speed. */
+export function setFastTokenCount(enabled: boolean): void {
+  _fastMode = enabled;
+}
 
 function loadTokenizer(): void {
-  if (_encode || _loadFailed) return;
+  if (_encode || _loadFailed || _fastMode) return;
   try {
     const tokenizer = require("gpt-tokenizer");
     _encode = tokenizer.encode;
@@ -16,6 +22,7 @@ function loadTokenizer(): void {
 }
 
 export function countTokens(value: string): number {
+  if (_fastMode) return Math.ceil(value.length / 4);
   loadTokenizer();
   if (_encode) {
     try {

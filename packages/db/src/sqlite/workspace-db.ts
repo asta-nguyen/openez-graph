@@ -10,7 +10,8 @@ import { createNativeDatabase } from "./database-loader";
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
 
-const dbCache = new Map<string, ReturnType<typeof getWorkspaceDbRaw>>();
+const dbCache = new Map<string, ReturnType<typeof drizzle>>();
+const nativeCache = new Map<string, ReturnType<typeof createNativeDatabase>>();
 
 // Resolve a bundled file (template.sqlite, registry-template.sqlite) that ships alongside the CLI binary.
 export function resolveBundledFile(filename: string): string | null {
@@ -69,33 +70,40 @@ export function getWorkspaceDb(rootPath: string) {
 
   const { sqlite, db } = getWorkspaceDbRaw(rootPath);
   initializeWorkspaceSchema(sqlite);
-  dbCache.set(rootPath, { sqlite, db });
+  dbCache.set(rootPath, db);
+  nativeCache.set(rootPath, sqlite);
   return db;
 }
 
 export function getWorkspaceNativeDb(rootPath: string) {
-  const cached = dbCache.get(rootPath);
-  if (cached) return cached.sqlite;
+  const cached = nativeCache.get(rootPath);
+  if (cached) return cached;
   getWorkspaceDb(rootPath);
-  return dbCache.get(rootPath)!.sqlite;
+  return nativeCache.get(rootPath)!;
 }
 
 export function closeWorkspaceDb(rootPath: string) {
-  const entry = dbCache.get(rootPath);
-  if (entry) {
+  const native = nativeCache.get(rootPath);
+  if (native) {
     try {
-      entry.sqlite.close();
-    } catch {}
-    dbCache.delete(rootPath);
+      native.close();
+    } catch {
+      // Already closed or closing in progress
+    }
+    nativeCache.delete(rootPath);
   }
+  dbCache.delete(rootPath);
 }
 
 export function closeAllWorkspaceDbs() {
-  for (const entry of dbCache.values()) {
+  for (const native of nativeCache.values()) {
     try {
-      entry.sqlite.close();
-    } catch {}
+      native.close();
+    } catch {
+      // Already closed or closing in progress
+    }
   }
+  nativeCache.clear();
   dbCache.clear();
 }
 
@@ -189,6 +197,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     migrateQueryLogColumns(sqlite);
     migrateEmbeddingColumns(sqlite);
     migrateEmbeddingDedup(sqlite);
+    migrateTextPkToInteger(sqlite);
     return;
   }
 
@@ -196,6 +205,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
   migrateQueryLogColumns(sqlite);
   migrateEmbeddingColumns(sqlite);
   migrateEmbeddingDedup(sqlite);
+  migrateTextPkToInteger(sqlite);
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
@@ -266,10 +276,36 @@ function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) 
   })();
 }
 
+function migrateTextPkToInteger(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // Detect old TEXT PK schema by checking documents.id column type.
+  const cols = sqlite.prepare("PRAGMA table_info(documents)").all() as Array<{
+    name: string;
+    type: string;
+  }>;
+  const idCol = cols.find((c) => c.name === "id");
+  if (!idCol || idCol.type.toUpperCase() === "INTEGER") return;
+
+  // Old TEXT PK DB — drop everything and recreate with INTEGER PK.
+  // Data loss is acceptable: indexing is idempotent, user just re-indexes.
+  sqlite.exec(`
+    DROP TABLE IF EXISTS chunks_fts;
+    DROP TABLE IF EXISTS embeddings;
+    DROP TABLE IF EXISTS graph_edges;
+    DROP TABLE IF EXISTS graph_nodes;
+    DROP TABLE IF EXISTS chunks;
+    DROP TABLE IF EXISTS documents;
+    DROP TABLE IF EXISTS index_runs;
+    DROP TABLE IF EXISTS graph_runs;
+    DROP TABLE IF EXISTS query_logs;
+    DROP TABLE IF EXISTS memories;
+  `);
+  sqlite.exec(getFullWorkspaceDdl());
+}
+
 function getWorkspaceTableDefinitions(): string[] {
   return [
     `CREATE TABLE IF NOT EXISTS documents (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       path TEXT NOT NULL UNIQUE,
       absolute_path TEXT NOT NULL,
       kind TEXT NOT NULL,
@@ -281,8 +317,8 @@ function getWorkspaceTableDefinitions(): string[] {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS chunks (
-      id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
       chunk_index INTEGER NOT NULL,
       heading TEXT,
       content TEXT NOT NULL,
@@ -293,8 +329,8 @@ function getWorkspaceTableDefinitions(): string[] {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS embeddings (
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY,
+      chunk_id INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
       provider TEXT NOT NULL,
       model TEXT NOT NULL,
       dimensions INTEGER NOT NULL,
@@ -303,25 +339,25 @@ function getWorkspaceTableDefinitions(): string[] {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_nodes (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       type TEXT NOT NULL,
       label TEXT NOT NULL,
-      ref_id TEXT,
+      ref_id INTEGER,
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_edges (
-      id TEXT PRIMARY KEY,
-      from_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-      to_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY,
+      from_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+      to_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
       type TEXT NOT NULL,
       weight INTEGER NOT NULL DEFAULT 1,
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS index_runs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       mode TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       files_scanned INTEGER NOT NULL DEFAULT 0,
@@ -334,7 +370,7 @@ function getWorkspaceTableDefinitions(): string[] {
       finished_at TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS graph_runs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       mode TEXT NOT NULL DEFAULT 'incremental',
       status TEXT NOT NULL DEFAULT 'pending',
       nodes_created INTEGER NOT NULL DEFAULT 0,
@@ -345,7 +381,7 @@ function getWorkspaceTableDefinitions(): string[] {
       finished_at TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS query_logs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       query TEXT NOT NULL,
       mode TEXT NOT NULL,
       result_count INTEGER NOT NULL DEFAULT 0,
@@ -355,12 +391,12 @@ function getWorkspaceTableDefinitions(): string[] {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       tags TEXT NOT NULL DEFAULT '',
       source TEXT NOT NULL,
-      supersedes_id TEXT,
+      supersedes_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,

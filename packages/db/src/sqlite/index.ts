@@ -9,6 +9,8 @@ export {
   readLocalWorkspaceConfig,
   writeLocalWorkspaceConfig,
 } from "./local-workspace";
+export { removeWorkspace } from "./remove-workspace";
+export type { RemoveWorkspaceReport, RemoveWorkspaceSelector } from "./remove-workspace";
 export type {
   RegistryWorkspace,
   RegistryRepository,

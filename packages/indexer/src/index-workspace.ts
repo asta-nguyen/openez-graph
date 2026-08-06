@@ -421,6 +421,7 @@ async function writeEmbeddingsToRepo(
 interface ParseTask {
   id: string;
   content: string;
+  contentHash: string;
   relativePath: string;
   absolutePath: string;
   sizeBytes: number;
@@ -438,7 +439,7 @@ async function parseInline(
   const results = new Map<string, ParseResult>();
 
   // ── Batch native tree-sitter parse for Python/Go/Rust files ──
-  const TS_LANGS = new Set(["python", "go", "rust"]);
+  const TS_LANGS = new Set(["python", "go", "rust", "c"]);
   let native: any = null;
   try {
     const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
@@ -663,15 +664,6 @@ export async function indexWorkspace(input: {
   let embeddingFailures = 0;
   let bulkWriteMode = false;
   let needsWriteModeRestore = false;
-  // FTS inputs collected during transaction, inserted after finalize (no DB contention)
-  let ftsInputsForBackground: Array<{
-    chunkId: string;
-    path: string;
-    heading: string | null;
-    language: string | null;
-    content: string;
-    metadata: string;
-  }> = [];
   const _T0 = Date.now();
   const symbolNodeIdsByFileAndName = new Map<string, string>();
   const pendingCallEdges: Array<{
@@ -712,71 +704,204 @@ export async function indexWorkspace(input: {
       }
     }
 
-    // ── Phase 2: Read only changed files in parallel (concurrency-limited) ──
+    // ── Phase 2-4: Streaming pipeline — read → hash → parse → write in batches ──
+    // Process 5000 files at a time to bound memory (71k files × symbols = OOM otherwise).
     process.stderr.write(
       `[t] phase1 stat-check: ${Date.now() - _T0}ms (${filesToRead.length} to read)\n`,
     );
-    const _T1 = Date.now();
-    const fileContents = new Map<string, string>();
-    const READ_CONCURRENCY = 32;
-    let readIndex = 0;
-    async function readWorker() {
-      while (readIndex < filesToRead.length) {
-        const i = readIndex++;
-        fileContents.set(
-          filesToRead[i].relativePath,
-          await fs.readFile(filesToRead[i].absolutePath, "utf8"),
-        );
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(READ_CONCURRENCY, filesToRead.length) }, () => readWorker()),
-    );
+    const _T4 = Date.now();
+    const STREAM_BATCH = filesToRead.length > 10000 ? 2000 : 200;
+    const allChunkRowsForEmbeddings: Array<{
+      id: string;
+      content: string;
+      path: string;
+      heading?: string | null;
+    }> = [];
 
-    // ── Phase 2b: Verify content hash for changed files ──
-    process.stderr.write(`[t] phase2 file-read: ${Date.now() - _T1}ms\n`);
-    const _T2 = Date.now();
-    for (const file of filesToRead) {
-      const content = fileContents.get(file.relativePath)!;
-      const contentHash = hashContent(content);
-      const existingDocument = existingDocumentsByPath.get(file.relativePath);
-      const unchanged =
-        runMode === "incremental" &&
-        existingDocument &&
-        existingDocument.contentHash === contentHash;
-
-      if (unchanged) {
-        await repo.updateDocument(existingDocument.id, {
-          absolutePath: file.absolutePath,
-          sizeBytes: file.sizeBytes,
-          mtimeMs: file.mtimeMs,
-        });
-        unchangedFiles.push({ existingDocument });
-      } else {
-        parseTasks.push({
-          id: file.relativePath,
-          content,
-          relativePath: file.relativePath,
-          absolutePath: file.absolutePath,
-          sizeBytes: file.sizeBytes,
-          mtimeMs: file.mtimeMs,
-          targetTokens: settings.chunking.targetTokens,
-          overlapTokens: settings.chunking.overlapTokens,
-        });
-      }
+    if (filesToRead.length > 0) {
+      repo.setOptimizedWriteMode(true);
+      repo.dropFtsTriggers();
+      bulkWriteMode = true;
     }
 
-    // ── Phase 3: Parse changed files ──
-    process.stderr.write(
-      `[t] phase2b hash-check: ${Date.now() - _T2}ms (${parseTasks.length} to parse)\n`,
-    );
-    const _T3 = Date.now();
-    const parseResults = await parseInline(parseTasks, (done, total) => {
-      reportProgress(
-        `Parsing ${done}/${total} files...`,
-        Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)),
+    for (let batchStart = 0; batchStart < filesToRead.length; batchStart += STREAM_BATCH) {
+      const batchEnd = Math.min(batchStart + STREAM_BATCH, filesToRead.length);
+      const batchFiles = filesToRead.slice(batchStart, batchEnd);
+
+      // ── Read batch in parallel ──
+      const batchContents = new Map<string, string>();
+      const READ_CONCURRENCY = 32;
+      let readIdx = 0;
+      async function readBatchWorker() {
+        while (readIdx < batchFiles.length) {
+          const i = readIdx++;
+          batchContents.set(
+            batchFiles[i].relativePath,
+            await fs.readFile(batchFiles[i].absolutePath, "utf8"),
+          );
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(READ_CONCURRENCY, batchFiles.length) }, () =>
+          readBatchWorker(),
+        ),
       );
-    });
+
+      // ── Hash check + build parse tasks ──
+      const batchParseTasks: ParseTask[] = [];
+      for (const file of batchFiles) {
+        const content = batchContents.get(file.relativePath)!;
+        const contentHash = hashContent(content);
+        const existingDocument = existingDocumentsByPath.get(file.relativePath);
+        const unchanged =
+          runMode === "incremental" &&
+          existingDocument &&
+          existingDocument.contentHash === contentHash;
+
+        if (unchanged) {
+          await repo.updateDocument(existingDocument.id, {
+            absolutePath: file.absolutePath,
+            sizeBytes: file.sizeBytes,
+            mtimeMs: file.mtimeMs,
+          });
+          unchangedFiles.push({ existingDocument });
+        } else {
+          batchParseTasks.push({
+            id: file.relativePath,
+            content,
+            contentHash,
+            relativePath: file.relativePath,
+            absolutePath: file.absolutePath,
+            sizeBytes: file.sizeBytes,
+            mtimeMs: file.mtimeMs,
+            targetTokens: settings.chunking.targetTokens,
+            overlapTokens: settings.chunking.overlapTokens,
+          });
+        }
+      }
+
+      if (batchParseTasks.length === 0) {
+        batchContents.clear();
+        continue;
+      }
+
+      // ── Parse batch ──
+      const batchParseResults = await parseInline(batchParseTasks, (done, _total) => {
+        reportProgress(
+          `Parsing ${batchStart + done}/${filesToRead.length} files...`,
+          Math.min(
+            50,
+            10 + Math.round(((batchStart + done) / Math.max(filesToRead.length, 1)) * 40),
+          ),
+        );
+      });
+
+      // ── Write batch to DB ──
+      await repo.transaction(async () => {
+        const newDocs: Array<{
+          path: string;
+          absolutePath: string;
+          kind: string;
+          language?: string | null;
+          contentHash: string;
+          sizeBytes: number;
+          mtimeMs: number;
+        }> = [];
+        const docIdMap = new Map<string, string>();
+
+        for (const task of batchParseTasks) {
+          const indexed = batchParseResults.get(task.id)!;
+          const existingDocument = existingDocumentsByPath.get(task.relativePath);
+
+          if (existingDocument) {
+            await resetChangedFileArtifacts(repo, existingDocument.id, task.relativePath);
+            await repo.updateDocument(existingDocument.id, {
+              absolutePath: task.absolutePath,
+              kind: indexed.kind,
+              language: indexed.language,
+              contentHash: task.contentHash,
+              sizeBytes: task.sizeBytes,
+              mtimeMs: task.mtimeMs,
+            });
+            docIdMap.set(task.relativePath, existingDocument.id);
+          } else {
+            newDocs.push({
+              path: task.relativePath,
+              absolutePath: task.absolutePath,
+              kind: indexed.kind,
+              language: indexed.language,
+              contentHash: task.contentHash,
+              sizeBytes: task.sizeBytes,
+              mtimeMs: task.mtimeMs,
+            });
+          }
+        }
+
+        if (newDocs.length > 0) {
+          const newDocIds = await repo.insertDocumentsBatch(newDocs);
+          for (let i = 0; i < newDocs.length; i++) {
+            docIdMap.set(newDocs[i].path, newDocIds[i]);
+          }
+        }
+
+        // Insert chunks
+        const batchChunkInputs: Array<{
+          documentId: string;
+          chunkIndex: number;
+          heading: string | null;
+          content: string;
+          tokenCount: number;
+          contentHash: string;
+          metadata: string;
+        }> = [];
+        for (const task of batchParseTasks) {
+          const indexed = batchParseResults.get(task.id)!;
+          const documentId = docIdMap.get(task.relativePath)!;
+          for (let ci = 0; ci < indexed.chunks.length; ci++) {
+            const chunk = indexed.chunks[ci];
+            batchChunkInputs.push({
+              documentId,
+              chunkIndex: ci,
+              heading: chunk.heading ?? null,
+              content: chunk.content,
+              tokenCount: chunk.tokenCount,
+              contentHash: chunk.contentHash,
+              metadata: JSON.stringify(chunk.metadata),
+            });
+          }
+        }
+        const chunkIds = await repo.insertChunks(batchChunkInputs);
+
+        // Collect embedding rows + count (only if embeddings enabled)
+        let ci = 0;
+        for (const task of batchParseTasks) {
+          const indexed = batchParseResults.get(task.id)!;
+          if (embeddingProvider) {
+            for (let c = 0; c < indexed.chunks.length; c++) {
+              allChunkRowsForEmbeddings.push({
+                id: chunkIds[ci],
+                content: indexed.chunks[c].content,
+                path: task.relativePath,
+                heading: indexed.chunks[c].heading,
+              });
+            }
+          }
+          ci += indexed.chunks.length;
+          chunksWritten += indexed.chunks.length;
+          filesUpdated += 1;
+        }
+      });
+
+      // Free batch memory
+      batchContents.clear();
+      batchParseResults.clear();
+
+      await reportProgress(
+        `Writing ${batchEnd}/${filesToRead.length}...`,
+        Math.min(95, 50 + Math.round((batchEnd / Math.max(filesToRead.length, 1)) * 45)),
+      );
+    }
+    process.stderr.write(`[t] phase2-4 stream: ${Date.now() - _T4}ms\n`);
 
     // Backfill unchanged embeddings only when embeddings are enabled.
     if (embeddingProvider) {
@@ -797,162 +922,7 @@ export async function indexWorkspace(input: {
       }
     }
 
-    // A true no-op never changes SQLite write pragmas or FTS triggers.
-    process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
-    const _T4 = Date.now();
-    if (parseTasks.length > 0) {
-      // ── Phase 4: Write all results to DB (main thread, transactioned) ──
-      repo.setOptimizedWriteMode(true);
-      repo.dropFtsTriggers();
-      bulkWriteMode = true;
-    }
-
-    const allChunkRowsForEmbeddings: Array<{
-      id: string;
-      content: string;
-      path: string;
-      heading?: string | null;
-    }> = [];
-
-    // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
-    const _dbSub: Record<string, number> = {};
-    await repo.transaction(async () => {
-      const _dbT0 = Date.now();
-      // Step 1: Handle existing documents (reset artifacts + update) in bulk
-      const newDocs: Array<{
-        path: string;
-        absolutePath: string;
-        kind: string;
-        language?: string | null;
-        contentHash: string;
-        sizeBytes: number;
-        mtimeMs: number;
-      }> = [];
-      const docIdMap = new Map<string, string>(); // relativePath -> documentId
-
-      for (const file of parseTasks) {
-        const indexed = parseResults.get(file.id)!;
-        const contentHash = hashContent(file.content);
-        const existingDocument = existingDocumentsByPath.get(file.relativePath);
-
-        if (existingDocument) {
-          await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
-          await repo.updateDocument(existingDocument.id, {
-            absolutePath: file.absolutePath,
-            kind: indexed.kind,
-            language: indexed.language,
-            contentHash,
-            sizeBytes: file.sizeBytes,
-            mtimeMs: file.mtimeMs,
-          });
-          docIdMap.set(file.relativePath, existingDocument.id);
-        } else {
-          newDocs.push({
-            path: file.relativePath,
-            absolutePath: file.absolutePath,
-            kind: indexed.kind,
-            language: indexed.language,
-            contentHash,
-            sizeBytes: file.sizeBytes,
-            mtimeMs: file.mtimeMs,
-          });
-        }
-      }
-
-      // Batch insert all new documents in one query
-      _dbSub["existing-update"] = Date.now() - _dbT0;
-      const _dbT1 = Date.now();
-      if (newDocs.length > 0) {
-        const newDocIds = await repo.insertDocumentsBatch(newDocs);
-        for (let i = 0; i < newDocs.length; i++) {
-          docIdMap.set(newDocs[i].path, newDocIds[i]);
-        }
-      }
-
-      // Step 2: Batch insert ALL chunks across all files in one call
-      const allChunkInputs: Array<{
-        documentId: string;
-        chunkIndex: number;
-        heading: string | null;
-        content: string;
-        tokenCount: number;
-        contentHash: string;
-        metadata: string;
-      }> = [];
-      const chunkFileMap: Array<{ fileRelativePath: string; chunkIndex: number }> = [];
-      for (const file of parseTasks) {
-        const indexed = parseResults.get(file.id)!;
-        const documentId = docIdMap.get(file.relativePath)!;
-        for (let ci = 0; ci < indexed.chunks.length; ci++) {
-          const chunk = indexed.chunks[ci];
-          allChunkInputs.push({
-            documentId,
-            chunkIndex: ci,
-            heading: chunk.heading ?? null,
-            content: chunk.content,
-            tokenCount: chunk.tokenCount,
-            contentHash: chunk.contentHash,
-            metadata: JSON.stringify(chunk.metadata),
-          });
-          chunkFileMap.push({ fileRelativePath: file.relativePath, chunkIndex: ci });
-        }
-      }
-      const allChunkIds = await repo.insertChunks(allChunkInputs);
-      _dbSub["insert-chunks"] = Date.now() - _dbT1;
-
-      // Precompute chunk offsets (prefix sum) for O(1) lookup
-      const chunkOffsets: number[] = new Array(parseTasks.length);
-      let totalChunks = 0;
-      for (let fi = 0; fi < parseTasks.length; fi++) {
-        chunkOffsets[fi] = totalChunks;
-        totalChunks += parseResults.get(parseTasks[fi].id)!.chunks.length;
-      }
-
-      // Collect FTS inputs for bulk insert after transaction (triggers down — no double-write)
-      const ftsInputs = ftsInputsForBackground;
-      for (let fi = 0; fi < parseTasks.length; fi++) {
-        const file = parseTasks[fi];
-        const indexed = parseResults.get(file.id)!;
-        const chunkOffset = chunkOffsets[fi];
-        for (let ci = 0; ci < indexed.chunks.length; ci++) {
-          const chunk = indexed.chunks[ci];
-          ftsInputs.push({
-            chunkId: allChunkIds[chunkOffset + ci],
-            path: file.relativePath,
-            heading: chunk.heading ?? null,
-            language: indexed.language ?? null,
-            content: chunk.content,
-            metadata: JSON.stringify(chunk.metadata),
-          });
-        }
-      }
-      _dbSub["collect-fts"] = Date.now() - _dbT1;
-
-      // Step 3: Collect chunk rows for embeddings — skip graph building (lazy, on-demand)
-      for (let fi = 0; fi < parseTasks.length; fi++) {
-        const file = parseTasks[fi];
-        const indexed = parseResults.get(file.id)!;
-        const chunkOffset = chunkOffsets[fi];
-
-        for (let ci = 0; ci < indexed.chunks.length; ci++) {
-          allChunkRowsForEmbeddings.push({
-            id: allChunkIds[chunkOffset + ci],
-            content: indexed.chunks[ci].content,
-            path: file.relativePath,
-            heading: indexed.chunks[ci].heading,
-          });
-        }
-        chunksWritten += indexed.chunks.length;
-        filesUpdated += 1;
-      }
-      // Graph (nodes + edges + call edges) is built lazily on first
-      // graph_neighbors/code_context query — see buildGraphFromIndexedFiles()
-
-      await reportProgress(`Writing ${parseTasks.length}/${parseTasks.length}...`, 95);
-    });
-    process.stderr.write(`[t]   db sub: ${JSON.stringify(_dbSub)}\n`);
-
-    // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
+    // Write embeddings outside the DB transaction
     if (allChunkRowsForEmbeddings.length > 0 && embeddingProvider) {
       await reportProgress(
         `Embedding ${allChunkRowsForEmbeddings.length} chunks via ${embeddingProvider.provider}/${embeddingProvider.model}...`,
@@ -967,24 +937,19 @@ export async function indexWorkspace(input: {
       embeddingFailures += embeddingResult.failedBatches;
     }
 
-    // ── Phase 5: FTS insert (triggers still down — no double-write) + restore ──
+    // ── Phase 5: FTS insert via INSERT...SELECT (no JS param marshalling) + restore ──
     process.stderr.write(`[t] phase4 db-write: ${Date.now() - _T4}ms\n`);
     const _T5 = Date.now();
 
-    // Insert FTS entries while triggers are still down (no trigger overhead)
-    if (ftsInputsForBackground.length > 0) {
-      _ftsBuildingWorkspaces.set(workspace.id, true);
-      const _ftsT = Date.now();
-      try {
-        await repo.bulkInsertFts(ftsInputsForBackground);
-        process.stderr.write(
-          `[t]   fts-insert: ${Date.now() - _ftsT}ms (${ftsInputsForBackground.length} entries)\n`,
-        );
-      } catch (e) {
-        process.stderr.write(`[fts] ERROR: ${e}\n`);
-      } finally {
-        _ftsBuildingWorkspaces.delete(workspace.id);
-      }
+    _ftsBuildingWorkspaces.set(workspace.id, true);
+    const _ftsT = Date.now();
+    try {
+      const inserted = repo.bulkInsertFtsFromChunks();
+      process.stderr.write(`[t]   fts-insert: ${Date.now() - _ftsT}ms (${inserted} entries)\n`);
+    } catch (e) {
+      process.stderr.write(`[fts] ERROR: ${e}\n`);
+    } finally {
+      _ftsBuildingWorkspaces.delete(workspace.id);
     }
 
     // Now restore FTS triggers (entries already inserted, no backfill needed)
@@ -1024,11 +989,10 @@ export async function indexWorkspace(input: {
       lastError: "",
     });
 
-    // Switch out of optimized write mode AFTER all writes are done.
-    // Doing it earlier causes fsync to flush ~70MB of dirty pages mid-finalize.
-    if (needsWriteModeRestore) {
-      repo.setOptimizedWriteMode(false);
-    }
+    // Don't restore write mode here — synchronous=NORMAL triggers fsync of all
+    // dirty pages accumulated during synchronous=OFF. The DB file on disk is
+    // already valid (MEMORY journal means changes are in the main DB file).
+    // Next open will use WAL + NORMAL (persisted defaults from workspace-db.ts).
     process.stderr.write(`[t] phase7 finalize: ${Date.now() - _T7}ms\n`);
   } catch (error) {
     if (bulkWriteMode || needsWriteModeRestore) {
@@ -1121,29 +1085,65 @@ export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
   const codeDocs = documents.filter((d) => d.kind === "code");
 
   // Read file contents
-  const fs = await import("node:fs/promises");
-  const batchItems: Array<{ language: string; content: string }> = [];
-  const docPaths: string[] = [];
+  const fsp = await import("node:fs/promises");
+
+  const NATIVE_LANGS = new Set(["rust", "python", "go", "c"]);
+  const TS_LANGS = new Set(["typescript", "tsx", "javascript", "jsx"]);
+
+  // Split files by parser type
+  const nativeBatchItems: Array<{ language: string; content: string }> = [];
+  const nativeDocPaths: string[] = [];
+  const tsDocPaths: string[] = [];
+  const tsContents: string[] = [];
+
   for (const doc of codeDocs) {
     try {
-      const content = await fs.readFile(doc.absolutePath, "utf8");
+      const content = await fsp.readFile(doc.absolutePath, "utf8");
       const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
-      if (lang === "rust" || lang === "python" || lang === "go") {
-        batchItems.push({ language: lang, content });
-        docPaths.push(doc.path);
+      if (NATIVE_LANGS.has(lang)) {
+        nativeBatchItems.push({ language: lang, content });
+        nativeDocPaths.push(doc.path);
+      } else if (TS_LANGS.has(lang)) {
+        tsDocPaths.push(doc.path);
+        tsContents.push(content);
       }
     } catch {
       /* file may have been deleted */
     }
   }
 
-  if (batchItems.length === 0) {
-    _graphBuiltWorkspaces.add(workspaceId);
-    return;
-  }
+  // Parse native languages in batch
+  const nativeResults = nativeBatchItems.length > 0 ? native.parseCodeBatch(nativeBatchItems) : [];
 
-  // Parse with native batch
-  const results = native.parseCodeBatch(batchItems);
+  // Parse TS/JS with OxcParser
+  let { OxcParser } = await import("./parsers/oxc-parser");
+  const tsResults: Array<{ symbols: any[]; callExpressions: any[]; importPaths: string[] }> = [];
+  for (let i = 0; i < tsDocPaths.length; i++) {
+    try {
+      const parser = new OxcParser();
+      const parsed = parser.parse(
+        {
+          relativePath: tsDocPaths[i],
+          content: tsContents[i],
+          contentHash: "",
+          absolutePath: "",
+          sizeBytes: 0,
+          mtimeMs: 0,
+          targetTokens: 0,
+          overlapTokens: 0,
+        },
+        "typescript",
+        "code",
+      );
+      tsResults.push({
+        symbols: parsed.definedSymbols,
+        callExpressions: parsed.callExpressions,
+        importPaths: parsed.importPaths,
+      });
+    } catch {
+      tsResults.push({ symbols: [], callExpressions: [], importPaths: [] });
+    }
+  }
 
   // Build graph nodes + edges
   const allNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> =
@@ -1152,54 +1152,104 @@ export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
     [];
   const symbolNodeIdsByFileAndName = new Map<string, string>();
   const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
+  const pendingImportEdges: Array<{ filePath: string; importPath: string }> = [];
 
-  for (let i = 0; i < results.length; i++) {
-    const nr = results[i];
+  // Unified structure for processing both native and TS results
+  interface FileResult {
+    filePath: string;
+    docId: string;
+    language: string | null;
+    symbols: Array<{ name: string; symbolType: string; exported: boolean }>;
+    callExpressions: Array<{ callerName: string; calleeName: string }>;
+    importPaths: string[];
+  }
+
+  const allResults: FileResult[] = [];
+
+  for (let i = 0; i < nativeResults.length; i++) {
+    const nr = nativeResults[i];
     if (!nr) continue;
-    const filePath = docPaths[i];
-    const doc = codeDocs.find((d) => d.path === filePath)!;
+    const doc = codeDocs.find((d) => d.path === nativeDocPaths[i])!;
+    allResults.push({
+      filePath: nativeDocPaths[i],
+      docId: doc.id,
+      language: doc.language,
+      symbols: nr.symbols,
+      callExpressions: nr.callExpressions,
+      importPaths: nr.importPaths,
+    });
+  }
 
+  for (let i = 0; i < tsResults.length; i++) {
+    const doc = codeDocs.find((d) => d.path === tsDocPaths[i])!;
+    allResults.push({
+      filePath: tsDocPaths[i],
+      docId: doc.id,
+      language: doc.language,
+      symbols: tsResults[i].symbols,
+      callExpressions: tsResults[i].callExpressions,
+      importPaths: tsResults[i].importPaths,
+    });
+  }
+
+  if (allResults.length === 0) {
+    _graphBuiltWorkspaces.add(workspaceId);
+    return;
+  }
+
+  for (const fr of allResults) {
     // File node
     const fileNodeIdx = allNodeInputs.length;
     allNodeInputs.push({
       type: "file",
-      label: filePath,
-      refId: doc.id,
-      metadata: JSON.stringify({ path: filePath, language: doc.language }),
+      label: fr.filePath,
+      refId: fr.docId,
+      metadata: JSON.stringify({ path: fr.filePath, language: fr.language }),
     });
-    const fileNodeId = ""; // will be replaced after batch insert
 
-    // Symbol nodes (cap 30)
-    const symbols = nr.symbols.slice(0, 30);
+    // Symbol nodes (no cap)
     const symNodeStart = allNodeInputs.length;
-    for (const sym of symbols) {
+    for (const sym of fr.symbols) {
       allNodeInputs.push({
         type: "symbol",
         label: sym.name,
-        refId: doc.id,
-        metadata: JSON.stringify({ symbolType: sym.symbolType, filePath, language: doc.language }),
+        refId: fr.docId,
+        metadata: JSON.stringify({
+          symbolType: sym.symbolType,
+          filePath: fr.filePath,
+          language: fr.language,
+        }),
       });
     }
 
-    // Call expressions (cap 20)
-    for (const call of nr.callExpressions.slice(0, 20)) {
-      pendingCallEdges.push({ callerName: call.callerName, calleeName: call.calleeName, filePath });
+    // Call expressions (no cap)
+    for (const call of fr.callExpressions) {
+      pendingCallEdges.push({
+        callerName: call.callerName,
+        calleeName: call.calleeName,
+        filePath: fr.filePath,
+      });
+    }
+
+    // Import edges
+    for (const imp of fr.importPaths) {
+      pendingImportEdges.push({ filePath: fr.filePath, importPath: imp });
     }
 
     // Store symbol positions for edge building (after we get IDs back)
     (allNodeInputs as any)._symMeta = (allNodeInputs as any)._symMeta || [];
     (allNodeInputs as any)._symMeta.push({
-      filePath,
+      filePath: fr.filePath,
       fileNodeIdx,
       symNodeStart,
-      symCount: symbols.length,
+      symCount: fr.symbols.length,
     });
   }
 
   // Batch insert all nodes
   const nodeIds = await repo.insertGraphNodesBatch(allNodeInputs);
 
-  // Build edges
+  // Build defines edges
   const symMeta = (allNodeInputs as any)._symMeta || [];
   for (const meta of symMeta) {
     const fileNodeId = nodeIds[meta.fileNodeIdx];
@@ -1221,9 +1271,12 @@ export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
   for (const call of pendingCallEdges) {
     const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
     if (!callerNodeId) continue;
+    // Try exact match, then strip qualified prefix (obj.method → method)
     const calleeNodeId =
       symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.calleeName}`) ??
-      globalSymbolNodes.get(call.calleeName);
+      globalSymbolNodes.get(call.calleeName) ??
+      globalSymbolNodes.get(call.calleeName.split(".").pop()!) ??
+      globalSymbolNodes.get(call.calleeName.split("->").pop()!);
     if (!calleeNodeId || callerNodeId === calleeNodeId) continue;
     allEdges.push({
       fromNodeId: callerNodeId,
@@ -1231,6 +1284,32 @@ export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
       type: "calls",
       metadata: _callMeta,
     });
+  }
+
+  // Resolve import edges — link file nodes to imported file nodes
+  const fileNodeLabels = new Map<string, string>();
+  for (const meta of symMeta) {
+    const fid = nodeIds[meta.fileNodeIdx];
+    if (fid) fileNodeLabels.set(meta.filePath, fid);
+  }
+  for (const imp of pendingImportEdges) {
+    const fromId = fileNodeLabels.get(imp.filePath);
+    if (!fromId) continue;
+    // Try to find matching file node by path suffix
+    // TS imports: "./foo" → "foo.ts", C includes: "linux/sched.h"
+    const importBase = imp.importPath.replace(/^\.\//, "").replace(/^\.\.\//, "");
+    for (const [filePath, toId] of fileNodeLabels) {
+      if (filePath === imp.filePath) continue;
+      const fileBase = filePath.replace(/\.(ts|tsx|js|jsx|rs|py|go|c|h)$/, "");
+      if (
+        filePath.endsWith(importBase) ||
+        fileBase.endsWith(importBase) ||
+        importBase.endsWith(fileBase)
+      ) {
+        allEdges.push({ fromNodeId: fromId, toNodeId: toId, type: "imports" });
+        break;
+      }
+    }
   }
 
   // Batch insert all edges

@@ -51,6 +51,7 @@ openez reindex [path]
 openez watch [path]
 openez status [path]
 openez list
+openez remove [path]        remove workspace from registry and delete its .openez data dir (--id, -y; alias: rm)
 openez serve --mcp
 openez setup codex
 ```
@@ -102,21 +103,21 @@ Every `code_query` call logs `tokens_returned`, `tokens_saved`, and `files_scann
 openez setup codex    # or claude, opencode, windsurf
 ```
 
-This configures MCP server access. After setup, the agent automatically sees `code_query`, `code_context`, `graph_neighbors`, `memory_write`, `memory_recall`, `index_workspace`, and `list_workspaces` as available tools.
+This configures MCP server access. After setup, the agent automatically sees `code_query`, `code_context`, `graph_neighbors`, `memory_write`, `memory_recall`, `index_workspace`, `remove_workspace`, and `list_workspaces` as available tools. `remove_workspace` is destructive (deletes the registry entry and `<root>/.openez/`) and requires `confirm: true`.
 
 ## MCP Expectations
 
 MCP should be multi-workspace aware.
 
 - `code_query`, `code_context`, `graph_neighbors`, and `memory_recall` should support one or many workspaces
-- `memory_write` and `index_workspace` remain single-workspace operations
+- `memory_write`, `index_workspace`, and `remove_workspace` remain single-workspace operations
 - `list_workspaces` should expose the registered workspace inventory
 - `workspaceId` is the canonical internal key
 
 ## Indexing Expectations
 
-- TS/JS: richest indexing path via `ts-morph`
-- Python/Go/Rust: basic top-level symbol extraction
+- TS/JS: richest indexing path via `oxc-parser`
+- Python/Go/Rust/C: basic top-level symbol extraction
 - YAML/JSON/TOML: structure-aware chunking
 - Markdown: section-oriented chunking
 
