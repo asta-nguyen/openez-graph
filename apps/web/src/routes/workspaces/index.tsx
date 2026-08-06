@@ -1,12 +1,13 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { api, type WorkspaceListItem } from "../../lib/api";
 import { formatDate } from "../../lib/utils";
 import { workspacesQueryOptions, workspaceQueryOptions } from "../../lib/queries";
 import { PAGE_SIZE, Pagination, paginate } from "../../lib/pagination";
 import { StatusBadge } from "../../components/status-badge";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@openez-graph/ui";
-import { Plus, FolderOpen, Search, Layers, AlertTriangle } from "lucide-react";
+import { Plus, FolderOpen, Search, Layers, AlertTriangle, Pin, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/workspaces/")({
   loader: ({ context }) => context.queryClient.ensureQueryData(workspacesQueryOptions),
@@ -20,6 +21,21 @@ function WorkspacesPage() {
   const queryClient = useQueryClient();
   const { page: currentPage } = useSearch({ from: "/workspaces/" });
   const { data: result, isLoading, error } = useQuery(workspacesQueryOptions);
+  const [workspaceToDelete, setWorkspaceToDelete] = useState<WorkspaceListItem | null>(null);
+
+  const pinMutation = useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) => api.pinWorkspace(id, pinned),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workspaces"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteWorkspace(id),
+    onSuccess: () => {
+      setWorkspaceToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
 
   if (isLoading)
     return (
@@ -136,6 +152,36 @@ function WorkspacesPage() {
                         </div>
                       </div>
                       <div className="text-right text-sm">
+                        <div className="flex items-center justify-end gap-1 mb-1">
+                          <button
+                            title={workspace.pinnedAt ? "Unpin workspace" : "Pin workspace"}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              pinMutation.mutate({ id: workspace.id, pinned: !workspace.pinnedAt });
+                            }}
+                            className={
+                              workspace.pinnedAt
+                                ? "text-primary"
+                                : "text-muted-foreground hover:text-foreground transition-colors"
+                            }
+                          >
+                            <Pin
+                              className={`h-4 w-4 ${workspace.pinnedAt ? "fill-current" : ""}`}
+                            />
+                          </button>
+                          <button
+                            title="Delete workspace"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setWorkspaceToDelete(workspace);
+                            }}
+                            className="text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                         <div className="flex gap-2 mb-1">
                           <StatusBadge status={workspace.indexingStatus} />
                           <StatusBadge status={workspace.graphStatus} />
@@ -153,6 +199,58 @@ function WorkspacesPage() {
           <Pagination currentPage={safePage} totalPages={totalPages} basePath="/workspaces/" />
         </>
       )}
+
+      {workspaceToDelete && (
+        <DeleteWorkspaceDialog
+          workspace={workspaceToDelete}
+          onClose={() => setWorkspaceToDelete(null)}
+          onConfirm={() => deleteMutation.mutate(workspaceToDelete.id)}
+          deleting={deleteMutation.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteWorkspaceDialog({
+  workspace,
+  onClose,
+  onConfirm,
+  deleting,
+}: {
+  workspace: WorkspaceListItem;
+  onClose: () => void;
+  onConfirm: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
+      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <CardHeader>
+          <CardTitle>Delete workspace</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <p className="text-sm">
+              Delete <span className="font-medium">{workspace.name}</span>? The registry entry and{" "}
+              <code className="text-xs">{workspace.rootPath}/.openez</code> will be permanently
+              deleted. Project source code is not touched.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={onClose} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" size="sm" onClick={onConfirm} disabled={deleting}>
+                <Trash2 className="h-4 w-4 mr-1" />
+                {deleting ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

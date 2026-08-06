@@ -33,6 +33,7 @@ export interface WorkspaceListItem {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+  pinnedAt: string | null;
   latestIndexRun: RunRow | null;
   latestGraphRun: RunRow | null;
 }
@@ -194,6 +195,11 @@ export const api = {
     }),
   deleteWorkspace: (id: string) =>
     request<{ success: boolean; error?: string }>(`/workspaces/${id}`, { method: "DELETE" }),
+  pinWorkspace: (id: string, pinned: boolean) =>
+    request<{ success: boolean; error?: string }>(`/workspaces/${id}/pin`, {
+      method: "PATCH",
+      body: JSON.stringify({ pinned }),
+    }),
   getWorkspaceGraph: (id: string) => request<WorkspaceGraphData>(`/workspaces/${id}/graph`),
   getDocuments: (params: { limit?: number; offset?: number } = {}) => {
     const qs = new URLSearchParams();
