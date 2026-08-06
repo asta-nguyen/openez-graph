@@ -1,0 +1,20 @@
+docs/superpowers/specs/2026-08-06-workspace-remove-pin-design.md
+  s_cf5c2e414f8ef6::t_3f826715e9296a 1-171
+  s_cf5c2e414f8ef6::t_eada60f394ad70 172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a2c41ec7d7078a3ea68fa41eed7f25936fbcf8b5",
+  "prompts": {},
+  "sessions": {
+    "s_cf5c2e414f8ef6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wiry-shock",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
