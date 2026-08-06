@@ -1,0 +1,32 @@
+tests/registry.test.ts
+  s_cf5c2e414f8ef6::t_a6ad695fc15a1c 142-168
+packages/db/src/sqlite/schema.ts
+  s_cf5c2e414f8ef6::t_ce636e37bc421b 24
+packages/db/src/sqlite/types.ts
+  s_cf5c2e414f8ef6::t_aa135cb3b16008 17
+  s_cf5c2e414f8ef6::t_f762e03e8e2432 74
+packages/db/src/sqlite/repository.ts
+  s_cf5c2e414f8ef6::t_739eca3351135b 219-224
+  s_cf5c2e414f8ef6::t_598a6e7fd422e1 294,300-306
+  s_cf5c2e414f8ef6::t_43d41b830c9328 56
+  s_cf5c2e414f8ef6::t_b0523e6e89c66d 307-308
+packages/db/src/sqlite/registry-db.ts
+  s_cf5c2e414f8ef6::t_23eb189f4a4ac7 81
+  s_cf5c2e414f8ef6::t_a5b214154a5cce 95-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "2374f7bbc03c530cdaa1555f89c32070b71909ef",
+  "prompts": {},
+  "sessions": {
+    "s_cf5c2e414f8ef6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wiry-shock",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
