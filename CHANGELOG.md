@@ -5,6 +5,14 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-08-06
+
+### Fixed
+
+- Writing phase performance bottleneck: symbol, import, and wikilink node upserts batched per file instead of N individual queries
+- Embedding provider and model now logged at indexing startup for visibility
+- Progress logs added for post-writing phases (embedding batches, FTS rebuild, call edge resolution)
+
 ## [0.11.0] - 2026-08-06
 
 ### Added
@@ -146,6 +154,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[0.11.1]: https://github.com/asta-nguyen/openez-graph/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/asta-nguyen/openez-graph/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD
 [0.9.1]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD

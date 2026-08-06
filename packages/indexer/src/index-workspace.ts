@@ -347,8 +347,15 @@ async function writeEmbeddingsToRepo(
   const BATCH_SIZE = 50;
   let totalWritten = 0;
   let failedBatches = 0;
+  const totalBatches = Math.ceil(toEmbed.length / BATCH_SIZE);
 
   for (let i = 0; i < toEmbed.length; i += BATCH_SIZE) {
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+    if (batchNum % 10 === 0 || batchNum === totalBatches) {
+      process.stdout.write(
+        `\r[embedding] batch ${batchNum}/${totalBatches} (${totalWritten} written)`,
+      );
+    }
     const batch = toEmbed.slice(i, i + BATCH_SIZE);
 
     try {
@@ -399,6 +406,9 @@ async function writeEmbeddingsToRepo(
     }
   }
 
+  if (totalBatches > 0) {
+    process.stdout.write("\n");
+  }
   return { written: totalWritten + reusedWritten, failedBatches };
 }
 
@@ -470,6 +480,14 @@ export async function indexWorkspace(input: {
   const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
   const embeddingProvider = await getEmbeddingProvider();
   const runMode = input.mode ?? "incremental";
+
+  if (embeddingProvider) {
+    process.stdout.write(
+      `[embedding] provider=${embeddingProvider.provider} model=${embeddingProvider.model}\n`,
+    );
+  } else {
+    process.stdout.write(`[embedding] disabled (no provider configured)\n`);
+  }
 
   const reportProgress = async (message: string, progress: number) => {
     await input.onProgress?.({ message, progress });
@@ -730,6 +748,18 @@ export async function indexWorkspace(input: {
           metadata?: string;
         }> = [];
         const reusedSymbolIds = new Set<string>();
+        const newSymbolInputs: Array<{
+          type: string;
+          label: string;
+          refId: string;
+          metadata: string;
+          _chunkIndex: number;
+        }> = [];
+        const pendingSymbolEdges: Array<{
+          label: string;
+          definesEdgeIdx: number;
+          representedByEdgeIdx: number;
+        }> = [];
 
         for (const [ci, chunkId] of chunkIds.entries()) {
           const chunkNodeId = chunkNodeIds[ci];
@@ -742,7 +772,7 @@ export async function indexWorkspace(input: {
             const fileSymbolKey = `${file.relativePath}\0${symbolName}`;
             let symbolNodeId = symbolNodeIdsByFileAndName.get(fileSymbolKey);
 
-            if (!symbolNodeId) {
+            if (symbolNodeIdsByFileAndName.has(fileSymbolKey) === false) {
               const existingSymbolId = fileExistingSymbols.get(symbolName);
               if (existingSymbolId) {
                 repo.updateSymbolNode(
@@ -757,7 +787,8 @@ export async function indexWorkspace(input: {
                 );
                 symbolNodeId = existingSymbolId;
               } else {
-                symbolNodeId = await repo.upsertGraphNode({
+                // Collect for batch insert — will be resolved below
+                newSymbolInputs.push({
                   type: "symbol",
                   label: symbolName,
                   refId: chunkId,
@@ -767,14 +798,46 @@ export async function indexWorkspace(input: {
                     language: indexed.language,
                     parser: indexed.parser,
                   }),
+                  _chunkIndex: ci,
                 });
+                // Placeholder — will be replaced after batch upsert
+                symbolNodeId = "";
               }
               symbolNodeIdsByFileAndName.set(fileSymbolKey, symbolNodeId);
+            } else {
+              symbolNodeId = symbolNodeIdsByFileAndName.get(fileSymbolKey) ?? "";
             }
 
             reusedSymbolIds.add(symbolNodeId);
+            // Track edge indices for placeholder fix-up
+            const definesEdgeIdx = edges.length;
             edges.push({ fromNodeId: fileNodeId, toNodeId: symbolNodeId, type: "defines" });
+            const representedByEdgeIdx = edges.length;
             edges.push({ fromNodeId: symbolNodeId, toNodeId: chunkNodeId, type: "represented_by" });
+            if (symbolNodeId === "") {
+              pendingSymbolEdges.push({ label: symbolName, definesEdgeIdx, representedByEdgeIdx });
+            }
+          }
+        }
+
+        // Batch insert all new symbol nodes in one query
+        if (newSymbolInputs.length > 0) {
+          const symbolIds = await repo.insertGraphNodesBatch(
+            newSymbolInputs.map(({ _chunkIndex, ...rest }) => rest),
+          );
+          for (let si = 0; si < newSymbolInputs.length; si++) {
+            const input = newSymbolInputs[si];
+            const fileSymbolKey = `${file.relativePath}\0${input.label}`;
+            const newId = symbolIds[si];
+            symbolNodeIdsByFileAndName.set(fileSymbolKey, newId);
+            reusedSymbolIds.add(newId);
+          }
+          // Fix placeholder edges using tracked indices
+          for (const pending of pendingSymbolEdges) {
+            const newId = symbolNodeIdsByFileAndName.get(`${file.relativePath}\0${pending.label}`);
+            if (!newId) continue;
+            edges[pending.definesEdgeIdx].toNodeId = newId;
+            edges[pending.representedByEdgeIdx].fromNodeId = newId;
           }
         }
 
@@ -789,6 +852,13 @@ export async function indexWorkspace(input: {
           repo.deleteGraphNodesByIds(staleSymbolIds);
         }
 
+        // Batch upsert import target nodes + wikilink entity nodes in one query
+        const batchNodeInputs: Array<{
+          type: string;
+          label: string;
+          metadata?: string;
+        }> = [];
+        const importEdgeInputs: Array<{ importPath: string; resolvedImportPath: string }> = [];
         for (const importPath of indexed.importPaths) {
           if (typeof importPath !== "string" || importPath.length === 0) continue;
 
@@ -798,28 +868,45 @@ export async function indexWorkspace(input: {
             indexed.language ?? undefined,
           );
           if (!resolvedImportPath) continue;
-          const targetNodeId = await repo.upsertGraphNode({
+          batchNodeInputs.push({
             type: "file",
             label: resolvedImportPath,
             metadata: JSON.stringify({ path: resolvedImportPath }),
           });
-
-          edges.push({
-            fromNodeId: fileNodeId,
-            toNodeId: targetNodeId,
-            type: "imports",
-            metadata: JSON.stringify({ importPath }),
-          });
+          importEdgeInputs.push({ importPath, resolvedImportPath });
         }
-
         for (const link of indexed.wikilinks) {
-          const entityNodeId = await repo.upsertGraphNode({
+          batchNodeInputs.push({
             type: "entity",
             label: link,
             metadata: "{}",
           });
+        }
 
-          edges.push({ fromNodeId: fileNodeId, toNodeId: entityNodeId, type: "mentions" });
+        if (batchNodeInputs.length > 0) {
+          const upsertedNodes = await repo.upsertGraphNodesBatch(batchNodeInputs);
+          // Map results back by label to build edges
+          const nodeByLabel = new Map<string, string>();
+          for (const node of upsertedNodes) {
+            nodeByLabel.set(node.label, node.id);
+          }
+          for (const { importPath, resolvedImportPath } of importEdgeInputs) {
+            const targetNodeId = nodeByLabel.get(resolvedImportPath);
+            if (targetNodeId) {
+              edges.push({
+                fromNodeId: fileNodeId,
+                toNodeId: targetNodeId,
+                type: "imports",
+                metadata: JSON.stringify({ importPath }),
+              });
+            }
+          }
+          for (const link of indexed.wikilinks) {
+            const entityNodeId = nodeByLabel.get(link);
+            if (entityNodeId) {
+              edges.push({ fromNodeId: fileNodeId, toNodeId: entityNodeId, type: "mentions" });
+            }
+          }
         }
 
         // Dedupe edges by from:to:type before insert
@@ -853,7 +940,11 @@ export async function indexWorkspace(input: {
     });
 
     // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
-    if (allChunkRowsForEmbeddings.length > 0) {
+    if (allChunkRowsForEmbeddings.length > 0 && embeddingProvider) {
+      await reportProgress(
+        `Embedding ${allChunkRowsForEmbeddings.length} chunks via ${embeddingProvider.provider}/${embeddingProvider.model}...`,
+        90,
+      );
       const embeddingResult = await writeEmbeddingsToRepo(
         repo,
         allChunkRowsForEmbeddings,
@@ -865,6 +956,7 @@ export async function indexWorkspace(input: {
 
     // ── Phase 5: Restore FTS triggers + bulk backfill ──
     if (bulkWriteMode) {
+      await reportProgress("Rebuilding FTS index...", 93);
       repo.restoreFtsTriggers();
       repo.setOptimizedWriteMode(false);
       bulkWriteMode = false;
@@ -872,6 +964,7 @@ export async function indexWorkspace(input: {
 
     // ── Phase 6: Batch call-edge resolution from in-memory symbol map ──
     // Load all symbol nodes in one query instead of N queries per call expression.
+    await reportProgress("Resolving call edges...", 95);
     const globalSymbolNodes = await repo.loadAllSymbolNodes();
     const insertedCallEdges = new Set<string>();
     const callEdges: Array<{

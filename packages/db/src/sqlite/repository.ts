@@ -576,6 +576,42 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       return ids;
     },
 
+    async upsertGraphNodesBatch(
+      inputs: Array<{ type: string; label: string; refId?: string; metadata?: string }>,
+    ): Promise<Array<{ label: string; id: string }>> {
+      if (inputs.length === 0) return [];
+      const now = new Date().toISOString();
+      const BATCH = 500;
+      const results: Array<{ label: string; id: string }> = [];
+
+      for (let i = 0; i < inputs.length; i += BATCH) {
+        const batch = inputs.slice(i, i + BATCH);
+        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
+        const params: unknown[] = [];
+        for (const item of batch) {
+          const id = crypto.randomUUID();
+          params.push(
+            id,
+            item.type,
+            item.label,
+            item.refId ?? null,
+            item.metadata ?? "{}",
+            now,
+            now,
+          );
+        }
+        const rows = native
+          .prepare(
+            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders}
+             ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET ref_id = COALESCE(excluded.ref_id, graph_nodes.ref_id), metadata = excluded.metadata, updated_at = excluded.updated_at
+             RETURNING id, label`,
+          )
+          .all(...params) as Array<{ id: string; label: string }>;
+        results.push(...rows.map((r) => ({ label: r.label, id: String(r.id) })));
+      }
+      return results;
+    },
+
     async getGraphNode(id: string) {
       const row = native.prepare("SELECT * FROM graph_nodes WHERE id = ?").get(id) as
         | Record<string, unknown>
