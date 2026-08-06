@@ -10,7 +10,8 @@ import { createNativeDatabase } from "./database-loader";
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
 
-const dbCache = new Map<string, ReturnType<typeof getWorkspaceDbRaw>>();
+const dbCache = new Map<string, ReturnType<typeof drizzle>>();
+const nativeCache = new Map<string, ReturnType<typeof createNativeDatabase>>();
 
 // Resolve a bundled file (template.sqlite, registry-template.sqlite) that ships alongside the CLI binary.
 export function resolveBundledFile(filename: string): string | null {
@@ -69,33 +70,40 @@ export function getWorkspaceDb(rootPath: string) {
 
   const { sqlite, db } = getWorkspaceDbRaw(rootPath);
   initializeWorkspaceSchema(sqlite);
-  dbCache.set(rootPath, { sqlite, db });
+  dbCache.set(rootPath, db);
+  nativeCache.set(rootPath, sqlite);
   return db;
 }
 
 export function getWorkspaceNativeDb(rootPath: string) {
-  const cached = dbCache.get(rootPath);
-  if (cached) return cached.sqlite;
+  const cached = nativeCache.get(rootPath);
+  if (cached) return cached;
   getWorkspaceDb(rootPath);
-  return dbCache.get(rootPath)!.sqlite;
+  return nativeCache.get(rootPath)!;
 }
 
 export function closeWorkspaceDb(rootPath: string) {
-  const entry = dbCache.get(rootPath);
-  if (entry) {
+  const native = nativeCache.get(rootPath);
+  if (native) {
     try {
-      entry.sqlite.close();
-    } catch {}
-    dbCache.delete(rootPath);
+      native.close();
+    } catch {
+      // Already closed or closing in progress
+    }
+    nativeCache.delete(rootPath);
   }
+  dbCache.delete(rootPath);
 }
 
 export function closeAllWorkspaceDbs() {
-  for (const entry of dbCache.values()) {
+  for (const native of nativeCache.values()) {
     try {
-      entry.sqlite.close();
-    } catch {}
+      native.close();
+    } catch {
+      // Already closed or closing in progress
+    }
   }
+  nativeCache.clear();
   dbCache.clear();
 }
 

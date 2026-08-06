@@ -88,7 +88,7 @@ The project-local `.openez` directory is generated state and should not be commi
 ## Supported content
 
 - TypeScript and JavaScript: rich AST indexing with `ts-morph`
-- Python, Go, and Rust: top-level symbol extraction
+- Python, Go, and Rust: tree-sitter AST parsing with regex fallback
 - YAML, JSON, and TOML: structure-aware chunks
 - Markdown: section-oriented chunks
 

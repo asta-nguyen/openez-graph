@@ -21,3 +21,6 @@ tsconfig.tsbuildinfo
 repomix-output.xml
 .omo
 scratch/
+
+# Rust build artifacts
+packages/native/target/

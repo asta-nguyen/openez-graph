@@ -11,6 +11,7 @@
     "@openez-graph/config": "workspace:*",
     "@openez-graph/core": "workspace:*",
     "@openez-graph/db": "workspace:*",
+    "@openez-graph/native": "workspace:*",
     "fast-glob": "^3.3.3",
     "github-slugger": "^2.0.0",
     "js-yaml": "^4.3.1",
@@ -19,7 +20,11 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "toml": "^4.1.1",
+    "tree-sitter-go": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
     "unified": "^11.0.5",
-    "unist-util-visit": "^5.0.0"
+    "unist-util-visit": "^5.0.0",
+    "web-tree-sitter": "^0.26.11"
   }
 }

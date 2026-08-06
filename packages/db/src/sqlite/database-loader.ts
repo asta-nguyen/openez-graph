@@ -13,9 +13,10 @@ function getRequireUrl(): string {
   return `file://${__filename}`;
 }
 
-const _require: typeof require = typeof __non_webpack_require__ === "function"
-  ? __non_webpack_require__
-  : module.createRequire(getRequireUrl());
+const _require: typeof require =
+  typeof __non_webpack_require__ === "function"
+    ? __non_webpack_require__
+    : module.createRequire(getRequireUrl());
 
 interface NativeDatabase {
   pragma(command: string): unknown;
@@ -27,6 +28,35 @@ interface NativeDatabase {
   };
   transaction<T>(fn: () => T): () => T;
   close(): void;
+}
+
+type NativeDatabaseConstructor = new (
+  filename: string,
+  options?: { nativeBinding?: string },
+) => NativeDatabase;
+
+function tryResolveAddon(): string | null {
+  if (resolvedAddon !== undefined) return resolvedAddon;
+
+  try {
+    const betterSqlite3Main = _require.resolve("better-sqlite3");
+    const addonPath = path.resolve(
+      path.dirname(betterSqlite3Main),
+      "..",
+      "build",
+      "Release",
+      "better_sqlite3.node",
+    );
+    if (fs.existsSync(addonPath)) {
+      resolvedAddon = addonPath;
+      return addonPath;
+    }
+  } catch {
+    // fall through
+  }
+
+  resolvedAddon = null;
+  return null;
 }
 
 export function createNativeDatabase(dbPath: string): NativeDatabase {
