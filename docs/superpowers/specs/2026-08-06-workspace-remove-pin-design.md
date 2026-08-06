@@ -34,6 +34,10 @@ Note: the registry schema is currently defined in two places — `packages/db` (
 schema + `initializeRegistrySchema`, used by CLI/MCP) and `apps/web/src/server/sqlite.ts`
 (used by the web server). Both open the same DB file. Schema changes must be applied to both.
 
+Verified: `apps/cli`, `apps/mcp`, and `apps/web` all already depend on
+`@openez-graph/db` (`workspace:*`), so the shared core can be imported everywhere with no
+new dependency.
+
 ## Feature 1: Remove Workspace
 
 ### Shared core — `packages/db/src/sqlite/remove-workspace.ts` (new)
@@ -58,8 +62,9 @@ Logic:
 
 1. Resolve workspace via `createRegistryRepository()`: `getWorkspace(id)` when `id` given,
    else `getWorkspaceByPath(path.resolve(rootPath))`. Not found → return `null`.
-2. If `indexingStatus` indicates an in-flight run, push a warning (do not block — the
-   status may be stale, which is exactly the junk-workspace case).
+2. If `indexingStatus === "running"` or `graphStatus === "running"` (see
+   `RegistryWorkspace` unions in `packages/db/src/sqlite/types.ts`), push a warning —
+   do not block; the status may be stale, which is exactly the junk-workspace case.
 3. `repo.deleteWorkspace(id)`.
 4. `fs.rm(getLocalWorkspaceDir(rootPath), { recursive: true, force: true })`.
    - Project dir missing from disk → still unregistered; `dataDirRemoved: false` + warning.
