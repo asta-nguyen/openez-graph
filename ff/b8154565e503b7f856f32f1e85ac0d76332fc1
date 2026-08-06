@@ -1,0 +1,23 @@
+tests/remove-workspace.test.ts
+  s_cf5c2e414f8ef6::t_f6ad6b8766efea 1-77
+packages/db/src/sqlite/index.ts
+  s_cf5c2e414f8ef6::t_191cbdf4726cb3 12-13
+packages/db/src/sqlite/remove-workspace.ts
+  s_cf5c2e414f8ef6::t_1e2677da6dd406 1-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ffb8154565e503b7f856f32f1e85ac0d76332fc1",
+  "prompts": {},
+  "sessions": {
+    "s_cf5c2e414f8ef6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wiry-shock",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
