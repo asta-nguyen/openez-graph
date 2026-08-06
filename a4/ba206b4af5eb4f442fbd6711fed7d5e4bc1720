@@ -1,0 +1,25 @@
+apps/web/src/routes/workspaces/index.tsx
+  s_cf5c2e414f8ef6::t_9875d10ef509af 227,233
+  s_cf5c2e414f8ef6::t_f88af7e2afb1a6 209-215
+  s_cf5c2e414f8ef6::t_7af3f65b849968 251
+packages/db/src/sqlite-index.ts
+  s_cf5c2e414f8ef6::t_cecfd7b33d5af7 11-12
+AGENTS.md
+  s_cf5c2e414f8ef6::t_81c7f06f5e2e83 54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a4ba206b4af5eb4f442fbd6711fed7d5e4bc1720",
+  "prompts": {},
+  "sessions": {
+    "s_cf5c2e414f8ef6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wiry-shock",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
