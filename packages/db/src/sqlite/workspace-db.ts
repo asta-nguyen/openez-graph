@@ -10,6 +10,7 @@ const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
 
 const dbCache = new Map<string, ReturnType<typeof drizzle>>();
+const nativeCache = new Map<string, ReturnType<typeof createNativeDatabase>>();
 
 export function getWorkspaceDb(rootPath: string) {
   const cached = dbCache.get(rootPath);
@@ -30,14 +31,32 @@ export function getWorkspaceDb(rootPath: string) {
   const db = drizzle(sqlite as never, { schema: workspaceSchema });
   initializeWorkspaceSchema(sqlite);
   dbCache.set(rootPath, db);
+  nativeCache.set(rootPath, sqlite);
   return db;
 }
 
 export function closeWorkspaceDb(rootPath: string) {
+  const native = nativeCache.get(rootPath);
+  if (native) {
+    try {
+      native.close();
+    } catch {
+      // Already closed or closing in progress
+    }
+    nativeCache.delete(rootPath);
+  }
   dbCache.delete(rootPath);
 }
 
 export function closeAllWorkspaceDbs() {
+  for (const native of nativeCache.values()) {
+    try {
+      native.close();
+    } catch {
+      // Already closed or closing in progress
+    }
+  }
+  nativeCache.clear();
   dbCache.clear();
 }
 

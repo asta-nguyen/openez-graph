@@ -21,6 +21,8 @@ export const workspaces = sqliteTable(
     nodeCount: integer("node_count").notNull().default(0),
     edgeCount: integer("edge_count").notNull().default(0),
     lastError: text("last_error"),
+    pinnedAt: text("pinned_at"),
+    pinOrder: integer("pin_order"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(datetime('now'))`),
