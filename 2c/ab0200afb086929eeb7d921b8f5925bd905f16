@@ -1,0 +1,22 @@
+CHANGELOG.md
+  s_a138ca8fa23431::t_c55b3828d46928 8-40
+  s_a138ca8fa23431::t_b2d8a03f778625 190
+apps/cli/package.json
+  s_a138ca8fa23431::t_9cd562268c283d 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "2cab0200afb086929eeb7d921b8f5925bd905f16",
+  "prompts": {},
+  "sessions": {
+    "s_a138ca8fa23431": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wobbly-caraway",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
