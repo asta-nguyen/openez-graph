@@ -19,10 +19,9 @@ import {
 } from "@openez-graph/db";
 import type { RegistryWorkspace, WorkspaceRepository } from "@openez-graph/db";
 
-import { indexCode } from "./code";
 import { hashContent } from "./hash";
-import { indexMarkdown } from "./markdown";
-import { parseGo, parsePython, parseRust, indexConfig, inferDocumentKind } from "./languages";
+import { inferDocumentKind } from "./languages";
+import { parseDocument } from "./parsers";
 import { scanWorkspaceFiles } from "./scanner";
 import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
 
@@ -231,146 +230,17 @@ export async function chunkDocument(input: {
   targetTokens: number;
   overlapTokens: number;
 }) {
-  const info = inferDocumentKind(input.relativePath);
-
-  if (info.kind === "markdown") {
-    const result = indexMarkdown({
-      content: input.content,
-      targetTokens: input.targetTokens,
-      overlapTokens: input.overlapTokens,
-    });
-
-    return {
-      kind: info.kind,
-      language: info.language,
-      chunks: result.chunks,
-      importPaths: [] as string[],
-      wikilinks: result.wikilinks,
-      definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[],
-      callExpressions: [] as Array<{ callerName: string; calleeName: string }>,
-    };
-  }
-
-  if (info.kind === "config") {
-    const configChunks = indexConfig(input.content, info.language ?? "");
-    return {
-      kind: info.kind,
-      language: info.language,
-      chunks: configChunks,
-      importPaths: [] as string[],
-      wikilinks: [] as string[],
-      definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[],
-      callExpressions: [] as Array<{ callerName: string; calleeName: string }>,
-    };
-  }
-
-  if (info.kind === "code") {
-    if (
-      info.language === "typescript" ||
-      info.language === "tsx" ||
-      info.language === "javascript" ||
-      info.language === "jsx"
-    ) {
-      const result = indexCode(input.content, input.absolutePath);
-      return {
-        kind: info.kind,
-        language: info.language,
-        chunks: result.chunks,
-        importPaths: result.importPaths,
-        wikilinks: [] as string[],
-        definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers,
-        callExpressions: result.callExpressions,
-      };
-    }
-
-    if (info.language === "python") {
-      const result = parsePython(input.content);
-      return {
-        kind: info.kind,
-        language: info.language,
-        chunks: result.chunks,
-        importPaths: result.importPaths,
-        wikilinks: [] as string[],
-        definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers,
-        callExpressions: result.callExpressions,
-      };
-    }
-
-    if (info.language === "go") {
-      const result = parseGo(input.content);
-      return {
-        kind: info.kind,
-        language: info.language,
-        chunks: result.chunks,
-        importPaths: result.importPaths,
-        wikilinks: [] as string[],
-        definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers,
-        callExpressions: result.callExpressions,
-      };
-    }
-
-    if (info.language === "rust") {
-      const result = parseRust(input.content);
-      return {
-        kind: info.kind,
-        language: info.language,
-        chunks: result.chunks,
-        importPaths: result.importPaths,
-        wikilinks: [] as string[],
-        definedSymbols: result.definedSymbols,
-        calledIdentifiers: result.calledIdentifiers,
-        callExpressions: result.callExpressions,
-      };
-    }
-
-    const fallbackChunk: IndexedChunk = {
-      content: input.content,
-      tokenCount: Math.ceil(input.content.length / 4),
-      contentHash: hashContent(input.content),
-      metadata: {
-        kind: "code",
-        language: info.language,
-        startLine: 1,
-        endLine: input.content.split("\n").length,
-      },
-    };
-    return {
-      kind: info.kind,
-      language: info.language,
-      chunks: [fallbackChunk],
-      importPaths: [] as string[],
-      wikilinks: [] as string[],
-      definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-      calledIdentifiers: [] as string[],
-      callExpressions: [] as Array<{ callerName: string; calleeName: string }>,
-    };
-  }
-
-  const fallbackChunk: IndexedChunk = {
-    content: input.content,
-    tokenCount: Math.ceil(input.content.length / 4),
-    contentHash: hashContent(input.content),
-    metadata: {
-      kind: info.kind,
-      startLine: 1,
-      endLine: input.content.split("\n").length,
-    },
-  };
-
+  const parsed = await parseDocument(input);
   return {
-    kind: info.kind,
-    language: info.language,
-    chunks: [fallbackChunk],
-    importPaths: [] as string[],
-    wikilinks: [] as string[],
-    definedSymbols: [] as Array<{ name: string; type: string; exported: boolean }>,
-    calledIdentifiers: [] as string[],
-    callExpressions: [] as Array<{ callerName: string; calleeName: string }>,
+    kind: parsed.kind,
+    language: parsed.language,
+    parser: parsed.parser,
+    chunks: parsed.chunks,
+    importPaths: parsed.importPaths,
+    wikilinks: parsed.wikilinks,
+    definedSymbols: parsed.definedSymbols,
+    calledIdentifiers: parsed.calledIdentifiers,
+    callExpressions: parsed.callExpressions,
   };
 }
 
@@ -648,7 +518,12 @@ export async function indexWorkspace(input: {
   let embeddingFailures = 0;
   let bulkWriteMode = false;
   const symbolNodeIdsByFileAndName = new Map<string, string>();
-  const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
+  const pendingCallEdges: Array<{
+    callerName: string;
+    calleeName: string;
+    filePath: string;
+    parser: string;
+  }> = [];
 
   try {
     await reportProgress(
@@ -876,6 +751,8 @@ export async function indexWorkspace(input: {
                   JSON.stringify({
                     symbolType: indexed.chunks[ci].symbolType,
                     filePath: file.relativePath,
+                    language: indexed.language,
+                    parser: indexed.parser,
                   }),
                 );
                 symbolNodeId = existingSymbolId;
@@ -887,6 +764,8 @@ export async function indexWorkspace(input: {
                   metadata: JSON.stringify({
                     symbolType: indexed.chunks[ci].symbolType,
                     filePath: file.relativePath,
+                    language: indexed.language,
+                    parser: indexed.parser,
                   }),
                 });
               }
@@ -954,7 +833,11 @@ export async function indexWorkspace(input: {
         await repo.insertEdges(dedupedEdges);
 
         pendingCallEdges.push(
-          ...indexed.callExpressions.map((call) => ({ ...call, filePath: file.relativePath })),
+          ...indexed.callExpressions.map((call) => ({
+            ...call,
+            filePath: file.relativePath,
+            parser: indexed.parser,
+          })),
         );
 
         const chunkRows = chunkIds.map((id, i) => ({
@@ -1012,12 +895,21 @@ export async function indexWorkspace(input: {
       if (insertedCallEdges.has(edgeKey)) continue;
       insertedCallEdges.add(edgeKey);
 
+      // Confidence by parser: ts-morph has type info → medium;
+      // tree-sitter and regex are syntax-only → low.
+      const confidence = callExpression.parser === "ts-morph" ? "medium" : "low";
+
       callEdges.push({
         fromNodeId: callerNodeId,
         toNodeId: calleeNodeId,
         type: "calls",
         weight: 0.35,
-        metadata: JSON.stringify({ heuristic: true, callee: callExpression.calleeName }),
+        metadata: JSON.stringify({
+          heuristic: true,
+          callee: callExpression.calleeName,
+          parser: callExpression.parser,
+          confidence,
+        }),
       });
     }
     await repo.transaction(async () => {
