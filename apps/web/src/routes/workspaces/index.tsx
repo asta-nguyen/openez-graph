@@ -225,7 +225,10 @@ function WorkspacesPage() {
       {workspaceToDelete && (
         <DeleteWorkspaceDialog
           workspace={workspaceToDelete}
-          onClose={() => setWorkspaceToDelete(null)}
+          onClose={() => {
+            deleteMutation.reset();
+            setWorkspaceToDelete(null);
+          }}
           onConfirm={() => deleteMutation.mutate(workspaceToDelete.id)}
           deleting={deleteMutation.isPending}
           error={
