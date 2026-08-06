@@ -206,6 +206,13 @@ function WorkspacesPage() {
           onClose={() => setWorkspaceToDelete(null)}
           onConfirm={() => deleteMutation.mutate(workspaceToDelete.id)}
           deleting={deleteMutation.isPending}
+          error={
+            deleteMutation.isError
+              ? deleteMutation.error instanceof Error
+                ? deleteMutation.error.message
+                : "Failed to delete workspace"
+              : null
+          }
         />
       )}
     </div>
@@ -217,11 +224,13 @@ function DeleteWorkspaceDialog({
   onClose,
   onConfirm,
   deleting,
+  error,
 }: {
   workspace: WorkspaceListItem;
   onClose: () => void;
   onConfirm: () => void;
   deleting: boolean;
+  error: string | null;
 }) {
   return (
     <div
@@ -239,6 +248,7 @@ function DeleteWorkspaceDialog({
               <code className="text-xs">{workspace.rootPath}/.openez</code> will be permanently
               deleted. Project source code is not touched.
             </p>
+            {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={onClose} disabled={deleting}>
                 Cancel

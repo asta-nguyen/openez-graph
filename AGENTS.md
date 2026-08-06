@@ -51,6 +51,7 @@ openez reindex [path]
 openez watch [path]
 openez status [path]
 openez list
+openez remove [path]        remove workspace from registry and delete its .openez data dir (--id, -y; alias: rm)
 openez serve --mcp
 openez setup codex
 ```
