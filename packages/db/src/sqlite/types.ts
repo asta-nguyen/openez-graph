@@ -195,6 +195,16 @@ export interface WorkspaceRepository {
     }>,
   ): Promise<string[]>;
 
+  /** Batch upsert: non-symbol nodes use ON CONFLICT, symbol nodes are pre-resolved by caller. */
+  upsertGraphNodesBatch(
+    inputs: Array<{
+      type: string;
+      label: string;
+      refId?: string;
+      metadata?: string;
+    }>,
+  ): Promise<Array<{ label: string; id: string }>>;
+
   getGraphNode(id: string): Promise<{
     id: string;
     type: string;
