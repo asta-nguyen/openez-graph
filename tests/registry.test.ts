@@ -139,4 +139,31 @@ describe("createRegistryRepository", () => {
     const list = await repo.listWorkspaces();
     expect(list).toHaveLength(0);
   });
+
+  it("setPinned sets and clears pinnedAt", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+
+    await repo.setPinned("ws1", true);
+    expect(typeof (await repo.getWorkspace("ws1"))?.pinnedAt).toBe("string");
+
+    await repo.setPinned("ws1", false);
+    expect((await repo.getWorkspace("ws1"))?.pinnedAt).toBeUndefined();
+  });
+
+  it("listWorkspaces sorts pinned first (newest pin on top)", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "a", name: "a", rootPath: "/tmp/a" });
+    await repo.createWorkspace({ id: "b", name: "b", rootPath: "/tmp/b" });
+    await repo.createWorkspace({ id: "c", name: "c", rootPath: "/tmp/c" });
+
+    await repo.setPinned("a", true);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await repo.setPinned("c", true);
+
+    expect((await repo.listWorkspaces()).map((w) => w.id)).toEqual(["c", "a", "b"]);
+
+    await repo.setPinned("c", false);
+    expect((await repo.listWorkspaces()).map((w) => w.id)[0]).toBe("a");
+  });
 });

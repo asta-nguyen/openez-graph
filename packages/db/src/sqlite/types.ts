@@ -14,6 +14,7 @@ export interface RegistryWorkspace {
   nodeCount: number;
   edgeCount: number;
   lastError: string | undefined;
+  pinnedAt: string | undefined;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,6 +71,7 @@ export interface RegistryRepository {
     >,
   ): Promise<void>;
   deleteWorkspace(id: string): Promise<void>;
+  setPinned(id: string, pinned: boolean): Promise<void>;
 
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;

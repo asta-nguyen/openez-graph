@@ -78,6 +78,7 @@ function initializeRegistrySchema(sqlite: ReturnType<typeof createNativeDatabase
       node_count INTEGER NOT NULL DEFAULT 0,
       edge_count INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
+      pinned_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -91,4 +92,16 @@ function initializeRegistrySchema(sqlite: ReturnType<typeof createNativeDatabase
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  migrateRegistryColumns(sqlite);
+}
+
+function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const columns = new Set(
+    (sqlite.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+  if (!columns.has("pinned_at")) {
+    sqlite.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+  }
 }
