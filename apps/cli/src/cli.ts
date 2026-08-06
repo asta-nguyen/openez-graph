@@ -346,6 +346,7 @@ program
     console.log(`Workspace: ${workspace.name} (${workspace.id})`);
     console.log(`  Path:     ${workspace.rootPath}`);
     console.log(`  Data dir: ${dataDir}`);
+    console.log(`  Indexed:  ${workspace.documentCount} docs, ${workspace.chunkCount} chunks`);
     console.log(
       "This removes the registry entry and deletes the data directory. Source code is not touched.",
     );

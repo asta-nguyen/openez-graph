@@ -53,6 +53,7 @@ export interface WebRegistryWorkspace {
   edgeCount: number;
   lastError?: string;
   pinnedAt?: string;
+  pinOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -168,6 +169,7 @@ function initializeRegistrySchema(db: SqliteDb) {
       edge_count INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
       pinned_at TEXT,
+      pin_order INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -177,25 +179,43 @@ function initializeRegistrySchema(db: SqliteDb) {
 }
 
 function migrateRegistryColumns(db: SqliteDb) {
-  const columns = new Set(
-    (db.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
-      (row) => row.name,
-    ),
-  );
+  const getColumns = () =>
+    new Set(
+      (db.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
+        (row) => row.name,
+      ),
+    );
 
-  if (!columns.has("pinned_at")) {
+  const addColumnIfMissing = (name: string, definition: string) => {
+    if (getColumns().has(name)) return;
     try {
-      db.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+      db.exec(`ALTER TABLE workspaces ADD COLUMN ${definition}`);
     } catch (err) {
       // Another process may have added the column concurrently; re-check.
-      const recheck = new Set(
-        (db.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
-          (row) => row.name,
-        ),
-      );
-      if (!recheck.has("pinned_at")) {
+      if (!getColumns().has(name)) {
         throw err;
       }
+    }
+  };
+
+  addColumnIfMissing("pinned_at", "pinned_at TEXT");
+  addColumnIfMissing("pin_order", "pin_order INTEGER");
+
+  // Backfill pin_order for pre-existing pinned workspaces that lack it.
+  const unbackfilled = db
+    .prepare(
+      "SELECT id FROM workspaces WHERE pinned_at IS NOT NULL AND pin_order IS NULL ORDER BY pinned_at DESC",
+    )
+    .all() as Array<{ id: string }>;
+  if (unbackfilled.length > 0) {
+    const maxRow = db
+      .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
+      .get() as { max_order: number | null } | undefined;
+    let next = (maxRow?.max_order ?? 0) + 1;
+    const stmt = db.prepare("UPDATE workspaces SET pin_order = ? WHERE id = ?");
+    for (const row of unbackfilled) {
+      stmt.run(next, row.id);
+      next += 1;
     }
   }
 }
@@ -413,6 +433,7 @@ function mapWorkspace(row: Record<string, unknown>): WebRegistryWorkspace {
     edgeCount: Number(row.edge_count ?? 0),
     lastError: row.last_error ? String(row.last_error) : undefined,
     pinnedAt: row.pinned_at ? String(row.pinned_at) : undefined,
+    pinOrder: row.pin_order != null ? Number(row.pin_order) : undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -421,7 +442,7 @@ function mapWorkspace(row: Record<string, unknown>): WebRegistryWorkspace {
 export function listRegistryWorkspaces(): WebRegistryWorkspace[] {
   const rows = getRegistryDb()
     .prepare(
-      "SELECT * FROM workspaces ORDER BY (pinned_at IS NULL), pinned_at DESC, created_at DESC",
+      "SELECT * FROM workspaces ORDER BY (pinned_at IS NULL), pin_order DESC, pinned_at DESC, created_at DESC",
     )
     .all() as Array<Record<string, unknown>>;
   return rows.map(mapWorkspace);
@@ -558,9 +579,20 @@ export function updateRegistryWorkspace(
 }
 
 export function setRegistryWorkspacePinned(id: string, pinned: boolean) {
-  getRegistryDb()
-    .prepare("UPDATE workspaces SET pinned_at = ? WHERE id = ?")
-    .run(pinned ? new Date().toISOString() : null, id);
+  const db = getRegistryDb();
+  if (pinned) {
+    const maxRow = db
+      .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
+      .get() as { max_order: number | null } | undefined;
+    const nextOrder = (maxRow?.max_order ?? 0) + 1;
+    db.prepare("UPDATE workspaces SET pinned_at = ?, pin_order = ? WHERE id = ?").run(
+      new Date().toISOString(),
+      nextOrder,
+      id,
+    );
+  } else {
+    db.prepare("UPDATE workspaces SET pinned_at = NULL, pin_order = NULL WHERE id = ?").run(id);
+  }
 }
 
 function mapRunRow(row: Record<string, unknown>, kind: "index" | "graph"): WebRunRow {

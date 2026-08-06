@@ -22,8 +22,11 @@ async function pathExists(target: string): Promise<boolean> {
   try {
     await fs.stat(target);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      return false;
+    }
+    throw err;
   }
 }
 
@@ -48,30 +51,53 @@ export async function removeWorkspace(
 
   const dataDirPath = getLocalWorkspaceDir(workspace.rootPath);
   let dataDirRemoved = false;
+  let rootPathChecked = false;
 
   // Close the native DB handle and remove the data directory BEFORE unregistering.
   // If the data-dir deletion fails, the workspace stays registered so the caller
   // can retry; unregistering first would orphan the data dir with no retry path.
-  if (!(await pathExists(workspace.rootPath))) {
-    warnings.push(`Workspace root path does not exist on disk: ${workspace.rootPath}`);
+  try {
+    if (!(await pathExists(workspace.rootPath))) {
+      warnings.push(`Workspace root path does not exist on disk: ${workspace.rootPath}`);
+    } else {
+      rootPathChecked = true;
+      closeWorkspaceDb(workspace.rootPath);
+      try {
+        await fs.rm(dataDirPath, { recursive: true, force: true });
+        dataDirRemoved = !(await pathExists(dataDirPath));
+      } catch (err) {
+        dataDirRemoved = false;
+        warnings.push(
+          `Failed to delete ${dataDirPath}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  } catch (err) {
+    warnings.push(
+      `Could not check workspace root path ${workspace.rootPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // Only unregister if the data directory was successfully removed (or was
+  // already absent because the root path is gone). If removal failed or we
+  // could not confirm the root path state, keep the registry row so the
+  // caller can retry.
+  let unregistered = false;
+  let rootPathAbsent = false;
+  if (!rootPathChecked) {
+    // Root path stat threw a non-ENOENT error; don't assume it's gone.
+    rootPathAbsent = false;
   } else {
-    closeWorkspaceDb(workspace.rootPath);
     try {
-      await fs.rm(dataDirPath, { recursive: true, force: true });
-      dataDirRemoved = !(await pathExists(dataDirPath));
+      rootPathAbsent = !(await pathExists(workspace.rootPath));
     } catch (err) {
-      dataDirRemoved = false;
       warnings.push(
-        `Failed to delete ${dataDirPath}: ${err instanceof Error ? err.message : String(err)}`,
+        `Could not re-check workspace root path ${workspace.rootPath}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
 
-  // Only unregister if the data directory was successfully removed (or was
-  // already absent because the root path is gone). If removal failed, keep the
-  // registry row so the caller can retry.
-  let unregistered = false;
-  if (dataDirRemoved || !(await pathExists(workspace.rootPath))) {
+  if (dataDirRemoved || rootPathAbsent) {
     await repo.deleteWorkspace(workspace.id);
     unregistered = true;
   } else {

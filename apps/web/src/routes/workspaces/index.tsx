@@ -172,6 +172,9 @@ function WorkspacesPage() {
                               e.stopPropagation();
                               pinMutation.mutate({ id: workspace.id, pinned: !workspace.pinnedAt });
                             }}
+                            disabled={
+                              pinMutation.isPending && pinMutation.variables?.id === workspace.id
+                            }
                             className={
                               workspace.pinnedAt
                                 ? "text-primary"
@@ -203,6 +206,13 @@ function WorkspacesPage() {
                         </p>
                       </div>
                     </div>
+                    {pinMutation.isError && pinMutation.variables?.id === workspace.id && (
+                      <p className="text-sm text-destructive mt-2">
+                        {pinMutation.error instanceof Error
+                          ? pinMutation.error.message
+                          : "Failed to update pin"}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </Link>

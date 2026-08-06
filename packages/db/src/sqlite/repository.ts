@@ -217,9 +217,21 @@ export function createRegistryRepository(): RegistryRepository {
     },
 
     async setPinned(id: string, pinned: boolean): Promise<void> {
-      native
-        .prepare("UPDATE workspaces SET pinned_at = ? WHERE id = ?")
-        .run(pinned ? new Date().toISOString() : null, id);
+      if (pinned) {
+        // Assign a monotonic pin_order so ordering is deterministic even when
+        // multiple workspaces are pinned within the same millisecond.
+        const maxRow = native
+          .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
+          .get() as { max_order: number | null } | undefined;
+        const nextOrder = (maxRow?.max_order ?? 0) + 1;
+        native
+          .prepare("UPDATE workspaces SET pinned_at = ?, pin_order = ? WHERE id = ?")
+          .run(new Date().toISOString(), nextOrder, id);
+      } else {
+        native
+          .prepare("UPDATE workspaces SET pinned_at = NULL, pin_order = NULL WHERE id = ?")
+          .run(id);
+      }
     },
 
     async getSetting(key: string): Promise<string | null> {
@@ -292,6 +304,7 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     edgeCount: row.edgeCount,
     lastError: row.lastError ?? undefined,
     pinnedAt: row.pinnedAt ?? undefined,
+    pinOrder: row.pinOrder ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -300,8 +313,13 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
 function compareWorkspaces(a: RegistryWorkspace, b: RegistryWorkspace): number {
   if (a.pinnedAt && !b.pinnedAt) return -1;
   if (!a.pinnedAt && b.pinnedAt) return 1;
-  if (a.pinnedAt && b.pinnedAt && a.pinnedAt !== b.pinnedAt) {
-    return b.pinnedAt.localeCompare(a.pinnedAt);
+  if (a.pinnedAt && b.pinnedAt) {
+    // Use monotonic pin_order as the primary tiebreaker (deterministic
+    // regardless of wall-clock resolution), then pinned_at as a fallback.
+    const aOrder = a.pinOrder ?? -Infinity;
+    const bOrder = b.pinOrder ?? -Infinity;
+    if (aOrder !== bOrder) return bOrder - aOrder;
+    if (a.pinnedAt !== b.pinnedAt) return b.pinnedAt.localeCompare(a.pinnedAt);
   }
   return b.createdAt.localeCompare(a.createdAt);
 }

@@ -158,7 +158,6 @@ describe("createRegistryRepository", () => {
     await repo.createWorkspace({ id: "c", name: "c", rootPath: "/tmp/c" });
 
     await repo.setPinned("a", true);
-    await new Promise((resolve) => setTimeout(resolve, 5));
     await repo.setPinned("c", true);
 
     expect((await repo.listWorkspaces()).map((w) => w.id)).toEqual(["c", "a", "b"]);

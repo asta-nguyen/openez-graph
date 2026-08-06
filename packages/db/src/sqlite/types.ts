@@ -15,6 +15,7 @@ export interface RegistryWorkspace {
   edgeCount: number;
   lastError: string | undefined;
   pinnedAt: string | undefined;
+  pinOrder: number | undefined;
   createdAt: string;
   updatedAt: string;
 }
