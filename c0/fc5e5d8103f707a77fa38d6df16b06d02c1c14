@@ -1,0 +1,55 @@
+apps/web/src/server/sqlite.ts
+  s_a138ca8fa23431::t_2d30329433fd66 226-238
+  s_a138ca8fa23431::t_9005b78c41287b 187-199
+  s_a138ca8fa23431::t_a80adec8540da5 207-215
+packages/db/src/sqlite/workspace-db.ts
+  s_a138ca8fa23431::t_7ff50734540c4c 13,34,39-47,52-59
+packages/db/src/sqlite/registry-db.ts
+  s_a138ca8fa23431::t_1aa7ab199c78d3 107-119
+  s_a138ca8fa23431::t_f42cf38df3765b 49,51,53
+apps/cli/src/cli.ts
+  s_a138ca8fa23431::t_bb53c32bc58877 367-371
+packages/db/src/sqlite/database-loader.ts
+  s_a138ca8fa23431::t_ece1e413baf800 35
+docs/superpowers/plans/2026-08-06-workspace-remove-pin.md
+  s_a138ca8fa23431::t_d604d029e4bae1 97,107-118,125
+  s_a138ca8fa23431::t_cf5ca56313e125 126
+packages/db/src/sqlite/remove-workspace.ts
+  s_a138ca8fa23431::t_71967775bd6660 52-54,61,70-82,86
+apps/web/src/routes/workspaces/index.tsx
+  s_a138ca8fa23431::t_63f0d6ed91edd7 38-44
+  s_a138ca8fa23431::t_4b14c26cf0a74e 3
+  s_a138ca8fa23431::t_19f6a02773101c 297
+  s_a138ca8fa23431::t_ecfa5efde50434 248,262
+  s_a138ca8fa23431::t_8ad06888fd51f7 27-33
+  s_a138ca8fa23431::t_e62d47a35c75ab 247,249-261,263-294,301-307,309,320
+  s_fcf71eff03cc6a::t_52c45eb9c2b02f 321-326
+apps/web/src/server/index.ts
+  s_a138ca8fa23431::t_6ae71ef726e0ed 40
+  s_a138ca8fa23431::t_a560994fb6d511 337
+  s_a138ca8fa23431::t_da57d0055de0cc 328-331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c0fc5e5d8103f707a77fa38d6df16b06d02c1c14",
+  "prompts": {},
+  "sessions": {
+    "s_a138ca8fa23431": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wobbly-caraway",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_fcf71eff03cc6a": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "resilient-neem",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
