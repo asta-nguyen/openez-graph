@@ -1,0 +1,45 @@
+packages/db/src/sqlite/types.ts
+  s_aea4f934248459::t_b8ce64f001352b 198-207
+apps/cli/package.json
+  s_aea4f934248459::t_7578ae38e69308 3
+CHANGELOG.md
+  s_aea4f934248459::t_8000155a99e496 9-11,15
+  s_aea4f934248459::t_d6da633e62b85e 8,12-14,157
+packages/indexer/src/index-workspace.ts
+  s_aea4f934248459::t_2a575041e455e5 751-755
+  s_aea4f934248459::t_b753dbd0d47585 944-947
+  s_aea4f934248459::t_4f11c92e8f1c68 409
+  s_aea4f934248459::t_b968b78dbc84fc 801,818-822,824-825,828,830-831
+  s_aea4f934248459::t_884d5e3707f204 756-760
+  s_aea4f934248459::t_93ff688dc4c21f 350,353-356
+  s_aea4f934248459::t_ca12bb9c36f775 813,815,817,832-834,838-840
+  s_aea4f934248459::t_1a5a6b7bc354d2 823,826-827,829,835-837
+  s_aea4f934248459::t_37f1e04caeea2b 943,959,967
+  s_aea4f934248459::t_6720b2e9e507d8 807,855-861,871,876,879,884,886-909
+  s_aea4f934248459::t_0747b2730a312f 484-489
+  s_aea4f934248459::t_a0a3e3cd9a0396 357-358
+  s_aea4f934248459::t_fb16a9d42dab2d 410-411
+  s_aea4f934248459::t_b94cfedf747a9c 490-491
+  s_aea4f934248459::t_ced428fdf469dd 761-762
+  s_aea4f934248459::t_e711066d78d0f9 808
+  s_aea4f934248459::t_cabade0707fec2 812
+packages/db/src/sqlite/repository.ts
+  s_aea4f934248459::t_9c6253a3df5897 579-613
+  s_aea4f934248459::t_f17a94dd4208df 614
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "17e08d071f6e2e14bd9a2931929bac58482258c0",
+  "prompts": {},
+  "sessions": {
+    "s_aea4f934248459": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "a6dd7e9f-c45f-4ed0-ad06-92e1974b41e0",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
