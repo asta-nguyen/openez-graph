@@ -1,0 +1,20 @@
+docs/superpowers/plans/2026-08-06-workspace-remove-pin.md
+  s_cf5c2e414f8ef6::t_39ac1a3b0a33d7 1-1191
+  s_cf5c2e414f8ef6::t_efdcab01bb5330 1192-1207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4cbe2c7c45714f246d9c1476885580914347868e",
+  "prompts": {},
+  "sessions": {
+    "s_cf5c2e414f8ef6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wiry-shock",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
