@@ -5,6 +5,27 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-08-06
+
+### Added
+
+- Tree-sitter AST parsing for Python, Go, and Rust via `web-tree-sitter` (WASM) with regex fallback
+- `CodeParser` interface and parser-registry pattern — pluggable parser dispatch via `getParserForPath()` + `parseDocument()`
+- Six parser implementations: `TsMorphParser`, `TreeSitterParser`, `MarkdownParser`, `ConfigParser`, `FallbackParser`, and `parser-registry` dispatcher
+- `language` and `parser` fields on symbol graph node metadata
+- `confidence` field on call edge metadata (`medium` for ts-morph, `low` for tree-sitter/regex)
+- 27 new tests (14 parser-registry + 13 tree-sitter parser)
+
+### Changed
+
+- `chunkDocument()` in `index-workspace.ts` reduced from ~150 lines of per-language branching to a 12-line delegate to `parseDocument()`
+- Python/Go/Rust indexing upgraded from regex-only to tree-sitter AST with automatic regex fallback
+- CLI bundles `web-tree-sitter` WASM grammars for Python, Go, and Rust
+
+### Fixed
+
+- Call edges now track originating parser for confidence attribution
+
 ## [0.10.0] - 2026-08-05
 
 ### Fixed
@@ -125,6 +146,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[0.11.0]: https://github.com/asta-nguyen/openez-graph/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD
 [0.9.1]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD
 [0.9.0]: https://github.com/asta-nguyen/openez-graph/compare/fbcad4f...HEAD
