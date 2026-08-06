@@ -32,6 +32,7 @@ interface NativeDatabase {
     run(...params: unknown[]): unknown;
   };
   transaction<T>(fn: () => T): () => T;
+  close(): void;
 }
 
 type NativeDatabaseConstructor = new (

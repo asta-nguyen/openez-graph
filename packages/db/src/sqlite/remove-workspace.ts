@@ -46,18 +46,19 @@ export async function removeWorkspace(
     );
   }
 
-  await repo.deleteWorkspace(workspace.id);
-
   const dataDirPath = getLocalWorkspaceDir(workspace.rootPath);
   let dataDirRemoved = false;
 
+  // Close the native DB handle and remove the data directory BEFORE unregistering.
+  // If the data-dir deletion fails, the workspace stays registered so the caller
+  // can retry; unregistering first would orphan the data dir with no retry path.
   if (!(await pathExists(workspace.rootPath))) {
     warnings.push(`Workspace root path does not exist on disk: ${workspace.rootPath}`);
   } else {
     closeWorkspaceDb(workspace.rootPath);
     try {
-      dataDirRemoved = await pathExists(dataDirPath);
       await fs.rm(dataDirPath, { recursive: true, force: true });
+      dataDirRemoved = !(await pathExists(dataDirPath));
     } catch (err) {
       dataDirRemoved = false;
       warnings.push(
@@ -66,10 +67,23 @@ export async function removeWorkspace(
     }
   }
 
+  // Only unregister if the data directory was successfully removed (or was
+  // already absent because the root path is gone). If removal failed, keep the
+  // registry row so the caller can retry.
+  let unregistered = false;
+  if (dataDirRemoved || !(await pathExists(workspace.rootPath))) {
+    await repo.deleteWorkspace(workspace.id);
+    unregistered = true;
+  } else {
+    warnings.push(
+      "Workspace was not unregistered because the data directory could not be removed. Retry to attempt cleanup again.",
+    );
+  }
+
   return {
     workspaceId: workspace.id,
     rootPath: workspace.rootPath,
-    unregistered: true,
+    unregistered,
     dataDirRemoved,
     dataDirPath,
     warnings,

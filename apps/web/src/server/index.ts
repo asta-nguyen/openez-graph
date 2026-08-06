@@ -37,6 +37,7 @@ import {
   getWorkspaceMemory,
   insertWorkspaceMemory,
   listRegistryWorkspaces,
+  closeWorkspaceDb,
   listWorkspaceDocuments,
   listWorkspaceMemories,
   resolveRegistryDbPath,
@@ -324,12 +325,16 @@ app.post("/api/workspaces", async (c) => {
 app.delete("/api/workspaces/:id", async (c) => {
   try {
     const id = c.req.param("id");
+    // Close the web server's cached workspace DB handle before removing,
+    // so the native connection doesn't keep the SQLite files locked.
+    const ws = getRegistryWorkspace(id);
+    if (ws) closeWorkspaceDb(ws.rootPath);
     const report = await removeWorkspace({ id });
     if (!report) return c.json({ success: false, error: "Workspace not found" }, 404);
     return c.json({ success: true, report });
   } catch (err) {
     console.error("Failed to delete workspace:", err);
-    return c.json({ success: false, error: "Failed to delete workspace" });
+    return c.json({ success: false, error: "Failed to delete workspace" }, 500);
   }
 });
 

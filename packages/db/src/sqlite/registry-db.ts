@@ -46,9 +46,11 @@ export function getRegistryDb() {
       const sqlite = createNativeDatabase(dbPath);
       sqlite.pragma("journal_mode = WAL");
       sqlite.pragma("foreign_keys = ON");
-      registryDb = drizzle(sqlite as never, { schema: registrySchema });
+      const db = drizzle(sqlite as never, { schema: registrySchema });
       initializeRegistrySchema(sqlite);
+      registryDb = db;
     } catch (err) {
+      registryDb = null;
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`Failed to open registry DB at "${dbPath}": ${message}`);
     }
@@ -102,6 +104,18 @@ function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>)
     ),
   );
   if (!columns.has("pinned_at")) {
-    sqlite.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+    try {
+      sqlite.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+    } catch (err) {
+      // Another process may have added the column concurrently; re-check.
+      const recheck = new Set(
+        (sqlite.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
+          (row) => row.name,
+        ),
+      );
+      if (!recheck.has("pinned_at")) {
+        throw err;
+      }
+    }
   }
 }

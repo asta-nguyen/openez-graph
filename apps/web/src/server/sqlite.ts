@@ -184,7 +184,19 @@ function migrateRegistryColumns(db: SqliteDb) {
   );
 
   if (!columns.has("pinned_at")) {
-    db.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+    try {
+      db.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+    } catch (err) {
+      // Another process may have added the column concurrently; re-check.
+      const recheck = new Set(
+        (db.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
+          (row) => row.name,
+        ),
+      );
+      if (!recheck.has("pinned_at")) {
+        throw err;
+      }
+    }
   }
 }
 
@@ -192,8 +204,15 @@ export function getRegistryDb(): SqliteDb {
   if (!registryDb) {
     const dbPath = resolveRegistryDbPath();
     ensureDirForFile(dbPath);
-    registryDb = openSqlite(dbPath);
-    initializeRegistrySchema(registryDb);
+    const db = openSqlite(dbPath);
+    try {
+      initializeRegistrySchema(db);
+      registryDb = db;
+    } catch (err) {
+      db.close();
+      registryDb = null;
+      throw err;
+    }
   }
 
   return registryDb;
@@ -202,6 +221,19 @@ export function getRegistryDb(): SqliteDb {
 export function closeRegistryDb() {
   registryDb?.close();
   registryDb = null;
+}
+
+export function closeWorkspaceDb(rootPath: string) {
+  const normalized = normalizeRootPath(rootPath);
+  const db = workspaceDbs.get(normalized);
+  if (db) {
+    try {
+      db.close();
+    } catch {
+      // Already closed or closing in progress
+    }
+    workspaceDbs.delete(normalized);
+  }
 }
 
 function resolveWorkspaceDbPath(rootPath: string): string {

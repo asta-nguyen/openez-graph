@@ -364,7 +364,11 @@ program
       process.exit(1);
     }
 
-    console.log(`✓ Unregistered workspace ${report.workspaceId}`);
+    if (report.unregistered) {
+      console.log(`✓ Unregistered workspace ${report.workspaceId}`);
+    } else {
+      console.log(`✗ Workspace ${report.workspaceId} could not be unregistered (see warnings)`);
+    }
     if (report.dataDirRemoved) {
       console.log(`✓ Deleted ${report.dataDirPath}`);
     }

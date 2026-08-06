@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, type WorkspaceListItem } from "../../lib/api";
 import { formatDate } from "../../lib/utils";
 import { workspacesQueryOptions, workspaceQueryOptions } from "../../lib/queries";
@@ -24,12 +24,24 @@ function WorkspacesPage() {
   const [workspaceToDelete, setWorkspaceToDelete] = useState<WorkspaceListItem | null>(null);
 
   const pinMutation = useMutation({
-    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) => api.pinWorkspace(id, pinned),
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
+      const res = await api.pinWorkspace(id, pinned);
+      if (!res.success) {
+        throw new Error(res.error ?? "Failed to update pin");
+      }
+      return res;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workspaces"] }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.deleteWorkspace(id),
+    mutationFn: async (id: string) => {
+      const res = await api.deleteWorkspace(id);
+      if (!res.success) {
+        throw new Error(res.error ?? "Failed to delete workspace");
+      }
+      return res;
+    },
     onSuccess: () => {
       setWorkspaceToDelete(null);
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
@@ -232,14 +244,69 @@ function DeleteWorkspaceDialog({
   deleting: boolean;
   error: string | null;
 }) {
+  const titleId = useId();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  // Restore focus to the trigger when the dialog closes.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    cancelRef.current?.focus();
+    return () => {
+      previouslyFocused?.focus?.();
+    };
+  }, []);
+
+  // Close on Escape and trap focus within the dialog.
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const focusable = node.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (e.shiftKey && (active === first || !node.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    node.addEventListener("keydown", handleKeyDown);
+    return () => node.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={onClose}
     >
-      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <Card
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
         <CardHeader>
-          <CardTitle>Delete workspace</CardTitle>
+          <CardTitle id={titleId}>Delete workspace</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
@@ -250,7 +317,13 @@ function DeleteWorkspaceDialog({
             </p>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={onClose} disabled={deleting}>
+              <Button
+                ref={cancelRef}
+                variant="outline"
+                size="sm"
+                onClick={onClose}
+                disabled={deleting}
+              >
                 Cancel
               </Button>
               <Button variant="destructive" size="sm" onClick={onConfirm} disabled={deleting}>

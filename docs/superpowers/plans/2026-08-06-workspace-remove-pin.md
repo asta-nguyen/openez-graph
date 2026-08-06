@@ -94,7 +94,7 @@ Expected: FAIL — `repo.setPinned is not a function`.
       pinned_at TEXT,
 ```
 
-Then add a migration function and call it at the end of `initializeRegistrySchema`:
+Then add a migration function and call it at the end of `initializeRegistrySchema`. The migration must be race-safe: two processes may concurrently see the column missing and both attempt `ALTER TABLE ADD COLUMN`. Wrap the ALTER in a try/catch and re-check `PRAGMA table_info` on failure, rethrowing only if the column is still absent:
 
 ```ts
 function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
@@ -104,12 +104,25 @@ function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>)
     ),
   );
   if (!columns.has("pinned_at")) {
-    sqlite.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+    try {
+      sqlite.exec("ALTER TABLE workspaces ADD COLUMN pinned_at TEXT");
+    } catch (err) {
+      const recheck = new Set(
+        (sqlite.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
+          (row) => row.name,
+        ),
+      );
+      if (!recheck.has("pinned_at")) {
+        throw err;
+      }
+    }
   }
 }
 ```
 
 Call `migrateRegistryColumns(sqlite);` after the `sqlite.exec(...)` inside `initializeRegistrySchema`.
+
+Additionally, `getRegistryDb` must not cache a partially-initialized handle. Assign `registryDb` only after `initializeRegistrySchema` succeeds, and reset `registryDb = null` in the catch block so a failed init does not leave a stale cached DB.
 
 3c. `packages/db/src/sqlite/types.ts` — in `RegistryWorkspace`, add after `lastError: string | undefined;`:
 
