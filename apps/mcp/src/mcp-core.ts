@@ -749,6 +749,9 @@ export function createMcpServer(options?: McpServerOptions) {
             path: input.path,
           });
         }
+        // Stop the opt-in auto-sync watcher if it was watching this workspace,
+        // preventing stale reindex attempts against the deleted workspace.
+        stopWatcherForWorkspace(report.workspaceId);
         return jsonResponse(report);
       }
       default:
@@ -768,6 +771,15 @@ export async function createAndStartMcpServer(options?: McpServerOptions) {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
+
+// ── Watcher state (module-scoped so remove_workspace can close it) ──
+interface ActiveWatcher {
+  watcher: ReturnType<typeof chokidar.watch>;
+  workspaceId: string;
+  rootPath: string;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+}
+let activeWatcher: ActiveWatcher | null = null;
 
 const WATCH_DEBOUNCE_MS = 2000;
 const WATCH_ENABLED = ["1", "true", "yes"].includes(
@@ -822,16 +834,20 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
   }
 
   // Start file watcher for opt-in auto-sync.
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const watcher = chokidar.watch(resolvedRoot, {
     ignored: WATCH_IGNORE_PATTERNS,
     ignoreInitial: true,
     persistent: true,
   });
 
+  activeWatcher = { watcher, workspaceId: workspace.id, rootPath: resolvedRoot, debounceTimer };
+
   const triggerReindex = () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(async () => {
+    const current = activeWatcher;
+    if (!current) return;
+    if (current.debounceTimer) clearTimeout(current.debounceTimer);
+    current.debounceTimer = setTimeout(async () => {
       try {
         await indexWorkspace({ workspaceId: workspace!.id, mode: "incremental" });
       } catch {
@@ -848,5 +864,14 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
       `OpenEZ MCP auto-sync watcher disabled: ${error instanceof Error ? error.message : String(error)}`,
     );
     void watcher.close();
+    activeWatcher = null;
   });
+}
+
+function stopWatcherForWorkspace(workspaceId: string): void {
+  if (activeWatcher && activeWatcher.workspaceId === workspaceId) {
+    if (activeWatcher.debounceTimer) clearTimeout(activeWatcher.debounceTimer);
+    void activeWatcher.watcher.close();
+    activeWatcher = null;
+  }
 }
