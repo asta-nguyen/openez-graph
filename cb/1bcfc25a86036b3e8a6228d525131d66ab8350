@@ -1,0 +1,20 @@
+landing/src/app/page.tsx
+  s_aea4f934248459::t_4eb8e69cc843e4 223
+  s_aea4f934248459::t_0bcaeb5290bc2b 127-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "cb1bcfc25a86036b3e8a6228d525131d66ab8350",
+  "prompts": {},
+  "sessions": {
+    "s_aea4f934248459": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "a6dd7e9f-c45f-4ed0-ad06-92e1974b41e0",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
