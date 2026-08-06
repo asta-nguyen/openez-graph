@@ -1,0 +1,25 @@
+packages/db/src/sqlite/remove-workspace.ts
+  s_a138ca8fa23431::t_3ee940a9e816ad 54,60-61,87-90,99
+apps/mcp/src/mcp-core.ts
+  s_a138ca8fa23431::t_468661569121d0 775-783,877
+  s_a138ca8fa23431::t_aeb9c48bc74ff4 847-850
+  s_a138ca8fa23431::t_b0b448537a1f60 867,870-876
+  s_a138ca8fa23431::t_8144b26a7180dc 752-754
+  s_a138ca8fa23431::t_1d441484d36759 837,844-845
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ea349e4e5658c0f88fd83b6eaaad4ebf985b1a16",
+  "prompts": {},
+  "sessions": {
+    "s_a138ca8fa23431": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "wobbly-caraway",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
