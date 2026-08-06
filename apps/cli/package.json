@@ -1,6 +1,6 @@
 {
   "name": "@openez-graph/cli",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Local-first code intelligence engine — index, query, and graph your codebase with zero config. SQLite-only, MCP-first.",
   "license": "MIT",
   "author": "Asta Nguyen",
@@ -48,7 +48,11 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.0"
+    "better-sqlite3": "^12.10.0",
+    "tree-sitter-go": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
+    "web-tree-sitter": "^0.26.11"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

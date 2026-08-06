@@ -5,7 +5,7 @@ import { countTokens } from "@openez-graph/core";
 import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
 
-function codeSearchText(text: string): string {
+export function codeSearchText(text: string): string {
   const terms = text.match(/[A-Z]?[a-z0-9]+|[A-Z]+(?=[A-Z][a-z]|\b)/g) ?? [];
   const unique = new Set<string>();
   for (let i = 0; i < terms.length && unique.size < 256; i++) {
@@ -1063,7 +1063,7 @@ function findSemicolonEnd(lines: string[], startIndex: number): number {
   return startIndex + 1;
 }
 
-function createSymbolChunks(
+export function createSymbolChunks(
   symbols: ExtractedSymbol[],
   allLines: string[],
   language: string,
@@ -1095,7 +1095,7 @@ function createSymbolChunks(
   });
 }
 
-function makeFallbackChunks(content: string, lines: string[]): IndexedCodeResult {
+export function makeFallbackChunks(content: string, lines: string[]): IndexedCodeResult {
   const chunks: IndexedChunk[] = [];
   for (let index = 0; index < lines.length; index += 80) {
     const slice = lines

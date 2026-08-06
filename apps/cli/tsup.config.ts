@@ -24,8 +24,16 @@ export default defineConfig({
   minify: false,
   splitting: false,
   define: { __OPENEZ_BUILD_ID__: JSON.stringify(getBuildId()) },
-  // better-sqlite3 is a native module — must remain external
-  external: ["better-sqlite3"],
+  // better-sqlite3 is a native module — must remain external.
+  // web-tree-sitter + tree-sitter-{python,go,rust} ship .wasm binary assets
+  // that tsup cannot inline; they must resolve from node_modules at runtime.
+  external: [
+    "better-sqlite3",
+    "web-tree-sitter",
+    "tree-sitter-python",
+    "tree-sitter-go",
+    "tree-sitter-rust",
+  ],
   // Bundle everything else (workspace packages + npm deps)
   noExternal: [
     "@openez-graph/config",
