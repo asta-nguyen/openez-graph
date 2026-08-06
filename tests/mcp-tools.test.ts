@@ -228,3 +228,55 @@ describe("MCP agent contracts", () => {
     }
   });
 });
+
+function toolJson(result: unknown): Record<string, unknown> {
+  const content = (result as { content: Array<{ type: string; text: string }> }).content;
+  return JSON.parse(content[0]!.text) as Record<string, unknown>;
+}
+
+describe("remove_workspace", () => {
+  it("refuses when confirm is not true", async () => {
+    const rootPath = path.join(tempRoot, "victim");
+    await createIndexedWorkspace("victim", rootPath);
+    const { client } = await connectClient(tempRoot);
+
+    const result = await client.callTool({
+      name: "remove_workspace",
+      arguments: { workspaceId: "victim" },
+    });
+
+    expect(String(toolJson(result).error)).toMatch(/confirm/i);
+    expect(await createRegistryRepository().getWorkspace("victim")).not.toBeNull();
+    expect(fs.existsSync(path.join(rootPath, ".openez"))).toBe(true);
+  });
+
+  it("removes registry entry and .openez dir when confirm is true", async () => {
+    const rootPath = path.join(tempRoot, "victim2");
+    await createIndexedWorkspace("victim2", rootPath);
+    const { client } = await connectClient(tempRoot);
+
+    const result = await client.callTool({
+      name: "remove_workspace",
+      arguments: { workspaceId: "victim2", confirm: true },
+    });
+
+    expect(toolJson(result)).toMatchObject({
+      workspaceId: "victim2",
+      unregistered: true,
+      dataDirRemoved: true,
+    });
+    expect(await createRegistryRepository().getWorkspace("victim2")).toBeNull();
+    expect(fs.existsSync(path.join(rootPath, ".openez"))).toBe(false);
+  });
+
+  it("errors without an explicit workspaceId or path", async () => {
+    const { client } = await connectClient(tempRoot);
+
+    const result = await client.callTool({
+      name: "remove_workspace",
+      arguments: { confirm: true },
+    });
+
+    expect(toolJson(result).error).toBeTruthy();
+  });
+});

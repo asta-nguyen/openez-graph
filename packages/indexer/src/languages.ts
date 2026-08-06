@@ -1,35 +1,11 @@
 import path from "node:path";
-import { countTokens } from "./tokenizer";
-import { fastHash } from "./hash";
+
+import { countTokens } from "@openez-graph/core";
+
+import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
 
-// oxc-parser — Rust-based, 13x faster than @babel/parser, ESTree-compatible AST
-let _parser: any = null;
-function loadParser(): any {
-  if (_parser) return _parser;
-  try {
-    _parser = require("oxc-parser");
-  } catch {
-    const mod = require("module");
-    const candidates = [
-      path.join(__dirname, "package.json"),
-      path.join(__dirname, "..", "package.json"),
-      path.join(__dirname, "..", "..", "package.json"),
-      path.join(__dirname, "..", "..", "..", "package.json"),
-      path.join(process.cwd(), "package.json"),
-      path.join(process.cwd(), "packages", "indexer", "package.json"),
-    ];
-    for (const candidate of candidates) {
-      try {
-        _parser = mod.createRequire(candidate)("oxc-parser");
-        break;
-      } catch { /* try next */ }
-    }
-  }
-  return _parser;
-}
-
-function codeSearchText(text: string): string {
+export function codeSearchText(text: string): string {
   const terms = text.match(/[A-Z]?[a-z0-9]+|[A-Z]+(?=[A-Z][a-z]|\b)/g) ?? [];
   const unique = new Set<string>();
   for (let i = 0; i < terms.length && unique.size < 256; i++) {
@@ -53,15 +29,13 @@ export const codeExtensions = new Map<string, string>([
   [".py", "python"],
   [".go", "go"],
   [".rs", "rust"],
-  [".c", "c"],
-  [".h", "c"]
 ]);
 
 export const configExtensions = new Map<string, string>([
   [".yaml", "yaml"],
   [".yml", "yaml"],
   [".json", "json"],
-  [".toml", "toml"]
+  [".toml", "toml"],
 ]);
 
 export const markdownExtensions = new Set([".md", ".mdx"]);
@@ -120,115 +94,47 @@ function isEscaped(text: string, index: number): boolean {
 
 function stripNonCode(
   content: string,
-  options: { hashComments?: boolean; backtickStrings?: boolean; tripleStrings?: boolean; rawStrings?: boolean; byteStrings?: boolean; singleQuoteStrings?: boolean } = {}
+  options: {
+    hashComments?: boolean;
+    backtickStrings?: boolean;
+    tripleStrings?: boolean;
+    rawStrings?: boolean;
+    byteStrings?: boolean;
+  } = {},
 ): string {
-  // Single-pass state machine — O(n), no regex backtracking
-  // Replaces comments and string contents with spaces (preserving newlines)
-  const buf = Buffer.from(content, "utf8") as unknown as { [i: number]: number; length: number };
-  const len = buf.length;
-  const out = Buffer.alloc(len);
-  let i = 0;
-  const SPACE = 32, NEWLINE = 10, SLASH = 47, STAR = 42, HASH = 35, DQUOTE = 34, SQUOTE = 39, BACKTICK = 96, R = 114, BSLASH = 92;
-
-  while (i < len) {
-    const c = buf[i];
-    const next = buf[i + 1];
-
-    // Line comment: // or #
-    if ((c === SLASH && next === SLASH) || (options.hashComments && c === HASH)) {
-      while (i < len && buf[i] !== NEWLINE) { out[i] = SPACE; i++; }
-      continue;
-    }
-    // Block comment: /* ... */
-    if (c === SLASH && next === STAR) {
-      if (i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; }
-      i += 2;
-      while (i < len && !(buf[i] === STAR && i + 1 < len && buf[i + 1] === SLASH)) {
-        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
-        i++;
-      }
-      if (i < len && i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; }
-      else { while (i < len) { out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE; i++; } }
-      continue;
-    }
-    // Triple strings: """ ... """ or ''' ... '''
-    if (options.tripleStrings && ((c === DQUOTE && next === DQUOTE && buf[i + 2] === DQUOTE) || (c === SQUOTE && next === SQUOTE && buf[i + 2] === SQUOTE))) {
-      const quote = c;
-      out[i] = SPACE; out[i + 1] = SPACE; out[i + 2] = SPACE; i += 3;
-      while (i < len && !(buf[i] === quote && buf[i + 1] === quote && buf[i + 2] === quote)) {
-        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
-        i++;
-      }
-      if (i < len) { out[i] = SPACE; out[i + 1] = SPACE; out[i + 2] = SPACE; i += 3; }
-      continue;
-    }
-    // Raw strings: r"..." or r#"..."#
-    if (options.rawStrings && c === R && (next === HASH || next === DQUOTE)) {
-      let hashCount = 0;
-      let j = i + 1;
-      while (buf[j] === HASH) { hashCount++; j++; }
-      if (buf[j] === DQUOTE) {
-        for (let k = i; k <= j; k++) out[k] = SPACE;
-        i = j + 1;
-        while (i < len) {
-          if (buf[i] === DQUOTE) {
-            let allHash = true;
-            for (let k = 1; k <= hashCount; k++) { if (buf[i + k] !== HASH) { allHash = false; break; } }
-            if (allHash) {
-              out[i] = SPACE;
-              for (let k = 1; k <= hashCount; k++) out[i + k] = SPACE;
-              i += 1 + hashCount;
-              break;
-            }
-          }
-          out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
-          i++;
-        }
-        continue;
-      }
-    }
-    // Backtick strings: `...`
-    if (options.backtickStrings && c === BACKTICK) {
-      out[i] = SPACE; i++;
-      while (i < len && buf[i] !== BACKTICK) {
-        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
-        i++;
-      }
-      if (i < len) { out[i] = SPACE; i++; }
-      continue;
-    }
-    // Double-quoted strings: "..."
-    if (c === DQUOTE) {
-      out[i] = SPACE; i++;
-      while (i < len && buf[i] !== DQUOTE) {
-        if (buf[i] === BSLASH && i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; continue; }
-        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
-        i++;
-      }
-      if (i < len) { out[i] = SPACE; i++; }
-      continue;
-    }
-    // Single-quoted strings: '...' (skip for Rust — ' is a lifetime, not a string)
-    if (options.singleQuoteStrings !== false && c === SQUOTE) {
-      out[i] = SPACE; i++;
-      while (i < len && buf[i] !== SQUOTE) {
-        if (buf[i] === BSLASH && i + 1 < len) { out[i] = SPACE; out[i + 1] = SPACE; i += 2; continue; }
-        out[i] = buf[i] === NEWLINE ? NEWLINE : SPACE;
-        i++;
-      }
-      if (i < len) { out[i] = SPACE; i++; }
-      continue;
-    }
-    out[i] = c;
-    i++;
+  let result = content;
+  if (options.tripleStrings) {
+    result = result.replace(/"""[\s\S]*?"""|'''[\s\S]*?'''/g, (m) => m.replace(/[^\n]/g, " "));
   }
-  return out.toString("utf8");
+  if (options.hashComments) {
+    result = result.replace(/#[^\n]*/g, (m) => " ".repeat(m.length));
+  } else {
+    result = result
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+      .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
+  }
+  if (options.backtickStrings) {
+    result = result.replace(/`[\s\S]*?`/g, (m) => m.replace(/[^\n]/g, " "));
+  }
+  if (options.rawStrings) {
+    result = result.replace(/r(#*)"[\s\S]*?"\1/g, (m) => m.replace(/[^\n]/g, " "));
+  }
+  result = result
+    .replace(/"(?:\\.|[^"\\])*"/g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/'(?:\\.|[^'\\])*'/g, (m) => m.replace(/[^\n]/g, " "));
+  return result;
 }
 
 // ── Python parser ──
 
 function stripPythonAlias(value: string): string {
-  return value.trim().replace(/^\(+|\)+$/g, "").split(/\s+as\s+/i)[0]?.trim() ?? "";
+  return (
+    value
+      .trim()
+      .replace(/^\(+|\)+$/g, "")
+      .split(/\s+as\s+/i)[0]
+      ?.trim() ?? ""
+  );
 }
 
 function parsePythonImportLine(line: string): string[] {
@@ -243,17 +149,16 @@ function parsePythonImportLine(line: string): string[] {
 
     return [
       modulePath,
-      ...importedNames.map((name) => modulePath.endsWith(".") ? `${modulePath}${name}` : `${modulePath}.${name}`)
+      ...importedNames.map((name) =>
+        modulePath.endsWith(".") ? `${modulePath}${name}` : `${modulePath}.${name}`,
+      ),
     ];
   }
 
   const importMatch = /^import\s+(.+)$/.exec(trimmed);
   if (!importMatch) return [];
 
-  return importMatch[1]
-    .split(",")
-    .map(stripPythonAlias)
-    .filter(Boolean);
+  return importMatch[1].split(",").map(stripPythonAlias).filter(Boolean);
 }
 
 function normalizePythonCallName(value: string): string {
@@ -262,9 +167,28 @@ function normalizePythonCallName(value: string): string {
 }
 
 const PYTHON_CALL_IGNORES = new Set([
-  "if", "for", "while", "with", "return", "yield",
-  "print", "len", "range", "str", "int", "float", "list", "dict", "set", "tuple", "bool",
-  "isinstance", "issubclass", "super", "self", "cls"
+  "if",
+  "for",
+  "while",
+  "with",
+  "return",
+  "yield",
+  "print",
+  "len",
+  "range",
+  "str",
+  "int",
+  "float",
+  "list",
+  "dict",
+  "set",
+  "tuple",
+  "bool",
+  "isinstance",
+  "issubclass",
+  "super",
+  "self",
+  "cls",
 ]);
 
 export function parsePython(content: string): IndexedCodeResult {
@@ -315,14 +239,21 @@ export function parsePython(content: string): IndexedCodeResult {
       const name = parentName ? `${parentName}::${rawName}` : rawName;
 
       const decoratorNames = pendingDecorators.map((d) => d.name);
-      const decoratorStartLine = pendingDecorators.length > 0
-        ? pendingDecorators[0].lineIndex + 1
-        : i + 1;
+      const decoratorStartLine =
+        pendingDecorators.length > 0 ? pendingDecorators[0].lineIndex + 1 : i + 1;
       const startLine = decoratorStartLine;
 
       const content = lines.slice(startLine - 1, endLine).join("\n");
 
-      definedSymbols.push({ name, symbolType, type: symbolType, exported, startLine, endLine, decorators: decoratorNames });
+      definedSymbols.push({
+        name,
+        symbolType,
+        type: symbolType,
+        exported,
+        startLine,
+        endLine,
+        decorators: decoratorNames,
+      });
 
       for (let lineIdx = i; lineIdx < endLine; lineIdx++) {
         const lineStr = codeLines[lineIdx];
@@ -331,7 +262,12 @@ export function parsePython(content: string): IndexedCodeResult {
         while ((callMatch = callRegex.exec(lineStr)) !== null) {
           const rawCalledName = callMatch[1];
           const calledName = normalizePythonCallName(rawCalledName);
-          if (!PYTHON_CALL_IGNORES.has(rawCalledName) && !PYTHON_CALL_IGNORES.has(calledName) && calledName !== rawName && calledName !== name) {
+          if (
+            !PYTHON_CALL_IGNORES.has(rawCalledName) &&
+            !PYTHON_CALL_IGNORES.has(calledName) &&
+            calledName !== rawName &&
+            calledName !== name
+          ) {
             calledIdentifiers.add(calledName);
             callExpressions.push({ callerName: name, calleeName: calledName });
           }
@@ -351,7 +287,12 @@ export function parsePython(content: string): IndexedCodeResult {
         while ((decCallMatch = decCallRegex.exec(decLine)) !== null) {
           const rawCalledName = decCallMatch[1];
           const calledName = normalizePythonCallName(rawCalledName);
-          if (!PYTHON_CALL_IGNORES.has(rawCalledName) && !PYTHON_CALL_IGNORES.has(calledName) && calledName !== name && calledName !== decCalledName) {
+          if (
+            !PYTHON_CALL_IGNORES.has(rawCalledName) &&
+            !PYTHON_CALL_IGNORES.has(calledName) &&
+            calledName !== name &&
+            calledName !== decCalledName
+          ) {
             calledIdentifiers.add(calledName);
             callExpressions.push({ callerName: name, calleeName: calledName });
           }
@@ -370,15 +311,41 @@ export function parsePython(content: string): IndexedCodeResult {
     return { ...makeFallbackChunks(content, lines), importPaths: [...new Set(importPaths)] };
   }
 
-  return { chunks, importPaths: [...new Set(importPaths)], definedSymbols, calledIdentifiers: [...calledIdentifiers], callExpressions };
+  return {
+    chunks,
+    importPaths: [...new Set(importPaths)],
+    definedSymbols,
+    calledIdentifiers: [...calledIdentifiers],
+    callExpressions,
+  };
 }
 
 // ── Go parser ──
 
 const GO_CALL_IGNORES = new Set([
-  "if", "for", "switch", "select", "case", "go", "defer", "return",
-  "make", "len", "cap", "append", "copy", "delete", "panic", "recover",
-  "new", "print", "println", "close", "complex", "real", "imag"
+  "if",
+  "for",
+  "switch",
+  "select",
+  "case",
+  "go",
+  "defer",
+  "return",
+  "make",
+  "len",
+  "cap",
+  "append",
+  "copy",
+  "delete",
+  "panic",
+  "recover",
+  "new",
+  "print",
+  "println",
+  "close",
+  "complex",
+  "real",
+  "imag",
 ]);
 
 function normalizeGoCallName(value: string): string {
@@ -419,7 +386,6 @@ function parseGoImports(lines: string[]): string[] {
 export function parseGo(content: string): IndexedCodeResult {
   const lines = content.split("\n");
   const codeLines = stripNonCode(content, { backtickStrings: true }).split("\n");
-  const braceEndMap = buildBraceEndMap(codeLines);
   const definedSymbols: ExtractedSymbol[] = [];
   const calledIdentifiers = new Set<string>();
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
@@ -430,14 +396,23 @@ export function parseGo(content: string): IndexedCodeResult {
   const callRegex = /(\w+(?:\.\w+)*)\s*\(/g;
 
   const importPaths = parseGoImports(lines);
-  const activeFunctions: Array<{ name: string; symbolName: string; receiverName?: string; receiverType?: string; endLine: number }> = [];
+  const activeFunctions: Array<{
+    name: string;
+    symbolName: string;
+    receiverName?: string;
+    receiverType?: string;
+    endLine: number;
+  }> = [];
 
   for (let i = 0; i < codeLines.length; i++) {
     const currentLineNum = i + 1;
     const lineStr = codeLines[i];
     const trimmed = lineStr.trim();
 
-    while (activeFunctions.length > 0 && activeFunctions[activeFunctions.length - 1].endLine < currentLineNum) {
+    while (
+      activeFunctions.length > 0 &&
+      activeFunctions[activeFunctions.length - 1].endLine < currentLineNum
+    ) {
       activeFunctions.pop();
     }
 
@@ -450,15 +425,16 @@ export function parseGo(content: string): IndexedCodeResult {
       const receiverType = receiverParts[receiverParts.length - 1];
       const exported = name[0] >= "A" && name[0] <= "Z";
       const startLine = currentLineNum;
-      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
+      const endLine = findBraceBlockEnd(codeLines, i);
       const symbolName = receiverType ? `${receiverType}::${name}` : name;
       definedSymbols.push({
         name: symbolName,
-        symbolType: "function", type: "function",
+        symbolType: "function",
+        type: "function",
         exported,
         startLine,
         endLine,
-        ...(receiver ? { receiver: receiver.trim() } : {})
+        ...(receiver ? { receiver: receiver.trim() } : {}),
       });
       if (endLine > currentLineNum) {
         activeFunctions.push({ name, symbolName, receiverName, receiverType, endLine });
@@ -470,13 +446,14 @@ export function parseGo(content: string): IndexedCodeResult {
       const name = typeMatch[1];
       const exported = name[0] >= "A" && name[0] <= "Z";
       const startLine = currentLineNum;
-      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
+      const endLine = findBraceBlockEnd(codeLines, i);
       definedSymbols.push({
         name,
-        symbolType: "type", type: "type",
+        symbolType: "type",
+        type: "type",
         exported,
         startLine,
-        endLine
+        endLine,
       });
     }
 
@@ -490,7 +467,7 @@ export function parseGo(content: string): IndexedCodeResult {
         type: trimmed.startsWith("const") ? "const" : "var",
         exported,
         startLine: currentLineNum,
-        endLine: currentLineNum
+        endLine: currentLineNum,
       });
     }
 
@@ -501,10 +478,17 @@ export function parseGo(content: string): IndexedCodeResult {
       while ((callMatch = callRegex.exec(lineStr)) !== null) {
         const rawCalledName = callMatch[1];
         const calledName = normalizeGoCallName(rawCalledName);
-        const calleeName = active.receiverName && rawCalledName.startsWith(`${active.receiverName}.`) && active.receiverType
-          ? `${active.receiverType}::${calledName}`
-          : calledName;
-        if (!GO_CALL_IGNORES.has(rawCalledName) && !GO_CALL_IGNORES.has(calledName) && calleeName !== active.symbolName) {
+        const calleeName =
+          active.receiverName &&
+          rawCalledName.startsWith(`${active.receiverName}.`) &&
+          active.receiverType
+            ? `${active.receiverType}::${calledName}`
+            : calledName;
+        if (
+          !GO_CALL_IGNORES.has(rawCalledName) &&
+          !GO_CALL_IGNORES.has(calledName) &&
+          calleeName !== active.symbolName
+        ) {
           calledIdentifiers.add(calleeName);
           callExpressions.push({ callerName: active.symbolName, calleeName });
         }
@@ -517,14 +501,38 @@ export function parseGo(content: string): IndexedCodeResult {
     return { ...makeFallbackChunks(content, lines), importPaths };
   }
 
-  return { chunks, importPaths, definedSymbols, calledIdentifiers: [...calledIdentifiers], callExpressions };
+  return {
+    chunks,
+    importPaths,
+    definedSymbols,
+    calledIdentifiers: [...calledIdentifiers],
+    callExpressions,
+  };
 }
 
 // ── Rust parser ──
 
 const RUST_CALL_IGNORES = new Set([
-  "if", "while", "for", "loop", "match", "return", "let", "as", "in",
-  "println", "print", "eprintln", "eprint", "format", "vec", "Box", "Some", "None", "Ok", "Err"
+  "if",
+  "while",
+  "for",
+  "loop",
+  "match",
+  "return",
+  "let",
+  "as",
+  "in",
+  "println",
+  "print",
+  "eprintln",
+  "eprint",
+  "format",
+  "vec",
+  "Box",
+  "Some",
+  "None",
+  "Ok",
+  "Err",
 ]);
 
 function normalizeRustCallName(value: string): string {
@@ -536,8 +544,7 @@ function normalizeRustCallName(value: string): string {
 
 export function parseRust(content: string): IndexedCodeResult {
   const lines = content.split("\n");
-  const codeLines = stripNonCode(content, { rawStrings: true, byteStrings: true, singleQuoteStrings: false }).split("\n");
-  const braceEndMap = buildBraceEndMap(codeLines);
+  const codeLines = stripNonCode(content, { rawStrings: true, byteStrings: true }).split("\n");
   const definedSymbols: ExtractedSymbol[] = [];
   const calledIdentifiers = new Set<string>();
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
@@ -567,7 +574,10 @@ export function parseRust(content: string): IndexedCodeResult {
     const lineStr = codeLines[i];
     const trimmed = lineStr.trim();
 
-    while (activeFunctions.length > 0 && activeFunctions[activeFunctions.length - 1].endLine < currentLineNum) {
+    while (
+      activeFunctions.length > 0 &&
+      activeFunctions[activeFunctions.length - 1].endLine < currentLineNum
+    ) {
       activeFunctions.pop();
     }
 
@@ -587,115 +597,169 @@ export function parseRust(content: string): IndexedCodeResult {
       }
     }
 
-    const isSymbolLine = /^(?:pub(?:\([^)]*\))?\s+)?(?:unsafe\s+)?(?:async\s+)?(?:fn|struct|enum|trait|impl|type|const|static|mod|use)\b/.test(trimmed);
+    const isSymbolLine =
+      /^(?:pub(?:\([^)]*\))?\s+)?(?:unsafe\s+)?(?:async\s+)?(?:fn|struct|enum|trait|impl|type|const|static|mod|use)\b/.test(
+        trimmed,
+      );
     if (isSymbolLine) {
       const implForMatch = implForRegex.exec(trimmed);
-    if (implForMatch) {
-      const traitName = implForMatch[1];
-      const typeName = implForMatch[2].trim();
-      const startLine = currentLineNum;
-      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
-      definedSymbols.push({
-        name: `impl ${traitName} for ${typeName}`,
-        symbolType: "impl", type: "impl",
-        exported: false,
-        startLine,
-        endLine
-      });
-      implContext = typeName;
-      implBraceDepth = countBraces(lineStr);
-      if (implBraceDepth <= 0) implContext = null;
-    } else {
-      const implMatch = implRegex.exec(trimmed);
-      if (implMatch) {
-        const typeName = implMatch[1].trim();
+      if (implForMatch) {
+        const traitName = implForMatch[1];
+        const typeName = implForMatch[2].trim();
         const startLine = currentLineNum;
-        const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
+        const endLine = findBraceBlockEnd(codeLines, i);
         definedSymbols.push({
-          name: `impl ${typeName}`,
-          symbolType: "impl", type: "impl",
+          name: `impl ${traitName} for ${typeName}`,
+          symbolType: "impl",
+          type: "impl",
           exported: false,
           startLine,
-          endLine
+          endLine,
         });
         implContext = typeName;
         implBraceDepth = countBraces(lineStr);
         if (implBraceDepth <= 0) implContext = null;
+      } else {
+        const implMatch = implRegex.exec(trimmed);
+        if (implMatch) {
+          const typeName = implMatch[1].trim();
+          const startLine = currentLineNum;
+          const endLine = findBraceBlockEnd(codeLines, i);
+          definedSymbols.push({
+            name: `impl ${typeName}`,
+            symbolType: "impl",
+            type: "impl",
+            exported: false,
+            startLine,
+            endLine,
+          });
+          implContext = typeName;
+          implBraceDepth = countBraces(lineStr);
+          if (implBraceDepth <= 0) implContext = null;
+        }
       }
-    }
 
-    const fnMatch = fnRegex.exec(trimmed);
-    if (fnMatch) {
-      const name = fnMatch[1];
-      const exported = trimmed.startsWith("pub");
-      const startLine = currentLineNum;
-      const endLine = trimmed.endsWith(";") ? currentLineNum : findBraceBlockEndFast(codeLines, i, braceEndMap);
-      const symbolName = implContext
-        ? `${implContext}::${name}`
-        : traitContext
-          ? `${traitContext}::${name}`
-          : name;
-      definedSymbols.push({ name: symbolName, symbolType: "function", type: "function", exported, startLine, endLine });
-      if (endLine > currentLineNum) {
-        activeFunctions.push({ name, symbolName, endLine });
+      const fnMatch = fnRegex.exec(trimmed);
+      if (fnMatch) {
+        const name = fnMatch[1];
+        const exported = trimmed.startsWith("pub");
+        const startLine = currentLineNum;
+        const endLine = trimmed.endsWith(";") ? currentLineNum : findBraceBlockEnd(codeLines, i);
+        const symbolName = implContext
+          ? `${implContext}::${name}`
+          : traitContext
+            ? `${traitContext}::${name}`
+            : name;
+        definedSymbols.push({
+          name: symbolName,
+          symbolType: "function",
+          type: "function",
+          exported,
+          startLine,
+          endLine,
+        });
+        if (endLine > currentLineNum) {
+          activeFunctions.push({ name, symbolName, endLine });
+        }
       }
-    }
 
-    const structMatch = structRegex.exec(trimmed);
-    if (structMatch) {
-      const name = structMatch[1];
-      const exported = trimmed.startsWith("pub");
-      const startLine = currentLineNum;
-      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
-      definedSymbols.push({ name, symbolType: "struct", type: "struct", exported, startLine, endLine });
-    }
+      const structMatch = structRegex.exec(trimmed);
+      if (structMatch) {
+        const name = structMatch[1];
+        const exported = trimmed.startsWith("pub");
+        const startLine = currentLineNum;
+        const endLine = findBraceBlockEnd(codeLines, i);
+        definedSymbols.push({
+          name,
+          symbolType: "struct",
+          type: "struct",
+          exported,
+          startLine,
+          endLine,
+        });
+      }
 
-    const enumMatch = enumRegex.exec(trimmed);
-    if (enumMatch) {
-      const name = enumMatch[1];
-      const exported = trimmed.startsWith("pub");
-      const startLine = currentLineNum;
-      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
-      definedSymbols.push({ name, symbolType: "enum", type: "enum", exported, startLine, endLine });
-    }
+      const enumMatch = enumRegex.exec(trimmed);
+      if (enumMatch) {
+        const name = enumMatch[1];
+        const exported = trimmed.startsWith("pub");
+        const startLine = currentLineNum;
+        const endLine = findBraceBlockEnd(codeLines, i);
+        definedSymbols.push({
+          name,
+          symbolType: "enum",
+          type: "enum",
+          exported,
+          startLine,
+          endLine,
+        });
+      }
 
-    const traitMatch = traitRegex.exec(trimmed);
-    if (traitMatch && !implRegex.test(trimmed) && !implForRegex.test(trimmed)) {
-      const name = traitMatch[1];
-      const exported = trimmed.startsWith("pub");
-      const startLine = currentLineNum;
-      const endLine = findBraceBlockEndFast(codeLines, i, braceEndMap);
-      definedSymbols.push({ name, symbolType: "trait", type: "trait", exported, startLine, endLine });
-      traitContext = name;
-      traitBraceDepth = countBraces(lineStr);
-      if (traitBraceDepth <= 0) traitContext = null;
-    }
+      const traitMatch = traitRegex.exec(trimmed);
+      if (traitMatch && !implRegex.test(trimmed) && !implForRegex.test(trimmed)) {
+        const name = traitMatch[1];
+        const exported = trimmed.startsWith("pub");
+        const startLine = currentLineNum;
+        const endLine = findBraceBlockEnd(codeLines, i);
+        definedSymbols.push({
+          name,
+          symbolType: "trait",
+          type: "trait",
+          exported,
+          startLine,
+          endLine,
+        });
+        traitContext = name;
+        traitBraceDepth = countBraces(lineStr);
+        if (traitBraceDepth <= 0) traitContext = null;
+      }
 
-    const typeMatch = typeRegex.exec(trimmed);
-    if (typeMatch) {
-      const name = typeMatch[1];
-      const exported = trimmed.startsWith("pub");
-      definedSymbols.push({ name, symbolType: "type", type: "type", exported, startLine: currentLineNum, endLine: currentLineNum });
-    }
+      const typeMatch = typeRegex.exec(trimmed);
+      if (typeMatch) {
+        const name = typeMatch[1];
+        const exported = trimmed.startsWith("pub");
+        definedSymbols.push({
+          name,
+          symbolType: "type",
+          type: "type",
+          exported,
+          startLine: currentLineNum,
+          endLine: currentLineNum,
+        });
+      }
 
-    const constMatch = constRegex.exec(trimmed);
-    if (constMatch) {
-      const name = constMatch[1];
-      const exported = trimmed.startsWith("pub");
-      definedSymbols.push({ name, symbolType: "const", type: "const", exported, startLine: currentLineNum, endLine: currentLineNum });
-    }
+      const constMatch = constRegex.exec(trimmed);
+      if (constMatch) {
+        const name = constMatch[1];
+        const exported = trimmed.startsWith("pub");
+        definedSymbols.push({
+          name,
+          symbolType: "const",
+          type: "const",
+          exported,
+          startLine: currentLineNum,
+          endLine: currentLineNum,
+        });
+      }
 
-    const modMatch = modRegex.exec(trimmed);
-    if (modMatch) {
-      const name = modMatch[1];
-      const exported = trimmed.startsWith("pub");
-      definedSymbols.push({ name, symbolType: "module", type: "module", exported, startLine: currentLineNum, endLine: currentLineNum });
-    }
+      const modMatch = modRegex.exec(trimmed);
+      if (modMatch) {
+        const name = modMatch[1];
+        const exported = trimmed.startsWith("pub");
+        definedSymbols.push({
+          name,
+          symbolType: "module",
+          type: "module",
+          exported,
+          startLine: currentLineNum,
+          endLine: currentLineNum,
+        });
+      }
 
-    const useMatch = useRegex.exec(trimmed);
-    if (useMatch) {
-      importPaths.push(useMatch[1].replace(/;$/, ""));
-    }
+      const useMatch = useRegex.exec(trimmed);
+      if (useMatch) {
+        importPaths.push(useMatch[1].replace(/;$/, ""));
+      }
     }
 
     if (activeFunctions.length > 0 && lineStr.includes("(")) {
@@ -705,7 +769,12 @@ export function parseRust(content: string): IndexedCodeResult {
       while ((callMatch = callRegex.exec(lineStr)) !== null) {
         const rawCalledName = callMatch[1];
         const calledName = normalizeRustCallName(rawCalledName);
-        if (!RUST_CALL_IGNORES.has(rawCalledName) && !RUST_CALL_IGNORES.has(calledName) && calledName !== active.name && calledName !== active.symbolName) {
+        if (
+          !RUST_CALL_IGNORES.has(rawCalledName) &&
+          !RUST_CALL_IGNORES.has(calledName) &&
+          calledName !== active.name &&
+          calledName !== active.symbolName
+        ) {
           calledIdentifiers.add(calledName);
           callExpressions.push({ callerName: active.symbolName, calleeName: calledName });
         }
@@ -718,7 +787,13 @@ export function parseRust(content: string): IndexedCodeResult {
     return { ...makeFallbackChunks(content, lines), importPaths };
   }
 
-  return { chunks, importPaths, definedSymbols, calledIdentifiers: [...calledIdentifiers], callExpressions };
+  return {
+    chunks,
+    importPaths,
+    definedSymbols,
+    calledIdentifiers: [...calledIdentifiers],
+    callExpressions,
+  };
 }
 
 // ── YAML/JSON/TOML config chunkers ──
@@ -753,14 +828,14 @@ function parseYamlConfig(content: string): IndexedChunk[] {
       heading: currentKey,
       content: text,
       tokenCount: countTokens(text),
-      contentHash: fastHash(text),
+      contentHash: hashContent(text),
       metadata: {
         kind: "config",
         language: "yaml",
         section: currentKey,
         startLine: sectionStartLine,
-        endLine
-      }
+        endLine,
+      },
     });
   };
 
@@ -820,13 +895,13 @@ function parseJsonConfig(content: string): IndexedChunk[] {
         heading: key,
         content: text,
         tokenCount: countTokens(text),
-        contentHash: fastHash(text),
+        contentHash: hashContent(text),
         metadata: {
           kind: "config",
           language: "json",
           section: key,
-          valueType: Array.isArray(value) ? "array" : typeof value
-        }
+          valueType: Array.isArray(value) ? "array" : typeof value,
+        },
       });
     }
 
@@ -856,15 +931,15 @@ function parseTomlConfig(content: string): IndexedChunk[] {
       heading: currentKey,
       content: text,
       tokenCount: countTokens(text),
-      contentHash: fastHash(text),
+      contentHash: hashContent(text),
       metadata: {
         kind: "config",
         language: "toml",
         section: currentKey,
         arrayTable: isArrayTable,
         startLine: sectionStartLine,
-        endLine
-      }
+        endLine,
+      },
     });
   };
 
@@ -911,12 +986,12 @@ function makeFallbackConfigChunk(content: string, language: string): IndexedChun
     {
       content,
       tokenCount: countTokens(content),
-      contentHash: fastHash(content),
+      contentHash: hashContent(content),
       metadata: {
         kind: "config",
-        language
-      }
-    }
+        language,
+      },
+    },
   ];
 }
 
@@ -944,32 +1019,25 @@ function findIndentedBlockEnd(lines: string[], startIndex: number): number {
   return lines.length;
 }
 
-// Pre-compute closing brace line for every opening brace line in one pass — O(n) not O(n²)
-function buildBraceEndMap(lines: string[]): Map<number, number> {
-  const result = new Map<number, number>();
-  const stack: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
+function findBraceBlockEnd(lines: string[], startIndex: number): number {
+  let braceCount = 0;
+  let found = false;
+
+  for (let i = startIndex; i < lines.length; i++) {
     const line = lines[i];
-    if (!line.includes("{") && !line.includes("}")) continue;
+    if (!found && !line.includes("{")) continue;
+
     for (let j = 0; j < line.length; j++) {
-      if (line[j] === "{") {
-        if (stack.length === 0) stack.push(i);
-      } else if (line[j] === "}") {
-        if (stack.length > 0) {
-          const openLine = stack.pop()!;
-          result.set(openLine, i + 1);
-        }
+      const char = line[j];
+      if (char === "{") {
+        braceCount++;
+        found = true;
+      } else if (char === "}") {
+        braceCount--;
       }
     }
-  }
-  return result;
-}
-
-function findBraceBlockEndFast(lines: string[], startIndex: number, braceEndMap: Map<number, number>): number {
-  for (let i = startIndex; i < lines.length; i++) {
-    if (lines[i].includes("{")) {
-      const end = braceEndMap.get(i);
-      if (end !== undefined) return end;
+    if (found && braceCount <= 0) {
+      return i + 1;
     }
   }
   return lines.length;
@@ -986,18 +1054,28 @@ function countBraces(line: string): number {
   return count;
 }
 
-function createSymbolChunks(
+function findSemicolonEnd(lines: string[], startIndex: number): number {
+  for (let i = startIndex; i < lines.length; i++) {
+    if (lines[i].trim().endsWith(";")) {
+      return i + 1;
+    }
+  }
+  return startIndex + 1;
+}
+
+export function createSymbolChunks(
   symbols: ExtractedSymbol[],
   allLines: string[],
-  language: string
+  language: string,
 ): IndexedChunk[] {
   return symbols.map((symbol) => {
-    const content = symbol.content || allLines.slice(symbol.startLine - 1, symbol.endLine).join("\n");
+    const content =
+      symbol.content || allLines.slice(symbol.startLine - 1, symbol.endLine).join("\n");
     return {
       heading: symbol.name,
       content,
       tokenCount: countTokens(content),
-      contentHash: fastHash(content),
+      contentHash: hashContent(content),
       symbolName: symbol.name,
       symbolType: symbol.symbolType,
       metadata: {
@@ -1009,259 +1087,42 @@ function createSymbolChunks(
         exported: symbol.exported,
         startLine: symbol.startLine,
         endLine: symbol.endLine,
-        ...(symbol.decorators && symbol.decorators.length > 0 ? { decorators: symbol.decorators } : {})
-      }
+        ...(symbol.decorators && symbol.decorators.length > 0
+          ? { decorators: symbol.decorators }
+          : {}),
+      },
     };
   });
 }
 
-function makeFallbackChunks(content: string, lines: string[]): IndexedCodeResult {
+export function makeFallbackChunks(content: string, lines: string[]): IndexedCodeResult {
   const chunks: IndexedChunk[] = [];
   for (let index = 0; index < lines.length; index += 80) {
-    const slice = lines.slice(index, index + 80).join("\n").trim();
+    const slice = lines
+      .slice(index, index + 80)
+      .join("\n")
+      .trim();
     if (!slice) continue;
 
     chunks.push({
       content: slice,
       tokenCount: countTokens(slice),
-      contentHash: fastHash(slice),
+      contentHash: hashContent(slice),
       metadata: {
         kind: "code",
         searchText: codeSearchText(slice),
         fallback: true,
         startLine: index + 1,
-        endLine: Math.min(index + 80, lines.length)
-      }
+        endLine: Math.min(index + 80, lines.length),
+      },
     });
   }
 
-  return { chunks, importPaths: [], definedSymbols: [], calledIdentifiers: [], callExpressions: [] };
-}
-
-export function parseTypeScript(content: string, filePath?: string): IndexedCodeResult {
-  const lines = content.split("\n");
-  const lineStarts: number[] = [0];
-  for (let i = 0; i < content.length; i++) {
-    if (content[i] === "\n") lineStarts.push(i + 1);
-  }
-
-  function offsetToLine(offset: number): number {
-    let lo = 0, hi = lineStarts.length - 1;
-    while (lo < hi) {
-      const mid = (lo + hi + 1) >> 1;
-      if (lineStarts[mid] <= offset) lo = mid;
-      else hi = mid - 1;
-    }
-    return lo + 1;
-  }
-
-  const definedSymbols: ExtractedSymbol[] = [];
-  const importPaths: string[] = [];
-  const calledIdentifiers = new Set<string>();
-  const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
-
-  let ast: { body: any[] };
-  try {
-    const parser = loadParser();
-    const fullAst = parser.parseSync(filePath ?? "file.ts", content, { sourceType: "module" });
-    ast = fullAst.program;
-  } catch {
-    return parseTypeScriptRegex(content);
-  }
-
-  function extractCalls(node: any, callerName: string) {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "CallExpression") {
-      const expr = node.callee;
-      const name = expr.type === "Identifier" ? expr.name :
-                   expr.type === "MemberExpression" ? (expr.property?.name ?? "") : "";
-      if (name) {
-        calledIdentifiers.add(name);
-        if (callerName) callExpressions.push({ callerName, calleeName: name });
-      }
-    }
-    for (const key of Object.keys(node)) {
-      const val = (node as any)[key];
-      if (Array.isArray(val)) val.forEach((c) => extractCalls(c, callerName));
-      else if (val && typeof val === "object" && val.type) extractCalls(val, callerName);
-    }
-  }
-
-  for (const node of ast.body) {
-    const isExported = node.type === "ExportNamedDeclaration" || node.type === "ExportDefaultDeclaration";
-    const inner = isExported ? node.declaration : node;
-
-    if (node.type === "ImportDeclaration") {
-      if (node.source?.value) importPaths.push(node.source.value);
-      continue;
-    }
-
-    if (!inner) continue;
-
-    let name: string | null = null;
-    let symbolType = "variable";
-    let body: any = null;
-
-    switch (inner.type) {
-      case "FunctionDeclaration":
-      case "FunctionExpression":
-        name = inner.id?.name ?? null;
-        symbolType = "function";
-        body = inner.body;
-        break;
-      case "ClassDeclaration":
-        name = inner.id?.name ?? null;
-        symbolType = "class";
-        body = inner.body;
-        break;
-      case "TSInterfaceDeclaration":
-        name = inner.id?.name ?? null;
-        symbolType = "interface";
-        body = inner.body;
-        break;
-      case "TSTypeAliasDeclaration":
-        name = inner.id?.name ?? null;
-        symbolType = "type";
-        break;
-      case "VariableDeclaration":
-        name = inner.declarations?.[0]?.id?.name ?? null;
-        symbolType = "variable";
-        body = inner.declarations?.[0]?.init;
-        break;
-    }
-
-    if (!name) continue;
-
-    const startLine = offsetToLine(inner.start);
-    const endLine = offsetToLine(inner.end);
-    definedSymbols.push({
-      name,
-      symbolType,
-      type: symbolType,
-      exported: isExported,
-      startLine,
-      endLine
-    });
-
-    if (body) extractCalls(body, name);
-  }
-
-  if (definedSymbols.length === 0) {
-    return makeFallbackChunks(content, lines);
-  }
-
-  const chunks = createSymbolChunks(definedSymbols, lines, "typescript");
   return {
     chunks,
-    importPaths,
-    definedSymbols,
-    calledIdentifiers: [...calledIdentifiers],
-    callExpressions
-  };
-}
-
-function parseTypeScriptRegex(content: string): IndexedCodeResult {
-  const lines = content.split("\n");
-  const codeLines = stripNonCode(content, { backtickStrings: true }).split("\n");
-  const braceEndMap = buildBraceEndMap(codeLines);
-
-  const definedSymbols: ExtractedSymbol[] = [];
-  const importPaths: string[] = [];
-
-  const fnRegex = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+(\w+)/;
-  const fnArrowRegex = /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?\s*=\s*(?:async\s*)?\(/;
-  const fnArrowArrowRegex = /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?\s*=\s*(?:async\s*)?([^=]+)=>/;
-  const classRegex = /^(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+(\w+)/;
-  const interfaceRegex = /^(?:export\s+)?interface\s+(\w+)/;
-  const typeRegex = /^(?:export\s+)?type\s+(\w+)\s*=/;
-  const constRegex = /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*(?::\s*[^=]+)?\s*=/;
-  const importRegex = /^(?:export\s+)?import\s+.*?\s+from\s+['"`](.+?)['"`]/;
-  const importSideEffectRegex = /^(?:export\s+)?import\s+['"`](.+?)['"`]/;
-  const exportRegex = /^export\s+/;
-
-  for (let i = 0; i < codeLines.length; i++) {
-    const trimmed = codeLines[i].trim();
-    if (!trimmed) continue;
-
-    const importMatch = importRegex.exec(trimmed) || importSideEffectRegex.exec(trimmed);
-    if (importMatch) {
-      importPaths.push(importMatch[1]);
-      continue;
-    }
-
-    const match = fnRegex.exec(trimmed)
-      || classRegex.exec(trimmed)
-      || interfaceRegex.exec(trimmed)
-      || typeRegex.exec(trimmed)
-      || fnArrowRegex.exec(trimmed)
-      || fnArrowArrowRegex.exec(trimmed);
-
-    if (match) {
-      const name = match[1];
-      const isExported = exportRegex.test(trimmed);
-      let symbolType = "function";
-      if (classRegex.test(trimmed)) symbolType = "class";
-      else if (interfaceRegex.test(trimmed)) symbolType = "interface";
-      else if (typeRegex.test(trimmed)) symbolType = "type";
-      else if (fnArrowRegex.test(trimmed) || fnArrowArrowRegex.test(trimmed)) symbolType = "function";
-
-      const startLine = i + 1;
-      const endLine = trimmed.includes("{") || classRegex.test(trimmed) || interfaceRegex.test(trimmed)
-        ? findBraceBlockEndFast(codeLines, i, braceEndMap)
-        : (typeRegex.test(trimmed) ? findTypeEnd(codeLines, i) : startLine);
-
-      definedSymbols.push({
-        name,
-        symbolType,
-        type: symbolType,
-        exported: isExported,
-        startLine,
-        endLine
-      });
-      i = endLine - 1;
-      continue;
-    }
-
-    const constMatch = constRegex.exec(trimmed);
-    if (constMatch && !fnArrowRegex.test(trimmed) && !fnArrowArrowRegex.test(trimmed)) {
-      const name = constMatch[1];
-      const isExported = exportRegex.test(trimmed);
-      const startLine = i + 1;
-      const endLine = trimmed.includes("{")
-        ? findBraceBlockEndFast(codeLines, i, braceEndMap)
-        : startLine;
-      definedSymbols.push({
-        name,
-        symbolType: "variable",
-        type: "variable",
-        exported: isExported,
-        startLine,
-        endLine
-      });
-      if (endLine > startLine) i = endLine - 1;
-    }
-  }
-
-  if (definedSymbols.length === 0) {
-    return makeFallbackChunks(content, lines);
-  }
-
-  const chunks = createSymbolChunks(definedSymbols, lines, "typescript");
-  return {
-    chunks,
-    importPaths,
-    definedSymbols,
+    importPaths: [],
+    definedSymbols: [],
     calledIdentifiers: [],
-    callExpressions: []
+    callExpressions: [],
   };
-}
-
-function findTypeEnd(lines: string[], startIndex: number): number {
-  for (let i = startIndex; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.includes(";") || (i > startIndex && /^[^;\s]/.test(line.trim()))) {
-      return i + 1;
-    }
-  }
-  return startIndex + 1;
 }

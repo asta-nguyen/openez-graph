@@ -8,6 +8,8 @@ export {
   readLocalWorkspaceConfig,
   writeLocalWorkspaceConfig,
 } from "./sqlite/local-workspace";
+export { removeWorkspace } from "./sqlite/remove-workspace";
+export type { RemoveWorkspaceReport, RemoveWorkspaceSelector } from "./sqlite/remove-workspace";
 export type {
   RegistryWorkspace,
   RegistryRepository,

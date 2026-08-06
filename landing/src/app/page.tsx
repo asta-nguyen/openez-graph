@@ -74,7 +74,7 @@ const features = [
   {
     icon: Layers,
     title: "Semantic Indexing",
-    desc: "TS/JS gets full AST-level indexing via ts-morph. Python, Go, Rust get top-level symbol extraction. Docs and config files get structure-aware chunking — all stored in local SQLite.",
+    desc: "TS/JS gets full AST-level indexing via ts-morph. Python, Go, Rust get tree-sitter AST parsing with regex fallback. Docs and config files get structure-aware chunking — all stored in local SQLite.",
   },
   {
     icon: Search,
@@ -120,6 +120,19 @@ export default async function LandingPage() {
       const data = await res.json();
       if (typeof data.stargazers_count === "number") {
         starCount = data.stargazers_count;
+      }
+    }
+  } catch {}
+
+  let cliVersion = "0.11.1";
+  try {
+    const res = await fetch("https://registry.npmjs.org/@openez-graph/cli/latest", {
+      next: { revalidate: 3600 },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.version === "string") {
+        cliVersion = data.version;
       }
     }
   } catch {}
@@ -207,7 +220,7 @@ export default async function LandingPage() {
                 }}
               >
                 <Star className="h-3 w-3" />
-                OpenEZ Graph v0.10.0 · local-first RAG
+                OpenEZ Graph v{cliVersion} · local-first RAG
               </div>
 
               <h1
@@ -404,8 +417,8 @@ export default async function LandingPage() {
               Every language you use
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-10 text-pretty">
-              Rich AST-level indexing for TypeScript and JavaScript. Symbol extraction for Python,
-              Go, and Rust. Structure-aware chunking for config files and documentation.
+              Rich AST-level indexing for TypeScript and JavaScript. Tree-sitter AST parsing for
+              Python, Go, and Rust. Structure-aware chunking for config files and documentation.
             </p>
             <div className="flex flex-wrap justify-center gap-2.5">
               {languages.map((lang) => (

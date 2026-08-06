@@ -1,7 +1,8 @@
 import GithubSlugger from "github-slugger";
 
-import { fastHash } from "./hash";
-import { countTokens } from "./tokenizer";
+import { countTokens } from "@openez-graph/core";
+
+import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
 
 interface HeadingState {
@@ -113,7 +114,7 @@ export function indexMarkdown(input: {
         heading: section.heading,
         content,
         tokenCount: countTokens(content),
-        contentHash: fastHash(content),
+        contentHash: hashContent(content),
         metadata: {
           kind: "markdown",
           headingPath: section.headingPath,

@@ -14,6 +14,8 @@ export interface RegistryWorkspace {
   nodeCount: number;
   edgeCount: number;
   lastError: string | undefined;
+  pinnedAt: string | undefined;
+  pinOrder: number | undefined;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,6 +72,7 @@ export interface RegistryRepository {
     >,
   ): Promise<void>;
   deleteWorkspace(id: string): Promise<void>;
+  setPinned(id: string, pinned: boolean): Promise<void>;
 
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
@@ -122,15 +125,17 @@ export interface WorkspaceRepository {
     mtimeMs: number;
   }): Promise<string>;
 
-  insertDocumentsBatch(inputs: Array<{
-    path: string;
-    absolutePath: string;
-    kind: string;
-    language?: string | null;
-    contentHash: string;
-    sizeBytes: number;
-    mtimeMs: number;
-  }>): Promise<string[]>;
+  insertDocumentsBatch(
+    inputs: Array<{
+      path: string;
+      absolutePath: string;
+      kind: string;
+      language?: string | null;
+      contentHash: string;
+      sizeBytes: number;
+      mtimeMs: number;
+    }>,
+  ): Promise<string[]>;
 
   updateDocument(
     id: string,
@@ -187,6 +192,17 @@ export interface WorkspaceRepository {
     }>,
   ): Promise<string[]>;
 
+  bulkInsertFts(
+    inputs: Array<{
+      chunkId: string;
+      path: string;
+      heading: string | null;
+      language: string | null;
+      content: string;
+      metadata: string;
+    }>,
+  ): Promise<void>;
+
   deleteChunksByDocument(documentId: string): Promise<void>;
 
   upsertGraphNode(input: {
@@ -204,6 +220,16 @@ export interface WorkspaceRepository {
       metadata?: string;
     }>,
   ): Promise<string[]>;
+
+  /** Batch upsert: non-symbol nodes use ON CONFLICT, symbol nodes are pre-resolved by caller. */
+  upsertGraphNodesBatch(
+    inputs: Array<{
+      type: string;
+      label: string;
+      refId?: string;
+      metadata?: string;
+    }>,
+  ): Promise<Array<{ label: string; id: string }>>;
 
   getGraphNode(id: string): Promise<{
     id: string;
@@ -364,21 +390,96 @@ export interface WorkspaceRepository {
   restoreNonUniqueIndexes(): void;
   ensureGraphBuilt(): void;
   /** Bulk insert FTS rows without triggers (used during optimized write phase). */
-  insertFtsBatch(rows: Array<{ chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }>): void;
+  insertFtsBatch(
+    rows: Array<{
+      chunkId: string;
+      path: string;
+      heading: string;
+      language: string;
+      searchText: string;
+      content: string;
+    }>,
+  ): void;
   /** Recreate FTS triggers and backfill any missing FTS rows. */
   restoreFtsTriggers(): void;
   /** Recreate FTS triggers only (no backfill — use when FTS rows were inserted inline). */
   restoreFtsTriggersOnly(): void;
 
   // ── Streaming inserts — cached prepared statements, no dynamic SQL ──
-  streamDocument(input: { id: string; path: string; absolutePath: string; kind: string; language?: string | null; contentHash: string; sizeBytes: number; mtimeMs: number }): void;
-  streamChunk(input: { id: string; documentId: string; chunkIndex: number; heading: string | null; content: string; tokenCount: number; contentHash: string; metadata: string }): void;
-  streamChunksBatch(inputs: Array<{ id: string; documentId: string; chunkIndex: number; heading: string | null; content: string; tokenCount: number; contentHash: string; metadata: string }>): void;
-  streamGraphNode(input: { id: string; type: string; label: string; refId?: string | null; metadata?: string }): void;
-  streamGraphNodesBatch(inputs: Array<{ id: string; type: string; label: string; refId?: string | null; metadata?: string }>): void;
-  streamEdgesBatch(inputs: Array<{ id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }>): void;
-  streamEdge(input: { id: string; fromNodeId: string; toNodeId: string; type: string; weight?: number; metadata?: string }): void;
-  streamFtsRow(input: { chunkId: string; path: string; heading: string; language: string; searchText: string; content: string }): void;
+  streamDocument(input: {
+    id: string;
+    path: string;
+    absolutePath: string;
+    kind: string;
+    language?: string | null;
+    contentHash: string;
+    sizeBytes: number;
+    mtimeMs: number;
+  }): void;
+  streamChunk(input: {
+    id: string;
+    documentId: string;
+    chunkIndex: number;
+    heading: string | null;
+    content: string;
+    tokenCount: number;
+    contentHash: string;
+    metadata: string;
+  }): void;
+  streamChunksBatch(
+    inputs: Array<{
+      id: string;
+      documentId: string;
+      chunkIndex: number;
+      heading: string | null;
+      content: string;
+      tokenCount: number;
+      contentHash: string;
+      metadata: string;
+    }>,
+  ): void;
+  streamGraphNode(input: {
+    id: string;
+    type: string;
+    label: string;
+    refId?: string | null;
+    metadata?: string;
+  }): void;
+  streamGraphNodesBatch(
+    inputs: Array<{
+      id: string;
+      type: string;
+      label: string;
+      refId?: string | null;
+      metadata?: string;
+    }>,
+  ): void;
+  streamEdgesBatch(
+    inputs: Array<{
+      id: string;
+      fromNodeId: string;
+      toNodeId: string;
+      type: string;
+      weight?: number;
+      metadata?: string;
+    }>,
+  ): void;
+  streamEdge(input: {
+    id: string;
+    fromNodeId: string;
+    toNodeId: string;
+    type: string;
+    weight?: number;
+    metadata?: string;
+  }): void;
+  streamFtsRow(input: {
+    chunkId: string;
+    path: string;
+    heading: string;
+    language: string;
+    searchText: string;
+    content: string;
+  }): void;
   refreshStreamTimestamp(): void;
   setMeta(key: string, value: string): void;
   getMeta(key: string): string | null;

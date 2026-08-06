@@ -5,13 +5,18 @@ import { existsSync, readFileSync } from "node:fs";
 
 import type { FileToIndex } from "./types";
 import { codeExtensions, configExtensions, markdownExtensions } from "./languages";
-import picomatch from "picomatch";
 
 const DEFAULT_INCLUDE_PATTERNS = [
   ...Array.from(codeExtensions.keys()).map((ext) => `**/*${ext}`),
   ...Array.from(configExtensions.keys()).map((ext) => `**/*${ext}`),
-  ...Array.from(markdownExtensions).map((ext) => `**/*${ext}`)
+  ...Array.from(markdownExtensions).map((ext) => `**/*${ext}`),
 ];
+
+const ALLOWED_EXTENSIONS = new Set([
+  ...codeExtensions.keys(),
+  ...configExtensions.keys(),
+  ...markdownExtensions,
+]);
 
 const DEFAULT_EXCLUDE_PATTERNS = [
   "**/node_modules",
@@ -34,7 +39,7 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   "**/target/**",
   "**/pnpm-lock.yaml",
   "**/package-lock.json",
-  "**/yarn.lock"
+  "**/yarn.lock",
 ];
 
 function loadGitignore(rootPath: string): string[] {
@@ -66,12 +71,6 @@ function baseName(filePath: string): string {
   return path.basename(filePath);
 }
 
-const ALLOWED_EXTENSIONS = new Set([
-  ...codeExtensions.keys(),
-  ...configExtensions.keys(),
-  ...markdownExtensions
-]);
-
 export async function scanWorkspaceFiles(input: {
   rootPath: string;
   include?: string;
@@ -83,93 +82,80 @@ export async function scanWorkspaceFiles(input: {
   const ignorePatterns = [
     ...DEFAULT_EXCLUDE_PATTERNS,
     ...gitignorePatterns,
-    ...(input.exclude ? input.exclude.split("\n").filter(Boolean).map((p) => p.trim()) : [])
+    ...(input.exclude
+      ? input.exclude
+          .split("\n")
+          .filter(Boolean)
+          .map((p) => p.trim())
+      : []),
   ];
 
-  // Custom include patterns: fall back to fast-glob (needs pattern matching)
-  if (input.include) {
-    const includePatterns = input.include.split("\n").filter(Boolean).map((p) => p.trim());
-    const entries = await fg(includePatterns, {
-      cwd: rootPath,
-      ignore: ignorePatterns,
-      onlyFiles: true,
-      absolute: true,
-      followSymbolicLinks: false,
-      dot: false
-    });
+  const includePatterns = input.include
+    ? input.include
+        .split("\n")
+        .filter(Boolean)
+        .map((p) => p.trim())
+    : DEFAULT_INCLUDE_PATTERNS;
 
-    const STAT_CONCURRENCY = 64;
-    const results: FileToIndex[] = [];
-    let statIndex = 0;
-    async function statWorker() {
-      while (statIndex < entries.length) {
-        const i = statIndex++;
-        try {
-          const stat = await fsAsync.stat(entries[i]);
-          results.push({
-            absolutePath: entries[i],
-            relativePath: path.relative(rootPath, entries[i]),
-            sizeBytes: stat.size,
-            mtimeMs: Math.trunc(stat.mtimeMs)
-          });
-        } catch { /* deleted between glob and stat */ }
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(STAT_CONCURRENCY, entries.length) }, () => statWorker())
-    );
-    return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
-  }
-
-  // Default: recursive readdir with Dirent (avoids fast-glob pattern matching + separate stat)
-  const ignoreDirs = new Set(["node_modules", "dist", "build", "coverage", "target", ".git", ".next", ".turbo", ".openez"]);
-  for (const p of gitignorePatterns) {
-    // Only extract simple directory names: **/dirname or dirname/
-    let dirName: string | null = null;
-    if (p.startsWith("**/")) dirName = p.slice(3).replace(/\/$/, "");
-    else if (p.endsWith("/")) dirName = p.replace(/^\//, "").replace(/\/$/, "");
-    if (dirName && !dirName.includes("/") && !dirName.includes("*")) ignoreDirs.add(dirName);
-  }
-  const isIgnored = picomatch(ignorePatterns, { dot: true });
-  const results: FileToIndex[] = [];
-  let scanErrors = 0;
-
-  async function walk(dir: string) {
-    let entries: import("node:fs").Dirent[];
+  // Native Rust scanner (rayon parallel walk) — fast path for default includes
+  if (!input.include) {
     try {
-      entries = await fsAsync.readdir(dir, { withFileTypes: true });
-    } catch { scanErrors++; return; }
-
-    const tasks: Promise<void>[] = [];
-    for (const entry of entries) {
-      if (entry.name.startsWith(".")) continue;
-      const fullPath = path.join(dir, entry.name);
-      const relative = path.relative(rootPath, fullPath).split(path.sep).join("/");
-
-      if (entry.isDirectory()) {
-        if (ignoreDirs.has(entry.name)) continue;
-        if (isIgnored(relative)) continue;
-        tasks.push(walk(fullPath));
-      } else if (entry.isFile()) {
-        const ext = path.extname(entry.name);
-        if (!ALLOWED_EXTENSIONS.has(ext)) continue;
-        if (isIgnored(relative)) continue;
-        tasks.push(
-          fsAsync.stat(fullPath).then((stat) => {
-            results.push({
-              absolutePath: fullPath,
-              relativePath: relative,
-              sizeBytes: stat.size,
-              mtimeMs: Math.trunc(stat.mtimeMs)
-            });
-          }).catch(() => { scanErrors++; })
+      let nativeBinding: any = null;
+      try {
+        nativeBinding = require(
+          require("path").join(__dirname, "native", "index.linux-x64-gnu.node"),
         );
+      } catch {
+        nativeBinding = require("@openez-graph/native");
       }
+      if (nativeBinding && typeof nativeBinding.scanWorkspaceFast === "function") {
+        const rawFiles: Array<{
+          absolutePath: string;
+          relativePath: string;
+          sizeBytes: number;
+          mtimeMs: number;
+        }> = nativeBinding.scanWorkspaceFast(rootPath, ALLOWED_EXTENSIONS);
+        if (rawFiles && rawFiles.length > 0) {
+          const isIgnored = picomatch(ignorePatterns, { dot: true });
+          const results: FileToIndex[] = [];
+          for (const f of rawFiles) {
+            if (!isIgnored(f.relativePath)) {
+              results.push({
+                absolutePath: f.absolutePath,
+                relativePath: f.relativePath,
+                sizeBytes: Number(f.sizeBytes),
+                mtimeMs: Number(f.mtimeMs),
+              });
+            }
+          }
+          return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+        }
+      }
+    } catch {
+      /* fallback to fast-glob */
     }
-    await Promise.all(tasks);
   }
 
-  await walk(rootPath);
-  if (scanErrors > 0) console.warn(`[openez] scan: ${scanErrors} errors`);
+  const entries = await fg(includePatterns, {
+    cwd: rootPath,
+    ignore: ignorePatterns,
+    onlyFiles: true,
+    absolute: true,
+    followSymbolicLinks: false,
+    dot: false,
+  });
+
+  const results = await Promise.all(
+    entries.map(async (absolutePath) => {
+      const stat = await fsAsync.stat(absolutePath);
+      return {
+        absolutePath,
+        relativePath: path.relative(rootPath, absolutePath),
+        sizeBytes: stat.size,
+        mtimeMs: Math.trunc(stat.mtimeMs),
+      } satisfies FileToIndex;
+    }),
+  );
+
   return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 }
