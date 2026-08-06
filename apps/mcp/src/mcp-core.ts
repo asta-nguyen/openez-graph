@@ -741,7 +741,10 @@ export function createMcpServer(options?: McpServerOptions) {
         if (!input.workspaceId && !input.path) {
           return jsonResponse({ error: "Pass an explicit workspaceId or path." });
         }
-        const report = await removeWorkspace({ id: input.workspaceId, rootPath: input.path });
+        const report = await removeWorkspace({
+          id: input.workspaceId,
+          rootPath: input.path ? path.resolve(input.path) : undefined,
+        });
         if (!report) {
           return jsonResponse({
             error: "Workspace not found",

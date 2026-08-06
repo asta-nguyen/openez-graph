@@ -22,6 +22,10 @@ function WorkspacesPage() {
   const { page: currentPage } = useSearch({ from: "/workspaces/" });
   const { data: result, isLoading, error } = useQuery(workspacesQueryOptions);
   const [workspaceToDelete, setWorkspaceToDelete] = useState<WorkspaceListItem | null>(null);
+  const [deleteReport, setDeleteReport] = useState<{
+    dataDirRemoved: boolean;
+    warnings: string[];
+  } | null>(null);
 
   const pinMutation = useMutation({
     mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
@@ -42,10 +46,18 @@ function WorkspacesPage() {
       }
       return res;
     },
-    onSuccess: () => {
-      setWorkspaceToDelete(null);
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Only close the dialog if cleanup fully succeeded. If the data dir
+      // was not removed or there are warnings, keep the dialog open so the
+      // user is aware of the partial failure.
+      if (res.report && (!res.report.dataDirRemoved || res.report.warnings.length > 0)) {
+        setDeleteReport(res.report);
+      } else {
+        setWorkspaceToDelete(null);
+        setDeleteReport(null);
+      }
     },
   });
 
@@ -125,97 +137,93 @@ function WorkspacesPage() {
           </p>
           <div className="space-y-4">
             {paged.map((workspace) => (
-              <Link
-                key={workspace.id}
-                to="/workspaces/$workspaceId"
-                params={{ workspaceId: workspace.id }}
-                className="block"
-                onMouseEnter={() => queryClient.prefetchQuery(workspaceQueryOptions(workspace.id))}
-              >
-                <Card className="hover:bg-muted/50 transition-colors">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h2 className="text-lg font-medium truncate">{workspace.name}</h2>
-                          <StatusBadge status={workspace.status} />
+              <Card key={workspace.id} className="hover:bg-muted/50 transition-colors">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <Link
+                      to="/workspaces/$workspaceId"
+                      params={{ workspaceId: workspace.id }}
+                      className="flex-1 min-w-0"
+                      onMouseEnter={() =>
+                        queryClient.prefetchQuery(workspaceQueryOptions(workspace.id))
+                      }
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <h2 className="text-lg font-medium truncate">{workspace.name}</h2>
+                        <StatusBadge status={workspace.status} />
+                      </div>
+                      <p className="muted text-sm truncate mb-3">{workspace.rootPath}</p>
+                      <div className="flex flex-wrap gap-4 text-sm">
+                        <div className="flex items-center gap-1.5">
+                          <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            {workspace.documentCount ?? 0} docs
+                          </span>
                         </div>
-                        <p className="muted text-sm truncate mb-3">{workspace.rootPath}</p>
-                        <div className="flex flex-wrap gap-4 text-sm">
+                        <div className="flex items-center gap-1.5">
+                          <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            {workspace.chunkCount ?? 0} chunks
+                          </span>
+                        </div>
+                        {(workspace.nodeCount ?? 0) > 0 && (
                           <div className="flex items-center gap-1.5">
-                            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="text-muted-foreground">
-                              {workspace.documentCount ?? 0} docs
+                              {workspace.nodeCount} nodes
                             </span>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-muted-foreground">
-                              {workspace.chunkCount ?? 0} chunks
-                            </span>
-                          </div>
-                          {(workspace.nodeCount ?? 0) > 0 && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-muted-foreground">
-                                {workspace.nodeCount} nodes
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                        )}
                       </div>
-                      <div className="text-right text-sm">
-                        <div className="flex items-center justify-end gap-1 mb-1">
-                          <button
-                            title={workspace.pinnedAt ? "Unpin workspace" : "Pin workspace"}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              pinMutation.mutate({ id: workspace.id, pinned: !workspace.pinnedAt });
-                            }}
-                            disabled={
-                              pinMutation.isPending && pinMutation.variables?.id === workspace.id
-                            }
-                            className={
-                              workspace.pinnedAt
-                                ? "text-primary"
-                                : "text-muted-foreground hover:text-foreground transition-colors"
-                            }
-                          >
-                            <Pin
-                              className={`h-4 w-4 ${workspace.pinnedAt ? "fill-current" : ""}`}
-                            />
-                          </button>
-                          <button
-                            title="Delete workspace"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setWorkspaceToDelete(workspace);
-                            }}
-                            className="text-muted-foreground hover:text-destructive transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                        <div className="flex gap-2 mb-1">
-                          <StatusBadge status={workspace.indexingStatus} />
-                          <StatusBadge status={workspace.graphStatus} />
-                        </div>
-                        <p className="muted text-xs">
-                          Last indexed: {formatDate(workspace.lastIndexedAt)}
-                        </p>
+                    </Link>
+                    <div className="text-right text-sm">
+                      <div className="flex items-center justify-end gap-1 mb-1">
+                        <button
+                          title={workspace.pinnedAt ? "Unpin workspace" : "Pin workspace"}
+                          onClick={() => {
+                            pinMutation.mutate({
+                              id: workspace.id,
+                              pinned: !workspace.pinnedAt,
+                            });
+                          }}
+                          disabled={
+                            pinMutation.isPending && pinMutation.variables?.id === workspace.id
+                          }
+                          className={
+                            workspace.pinnedAt
+                              ? "text-primary"
+                              : "text-muted-foreground hover:text-foreground transition-colors"
+                          }
+                        >
+                          <Pin className={`h-4 w-4 ${workspace.pinnedAt ? "fill-current" : ""}`} />
+                        </button>
+                        <button
+                          title="Delete workspace"
+                          onClick={() => {
+                            setWorkspaceToDelete(workspace);
+                          }}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
-                    </div>
-                    {pinMutation.isError && pinMutation.variables?.id === workspace.id && (
-                      <p className="text-sm text-destructive mt-2">
-                        {pinMutation.error instanceof Error
-                          ? pinMutation.error.message
-                          : "Failed to update pin"}
+                      <div className="flex gap-2 mb-1">
+                        <StatusBadge status={workspace.indexingStatus} />
+                        <StatusBadge status={workspace.graphStatus} />
+                      </div>
+                      <p className="muted text-xs">
+                        Last indexed: {formatDate(workspace.lastIndexedAt)}
                       </p>
-                    )}
-                  </CardContent>
-                </Card>
-              </Link>
+                    </div>
+                  </div>
+                  {pinMutation.isError && pinMutation.variables?.id === workspace.id && (
+                    <p className="text-sm text-destructive mt-2">
+                      {pinMutation.error instanceof Error
+                        ? pinMutation.error.message
+                        : "Failed to update pin"}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             ))}
           </div>
           <Pagination currentPage={safePage} totalPages={totalPages} basePath="/workspaces/" />
@@ -225,7 +233,10 @@ function WorkspacesPage() {
       {workspaceToDelete && (
         <DeleteWorkspaceDialog
           workspace={workspaceToDelete}
-          onClose={() => setWorkspaceToDelete(null)}
+          onClose={() => {
+            setWorkspaceToDelete(null);
+            setDeleteReport(null);
+          }}
           onConfirm={() => deleteMutation.mutate(workspaceToDelete.id)}
           deleting={deleteMutation.isPending}
           error={
@@ -235,6 +246,7 @@ function WorkspacesPage() {
                 : "Failed to delete workspace"
               : null
           }
+          report={deleteReport}
         />
       )}
     </div>
@@ -247,12 +259,14 @@ function DeleteWorkspaceDialog({
   onConfirm,
   deleting,
   error,
+  report,
 }: {
   workspace: WorkspaceListItem;
   onClose: () => void;
   onConfirm: () => void;
   deleting: boolean;
   error: string | null;
+  report: { dataDirRemoved: boolean; warnings: string[] } | null;
 }) {
   const titleId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -320,12 +334,35 @@ function DeleteWorkspaceDialog({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
-            <p className="text-sm">
-              Delete <span className="font-medium">{workspace.name}</span>? The registry entry and{" "}
-              <code className="text-xs">{workspace.rootPath}/.openez</code> will be permanently
-              deleted. Project source code is not touched.
-            </p>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {report ? (
+              <>
+                <p className="text-sm">
+                  {report.dataDirRemoved
+                    ? "Workspace removed, but with warnings:"
+                    : "Workspace was removed from the registry, but the data directory could not be fully deleted:"}
+                </p>
+                <ul className="text-sm text-destructive list-disc list-inside space-y-1">
+                  {report.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+                {!report.dataDirRemoved && (
+                  <p className="text-sm">
+                    You can retry deletion later — the workspace remains accessible for another
+                    attempt.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-sm">
+                  Delete <span className="font-medium">{workspace.name}</span>? The registry entry
+                  and <code className="text-xs">{workspace.rootPath}/.openez</code> will be
+                  permanently deleted. Project source code is not touched.
+                </p>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+              </>
+            )}
             <div className="flex justify-end gap-2">
               <Button
                 ref={cancelRef}
@@ -334,12 +371,14 @@ function DeleteWorkspaceDialog({
                 onClick={onClose}
                 disabled={deleting}
               >
-                Cancel
+                {report ? "Close" : "Cancel"}
               </Button>
-              <Button variant="destructive" size="sm" onClick={onConfirm} disabled={deleting}>
-                <Trash2 className="h-4 w-4 mr-1" />
-                {deleting ? "Deleting..." : "Delete"}
-              </Button>
+              {!report && (
+                <Button variant="destructive" size="sm" onClick={onConfirm} disabled={deleting}>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  {deleting ? "Deleting..." : "Delete"}
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>

@@ -194,7 +194,18 @@ export const api = {
       body: JSON.stringify(input),
     }),
   deleteWorkspace: (id: string) =>
-    request<{ success: boolean; error?: string }>(`/workspaces/${id}`, { method: "DELETE" }),
+    request<{
+      success: boolean;
+      error?: string;
+      report?: {
+        workspaceId: string;
+        rootPath: string;
+        unregistered: boolean;
+        dataDirRemoved: boolean;
+        dataDirPath: string;
+        warnings: string[];
+      };
+    }>(`/workspaces/${id}`, { method: "DELETE" }),
   pinWorkspace: (id: string, pinned: boolean) =>
     request<{ success: boolean; error?: string }>(`/workspaces/${id}/pin`, {
       method: "PATCH",
