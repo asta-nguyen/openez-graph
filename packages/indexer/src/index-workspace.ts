@@ -1125,10 +1125,17 @@ export async function buildGraphForWorkspace(workspaceId: string, rootPath: stri
   }
 
   // Start a new build (race-safe: concurrent callers share the same promise).
-  const buildPromise = _buildGraphInternal(workspaceId, rootPath).finally(() => {
-    // Keep the promise in the map as "built" marker; it is only removed
-    // by invalidateGraphForWorkspace or a build failure.
-  });
+  // On success, replace the in-flight promise with a resolved one so the
+  // workspace is marked "built". On failure, delete the entry so the next
+  // call can retry — otherwise the rejected promise would be cached forever.
+  const buildPromise = _buildGraphInternal(workspaceId, rootPath)
+    .then(() => {
+      graphBuilds.set(workspaceId, Promise.resolve());
+    })
+    .catch((err) => {
+      graphBuilds.delete(workspaceId);
+      throw err;
+    });
 
   graphBuilds.set(workspaceId, buildPromise);
   return buildPromise;
