@@ -1694,6 +1694,11 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       native.exec("DELETE FROM chunks");
       native.exec("DELETE FROM documents");
     },
+
+    clearGraphArtifacts(): void {
+      native.exec("DELETE FROM graph_edges");
+      native.exec("DELETE FROM graph_nodes");
+    },
   };
 }
 

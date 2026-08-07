@@ -561,8 +561,12 @@ async function parseInline(
       targetTokens: task.targetTokens,
       overlapTokens: task.overlapTokens,
     });
-    // Skip boundChunks for non-native path — chunkDocument already produces reasonable sizes
-    // and boundChunks calls countTokens which is slow (387ms/50 files)
+    // Bound large symbol chunks (e.g. a 1000-line function) to the target
+    // token limit. The OxcParser creates one chunk per symbol, which can
+    // exceed the limit for very large functions.
+    if (indexed.kind === "code") {
+      indexed.chunks = boundChunks(indexed.chunks, task.targetTokens, task.overlapTokens);
+    }
     results.set(task.id, indexed);
     onProgress?.(results.size, tasks.length);
   }
@@ -622,6 +626,7 @@ export async function indexWorkspace(input: {
 
   if (runMode === "full") {
     repo.resetIndexArtifacts();
+    invalidateGraphForWorkspace(workspace.id);
   }
 
   const runId = await repo.createIndexRun({ mode: runMode });
@@ -641,11 +646,16 @@ export async function indexWorkspace(input: {
 
   if (runMode === "incremental") {
     const scannedPaths = new Set(files.map((file) => file.relativePath));
+    let deletedAny = false;
     for (const document of existingDocuments) {
       if (!scannedPaths.has(document.path)) {
         await resetDocumentArtifacts(repo, document.id);
         await repo.deleteDocument(document.id);
+        deletedAny = true;
       }
+    }
+    if (deletedAny) {
+      invalidateGraphForWorkspace(workspace.id);
     }
   }
 
@@ -805,6 +815,8 @@ export async function indexWorkspace(input: {
       repo.setOptimizedWriteMode(true);
       repo.dropFtsTriggers();
       bulkWriteMode = true;
+      // At least one file changed — graph is stale.
+      invalidateGraphForWorkspace(workspace.id);
     }
 
     const allChunkRowsForEmbeddings: Array<{
@@ -1075,8 +1087,7 @@ export async function indexWorkspace(input: {
 // When FTS is building in background, code_query should wait for it.
 const _ftsBuildingWorkspaces = new Map<string, boolean>();
 
-export async function waitForFts(rootPath: string): Promise<void> {
-  const workspaceId = path.basename(rootPath);
+export async function waitForFts(workspaceId: string): Promise<void> {
   // Poll until background FTS build finishes (typically <3s)
   let waited = 0;
   while (_ftsBuildingWorkspaces.has(workspaceId) && waited < 10000) {
@@ -1087,65 +1098,216 @@ export async function waitForFts(rootPath: string): Promise<void> {
 
 // ── Lazy graph builder ──
 // Called on first graph_neighbors/code_context query.
-// Re-parses files with native batch, inserts graph nodes + edges + call edges.
+// Re-parses files with parseDocument (TS/JS/Markdown/config) and native
+// batch (Python/Go/Rust), inserts graph nodes + edges + call edges.
 // One-time cost (~5s for 2K files). Subsequent queries use cached graph.
 
-const _graphBuiltWorkspaces = new Set<string>();
+/** In-flight graph builds: workspaceId -> Promise. Concurrent callers share
+ *  the same promise. A resolved promise remaining in the map means "built". */
+const graphBuilds = new Map<string, Promise<void>>();
 
-export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
-  const workspaceId = path.basename(rootPath);
-  if (_graphBuiltWorkspaces.has(workspaceId)) return;
+/** Workspaces whose graph is stale and must be rebuilt on next access. */
+const _graphDirtyWorkspaces = new Set<string>();
+
+/** Mark a workspace's graph as stale so the next buildGraphForWorkspace call
+ *  rebuilds from current documents. Called by indexWorkspace after changes. */
+function invalidateGraphForWorkspace(workspaceId: string): void {
+  _graphDirtyWorkspaces.add(workspaceId);
+  // Remove any cached "built" promise so the next call rebuilds.
+  graphBuilds.delete(workspaceId);
+}
+
+export async function buildGraphForWorkspace(workspaceId: string, rootPath: string): Promise<void> {
+  // If already built and not dirty, return immediately.
+  const existing = graphBuilds.get(workspaceId);
+  if (existing && !_graphDirtyWorkspaces.has(workspaceId)) {
+    return existing;
+  }
+
+  // Start a new build (race-safe: concurrent callers share the same promise).
+  const buildPromise = _buildGraphInternal(workspaceId, rootPath).finally(() => {
+    // Keep the promise in the map as "built" marker; it is only removed
+    // by invalidateGraphForWorkspace or a build failure.
+  });
+
+  graphBuilds.set(workspaceId, buildPromise);
+  return buildPromise;
+}
+
+async function _buildGraphInternal(workspaceId: string, rootPath: string): Promise<void> {
+  _graphDirtyWorkspaces.delete(workspaceId);
+  const _graphStart = Date.now();
 
   const repo = createWorkspaceRepository(rootPath);
-  const nodeCount = repo.getNodeCount();
-  if (nodeCount > 0) {
-    _graphBuiltWorkspaces.add(workspaceId);
-    return;
-  }
+  const settings = await getBrainSettings();
+  const targetTokens = settings.chunking.targetTokens;
+  const overlapTokens = settings.chunking.overlapTokens;
 
-  // Load native module
-  let native: any = null;
-  try {
-    const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
-    native = require(nativePath);
-  } catch {
-    try {
-      native = require("@openez-graph/native");
-    } catch {
-      return;
-    }
-  }
+  // Clear stale graph artifacts before rebuilding.
+  repo.clearGraphArtifacts();
 
   // Get all documents from DB
   const documents = await repo.listDocuments();
-  const codeDocs = documents.filter((d) => d.kind === "code");
+  const graphDocs = documents.filter(
+    (d) => d.kind === "code" || d.kind === "markdown" || d.kind === "config",
+  );
+
+  if (graphDocs.length === 0) {
+    process.stderr.write(`[t] graph-build: 0 docs (${Date.now() - _graphStart}ms)\n`);
+    return;
+  }
 
   // Read file contents
   const fs = await import("node:fs/promises");
-  const batchItems: Array<{ language: string; content: string }> = [];
-  const docPaths: string[] = [];
-  for (const doc of codeDocs) {
+
+  // Split documents: native-parseable (python/go/rust) vs registry-parseable
+  const NATIVE_LANGS = new Set(["python", "go", "rust"]);
+  const nativeDocs: typeof graphDocs = [];
+  const registryDocs: typeof graphDocs = [];
+  for (const doc of graphDocs) {
+    const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
+    if (doc.kind === "code" && NATIVE_LANGS.has(lang)) {
+      nativeDocs.push(doc);
+    } else {
+      registryDocs.push(doc);
+    }
+  }
+
+  // ── Parse registry docs (TS/JS/Markdown/config) with parseDocument ──
+  type ParsedFile = {
+    filePath: string;
+    language: string | null;
+    kind: string;
+    parser: string;
+    definedSymbols: Array<{ name: string; symbolType: string; type: string; exported: boolean }>;
+    importPaths: string[];
+    calledIdentifiers: string[];
+    callExpressions: Array<{ callerName: string; calleeName: string }>;
+  };
+
+  const parsedFiles = new Map<string, ParsedFile>();
+
+  for (const doc of registryDocs) {
     try {
       const content = await fs.readFile(doc.absolutePath, "utf8");
-      const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
-      if (lang === "rust" || lang === "python" || lang === "go") {
-        batchItems.push({ language: lang, content });
-        docPaths.push(doc.path);
-      }
+      const parsed = await parseDocument({
+        relativePath: doc.path,
+        absolutePath: doc.absolutePath,
+        content,
+        targetTokens,
+        overlapTokens,
+      });
+      parsedFiles.set(doc.path, {
+        filePath: doc.path,
+        language: parsed.language,
+        kind: parsed.kind,
+        parser: parsed.parser,
+        definedSymbols: parsed.definedSymbols,
+        importPaths: parsed.importPaths,
+        calledIdentifiers: parsed.calledIdentifiers,
+        callExpressions: parsed.callExpressions,
+      });
     } catch {
       /* file may have been deleted */
     }
   }
 
-  if (batchItems.length === 0) {
-    _graphBuiltWorkspaces.add(workspaceId);
+  // ── Parse native docs (Python/Go/Rust) with native batch, fallback to parseDocument ──
+  if (nativeDocs.length > 0) {
+    let native: any = null;
+    try {
+      const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
+      native = require(nativePath);
+    } catch {
+      try {
+        native = require("@openez-graph/native");
+      } catch {
+        /* not installed — will fall back to parseDocument */
+      }
+    }
+
+    if (native?.parseCodeBatch) {
+      const batchItems: Array<{ language: string; content: string }> = [];
+      const batchDocPaths: string[] = [];
+      for (const doc of nativeDocs) {
+        try {
+          const content = await fs.readFile(doc.absolutePath, "utf8");
+          const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
+          batchItems.push({ language: lang, content });
+          batchDocPaths.push(doc.path);
+        } catch {
+          /* file may have been deleted */
+        }
+      }
+
+      if (batchItems.length > 0) {
+        const nativeResults = native.parseCodeBatch(batchItems);
+        for (let i = 0; i < nativeResults.length; i++) {
+          const nr = nativeResults[i];
+          if (!nr) continue;
+          const filePath = batchDocPaths[i];
+          const doc = nativeDocs.find((d) => d.path === filePath)!;
+          const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
+          parsedFiles.set(filePath, {
+            filePath,
+            language: lang,
+            kind: "code",
+            parser: "tree-sitter-native",
+            definedSymbols: nr.symbols.map((s: any) => ({
+              name: s.name,
+              symbolType: s.symbolType,
+              type: s.symbolType,
+              exported: s.exported,
+            })),
+            importPaths: nr.importPaths,
+            calledIdentifiers: nr.calledIdentifiers,
+            callExpressions: nr.callExpressions.slice(0, 20),
+          });
+        }
+      }
+    }
+
+    // Fallback: parse native docs that weren't handled by native batch
+    for (const doc of nativeDocs) {
+      if (parsedFiles.has(doc.path)) continue;
+      try {
+        const content = await fs.readFile(doc.absolutePath, "utf8");
+        const parsed = await parseDocument({
+          relativePath: doc.path,
+          absolutePath: doc.absolutePath,
+          content,
+          targetTokens,
+          overlapTokens,
+        });
+        parsedFiles.set(doc.path, {
+          filePath: doc.path,
+          language: parsed.language,
+          kind: parsed.kind,
+          parser: parsed.parser,
+          definedSymbols: parsed.definedSymbols,
+          importPaths: parsed.importPaths,
+          calledIdentifiers: parsed.calledIdentifiers,
+          callExpressions: parsed.callExpressions,
+        });
+      } catch {
+        /* file may have been deleted */
+      }
+    }
+  }
+
+  if (parsedFiles.size === 0) {
+    process.stderr.write(`[t] graph-build: 0 parsed (${Date.now() - _graphStart}ms)\n`);
     return;
   }
 
-  // Parse with native batch
-  const results = native.parseCodeBatch(batchItems);
+  // ── Build known files set for import resolution ──
+  const knownFiles = graphDocs.map((d) => ({
+    relativePath: d.path,
+    absolutePath: d.absolutePath,
+  }));
+  const resolver = createWorkspaceFileResolver(rootPath, knownFiles);
 
-  // Build graph nodes + edges
+  // ── Build nodes ──
   const allNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> =
     [];
   const allEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> =
@@ -1153,11 +1315,38 @@ export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
   const symbolNodeIdsByFileAndName = new Map<string, string>();
   const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
 
-  for (let i = 0; i < results.length; i++) {
-    const nr = results[i];
-    if (!nr) continue;
-    const filePath = docPaths[i];
-    const doc = codeDocs.find((d) => d.path === filePath)!;
+  // Map: filePath -> { fileNodeIdx, symNodeStart, symCount }
+  const _symMeta: Array<{
+    filePath: string;
+    fileNodeIdx: number;
+    symNodeStart: number;
+    symCount: number;
+  }> = [];
+
+  // Map: filePath -> doc.id (for chunk lookups)
+  const docIdByPath = new Map<string, string>();
+  for (const doc of graphDocs) {
+    docIdByPath.set(doc.path, doc.id);
+  }
+
+  for (const [filePath, parsed] of parsedFiles) {
+    const doc = graphDocs.find((d) => d.path === filePath);
+    if (!doc) continue;
+    const language = parsed.language ?? doc.language ?? "text";
+
+    // Load chunks for this document to map symbolName -> chunkId
+    const chunks = await repo.getChunksByDocument(doc.id);
+    const chunkIdBySymbolName = new Map<string, string>();
+    for (const chunk of chunks) {
+      try {
+        const meta = JSON.parse(chunk.metadata);
+        if (meta.symbolName) {
+          chunkIdBySymbolName.set(meta.symbolName, chunk.id);
+        }
+      } catch {
+        /* ignore malformed metadata */
+      }
+    }
 
     // File node
     const fileNodeIdx = allNodeInputs.length;
@@ -1165,44 +1354,45 @@ export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
       type: "file",
       label: filePath,
       refId: doc.id,
-      metadata: JSON.stringify({ path: filePath, language: doc.language }),
+      metadata: JSON.stringify({ path: filePath, language }),
     });
-    const fileNodeId = ""; // will be replaced after batch insert
 
     // Symbol nodes (cap 30)
-    const symbols = nr.symbols.slice(0, 30);
+    const symbols = parsed.definedSymbols.slice(0, 30);
     const symNodeStart = allNodeInputs.length;
     for (const sym of symbols) {
+      const refId = chunkIdBySymbolName.get(sym.name) ?? null;
       allNodeInputs.push({
         type: "symbol",
         label: sym.name,
-        refId: doc.id,
-        metadata: JSON.stringify({ symbolType: sym.symbolType, filePath, language: doc.language }),
+        refId: refId ?? undefined,
+        metadata: JSON.stringify({
+          symbolType: sym.symbolType,
+          filePath,
+          language,
+          parser: parsed.parser,
+        }),
       });
     }
 
     // Call expressions (cap 20)
-    for (const call of nr.callExpressions.slice(0, 20)) {
+    for (const call of parsed.callExpressions.slice(0, 20)) {
       pendingCallEdges.push({ callerName: call.callerName, calleeName: call.calleeName, filePath });
     }
 
-    // Store symbol positions for edge building (after we get IDs back)
-    (allNodeInputs as any)._symMeta = (allNodeInputs as any)._symMeta || [];
-    (allNodeInputs as any)._symMeta.push({
-      filePath,
-      fileNodeIdx,
-      symNodeStart,
-      symCount: symbols.length,
-    });
+    _symMeta.push({ filePath, fileNodeIdx, symNodeStart, symCount: symbols.length });
   }
 
   // Batch insert all nodes
   const nodeIds = await repo.insertGraphNodesBatch(allNodeInputs);
 
-  // Build edges
-  const symMeta = (allNodeInputs as any)._symMeta || [];
-  for (const meta of symMeta) {
+  // ── Build edges ──
+  // Maps for node lookup
+  const fileNodeIdsByPath = new Map<string, string>();
+  for (const meta of _symMeta) {
     const fileNodeId = nodeIds[meta.fileNodeIdx];
+    if (fileNodeId) fileNodeIdsByPath.set(meta.filePath, fileNodeId);
+
     for (let si = 0; si < meta.symCount; si++) {
       const symNodeId = nodeIds[meta.symNodeStart + si];
       symbolNodeIdsByFileAndName.set(
@@ -1215,12 +1405,30 @@ export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
     }
   }
 
-  // Resolve call edges
+  // Import edges
+  for (const [filePath, parsed] of parsedFiles) {
+    const importerNode = fileNodeIdsByPath.get(filePath);
+    if (!importerNode) continue;
+    const language = parsed.language ?? "text";
+    const seenTargets = new Set<string>();
+    for (const importPath of parsed.importPaths) {
+      const targetPath = resolver.resolveImport(filePath, importPath, language);
+      if (!targetPath) continue;
+      if (seenTargets.has(targetPath)) continue; // deduplicate
+      seenTargets.add(targetPath);
+      const targetNode = fileNodeIdsByPath.get(targetPath);
+      if (!targetNode || targetNode === importerNode) continue;
+      allEdges.push({ fromNodeId: importerNode, toNodeId: targetNode, type: "imports" });
+    }
+  }
+
+  // Call edges
   const globalSymbolNodes = await repo.loadAllSymbolNodes();
   const _callMeta = `{"heuristic":true,"confidence":"low"}`;
   for (const call of pendingCallEdges) {
     const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
     if (!callerNodeId) continue;
+    // Resolve call targets first in the caller file, then through the global symbol map
     const calleeNodeId =
       symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.calleeName}`) ??
       globalSymbolNodes.get(call.calleeName);
@@ -1233,10 +1441,12 @@ export async function buildGraphForWorkspace(rootPath: string): Promise<void> {
     });
   }
 
-  // Batch insert all edges
+  // Batch insert all edges in one transaction
   await repo.transaction(async () => {
     await repo.insertEdges(allEdges);
   });
 
-  _graphBuiltWorkspaces.add(workspaceId);
+  process.stderr.write(
+    `[t] graph-build: ${Date.now() - _graphStart}ms (${parsedFiles.size} files, ${allNodeInputs.length} nodes, ${allEdges.length} edges)\n`,
+  );
 }

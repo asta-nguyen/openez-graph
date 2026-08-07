@@ -29,9 +29,11 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "better-sqlite3": "^12.10.0",
     "concurrently": "^10.0.4",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",

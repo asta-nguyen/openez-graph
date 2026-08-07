@@ -66,7 +66,7 @@ function getWorkspaceDbRaw(rootPath: string) {
 
 export function getWorkspaceDb(rootPath: string) {
   const cached = dbCache.get(rootPath);
-  if (cached) return cached.db;
+  if (cached) return cached;
 
   const { sqlite, db } = getWorkspaceDbRaw(rootPath);
   initializeWorkspaceSchema(sqlite);

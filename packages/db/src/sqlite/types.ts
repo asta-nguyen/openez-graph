@@ -491,4 +491,9 @@ export interface WorkspaceRepository {
   /** Delete only rebuildable index artifacts (documents, chunks, embeddings, graph_nodes, graph_edges).
    *  Preserves memories, query_logs, index_runs, and graph_runs. */
   resetIndexArtifacts(): void;
+
+  /** Delete only graph nodes and edges (preserves documents, chunks, embeddings,
+   *  memories, query logs, and index runs). Used by the lazy graph builder to
+   *  invalidate stale graph state before rebuilding. */
+  clearGraphArtifacts(): void;
 }

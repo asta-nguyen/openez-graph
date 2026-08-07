@@ -50,6 +50,29 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
   const results: SymbolAst[] = [];
 
   for (const node of body) {
+    // Export wrappers don't have their own name — recurse into the inner
+    // declaration before the getNodeId check below would skip them.
+    if (node.type === "ExportNamedDeclaration") {
+      if (node.declaration) {
+        const inner = extractSymbols([node.declaration as OxcNode], source);
+        for (const s of inner) {
+          s.symbol.exported = true;
+          results.push(s);
+        }
+      }
+      continue;
+    }
+    if (node.type === "ExportDefaultDeclaration") {
+      if (node.declaration) {
+        const inner = extractSymbols([node.declaration as OxcNode], source);
+        for (const s of inner) {
+          s.symbol.exported = true;
+          results.push(s);
+        }
+      }
+      continue;
+    }
+
     const name = getNodeId(node);
     if (!name) continue;
 
@@ -97,25 +120,6 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
                 node: bodyNode,
               });
             }
-          }
-        }
-        continue;
-      case "ExportNamedDeclaration":
-        // Re-export — extract the inner declaration
-        if (node.declaration) {
-          const inner = extractSymbols([node.declaration as OxcNode], source);
-          for (const s of inner) {
-            s.symbol.exported = true;
-            results.push(s);
-          }
-        }
-        continue;
-      case "ExportDefaultDeclaration":
-        if (node.declaration) {
-          const inner = extractSymbols([node.declaration as OxcNode], source);
-          for (const s of inner) {
-            s.symbol.exported = true;
-            results.push(s);
           }
         }
         continue;

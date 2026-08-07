@@ -11,7 +11,11 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
 } from "../packages/db/src/sqlite";
-import { indexWorkspace } from "../packages/indexer/src/index-workspace";
+import {
+  indexWorkspace,
+  buildGraphForWorkspace,
+  waitForFts,
+} from "../packages/indexer/src/index-workspace";
 import { codeContext } from "../packages/core/src/graph";
 
 let registryRoot: string;
@@ -45,6 +49,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
     const repo = createWorkspaceRepository(workspaceRoot);
     const document = await repo.getDocumentByPath("large.ts");
     const chunks = await repo.getChunksByDocument(document!.id);
@@ -105,6 +110,7 @@ describe("indexWorkspace", () => {
     await indexWorkspace({ workspaceId: workspace.id });
     fs.writeFileSync(callerPath, "export function caller() { return helper() + 1; }\n");
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
 
     const context = await codeContext({
       workspaceId: workspace.id,
@@ -124,6 +130,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
     const contextBefore = await codeContext({
       workspaceId: workspace.id,
       symbolOrPath: "helper",
@@ -134,6 +141,7 @@ describe("indexWorkspace", () => {
     // Only change helper implementation, not its name/exports
     fs.writeFileSync(helperPath, "export function helper() { return 42; }\n");
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
 
     const contextAfter = await codeContext({
       workspaceId: workspace.id,
@@ -153,6 +161,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
     const repo = createWorkspaceRepository(workspaceRoot);
 
     const importEdgesBefore = await repo.queryRaw(
@@ -165,6 +174,7 @@ describe("indexWorkspace", () => {
     // Change only the target file content
     fs.writeFileSync(targetPath, "export function target() { return 2; }\n");
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
 
     const importEdgesAfter = await repo.queryRaw(
       `SELECT count(*) AS c FROM graph_edges e
@@ -184,6 +194,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
     const contextBefore = await codeContext({
       workspaceId: workspace.id,
       symbolOrPath: "helper",
@@ -194,6 +205,7 @@ describe("indexWorkspace", () => {
     // Remove the helper symbol entirely
     fs.writeFileSync(helperPath, "export function otherFunc() { return 1; }\n");
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
 
     const contextAfter = await codeContext({
       workspaceId: workspace.id,
@@ -213,12 +225,15 @@ describe("indexWorkspace", () => {
     const repo = createWorkspaceRepository(workspaceRoot);
 
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
     const edgesAfter1 = await repo.getEdgeCount();
 
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
     const edgesAfter2 = await repo.getEdgeCount();
 
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
     const edgesAfter3 = await repo.getEdgeCount();
 
     expect(edgesAfter1).toBe(edgesAfter2);
@@ -238,6 +253,7 @@ describe("indexWorkspace", () => {
     const repo = createWorkspaceRepository(workspaceRoot);
 
     await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
 
     const imports = await repo.queryRaw(
       `SELECT count(*) AS count
@@ -299,5 +315,210 @@ describe("indexWorkspace", () => {
 
     const docs = await repo.queryRaw("SELECT count(*) AS c FROM documents");
     expect(Number(docs[0].c)).toBe(1);
+  });
+
+  it("builds TS file and symbol nodes with valid chunk refIds", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "helper.ts"),
+      "export function helper() { return 1; }\n",
+    );
+    fs.writeFileSync(
+      path.join(workspaceRoot, "caller.ts"),
+      "import { helper } from './helper';\nexport function caller() { return helper(); }\n",
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    const repo = createWorkspaceRepository(workspaceRoot);
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+
+    // File nodes exist
+    const fileNodes = await repo.queryRaw(
+      `SELECT label, ref_id FROM graph_nodes WHERE type = 'file' ORDER BY label`,
+    );
+    expect(fileNodes.map((n: any) => n.label)).toContain("caller.ts");
+    expect(fileNodes.map((n: any) => n.label)).toContain("helper.ts");
+
+    // Symbol nodes exist with refId pointing to chunks (not documents)
+    const symbolNodes = await repo.queryRaw(
+      `SELECT label, ref_id FROM graph_nodes WHERE type = 'symbol' ORDER BY label`,
+    );
+    const helperNode = symbolNodes.find((n: any) => n.label === "helper");
+    const callerNode = symbolNodes.find((n: any) => n.label === "caller");
+    expect(helperNode).toBeTruthy();
+    expect(callerNode).toBeTruthy();
+
+    // refId should point to a chunk ID, not a document ID
+    if (helperNode && helperNode.ref_id) {
+      const chunkMatch = await repo.queryRaw(`SELECT count(*) AS c FROM chunks WHERE id = ?`, [
+        helperNode.ref_id,
+      ]);
+      expect(Number(chunkMatch[0].c)).toBe(1);
+    }
+
+    // codeContext returns callers with source snippets
+    const context = await codeContext({
+      workspaceId: workspace.id,
+      symbolOrPath: "helper",
+      hops: 1,
+    });
+    expect(context.callers).toContainEqual(expect.objectContaining({ symbol: "caller" }));
+    expect(context.symbol?.snippet).toContain("function helper");
+  });
+
+  it("creates imports edge from caller to target", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "target.ts"),
+      "export function target() { return 1; }\n",
+    );
+    fs.writeFileSync(
+      path.join(workspaceRoot, "caller.ts"),
+      "import { target } from './target';\nexport function caller() { return target(); }\n",
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    const repo = createWorkspaceRepository(workspaceRoot);
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+
+    const importEdges = await repo.queryRaw(
+      `SELECT count(*) AS count
+       FROM graph_edges edge
+       JOIN graph_nodes source ON source.id = edge.from_node_id
+       JOIN graph_nodes target ON target.id = edge.to_node_id
+       WHERE edge.type = 'imports' AND source.label = 'caller.ts' AND target.label = 'target.ts'`,
+    );
+    expect(importEdges).toEqual([{ count: 1 }]);
+  });
+
+  it("isolates same-basename workspaces in graph cache", async () => {
+    // Two workspaces whose root directories have the same basename
+    const parentA = fs.mkdtempSync(path.join(os.tmpdir(), "openez-basename-"));
+    const parentB = fs.mkdtempSync(path.join(os.tmpdir(), "openez-basename-"));
+    const rootA = path.join(parentA, "project");
+    const rootB = path.join(parentB, "project");
+    fs.mkdirSync(rootA, { recursive: true });
+    fs.mkdirSync(rootB, { recursive: true });
+
+    try {
+      fs.writeFileSync(path.join(rootA, "mod.ts"), "export function alpha() { return 1; }\n");
+      fs.writeFileSync(path.join(rootB, "mod.ts"), "export function beta() { return 1; }\n");
+
+      const wsA = await createRegistryRepository().ensureWorkspace({ rootPath: rootA });
+      const wsB = await createRegistryRepository().ensureWorkspace({ rootPath: rootB });
+
+      await indexWorkspace({ workspaceId: wsA.id });
+      await indexWorkspace({ workspaceId: wsB.id });
+      await buildGraphForWorkspace(wsA.id, wsA.rootPath);
+      await buildGraphForWorkspace(wsB.id, wsB.rootPath);
+
+      const repoA = createWorkspaceRepository(rootA);
+      const repoB = createWorkspaceRepository(rootB);
+
+      const symbolsA = await repoA.queryRaw(`SELECT label FROM graph_nodes WHERE type = 'symbol'`);
+      const symbolsB = await repoB.queryRaw(`SELECT label FROM graph_nodes WHERE type = 'symbol'`);
+
+      expect(symbolsA.map((s: any) => s.label)).toContain("alpha");
+      expect(symbolsA.map((s: any) => s.label)).not.toContain("beta");
+      expect(symbolsB.map((s: any) => s.label)).toContain("beta");
+      expect(symbolsB.map((s: any) => s.label)).not.toContain("alpha");
+    } finally {
+      closeAllWorkspaceDbs();
+      fs.rmSync(parentA, { recursive: true, force: true });
+      fs.rmSync(parentB, { recursive: true, force: true });
+    }
+  });
+
+  it("handles concurrent buildGraphForWorkspace calls without duplicates", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "a.ts"), "export function a() { return 1; }\n");
+    fs.writeFileSync(path.join(workspaceRoot, "b.ts"), "export function b() { return a(); }\n");
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    const repo = createWorkspaceRepository(workspaceRoot);
+
+    await indexWorkspace({ workspaceId: workspace.id });
+
+    // Two concurrent calls should share the same build promise
+    await Promise.all([
+      buildGraphForWorkspace(workspace.id, workspace.rootPath),
+      buildGraphForWorkspace(workspace.id, workspace.rootPath),
+    ]);
+
+    // One file node per path (no duplicates)
+    const fileNodes = await repo.queryRaw(
+      `SELECT label FROM graph_nodes WHERE type = 'file' ORDER BY label`,
+    );
+    expect(fileNodes.filter((n: any) => n.label === "a.ts")).toHaveLength(1);
+    expect(fileNodes.filter((n: any) => n.label === "b.ts")).toHaveLength(1);
+
+    // No duplicate symbol nodes
+    const symbolNodes = await repo.queryRaw(
+      `SELECT label, count(*) AS c FROM graph_nodes WHERE type = 'symbol' GROUP BY label`,
+    );
+    for (const sym of symbolNodes) {
+      expect(Number((sym as any).c)).toBe(1);
+    }
+
+    // Every edge references existing nodes
+    const edges = await repo.queryRaw(
+      `SELECT e.from_node_id, e.to_node_id
+       FROM graph_edges e
+       WHERE NOT EXISTS (SELECT 1 FROM graph_nodes n WHERE n.id = e.from_node_id)
+          OR NOT EXISTS (SELECT 1 FROM graph_nodes n WHERE n.id = e.to_node_id)`,
+    );
+    expect(edges).toHaveLength(0);
+  });
+
+  it("invalidates stale call edge after reindex", async () => {
+    const helperPath = path.join(workspaceRoot, "helper.ts");
+    fs.writeFileSync(helperPath, "export function helper() { return 1; }\n");
+    fs.writeFileSync(
+      path.join(workspaceRoot, "caller.ts"),
+      "export function caller() { return helper(); }\n",
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+
+    const contextBefore = await codeContext({
+      workspaceId: workspace.id,
+      symbolOrPath: "helper",
+      hops: 1,
+    });
+    expect(contextBefore.callers).toHaveLength(1);
+
+    // Change caller to call a different function
+    fs.writeFileSync(helperPath, "export function renamed() { return 1; }\n");
+    fs.writeFileSync(
+      path.join(workspaceRoot, "caller.ts"),
+      "import { renamed } from './helper';\nexport function caller() { return renamed(); }\n",
+    );
+    await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+
+    // Old call edge (caller -> helper) should be gone
+    const contextAfter = await codeContext({
+      workspaceId: workspace.id,
+      symbolOrPath: "helper",
+      hops: 1,
+    });
+    expect(contextAfter.symbol).toBeFalsy();
+
+    // New call edge (caller -> renamed) should be present
+    const contextRenamed = await codeContext({
+      workspaceId: workspace.id,
+      symbolOrPath: "renamed",
+      hops: 1,
+    });
+    expect(contextRenamed.callers).toContainEqual(expect.objectContaining({ symbol: "caller" }));
+  });
+
+  it("resolves waitForFts for a registered workspace ID", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "a.ts"), "export function a() { return 1; }\n");
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    // waitForFts should resolve immediately (FTS build already completed)
+    await expect(waitForFts(workspace.id)).resolves.toBeUndefined();
   });
 });

@@ -550,7 +550,7 @@ export function createMcpServer(options?: McpServerOptions) {
         const workspaceBudget = Math.max(100, Math.floor(responseBudget / workspaces.length));
         await catchUpReadWorkspaces(workspaces);
         // Wait for background FTS build if still in progress
-        await Promise.all(workspaces.map((w) => waitForFts(w.rootPath)));
+        await Promise.all(workspaces.map((w) => waitForFts(w.id)));
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspace,
@@ -654,7 +654,7 @@ export function createMcpServer(options?: McpServerOptions) {
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
         // Lazy graph build — one-time cost on first graph query
-        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.rootPath)));
+        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.id, w.rootPath)));
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
@@ -676,7 +676,7 @@ export function createMcpServer(options?: McpServerOptions) {
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
         // Lazy graph build — one-time cost on first graph query
-        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.rootPath)));
+        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.id, w.rootPath)));
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
