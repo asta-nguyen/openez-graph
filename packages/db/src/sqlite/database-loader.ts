@@ -68,12 +68,12 @@ function adaptBetterSqlite3(db: any): NativeDatabase {
   };
   // Add .pragma() shim — bun:sqlite doesn't have it natively.
   // Under better-sqlite3, certain pragmas cause "database is locked" errors
-  // in single-threaded test runs because they require exclusive locks or
-  // WAL→MEMORY journal transitions that conflict with open connections.
-  // Skip the ones that are pure performance optimizations for bulk indexing.
+  // in single-threaded test runs because they require exclusive locks that
+  // conflict with open connections. Skip the ones that are pure performance
+  // optimizations for bulk indexing. journal_mode=WAL must NOT be skipped —
+  // it is required for crash-recoverable indexing.
   (db as any).pragma = (cmd: string) => {
     if (/locking_mode\s*=\s*EXCLUSIVE/i.test(cmd)) return;
-    if (/journal_mode\s*=\s*MEMORY/i.test(cmd)) return;
     if (/mmap_size/i.test(cmd)) return;
     try {
       db.exec(`PRAGMA ${cmd}`);
