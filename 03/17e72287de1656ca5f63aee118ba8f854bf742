@@ -1,0 +1,22 @@
+package.json
+  s_fb4f32c665b8c6::t_632a700a10e6e2 25
+  s_fb4f32c665b8c6::t_fe33f9273f7f14 41
+pnpm-lock.yaml
+  s_fb4f32c665b8c6::t_76a13c03dc383f 6642,6779-6780,6788,6793,6800,6838,6888-6889,7028,7032-7033,7098,7227-7228,7309-7310,7337-7338,7400-7401,7458-7459,7470-7471,7987-7988,7996-7997,8016-8017,8049,8278,8308,8394,8552-8553,8706-8707,8714,8786-8787,8835,8844,8946
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0317e72287de1656ca5f63aee118ba8f854bf742",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
