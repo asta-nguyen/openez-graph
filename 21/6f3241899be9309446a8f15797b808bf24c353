@@ -1,0 +1,51 @@
+tests/retrieval-eval.test.ts
+  s_fb4f32c665b8c6::t_de1a5d034d23bb 1
+tests/parser-registry.test.ts
+  s_fb4f32c665b8c6::t_366c6b05d436e4 1
+tests/go-rust-indexer.test.ts
+  s_fb4f32c665b8c6::t_6454a062607df5 1
+tests/python-indexer.test.ts
+  s_fb4f32c665b8c6::t_e52215ab00e921 3
+tests/chunking.test.ts
+  s_fb4f32c665b8c6::t_b0b09004c40681 1
+tests/embed-benchmark.test.ts
+  s_fb4f32c665b8c6::t_689ac065d56627 1
+tests/e2e-search.test.ts
+  s_fb4f32c665b8c6::t_65d0cb247346a7 1
+tests/web-workspaces-endpoint.test.ts
+  s_fb4f32c665b8c6::t_0412d8dd67ca01 5
+tests/mcp-tools.test.ts
+  s_fb4f32c665b8c6::t_1481f7eef553b6 7
+tests/workspace-db.test.ts
+  s_fb4f32c665b8c6::t_288b37fc5bd9bf 1
+tests/config-indexer.test.ts
+  s_fb4f32c665b8c6::t_dc8b98d7369f6e 1
+tests/oxc-parser.test.ts
+  s_fb4f32c665b8c6::t_2144e7b4727e58 1
+tests/remove-workspace.test.ts
+  s_fb4f32c665b8c6::t_fa5faec41f6ccf 1
+tests/web-index-endpoint.test.ts
+  s_fb4f32c665b8c6::t_99033b058ee55a 5
+tests/registry.test.ts
+  s_fb4f32c665b8c6::t_814d8e7691c60e 1
+tests/tree-sitter-parser.test.ts
+  s_fb4f32c665b8c6::t_6b7bc09a3b40fa 1
+tests/vector-search.test.ts
+  s_fb4f32c665b8c6::t_48a14f3cb1c1d5 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "216f3241899be9309446a8f15797b808bf24c353",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
