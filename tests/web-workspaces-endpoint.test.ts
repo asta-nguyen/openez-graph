@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { createWebServer } from "../apps/web/src/server/index";
 import { closeRegistryDb as closeWebRegistryDb } from "../apps/web/src/server/sqlite";
