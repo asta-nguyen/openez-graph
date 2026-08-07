@@ -1,0 +1,22 @@
+tests/mcp-tools.test.ts
+  s_fb4f32c665b8c6::t_6fab5da3181319 71-74
+  s_fb4f32c665b8c6::t_314c0550778bd0 9
+apps/mcp/src/mcp-core.ts
+  s_fb4f32c665b8c6::t_aa56ce43cf88f7 808
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "cbb1fd2aa972a12adad22878bc28a9c9843403a4",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
