@@ -1,0 +1,39 @@
+tests/__mocks__/bun-sqlite.ts
+  s_fb4f32c665b8c6::t_68642c541f1422 1-29
+tests/parser-registry.test.ts
+  s_fb4f32c665b8c6::t_ae9d8b1fc3474e 142
+  s_fb4f32c665b8c6::t_53342d9d394c41 59,67
+  s_fb4f32c665b8c6::t_645cd4668501b4 19-23
+  s_fb4f32c665b8c6::t_a2db7ee23010ca 8
+vitest.config.ts
+  s_fb4f32c665b8c6::t_7adb24e442095c 1-20,29-30
+  s_fb4f32c665b8c6::t_9d2b5d192c3571 21-28
+tests/oxc-parser.test.ts
+  s_fb4f32c665b8c6::t_69faed72ba67a1 1-88
+packages/indexer/src/parsers/oxc-parser.ts
+  s_fb4f32c665b8c6::t_30df563feb25ad 415-417
+  s_fb4f32c665b8c6::t_0a1afb28551a02 36-50,66-74,85-97,106,108-109,115,117-118,128-137,141-175,178-180,182-186,189,194-196,198-262,265-271,334-345,404
+  s_fb4f32c665b8c6::t_1b81106fbb0b21 177,181,192-193,197
+  s_fb4f32c665b8c6::t_7e27d2861dbed3 263-264
+  s_fb4f32c665b8c6::t_a267d635bc702b 272-333
+  s_fb4f32c665b8c6::t_e370f6fe0e6ab9 176,187-188,190-191
+  s_fb4f32c665b8c6::t_32551e5485775f 408-409
+  s_fb4f32c665b8c6::t_c12bd41e662b42 411-414
+  s_fb4f32c665b8c6::t_038af4638de6b1 403,406-407,410,430-431
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "241b60093c2463e9885483415413903857459eb6",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
