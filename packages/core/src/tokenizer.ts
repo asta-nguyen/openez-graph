@@ -71,8 +71,11 @@ export function splitToTokenLimit(value: string, maxTokens: number, overlapToken
 
   const overlap = Math.min(Math.max(0, overlapTokens), maxTokens - 1);
 
+  // In fast mode, skip BPE encoding and use the same char-based approximation
+  // as countTokens. This keeps splitting and counting consistent even if the
+  // real tokenizer was already loaded by an earlier call (e.g. retrieval).
   loadTokenizer();
-  if (_encode && _decode) {
+  if (_encode && _decode && !_fastMode) {
     try {
       const tokens = _encode(value);
       if (tokens.length <= maxTokens) return [value];

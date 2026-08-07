@@ -2,21 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 
-const testEmbeddingProvider = {
-  provider: "ollama" as const,
-  model: "test-model",
-  embed: mock(async () => [[1, 0]]),
-};
-
-mock.module("../packages/core/src/embeddings", () => {
-  return {
-    getEmbeddingProvider: async () => testEmbeddingProvider,
-    embeddingStorageModel: (provider: { model: string }) => `${provider.model}:openez-code-v1`,
-  };
-});
-
+import * as embeddings from "../packages/core/src/embeddings";
 import { embeddingStorageModel } from "../packages/core/src/embeddings";
 import { codeQuery } from "../packages/core/src/retrieval";
 import {
@@ -25,6 +13,20 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
 } from "../packages/db/src/sqlite";
+
+const testEmbeddingProvider = {
+  provider: "ollama" as const,
+  model: "test-model",
+  embed: mock(async () => [[1, 0]]),
+};
+
+// Bun's mock.module is process-global and cannot be restored in bun 1.3.14
+// (neither mock.restore() nor re-mocking reverts the cached namespace). Use
+// spyOn instead so the spy can be reverted in afterAll, preventing the mock
+// from leaking into other test files that run in the same `bun test` process.
+const getEmbeddingProviderSpy = spyOn(embeddings, "getEmbeddingProvider").mockImplementation(
+  async () => testEmbeddingProvider,
+);
 
 let registryRoot: string;
 let workspaceRoot: string;
@@ -172,4 +174,10 @@ describe("codeQuery hybrid retrieval", () => {
     expect(result.sources.map((source) => source.path)).toEqual(["shared.ts"]);
     expect(result.answerContext).toContain("needle is in this chunk");
   });
+});
+
+afterAll(() => {
+  // Restore the real getEmbeddingProvider so the mock does not leak into
+  // other test files that run in the same `bun test` process.
+  getEmbeddingProviderSpy.mockRestore();
 });
