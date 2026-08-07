@@ -48,7 +48,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "better-sqlite3": "^12.10.0",
     "tree-sitter-go": "^0.25.0",
     "tree-sitter-python": "^0.25.0",
     "tree-sitter-rust": "^0.24.0",
@@ -63,7 +62,6 @@
     "@openez-graph/indexer": "workspace:*",
     "@openez-graph/mcp": "workspace:*",
     "@openez-graph/web": "workspace:*",
-    "@types/better-sqlite3": "^7.6.13",
     "chokidar": "^4.0.3",
     "commander": "^14.0.0",
     "hono": "^4.12.33",

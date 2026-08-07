@@ -26,7 +26,6 @@ export default defineConfig({
   define: { __OPENEZ_BUILD_ID__: JSON.stringify(getBuildId()) },
   // Native modules + wasm binaries must remain external — they resolve from node_modules at runtime.
   external: [
-    "better-sqlite3",
     "bun:sqlite",
     "@openez-graph/native",
     "web-tree-sitter",
