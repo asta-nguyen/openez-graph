@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import * as schema from "./schema";
 import { createNativeDatabase } from "./database-loader";
-import { restoreFtsTriggerDefinitions } from "./repository";
+import { restoreFtsTriggerDefinitions } from "./fts-repository";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
