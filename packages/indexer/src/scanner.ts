@@ -3,6 +3,9 @@ import fsAsync from "node:fs/promises";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 
+// @ts-expect-error — picomatch v4 ships no type declarations
+import picomatch from "picomatch";
+
 import type { FileToIndex } from "./types";
 import { codeExtensions, configExtensions, markdownExtensions } from "./languages";
 

@@ -473,11 +473,8 @@ async function parseInline(
       language: inferDocumentKind(t.relativePath).language!,
       content: t.content,
     }));
-    // Use parse_and_chunk_batch — does parse + chunk creation in Rust (rayon parallel)
-    const useChunkBatch = !!native.parseAndChunkBatch;
-    const nativeResults = useChunkBatch
-      ? native.parseAndChunkBatch(batchItems)
-      : native.parseCodeBatch(batchItems);
+    // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust
+    const nativeResults = native.parseCodeBatch(batchItems);
     process.stderr.write(
       `[t]   native-batch: ${Date.now() - _batchStart}ms (${batchTasks.length} files)\n`,
     );
@@ -486,36 +483,26 @@ async function parseInline(
       const nr = nativeResults[i];
       if (nr) {
         const lang = batchItems[i].language;
-        // Chunks come from Rust if using parseAndChunkBatch, otherwise build in JS
-        let chunks: any[];
-        if (useChunkBatch && nr.chunks) {
-          chunks = nr.chunks.map((c: any) => ({
-            content: c.content,
+        // Build line-based chunks from native parse results
+        const lines = task.content.split("\n");
+        const chunks: any[] = [];
+        for (let ci = 0; ci < lines.length; ci += 80) {
+          const slice = lines
+            .slice(ci, ci + 80)
+            .join("\n")
+            .trim();
+          if (!slice) continue;
+          chunks.push({
+            content: slice,
             tokenCount: 0,
             contentHash: "",
-            metadata: { kind: "code", fallback: true, startLine: c.startLine, endLine: c.endLine },
-          }));
-        } else {
-          const lines = task.content.split("\n");
-          chunks = [];
-          for (let ci = 0; ci < lines.length; ci += 80) {
-            const slice = lines
-              .slice(ci, ci + 80)
-              .join("\n")
-              .trim();
-            if (!slice) continue;
-            chunks.push({
-              content: slice,
-              tokenCount: 0,
-              contentHash: "",
-              metadata: {
-                kind: "code",
-                fallback: true,
-                startLine: ci + 1,
-                endLine: Math.min(ci + 80, lines.length),
-              },
-            });
-          }
+            metadata: {
+              kind: "code",
+              fallback: true,
+              startLine: ci + 1,
+              endLine: Math.min(ci + 80, lines.length),
+            },
+          });
         }
         results.set(task.id, {
           kind: "code",
