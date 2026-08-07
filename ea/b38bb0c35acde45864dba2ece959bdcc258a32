@@ -1,0 +1,38 @@
+packages/db/src/sqlite/embedding-repository.ts
+  s_fb4f32c665b8c6::t_c4d97693510ca7 27-36
+  s_fb4f32c665b8c6::t_365e6247c83699 1-26,37-58
+packages/db/src/sqlite/memory-repository.ts
+  s_fb4f32c665b8c6::t_be86b8a5f319dd 46-52
+  s_fb4f32c665b8c6::t_93b22d14615e55 1-3,5-21,23-45,53-71,73-78,80-110
+  s_fb4f32c665b8c6::t_c9b24f0f3daf01 22
+  s_fb4f32c665b8c6::t_6f37cf09695df1 4
+  s_fb4f32c665b8c6::t_7a1076728c18f8 79
+  s_fb4f32c665b8c6::t_c8d9fd483d7cf7 72
+packages/db/src/sqlite/repository.ts
+  s_fb4f32c665b8c6::t_9d0561f2818b2f 400-402,408-410
+  s_fb4f32c665b8c6::t_6a9dcfa9506076 8-9,11,19-21
+  s_fb4f32c665b8c6::t_00dc70d36c825b 22
+packages/db/src/sqlite/utils.ts
+  s_fb4f32c665b8c6::t_9a793c6739d469 1-64
+packages/db/src/sqlite/graph-repository.ts
+  s_fb4f32c665b8c6::t_8dc74dea68eedb 5
+packages/db/src/sqlite/fts-repository.ts
+  s_fb4f32c665b8c6::t_75263c6336a146 258-285
+  s_fb4f32c665b8c6::t_7b50a5ba2d2107 1-257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "eab38bb0c35acde45864dba2ece959bdcc258a32",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
