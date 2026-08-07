@@ -1,22 +1,20 @@
 import crypto from "node:crypto";
 
+import { createChunkOps, type ChunkStmts } from "./chunk-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 
 /**
- * Prepared statements used by the document/chunk operations.
+ * Prepared statements used by the document operations.
  *
  * These are prepared once in `createWorkspaceRepository()` and reused across
- * thousands of calls. Only the statements needed by this module are declared
- * here; the remaining statements stay in `repository.ts` and will be split out
- * by later tasks.
+ * thousands of calls. Chunk statements live in `ChunkStmts`
+ * (see `chunk-repository.ts`); the two interfaces are intentionally kept
+ * separate so each module only declares what it needs.
  */
 export interface DocumentStmts {
   docByPath: ReturnType<NativeDatabase["prepare"]>;
   docById: ReturnType<NativeDatabase["prepare"]>;
   insertDoc: ReturnType<NativeDatabase["prepare"]>;
-  chunksByDoc: ReturnType<NativeDatabase["prepare"]>;
-  insertChunk: ReturnType<NativeDatabase["prepare"]>;
-  deleteChunksByDoc: ReturnType<NativeDatabase["prepare"]>;
 }
 
 function mapDocumentRow(row: Record<string, unknown>) {
@@ -34,45 +32,31 @@ function mapDocumentRow(row: Record<string, unknown>) {
   };
 }
 
-function mapChunkRow(row: Record<string, unknown>) {
-  return {
-    id: String(row.id),
-    documentId: String(row.document_id),
-    chunkIndex: Number(row.chunk_index),
-    heading: row.heading ? String(row.heading) : null,
-    content: String(row.content),
-    tokenCount: Number(row.token_count),
-    contentHash: String(row.content_hash),
-    metadata: String(row.metadata ?? "{}"),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
-  };
-}
-
 /**
- * Factory for document and chunk operations extracted from
+ * Factory for document and parsed_documents operations extracted from
  * `createWorkspaceRepository()`.
  *
  * Behavior is identical to the original inline implementations — this is a
  * pure code-move. `streamNow` is shared via a mutable holder so that
  * `refreshStreamTimestamp()` (defined here) stays visible to the graph/edge/fts
- * stream methods that still live in `repository.ts`.
+ * stream methods that still live in `repository.ts`, and to the chunk stream
+ * methods that now live in `chunk-repository.ts`.
+ *
+ * Chunk operations are composed in from `createChunkOps()` so callers of
+ * `createDocumentOps()` continue to receive a single merged ops object.
  */
 export function createDocumentOps(
   native: NativeDatabase,
-  stmts: DocumentStmts,
+  stmts: DocumentStmts & ChunkStmts,
   streamNow: StreamTimestampHolder,
 ) {
+  const chunkOps = createChunkOps(native, stmts, streamNow);
+
   return {
     async getDocumentCount(): Promise<number> {
       const row = native.prepare("SELECT count(*) AS count FROM documents").get() as {
         count: number;
       };
-      return row?.count ?? 0;
-    },
-
-    async getChunkCount(): Promise<number> {
-      const row = native.prepare("SELECT count(*) AS count FROM chunks").get() as { count: number };
       return row?.count ?? 0;
     },
 
@@ -210,61 +194,7 @@ export function createDocumentOps(
       return rows.map(mapDocumentRow);
     },
 
-    // ── Chunk Operations ──
-
-    async getChunksByDocument(documentId: string) {
-      const rows = stmts.chunksByDoc.all(documentId) as Array<Record<string, unknown>>;
-      return rows.map(mapChunkRow);
-    },
-
-    async insertChunks(
-      inputs: Array<{
-        documentId: string;
-        chunkIndex: number;
-        heading?: string | null;
-        content: string;
-        tokenCount: number;
-        contentHash: string;
-        metadata: string;
-      }>,
-    ): Promise<string[]> {
-      if (inputs.length === 0) return [];
-      const now = new Date().toISOString();
-      const ids: string[] = inputs.map(() => crypto.randomUUID());
-      const BATCH = 2000;
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
-          params.push(
-            ids[i + j],
-            item.documentId,
-            item.chunkIndex,
-            item.heading ?? null,
-            item.content,
-            item.tokenCount,
-            item.contentHash,
-            item.metadata,
-            now,
-            now,
-          );
-        }
-        native
-          .prepare(
-            `INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
-          )
-          .run(...params);
-      }
-      return ids;
-    },
-
-    async deleteChunksByDocument(documentId: string) {
-      stmts.deleteChunksByDoc.run(documentId);
-    },
-
-    // ── Streaming inserts (document/chunk) ──
+    // ── Streaming inserts (document) ──
 
     streamDocument(input: {
       id: string;
@@ -291,75 +221,11 @@ export function createDocumentOps(
       );
     },
 
-    streamChunk(input: {
-      id: string;
-      documentId: string;
-      chunkIndex: number;
-      heading: string | null;
-      content: string;
-      tokenCount: number;
-      contentHash: string;
-      metadata: string;
-    }): void {
-      const now = streamNow.value;
-      stmts.insertChunk.run(
-        input.id,
-        input.documentId,
-        input.chunkIndex,
-        input.heading,
-        input.content,
-        input.tokenCount,
-        input.contentHash,
-        input.metadata,
-        now,
-        now,
-      );
-    },
-
-    streamChunksBatch(
-      inputs: Array<{
-        id: string;
-        documentId: string;
-        chunkIndex: number;
-        heading: string | null;
-        content: string;
-        tokenCount: number;
-        contentHash: string;
-        metadata: string;
-      }>,
-    ): void {
-      if (inputs.length === 0) return;
-      const BATCH = 100;
-      const now = streamNow.value;
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const c of batch) {
-          params.push(
-            c.id,
-            c.documentId,
-            c.chunkIndex,
-            c.heading,
-            c.content,
-            c.tokenCount,
-            c.contentHash,
-            c.metadata,
-            now,
-            now,
-          );
-        }
-        native
-          .prepare(
-            `INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
-          )
-          .run(...params);
-      }
-    },
-
     refreshStreamTimestamp(): void {
       streamNow.value = new Date().toISOString();
     },
+
+    // ── parsed_documents cache ──
 
     insertParsedDocument(input: {
       documentId: string;
@@ -406,5 +272,9 @@ export function createDocumentOps(
         .prepare(`DELETE FROM parsed_documents WHERE document_id IN (${placeholders})`)
         .run(...documentIds);
     },
+
+    // ── Chunk operations (composed from chunk-repository.ts) ──
+
+    ...chunkOps,
   };
 }
