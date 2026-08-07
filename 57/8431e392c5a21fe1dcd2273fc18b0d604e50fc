@@ -1,0 +1,23 @@
+docs/superpowers/specs/2026-08-08-rag-architecture-improvement-design.md
+  s_fb4f32c665b8c6::t_0b656e19ed3e59 77
+  s_fb4f32c665b8c6::t_c11581fc3b37f4 168
+  s_fb4f32c665b8c6::t_8ff2acc3bcc3e0 1-76,78-107,109-112,114-167,169-196
+  s_fb4f32c665b8c6::t_a3eb56e786f739 108,113
+  s_fb4f32c665b8c6::t_a0b523ef3fc0e0 197-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "578431e392c5a21fe1dcd2273fc18b0d604e50fc",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
