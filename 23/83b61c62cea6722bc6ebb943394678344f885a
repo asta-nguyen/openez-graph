@@ -1,0 +1,25 @@
+tests/index-workspace.test.ts
+  s_fb4f32c665b8c6::t_b28bd9f634960c 6
+  s_fb4f32c665b8c6::t_f32ed852e4fa97 279
+tests/hybrid-retrieval.test.ts
+  s_fb4f32c665b8c6::t_1c29d16505cc89 5,10,13-17
+docs/superpowers/plans/2026-08-08-migrate-to-bun-native.md
+  s_fb4f32c665b8c6::t_dd5e767bdc112f 1-665
+  s_fb4f32c665b8c6::t_730d18c1bafe89 666-693
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "2383b61c62cea6722bc6ebb943394678344f885a",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
