@@ -17,6 +17,7 @@ import {
   waitForFts,
 } from "../packages/indexer/src/index-workspace";
 import { codeContext } from "../packages/core/src/graph";
+import { countTokens, setFastTokenCount } from "../packages/core/src/tokenizer";
 
 let registryRoot: string;
 let workspaceRoot: string;
@@ -520,5 +521,36 @@ describe("indexWorkspace", () => {
     await indexWorkspace({ workspaceId: workspace.id });
     // waitForFts should resolve immediately (FTS build already completed)
     await expect(waitForFts(workspace.id)).resolves.toBeUndefined();
+  });
+
+  it("restores exact token counting after indexing (fast token reset)", async () => {
+    // Disable fast mode and record an exact BPE count for text whose count
+    // differs from the Math.ceil(length / 4) approximation.
+    setFastTokenCount(false);
+    const sample = "The tokenizer must leave fast mode after indexing.";
+    const exact = countTokens(sample);
+    expect(exact).not.toBe(Math.ceil(sample.length / 4));
+
+    fs.writeFileSync(path.join(workspaceRoot, "a.ts"), "export function a() { return 1; }\n");
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+
+    // After indexing, exact BPE counting must be restored — not the fast
+    // length/4 approximation used during indexing.
+    expect(countTokens(sample)).toBe(exact);
+  });
+
+  it("resets fast token flag even when indexing fails early (missing workspace ID)", async () => {
+    setFastTokenCount(false);
+    const sample = "The tokenizer must leave fast mode after indexing.";
+    const exact = countTokens(sample);
+    expect(exact).not.toBe(Math.ceil(sample.length / 4));
+
+    // No workspaceId and no rootPath — throws before runId is created.
+    await expect(indexWorkspace({})).rejects.toThrow();
+
+    // The finally block must have reset the flag despite the early error.
+    expect(countTokens(sample)).toBe(exact);
   });
 });
