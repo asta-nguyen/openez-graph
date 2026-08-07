@@ -30,7 +30,7 @@ export function createEmbeddingOps(native: NativeDatabase, stmts: EmbeddingStmts
         provider: string;
         model: string;
         dimensions: number;
-        embedding: string;
+        embedding: Uint8Array;
         inputHash?: string | null;
       }>,
     ) {

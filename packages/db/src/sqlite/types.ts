@@ -310,7 +310,7 @@ export interface WorkspaceRepository {
       provider: string;
       model: string;
       dimensions: number;
-      embedding: string;
+      embedding: Uint8Array;
       inputHash?: string | null;
     }>,
   ): Promise<void>;

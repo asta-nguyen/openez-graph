@@ -54,6 +54,13 @@ export function cosineSimilarity(left: number[], right: number[]): number {
 }
 
 function parseEmbedding(value: unknown): number[] {
+  if (value instanceof Uint8Array) {
+    return Array.from(new Float32Array(value.buffer, value.byteOffset, value.byteLength / 4));
+  }
+  if (value instanceof ArrayBuffer) {
+    return Array.from(new Float32Array(value));
+  }
+  // Fallback for old JSON data
   try {
     const parsed = JSON.parse(String(value));
     return Array.isArray(parsed) && parsed.every((item) => typeof item === "number") ? parsed : [];

@@ -20,6 +20,8 @@ const testEmbeddingProvider = {
   embed: mock(async () => [[1, 0]]),
 };
 
+const toBlob = (values: number[]): Uint8Array => new Uint8Array(new Float32Array(values).buffer);
+
 // Bun's mock.module is process-global and cannot be restored in bun 1.3.14
 // (neither mock.restore() nor re-mocking reverts the cached namespace). Use
 // spyOn instead so the spy can be reverted in afterAll, preventing the mock
@@ -103,7 +105,7 @@ describe("codeQuery hybrid retrieval", () => {
         provider: testEmbeddingProvider.provider,
         model: embeddingStorageModel(testEmbeddingProvider),
         dimensions: 2,
-        embedding: JSON.stringify([1, 0]),
+        embedding: toBlob([1, 0]),
       },
     ]);
 
@@ -160,7 +162,7 @@ describe("codeQuery hybrid retrieval", () => {
         provider: testEmbeddingProvider.provider,
         model: embeddingStorageModel(testEmbeddingProvider),
         dimensions: 2,
-        embedding: JSON.stringify([1, 0]),
+        embedding: toBlob([1, 0]),
       },
     ]);
 
