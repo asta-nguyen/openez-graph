@@ -1210,19 +1210,23 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     setOptimizedWriteMode(enabled: boolean): void {
       if (enabled) {
+        // ponytail: synchronous=OFF trades power-loss durability for bulk-index speed; restore NORMAL below.
+        // Keep WAL journal mode so a power loss during indexing stays recoverable.
+        native.pragma("journal_mode = WAL");
         native.pragma("synchronous = OFF");
         native.pragma("cache_size = -65536");
         native.pragma("temp_store = MEMORY");
         native.pragma("mmap_size = 536870912");
         native.pragma("locking_mode = EXCLUSIVE");
-        native.pragma("journal_mode = MEMORY");
       } else {
         // Switch back to WAL + NORMAL for query-safe access.
-        // Use PASSIVE checkpoint — doesn't block or fsync, lets OS flush async.
+        // Restore synchronous first, then release the exclusive lock, then
+        // re-assert WAL (migrates databases left in MEMORY by the old code),
+        // and checkpoint so the WAL doesn't grow unbounded.
+        native.pragma("synchronous = NORMAL");
+        native.pragma("locking_mode = NORMAL");
         native.pragma("journal_mode = WAL");
         native.exec("PRAGMA wal_checkpoint(PASSIVE)");
-        native.pragma("locking_mode = NORMAL");
-        native.pragma("synchronous = NORMAL");
         native.pragma("cache_size = -2000");
         native.pragma("temp_store = DEFAULT");
         native.pragma("mmap_size = 0");
