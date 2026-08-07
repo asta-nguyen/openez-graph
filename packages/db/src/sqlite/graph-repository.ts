@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
+import { safeParseJson } from "./utils";
 
 /**
  * Prepared statements used by the graph node/edge operations.
@@ -85,18 +86,6 @@ function mapNodeRow(row: Record<string, unknown>) {
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
-}
-
-function safeParseJson(
-  value: string | undefined,
-  fallback: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!value) return fallback;
-  try {
-    return JSON.parse(value) as Record<string, unknown>;
-  } catch {
-    return fallback;
-  }
 }
 
 /**

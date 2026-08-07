@@ -5,13 +5,20 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 
 import { createDocumentOps } from "./document-repository";
+import { createEmbeddingOps } from "./embedding-repository";
+import { createFtsOps } from "./fts-repository";
 import { createGraphOps } from "./graph-repository";
+import { createMemoryOps } from "./memory-repository";
 import { getRegistryDb, getRegistryNativeDb } from "./registry-db";
 import * as schema from "./schema";
 import { decryptValue, encryptValue, isSensitiveKey } from "./secure-storage";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 import type { RegistryRepository, RegistryWorkspace, WorkspaceRepository } from "./types";
 import { getWorkspaceDb, getWorkspaceNativeDb } from "./workspace-db";
+
+// Re-export restoreFtsTriggerDefinitions for backward compatibility (it now
+// lives in fts-repository.ts but existing callers import it from here).
+export { restoreFtsTriggerDefinitions } from "./fts-repository";
 
 function normalizeRootPath(rootPath: string): string {
   const resolved = path.resolve(rootPath.trim());
@@ -321,34 +328,6 @@ function getNativeWorkspaceDb(rootPath: string): {
   return { db, native };
 }
 
-export function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
-  native.exec(`
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
-    BEGIN
-      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-      SELECT new.id, documents.path, coalesce(new.heading, ''),
-        coalesce(documents.language, ''), substr(new.content, 1, 400)
-      FROM documents WHERE documents.id = new.document_id;
-    END;
-  `);
-  native.exec(`
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
-    BEGIN
-      DELETE FROM chunks_fts WHERE chunk_id = old.id;
-    END;
-  `);
-  native.exec(`
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
-    BEGIN
-      DELETE FROM chunks_fts WHERE chunk_id = old.id;
-      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-      SELECT new.id, documents.path, coalesce(new.heading, ''),
-        coalesce(documents.language, ''), substr(new.content, 1, 400)
-      FROM documents WHERE documents.id = new.document_id;
-    END;
-  `);
-}
-
 export function createWorkspaceRepository(rootPath: string): WorkspaceRepository {
   const { native } = getNativeWorkspaceDb(rootPath);
 
@@ -418,176 +397,17 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
   };
 
   const graphOps = createGraphOps(native, stmts, streamNow, { getMeta, setMeta });
+  const ftsOps = createFtsOps(native, stmts, { getMeta, setMeta });
+  const embeddingOps = createEmbeddingOps(native, stmts);
+  const memoryOps = createMemoryOps(native, stmts);
 
   return {
     rootPath,
     ...documentOps,
     ...graphOps,
-
-    // ── Chunk Operations (FTS bulk insert) ──
-
-    async bulkInsertFts(
-      inputs: Array<{
-        chunkId: string;
-        path: string;
-        heading: string | null;
-        language: string | null;
-        content: string;
-        metadata: string;
-      }>,
-    ): Promise<void> {
-      if (inputs.length === 0) return;
-      const BATCH = 2000;
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const item of batch) {
-          const searchText = item.content.slice(0, 400);
-          params.push(item.chunkId, item.path, item.heading ?? "", item.language ?? "", searchText);
-        }
-        native
-          .prepare(
-            `INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES ${placeholders}`,
-          )
-          .run(...params);
-      }
-    },
-
-    // ── Embedding Operations ──
-
-    async insertEmbeddings(inputs) {
-      const now = new Date().toISOString();
-      for (const input of inputs) {
-        stmts.insertEmbedding.run(
-          crypto.randomUUID(),
-          input.chunkId,
-          input.provider,
-          input.model,
-          input.dimensions,
-          input.embedding,
-          input.inputHash ?? null,
-          now,
-        );
-      }
-    },
-
-    async deleteEmbeddingsByChunkIds(chunkIds: string[]) {
-      if (chunkIds.length === 0) return;
-      const placeholders = chunkIds.map(() => "?").join(",");
-      native.prepare(`DELETE FROM embeddings WHERE chunk_id IN (${placeholders})`).run(...chunkIds);
-    },
-
-    // ── Full-Text Search ──
-
-    async fullTextSearch(query: string, limit: number) {
-      const ftsQuery = sanitizeFtsQuery(query);
-      if (!ftsQuery) return [];
-
-      this.ensureFtsReady();
-
-      const rows = native
-        .prepare(
-          `SELECT
-            chunks.id, chunks.content, chunks.heading, chunks.metadata,
-            documents.path,
-            bm25(chunks_fts, 0, 4, 3, 1.5, 2)
-              * CASE
-                  WHEN documents.path LIKE 'tests/%' OR documents.path LIKE '%/__tests__/%' OR documents.path GLOB '*.test.*' THEN 0.8
-                  WHEN documents.kind = 'code' THEN 1.35
-                  ELSE 1
-                END AS bm25_score
-           FROM chunks_fts
-           INNER JOIN chunks ON chunks.id = chunks_fts.chunk_id
-           INNER JOIN documents ON documents.id = chunks.document_id
-           WHERE chunks_fts MATCH ?
-           ORDER BY bm25_score ASC
-           LIMIT ?`,
-        )
-        .all(ftsQuery, limit * 5) as Array<Record<string, unknown>>;
-
-      const seenPaths = new Set<string>();
-      return rows
-        .map((row) => {
-          const bm25 = Number(row.bm25_score ?? 0);
-          // Convert bm25 (lower = better) to a 0-1 score (higher = better)
-          const score = -bm25;
-          return {
-            id: String(row.id),
-            path: String(row.path),
-            content: String(row.content),
-            score,
-            heading: row.heading ? String(row.heading) : null,
-            metadata: safeParseJson(String(row.metadata ?? ""), {}) as Record<string, unknown>,
-          };
-        })
-        .filter((row) => {
-          if (seenPaths.has(row.path)) return false;
-          seenPaths.add(row.path);
-          return true;
-        })
-        .slice(0, limit);
-    },
-
-    // ── Memory Operations ──
-
-    async insertMemory(input) {
-      const id = crypto.randomUUID();
-      const now = new Date().toISOString();
-      native
-        .prepare(
-          "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          id,
-          input.title,
-          input.content,
-          input.tags ?? "",
-          input.source,
-          input.supersedesId ?? null,
-          now,
-          now,
-        );
-      return id;
-    },
-
-    async getMemory(id) {
-      const row = native.prepare("SELECT * FROM memories WHERE id = ?").get(id) as
-        | Record<string, unknown>
-        | undefined;
-      return row ? mapMemoryRow(row) : null;
-    },
-
-    async searchMemories(query, limit) {
-      const normalized = query.trim().toLowerCase();
-      const terms = [...new Set(normalized.split(/\s+/).filter(Boolean))].slice(0, 8);
-      if (terms.length === 0) return [];
-
-      const clauses = terms.map(
-        () =>
-          "(lower(m.title) LIKE ? ESCAPE '\\' OR lower(m.content) LIKE ? ESCAPE '\\' OR lower(m.tags) LIKE ? ESCAPE '\\')",
-      );
-      const termParams = terms.flatMap((term) => {
-        const pattern = `%${escapeLikePattern(term)}%`;
-        return [pattern, pattern, pattern];
-      });
-      const phrasePattern = `%${escapeLikePattern(normalized)}%`;
-      const rows = native
-        .prepare(
-          `SELECT m.*
-         FROM memories m
-         WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
-           AND ${clauses.join(" AND ")}
-         ORDER BY CASE
-           WHEN lower(m.title) = ? THEN 0
-           WHEN lower(m.title) LIKE ? ESCAPE '\\' THEN 1
-           ELSE 2
-         END, m.updated_at DESC
-         LIMIT ?`,
-        )
-        .all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
-      return rows.map(mapMemoryRow);
-    },
+    ...ftsOps,
+    ...embeddingOps,
+    ...memoryOps,
 
     // ── Index Run Operations ──
 
@@ -711,79 +531,6 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       native.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     },
 
-    dropFtsTriggers(): void {
-      native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
-      native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
-      native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
-    },
-
-    dropNonUniqueIndexes(): void {
-      native.exec("DROP INDEX IF EXISTS idx_chunks_document_id");
-      native.exec("DROP INDEX IF EXISTS idx_chunks_content_hash");
-      native.exec("DROP INDEX IF EXISTS idx_graph_nodes_type");
-      native.exec("DROP INDEX IF EXISTS idx_graph_nodes_label");
-      native.exec("DROP INDEX IF EXISTS idx_graph_edges_from");
-      native.exec("DROP INDEX IF EXISTS idx_graph_edges_to");
-      native.exec("DROP INDEX IF EXISTS idx_graph_edges_type");
-      native.exec("DROP INDEX IF EXISTS idx_embeddings_chunk_id");
-    },
-
-    restoreNonUniqueIndexes(): void {
-      native.exec("CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)");
-      native.exec("CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash)");
-      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type)");
-      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label)");
-      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id)");
-      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id)");
-      native.exec("CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type)");
-      native.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
-    },
-
-    insertFtsBatch(
-      rows: Array<{
-        chunkId: string;
-        path: string;
-        heading: string;
-        language: string;
-        searchText: string;
-        content: string;
-      }>,
-    ): void {
-      if (rows.length === 0) return;
-      const BATCH = 500;
-      for (let i = 0; i < rows.length; i += BATCH) {
-        const batch = rows.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const r of batch) {
-          params.push(r.chunkId, r.path, r.heading, r.language, r.searchText);
-        }
-        native
-          .prepare(
-            `INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES ${placeholders}`,
-          )
-          .run(...params);
-      }
-    },
-
-    streamFtsRow(input: {
-      chunkId: string;
-      path: string;
-      heading: string;
-      language: string;
-      searchText: string;
-      content: string;
-    }): void {
-      stmts.insertFtsRow.run(
-        input.chunkId,
-        input.path,
-        input.heading,
-        input.language,
-        input.searchText,
-        input.content,
-      );
-    },
-
     setMeta(key: string, value: string): void {
       native
         .prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)")
@@ -796,145 +543,5 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         | undefined;
       return row?.value ?? null;
     },
-
-    ensureFtsReady(): void {
-      if (this.getMeta("fts_backfill_pending") !== "1") return;
-      native.exec("BEGIN IMMEDIATE");
-      try {
-        if (this.getMeta("fts_backfill_pending") !== "1") {
-          native.exec("COMMIT");
-          return;
-        }
-        // Clean up orphaned FTS rows
-        native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
-
-        // Backfill missing FTS entries via SQL (content is uncompressed TEXT)
-        native.exec(`
-          INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-          SELECT c.id, d.path, coalesce(c.heading, ''),
-            coalesce(d.language, ''), substr(c.content, 1, 400)
-          FROM chunks c
-          INNER JOIN documents d ON d.id = c.document_id
-          LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-          WHERE f.chunk_id IS NULL;
-        `);
-
-        restoreFtsTriggerDefinitions(native);
-        this.setMeta("fts_backfill_pending", "0");
-        native.exec("COMMIT");
-      } catch (error) {
-        try {
-          native.exec("ROLLBACK");
-        } catch {}
-        throw error;
-      }
-    },
-
-    restoreFtsTriggers(): void {
-      // Remove orphaned FTS entries
-      native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
-
-      // Backfill missing FTS entries via SQL (content is uncompressed TEXT)
-      native.exec(`
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-        SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''), substr(c.content, 1, 400)
-        FROM chunks c
-        INNER JOIN documents d ON d.id = c.document_id
-        LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-        WHERE f.chunk_id IS NULL;
-      `);
-
-      restoreFtsTriggerDefinitions(native);
-    },
-
-    restoreFtsTriggersOnly(): void {
-      restoreFtsTriggerDefinitions(native);
-    },
-
-    // ── Reset ──
-
-    resetIndexArtifacts(): void {
-      native.exec("DELETE FROM graph_edges");
-      native.exec("DELETE FROM graph_nodes");
-      native.exec("DELETE FROM embeddings");
-      native.exec("DELETE FROM chunks");
-      native.exec("DELETE FROM documents");
-    },
   };
-}
-
-function mapMemoryRow(row: Record<string, unknown>) {
-  return {
-    id: String(row.id),
-    title: String(row.title),
-    content: String(row.content),
-    tags: String(row.tags ?? ""),
-    source: String(row.source),
-    supersedesId: row.supersedes_id ? String(row.supersedes_id) : null,
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
-  };
-}
-
-function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, "\\$&");
-}
-
-function safeParseJson(
-  value: string | undefined,
-  fallback: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!value) return fallback;
-  try {
-    return JSON.parse(value) as Record<string, unknown>;
-  } catch {
-    return fallback;
-  }
-}
-
-/**
- * Sanitize a user query for FTS5 MATCH.
- * Splits into terms, strips FTS5 special characters, and joins with OR
- * so multi-word queries match any term (broader recall for code search).
- * Falls back to prefix matching for partial words.
- */
-function sanitizeFtsQuery(query: string): string {
-  const stopwords = new Set([
-    "a",
-    "an",
-    "are",
-    "does",
-    "extracted",
-    "how",
-    "implement",
-    "implementation",
-    "implemented",
-    "in",
-    "is",
-    "of",
-    "the",
-    "to",
-    "what",
-    "where",
-    "work",
-  ]);
-  const codeVerbs: Record<string, string> = {
-    created: "create",
-    generated: "generate",
-    indexing: "index",
-    selected: "select",
-    stored: "store",
-    written: "write",
-  };
-  const terms = (query.match(/[\p{L}\p{N}$]+/gu) ?? []).filter(
-    (t) => t.length > 1 && !stopwords.has(t.toLowerCase()),
-  );
-
-  if (terms.length === 0) return "";
-
-  // Use prefix matching (*) for each term, joined with OR
-  return [...new Set(terms.map((term) => codeVerbs[term.toLowerCase()] ?? term))]
-    .map((term) => `"${term}"*`)
-    .join(" OR ");
 }
