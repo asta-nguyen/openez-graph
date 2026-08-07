@@ -360,5 +360,51 @@ export function createDocumentOps(
     refreshStreamTimestamp(): void {
       streamNow.value = new Date().toISOString();
     },
+
+    insertParsedDocument(input: {
+      documentId: string;
+      contentHash: string;
+      symbols: string;
+      imports: string;
+      calls: string;
+    }): void {
+      const now = Date.now();
+      native
+        .prepare(
+          `INSERT OR REPLACE INTO parsed_documents (document_id, content_hash, symbols, imports, calls, parsed_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(input.documentId, input.contentHash, input.symbols, input.imports, input.calls, now);
+    },
+
+    getParsedDocument(documentId: string): {
+      documentId: string;
+      contentHash: string;
+      symbols: string | null;
+      imports: string | null;
+      calls: string | null;
+      parsedAt: number;
+    } | null {
+      const row = native
+        .prepare("SELECT * FROM parsed_documents WHERE document_id = ?")
+        .get(documentId) as any;
+      if (!row) return null;
+      return {
+        documentId: String(row.document_id),
+        contentHash: String(row.content_hash),
+        symbols: row.symbols ? String(row.symbols) : null,
+        imports: row.imports ? String(row.imports) : null,
+        calls: row.calls ? String(row.calls) : null,
+        parsedAt: Number(row.parsed_at),
+      };
+    },
+
+    deleteParsedDocumentsByDocumentIds(documentIds: string[]): void {
+      if (documentIds.length === 0) return;
+      const placeholders = documentIds.map(() => "?").join(",");
+      native
+        .prepare(`DELETE FROM parsed_documents WHERE document_id IN (${placeholders})`)
+        .run(...documentIds);
+    },
   };
 }

@@ -221,6 +221,25 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     migrateEmbeddingDedup(sqlite);
     migrateEmbeddingToBlob(sqlite);
 
+    const hasParsedDocs =
+      (
+        sqlite
+          .prepare(
+            "SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='parsed_documents'",
+          )
+          .get() as { c: number }
+      ).c > 0;
+    if (!hasParsedDocs) {
+      sqlite.exec(`CREATE TABLE IF NOT EXISTS parsed_documents (
+        document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+        content_hash TEXT NOT NULL,
+        symbols TEXT,
+        imports TEXT,
+        calls TEXT,
+        parsed_at INTEGER NOT NULL
+      )`);
+    }
+
     // Ensure FTS triggers exist (may be missing on DBs created before triggers
     // were added, or on fresh DBs that only ran getFullWorkspaceDdl).
     restoreFtsTriggerDefinitions(sqlite);
@@ -466,6 +485,14 @@ function getWorkspaceTableDefinitions(): string[] {
     `CREATE TABLE IF NOT EXISTS index_meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS parsed_documents (
+      document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+      content_hash TEXT NOT NULL,
+      symbols TEXT,
+      imports TEXT,
+      calls TEXT,
+      parsed_at INTEGER NOT NULL
     )`,
   ];
 }
