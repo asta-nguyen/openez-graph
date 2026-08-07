@@ -3,10 +3,11 @@ import type { NativeDatabase } from "./shared-types";
 /**
  * Prepared statements used by the graph node/edge operations.
  *
- * These are prepared once in `createWorkspaceRepository()` and reused across
- * thousands of calls. Only the statements needed by this module are declared
- * here; the remaining statements stay in `repository.ts` and will be split out
- * by later tasks.
+ * These are prepared once in `createWorkspaceRepository()` (the facade in
+ * `workspace-repository.ts`) and reused across thousands of calls. Only the
+ * statements needed by this module are declared here; the remaining
+ * statements are declared in the other split repository modules
+ * (`document-repository.ts`, `fts-repository.ts`, `embedding-repository.ts`).
  */
 export interface GraphStmts {
   nodeByTypeLabel: ReturnType<NativeDatabase["prepare"]>;
@@ -22,8 +23,8 @@ export interface GraphStmts {
  * Dependencies that `ensureGraphBuilt` needs from the parent repository.
  *
  * `ensureGraphBuilt` reads/writes the `index_meta` table via `getMeta`/`setMeta`
- * (which still live in `repository.ts`). Passing them in keeps the graph module
- * decoupled from the meta/lifecycle operations that will be extracted later.
+ * (which are defined in the `workspace-repository.ts` facade). Passing them in
+ * keeps the graph module decoupled from the meta/lifecycle operations.
  */
 export interface GraphOpsDeps {
   getMeta: (key: string) => string | null;

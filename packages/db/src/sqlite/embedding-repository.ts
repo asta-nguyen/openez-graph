@@ -6,9 +6,11 @@ import type { NativeDatabase } from "./shared-types";
 /**
  * Prepared statements used by the embedding operations.
  *
- * These are prepared once in `createWorkspaceRepository()` and reused across
- * thousands of calls. Only the statements needed by this module are declared
- * here.
+ * These are prepared once in `createWorkspaceRepository()` (the facade in
+ * `workspace-repository.ts`) and reused across thousands of calls. Only the
+ * statements needed by this module are declared here; the remaining
+ * statements are declared in the other split repository modules
+ * (`document-repository.ts`, `graph-ops-shared.ts`, `fts-repository.ts`).
  */
 export interface EmbeddingStmts {
   insertEmbedding: ReturnType<NativeDatabase["prepare"]>;
@@ -57,7 +59,7 @@ export function createEmbeddingOps(native: NativeDatabase, stmts: EmbeddingStmts
           try {
             native
               .prepare("INSERT OR REPLACE INTO embeddings_vec (chunk_id, embedding) VALUES (?, ?)")
-              .run(Number(input.chunkId), input.embedding);
+              .run(input.chunkId, input.embedding);
           } catch {
             // Vec table might not exist or dimension mismatch — skip
           }
@@ -73,11 +75,10 @@ export function createEmbeddingOps(native: NativeDatabase, stmts: EmbeddingStmts
       // Keep the sqlite-vec virtual table in sync on delete.
       if (hasVecExtension()) {
         try {
-          const numIds = chunkIds.map((id) => Number(id));
-          const numPlaceholders = numIds.map(() => "?").join(",");
+          const vecPlaceholders = chunkIds.map(() => "?").join(",");
           native
-            .prepare(`DELETE FROM embeddings_vec WHERE chunk_id IN (${numPlaceholders})`)
-            .run(...numIds);
+            .prepare(`DELETE FROM embeddings_vec WHERE chunk_id IN (${vecPlaceholders})`)
+            .run(...chunkIds);
         } catch {
           // Vec table might not exist — skip
         }

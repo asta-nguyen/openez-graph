@@ -23,8 +23,9 @@ export { createGraphTraversalOps } from "./graph-traversal-ops";
  * visible to the graph/edge stream methods in the sub-modules.
  *
  * `ensureGraphBuilt` depends on `getMeta`/`setMeta` from the parent
- * repository; those are passed in via `deps` to avoid a circular dependency
- * on the meta/lifecycle module that will be extracted in a later task.
+ * repository (defined in the `workspace-repository.ts` facade); those are
+ * passed in via `deps` to avoid a circular dependency on the
+ * meta/lifecycle module.
  */
 export function createGraphOps(
   native: NativeDatabase,

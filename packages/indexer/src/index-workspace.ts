@@ -45,6 +45,27 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
   ".py",
 ] as const;
 
+// Parser version tags stored alongside cached parse results in
+// `parsed_documents`. Bump these when parser logic changes so stale cache
+// entries are invalidated on the next index/graph build.
+const PARSER_VERSION_TS_MORPH = "ts-morph-v1";
+const PARSER_VERSION_NATIVE = "native-v1";
+const PARSER_VERSION_FALLBACK = "fallback-v1";
+
+/**
+ * Map a parser name (returned by `parseDocument`/`parseInline`) to the
+ * version tag stored in `parsed_documents.parser_version`. Native
+ * tree-sitter results use `native-v1`, the fallback parser uses
+ * `fallback-v1`, and every other parser (oxc, tree-sitter, markdown,
+ * config, regex) is grouped under `ts-morph-v1` since they share the same
+ * chunking/call-extraction contract.
+ */
+function parserVersionFor(parserName: string): string {
+  if (parserName === "tree-sitter-native") return PARSER_VERSION_NATIVE;
+  if (parserName === "fallback") return PARSER_VERSION_FALLBACK;
+  return PARSER_VERSION_TS_MORPH;
+}
+
 function normalizeRelativePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
@@ -965,6 +986,8 @@ export async function indexWorkspace(input: {
             symbols: JSON.stringify(indexed.definedSymbols ?? []),
             imports: JSON.stringify(indexed.importPaths ?? []),
             calls: JSON.stringify(indexed.callExpressions ?? []),
+            calledIdentifiers: JSON.stringify(indexed.calledIdentifiers ?? []),
+            parserVersion: parserVersionFor(indexed.parser),
           });
         }
 
@@ -1209,9 +1232,14 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
   const parsedFiles = new Map<string, ParsedFile>();
 
   for (const doc of registryDocs) {
-    // Try cache first — skip re-parsing if content_hash matches.
+    // Try cache first — skip re-parsing if content_hash matches and the
+    // parser version is current (cache invalidation on parser logic change).
     const cached = repo.getParsedDocument(doc.id);
-    if (cached && cached.contentHash === doc.contentHash) {
+    if (
+      cached &&
+      cached.contentHash === doc.contentHash &&
+      cached.parserVersion === PARSER_VERSION_TS_MORPH
+    ) {
       parsedFiles.set(doc.path, {
         filePath: doc.path,
         language: doc.language,
@@ -1219,7 +1247,7 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
         parser: "cached",
         definedSymbols: cached.symbols ? JSON.parse(cached.symbols) : [],
         importPaths: cached.imports ? JSON.parse(cached.imports) : [],
-        calledIdentifiers: [],
+        calledIdentifiers: cached.calledIdentifiers ? JSON.parse(cached.calledIdentifiers) : [],
         callExpressions: cached.calls ? JSON.parse(cached.calls) : [],
       });
       continue;
@@ -1251,6 +1279,8 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
         symbols: JSON.stringify(parsed.definedSymbols ?? []),
         imports: JSON.stringify(parsed.importPaths ?? []),
         calls: JSON.stringify(parsed.callExpressions ?? []),
+        calledIdentifiers: JSON.stringify(parsed.calledIdentifiers ?? []),
+        parserVersion: parserVersionFor(parsed.parser),
       });
     } catch {
       /* file may have been deleted */
@@ -1263,7 +1293,15 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
     const nativeToParse: typeof nativeDocs = [];
     for (const doc of nativeDocs) {
       const cached = repo.getParsedDocument(doc.id);
-      if (cached && cached.contentHash === doc.contentHash) {
+      // Cache hit requires matching content_hash AND a current parser
+      // version. Native docs may have been cached by the fallback parser
+      // (fallback-v1) — those are re-parsed by the native batch when the
+      // native extension is available, so only accept native-v1 here.
+      if (
+        cached &&
+        cached.contentHash === doc.contentHash &&
+        cached.parserVersion === PARSER_VERSION_NATIVE
+      ) {
         parsedFiles.set(doc.path, {
           filePath: doc.path,
           language: doc.language,
@@ -1271,7 +1309,7 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
           parser: "cached",
           definedSymbols: cached.symbols ? JSON.parse(cached.symbols) : [],
           importPaths: cached.imports ? JSON.parse(cached.imports) : [],
-          calledIdentifiers: [],
+          calledIdentifiers: cached.calledIdentifiers ? JSON.parse(cached.calledIdentifiers) : [],
           callExpressions: cached.calls ? JSON.parse(cached.calls) : [],
         });
       } else {
@@ -1339,6 +1377,8 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
             symbols: JSON.stringify(definedSymbols),
             imports: JSON.stringify(nr.importPaths ?? []),
             calls: JSON.stringify(callExpressions),
+            calledIdentifiers: JSON.stringify(nr.calledIdentifiers ?? []),
+            parserVersion: PARSER_VERSION_NATIVE,
           });
         }
       }
@@ -1373,6 +1413,8 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
           symbols: JSON.stringify(parsed.definedSymbols ?? []),
           imports: JSON.stringify(parsed.importPaths ?? []),
           calls: JSON.stringify(parsed.callExpressions ?? []),
+          calledIdentifiers: JSON.stringify(parsed.calledIdentifiers ?? []),
+          parserVersion: parserVersionFor(parsed.parser),
         });
       } catch {
         /* file may have been deleted */
