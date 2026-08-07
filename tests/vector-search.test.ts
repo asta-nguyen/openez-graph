@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import { embeddingStorageModel, formatEmbeddingInput } from "../packages/core/src/embeddings";
 import { cosineSimilarity, rankStoredEmbeddings } from "../packages/core/src/retrieval";

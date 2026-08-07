@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { autoIndexAndSync, createMcpServer } from "../apps/mcp/src/mcp-core";
 import { countTokens } from "../packages/core/src/tokenizer";

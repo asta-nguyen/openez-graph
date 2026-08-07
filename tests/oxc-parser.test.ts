@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { OxcParser } from "../packages/indexer/src/parsers/oxc-parser";
 

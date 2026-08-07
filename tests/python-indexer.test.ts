@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createWorkspaceFileResolver } from "../packages/indexer/src/index-workspace";
 import { parsePython } from "../packages/indexer/src/languages";

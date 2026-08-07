@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { indexMarkdown } from "../packages/indexer/src/markdown";
 import { countTokens, splitToTokenLimit } from "../packages/core/src/tokenizer";
