@@ -1,0 +1,24 @@
+packages/core/src/tokenizer.ts
+  s_fb4f32c665b8c6::t_d80d747df07c9c 74-76,78
+tests/hybrid-retrieval.test.ts
+  s_fb4f32c665b8c6::t_34cc7c1012f6d0 178,183
+  s_fb4f32c665b8c6::t_d6ba9bb34ead4d 5,7,17-29
+  s_fb4f32c665b8c6::t_aa3821211ec064 179-182
+  s_fb4f32c665b8c6::t_6691ef092436ed 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c4eae96ef2382a4a8ec1b618f9def6eccf1ddd17",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
