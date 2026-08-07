@@ -219,6 +219,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     migrateQueryLogColumns(sqlite);
     migrateEmbeddingColumns(sqlite);
     migrateEmbeddingDedup(sqlite);
+    migrateEmbeddingToBlob(sqlite);
 
     // Ensure FTS triggers exist (may be missing on DBs created before triggers
     // were added, or on fresh DBs that only ran getFullWorkspaceDdl).
@@ -230,6 +231,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
   migrateQueryLogColumns(sqlite);
   migrateEmbeddingColumns(sqlite);
   migrateEmbeddingDedup(sqlite);
+  migrateEmbeddingToBlob(sqlite);
 
   // Create FTS triggers — getFullWorkspaceDdl creates the chunks_fts table but
   // not the triggers that auto-populate it on INSERT/DELETE/UPDATE.
@@ -304,6 +306,37 @@ function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) 
   })();
 }
 
+function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const info = sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{
+    name: string;
+    type: string;
+  }>;
+  const embeddingCol = info.find((c) => c.name === "embedding");
+  if (embeddingCol && embeddingCol.type.toUpperCase() === "TEXT") {
+    // Drop and recreate — full reindex required
+    sqlite.exec("DELETE FROM embeddings");
+    sqlite.exec("DROP TABLE embeddings");
+    sqlite.exec(`CREATE TABLE IF NOT EXISTS embeddings (
+      id TEXT PRIMARY KEY,
+      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      dimensions INTEGER NOT NULL,
+      embedding BLOB NOT NULL,
+      input_hash TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    // Recreate indexes
+    sqlite.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
+    sqlite.exec(
+      "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
+    );
+    sqlite.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
+    );
+  }
+}
+
 function getWorkspaceTableDefinitions(): string[] {
   return [
     `CREATE TABLE IF NOT EXISTS documents (
@@ -336,7 +369,7 @@ function getWorkspaceTableDefinitions(): string[] {
       provider TEXT NOT NULL,
       model TEXT NOT NULL,
       dimensions INTEGER NOT NULL,
-      embedding TEXT NOT NULL,
+      embedding BLOB NOT NULL,
       input_hash TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,

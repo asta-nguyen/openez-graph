@@ -301,7 +301,7 @@ async function writeEmbeddingsToRepo(
   // has its own embedding row and appears in vector search results.
   let reusedWritten = 0;
   if (skipped.length > 0) {
-    const hashToVector = new Map<string, { embedding: string; dimensions: number }>();
+    const hashToVector = new Map<string, { embedding: Uint8Array; dimensions: number }>();
     const uniqueHashes = [...new Set(skipped.map((entry) => entry.hash))];
     for (let i = 0; i < uniqueHashes.length; i += LOOKUP_BATCH_SIZE) {
       const batch = uniqueHashes.slice(i, i + LOOKUP_BATCH_SIZE);
@@ -314,8 +314,12 @@ async function writeEmbeddingsToRepo(
       );
       for (const row of rows) {
         if (row.input_hash) {
+          const emb =
+            row.embedding instanceof Uint8Array
+              ? row.embedding
+              : new Uint8Array(new Float32Array(JSON.parse(String(row.embedding))).buffer);
           hashToVector.set(String(row.input_hash), {
-            embedding: String(row.embedding),
+            embedding: emb,
             dimensions: Number(row.dimensions),
           });
         }
@@ -326,7 +330,7 @@ async function writeEmbeddingsToRepo(
       provider: string;
       model: string;
       dimensions: number;
-      embedding: string;
+      embedding: Uint8Array;
       inputHash: string;
     }> = [];
     for (const entry of skipped) {
@@ -398,7 +402,7 @@ async function writeEmbeddingsToRepo(
           provider: provider.provider,
           model: embeddingStorageModel(provider),
           dimensions,
-          embedding: JSON.stringify(embedding),
+          embedding: new Uint8Array(new Float32Array(embedding).buffer),
           inputHash: batch[index].hash,
         })),
       );

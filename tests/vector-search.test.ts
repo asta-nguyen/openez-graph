@@ -11,6 +11,8 @@ import { closeAllWorkspaceDbs, createWorkspaceRepository } from "../packages/db/
 
 const roots: string[] = [];
 
+const toBlob = (values: number[]): Uint8Array => new Uint8Array(new Float32Array(values).buffer);
+
 afterEach(() => {
   closeAllWorkspaceDbs();
   roots.splice(0).forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
@@ -74,14 +76,14 @@ describe("vector search", () => {
         provider: "ollama",
         model: embeddingStorageModel(ollama),
         dimensions: 2,
-        embedding: "[1,0]",
+        embedding: toBlob([1, 0]),
       },
       {
         chunkId: chunkB,
         provider: "ollama",
         model: embeddingStorageModel(ollama),
         dimensions: 2,
-        embedding: "[0.9,0.1]",
+        embedding: toBlob([0.9, 0.1]),
       },
     ]);
 
@@ -121,7 +123,7 @@ describe("vector search", () => {
         provider: "ollama",
         model: embeddingStorageModel(ollama),
         dimensions: 2,
-        embedding: "[0,1]",
+        embedding: toBlob([0, 1]),
       },
     ]);
 
@@ -159,17 +161,25 @@ describe("vector search", () => {
       provider: "ollama",
       model: embeddingStorageModel(ollama),
       dimensions: 2,
-      embedding: "[1,0]",
+      embedding: toBlob([1, 0]),
     };
     await repo.insertEmbeddings([embedding]);
-    await repo.insertEmbeddings([{ ...embedding, embedding: "[0,1]" }]);
+    await repo.insertEmbeddings([{ ...embedding, embedding: toBlob([0, 1]) }]);
 
     const rows = await repo.queryRaw(
       "SELECT embedding FROM embeddings WHERE chunk_id = ? AND provider = ? AND model = ?",
       [chunkId, embedding.provider, embedding.model],
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].embedding).toBe("[0,1]");
+    expect(
+      Array.from(
+        new Float32Array(
+          rows[0].embedding.buffer,
+          rows[0].embedding.byteOffset,
+          rows[0].embedding.byteLength / 4,
+        ),
+      ),
+    ).toEqual([0, 1]);
   });
 
   it("adds code context and honors fusion weights", () => {
