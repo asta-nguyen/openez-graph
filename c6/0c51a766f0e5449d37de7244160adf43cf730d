@@ -1,0 +1,58 @@
+packages/db/src/sqlite/workspace-repository.ts
+  s_fb4f32c665b8c6::t_26f85f217860be 5,7,9,11
+  s_fb4f32c665b8c6::t_48776aadde7f97 30
+  s_fb4f32c665b8c6::t_cb17affcd5d0c6 3
+packages/db/src/sqlite/types.ts
+  s_fb4f32c665b8c6::t_c8e7bbfa7f8d79 507-508,517-518
+packages/db/src/sqlite/embedding-repository.ts
+  s_fb4f32c665b8c6::t_e7319d17b60e74 62
+  s_fb4f32c665b8c6::t_0111355a89a662 81
+  s_fb4f32c665b8c6::t_8c985970fdeca9 9-13
+  s_fb4f32c665b8c6::t_851a1444040e9b 78,80
+packages/db/src/sqlite/schema.ts
+  s_fb4f32c665b8c6::t_a1fb682bdea57a 99
+  s_fb4f32c665b8c6::t_67b74aa4e3551e 2
+packages/db/src/sqlite/document-repository.ts
+  s_fb4f32c665b8c6::t_83cd18654060b9 42-44
+  s_fb4f32c665b8c6::t_e6d0a14668b7d6 237-238,243-244,246-255,264-265,278-279
+  s_fb4f32c665b8c6::t_ca2052dd5e3dfb 284-288
+packages/db/src/sqlite/graph-repository.ts
+  s_fb4f32c665b8c6::t_b9718ecdb2d2ce 26-28
+packages/indexer/src/index-workspace.ts
+  s_fb4f32c665b8c6::t_895a0346c5b7b1 989
+  s_fb4f32c665b8c6::t_4a4763d6c33ecb 990
+  s_fb4f32c665b8c6::t_96cb8219671f19 55-68
+  s_fb4f32c665b8c6::t_b790d37078220f 1235-1236,1238-1242,1250
+  s_fb4f32c665b8c6::t_8a7141ca4d3e71 1282-1283
+  s_fb4f32c665b8c6::t_22a348d7e790a6 1416-1417
+  s_fb4f32c665b8c6::t_955a13ad85e86d 48-54
+  s_fb4f32c665b8c6::t_3b0cb9699a5e96 1296-1304,1312
+  s_fb4f32c665b8c6::t_d69aef4b9b5148 1380-1381
+packages/db/src/sqlite/graph-ops-shared.ts
+  s_fb4f32c665b8c6::t_36a2f7c496184d 6-10,26-27
+packages/db/src/sqlite/fts-repository.ts
+  s_fb4f32c665b8c6::t_cb2d3b4ceb3a1f 7-11,21-22
+packages/db/src/sqlite/workspace-db.ts
+  s_fb4f32c665b8c6::t_228d55024f565b 268,285
+  s_fb4f32c665b8c6::t_fc2893b317f4cc 521-522
+  s_fb4f32c665b8c6::t_65b81afe5d70c0 131-134
+  s_fb4f32c665b8c6::t_698f9bd554c9ef 363-365
+  s_fb4f32c665b8c6::t_e9484a6dd0e7da 393-394,398-401,405
+  s_fb4f32c665b8c6::t_ab6b4e12724ab1 242-243,246-259
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c60c51a766f0e5449d37de7244160adf43cf730d",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
