@@ -496,4 +496,24 @@ export interface WorkspaceRepository {
    *  memories, query logs, and index runs). Used by the lazy graph builder to
    *  invalidate stale graph state before rebuilding. */
   clearGraphArtifacts(): void;
+
+  /** Cache parsed symbols/imports/calls for graph build. */
+  insertParsedDocument(input: {
+    documentId: string;
+    contentHash: string;
+    symbols: string;
+    imports: string;
+    calls: string;
+  }): void;
+
+  getParsedDocument(documentId: string): {
+    documentId: string;
+    contentHash: string;
+    symbols: string | null;
+    imports: string | null;
+    calls: string | null;
+    parsedAt: number;
+  } | null;
+
+  deleteParsedDocumentsByDocumentIds(documentIds: string[]): void;
 }

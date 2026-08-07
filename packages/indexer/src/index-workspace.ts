@@ -951,6 +951,23 @@ export async function indexWorkspace(input: {
           chunksWritten += indexed.chunks.length;
           filesUpdated += 1;
         }
+
+        // Step 4: Cache parse results (symbols/imports/calls) so graph build
+        // can skip re-parsing. Keyed by document_id, invalidated on content change.
+        for (let fi = 0; fi < parseTasks.length; fi++) {
+          const file = parseTasks[fi];
+          const indexed = parseResults.get(file.id)!;
+          const documentId = docIdMap.get(file.relativePath)!;
+          const contentHash = hashContent(file.content);
+          repo.insertParsedDocument({
+            documentId,
+            contentHash,
+            symbols: JSON.stringify(indexed.definedSymbols ?? []),
+            imports: JSON.stringify(indexed.importPaths ?? []),
+            calls: JSON.stringify(indexed.callExpressions ?? []),
+          });
+        }
+
         // Graph (nodes + edges + call edges) is built lazily on first
         // graph_neighbors/code_context query — see buildGraphFromIndexedFiles()
 
