@@ -54,7 +54,7 @@ export function cosineSimilarity(left: number[], right: number[]): number {
   return leftNorm === 0 || rightNorm === 0 ? 0 : dot / Math.sqrt(leftNorm * rightNorm);
 }
 
-function parseEmbedding(value: unknown): number[] {
+export function parseEmbedding(value: unknown): number[] {
   if (value instanceof Uint8Array) {
     return Array.from(new Float32Array(value.buffer, value.byteOffset, value.byteLength / 4));
   }
