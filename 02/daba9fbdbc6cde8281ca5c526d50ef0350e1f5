@@ -1,0 +1,20 @@
+packages/indexer/src/index-workspace.ts
+  s_fb4f32c665b8c6::t_055d5c60b68a4e 1262-1281,1283,1285-1286,1288-1292,1296,1299,1316,1318-1324,1330,1333-1341,1348,1369-1376
+  s_fb4f32c665b8c6::t_60667480551691 1212-1227,1247-1254
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "02daba9fbdbc6cde8281ca5c526d50ef0350e1f5",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
