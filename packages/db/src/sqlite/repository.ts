@@ -1212,24 +1212,24 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       if (enabled) {
         // ponytail: synchronous=OFF trades power-loss durability for bulk-index speed; restore NORMAL below.
         // Keep WAL journal mode so a power loss during indexing stays recoverable.
+        // NOTE: locking_mode=EXCLUSIVE and mmap_size are intentionally omitted —
+        // they caused SQLITE_BUSY under bun:sqlite (the old better-sqlite3 test
+        // adapter skipped them). synchronous=OFF + WAL + temp_store=MEMORY are
+        // the main bulk-indexing performance gains.
         native.pragma("journal_mode = WAL");
         native.pragma("synchronous = OFF");
         native.pragma("cache_size = -65536");
         native.pragma("temp_store = MEMORY");
-        native.pragma("mmap_size = 536870912");
-        native.pragma("locking_mode = EXCLUSIVE");
       } else {
         // Switch back to WAL + NORMAL for query-safe access.
-        // Restore synchronous first, then release the exclusive lock, then
-        // re-assert WAL (migrates databases left in MEMORY by the old code),
-        // and checkpoint so the WAL doesn't grow unbounded.
+        // Restore synchronous first, then re-assert WAL (migrates databases
+        // left in MEMORY by the old code), and checkpoint so the WAL doesn't
+        // grow unbounded.
         native.pragma("synchronous = NORMAL");
-        native.pragma("locking_mode = NORMAL");
         native.pragma("journal_mode = WAL");
         native.exec("PRAGMA wal_checkpoint(PASSIVE)");
         native.pragma("cache_size = -2000");
         native.pragma("temp_store = DEFAULT");
-        native.pragma("mmap_size = 0");
       }
     },
 
