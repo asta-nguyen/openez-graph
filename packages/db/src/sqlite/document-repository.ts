@@ -39,8 +39,9 @@ function mapDocumentRow(row: Record<string, unknown>) {
  * Behavior is identical to the original inline implementations — this is a
  * pure code-move. `streamNow` is shared via a mutable holder so that
  * `refreshStreamTimestamp()` (defined here) stays visible to the graph/edge/fts
- * stream methods that still live in `repository.ts`, and to the chunk stream
- * methods that now live in `chunk-repository.ts`.
+ * stream methods that now live in their respective split modules
+ * (`graph-repository.ts`, `fts-repository.ts`), and to the chunk stream
+ * methods that live in `chunk-repository.ts`.
  *
  * Chunk operations are composed in from `createChunkOps()` so callers of
  * `createDocumentOps()` continue to receive a single merged ops object.
@@ -233,14 +234,25 @@ export function createDocumentOps(
       symbols: string;
       imports: string;
       calls: string;
+      calledIdentifiers: string;
+      parserVersion: string;
     }): void {
       const now = Date.now();
       native
         .prepare(
-          `INSERT OR REPLACE INTO parsed_documents (document_id, content_hash, symbols, imports, calls, parsed_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT OR REPLACE INTO parsed_documents (document_id, content_hash, symbols, imports, calls, called_identifiers, parser_version, parsed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(input.documentId, input.contentHash, input.symbols, input.imports, input.calls, now);
+        .run(
+          input.documentId,
+          input.contentHash,
+          input.symbols,
+          input.imports,
+          input.calls,
+          input.calledIdentifiers,
+          input.parserVersion,
+          now,
+        );
     },
 
     getParsedDocument(documentId: string): {
@@ -249,6 +261,8 @@ export function createDocumentOps(
       symbols: string | null;
       imports: string | null;
       calls: string | null;
+      calledIdentifiers: string | null;
+      parserVersion: string | null;
       parsedAt: number;
     } | null {
       const row = native
@@ -261,10 +275,17 @@ export function createDocumentOps(
         symbols: row.symbols ? String(row.symbols) : null,
         imports: row.imports ? String(row.imports) : null,
         calls: row.calls ? String(row.calls) : null,
+        calledIdentifiers: row.called_identifiers ? String(row.called_identifiers) : null,
+        parserVersion: row.parser_version ? String(row.parser_version) : null,
         parsedAt: Number(row.parsed_at),
       };
     },
 
+    /**
+     * Explicit delete for parsed_documents entries. Normally not needed because
+     * the `parsed_documents` table has `ON DELETE CASCADE` referencing `documents(id)`.
+     * Kept for manual cleanup scenarios.
+     */
     deleteParsedDocumentsByDocumentIds(documentIds: string[]): void {
       if (documentIds.length === 0) return;
       const placeholders = documentIds.map(() => "?").join(",");

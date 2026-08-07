@@ -1,9 +1,14 @@
 import crypto from "node:crypto";
 
+import type { ChunkStmts } from "./chunk-repository";
 import { createDocumentOps } from "./document-repository";
+import type { DocumentStmts } from "./document-repository";
 import { createEmbeddingOps } from "./embedding-repository";
+import type { EmbeddingStmts } from "./embedding-repository";
 import { createFtsOps } from "./fts-repository";
+import type { FtsStmts } from "./fts-repository";
 import { createGraphOps } from "./graph-repository";
+import type { GraphStmts } from "./graph-repository";
 import { createMemoryOps } from "./memory-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 import type { WorkspaceRepository } from "./types";
@@ -22,7 +27,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
   const { native } = getNativeWorkspaceDb(rootPath);
 
   // ── Cached prepared statements (prepared once, reused thousands of times) ──
-  const stmts = {
+  const stmts: DocumentStmts & ChunkStmts & GraphStmts & FtsStmts & EmbeddingStmts = {
     docByPath: native.prepare("SELECT * FROM documents WHERE path = ?"),
     docById: native.prepare("SELECT * FROM documents WHERE id = ?"),
     insertDoc: native.prepare(

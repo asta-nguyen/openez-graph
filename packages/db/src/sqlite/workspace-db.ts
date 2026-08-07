@@ -128,7 +128,10 @@ export function getFullWorkspaceDdl(): string {
   );
 }
 
-export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
+export function initializeWorkspaceSchema(
+  sqlite: ReturnType<typeof createNativeDatabase>,
+  dimensions: number = 768,
+) {
   const tableExists =
     (
       sqlite
@@ -236,8 +239,24 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
         symbols TEXT,
         imports TEXT,
         calls TEXT,
+        called_identifiers TEXT,
+        parser_version TEXT,
         parsed_at INTEGER NOT NULL
       )`);
+    } else {
+      // Add called_identifiers and parser_version columns to existing
+      // parsed_documents tables created before these fields existed.
+      const parsedCols = new Set(
+        (
+          sqlite.prepare("PRAGMA table_info(parsed_documents)").all() as Array<{ name: string }>
+        ).map((row) => row.name),
+      );
+      if (!parsedCols.has("called_identifiers")) {
+        sqlite.exec("ALTER TABLE parsed_documents ADD COLUMN called_identifiers TEXT");
+      }
+      if (!parsedCols.has("parser_version")) {
+        sqlite.exec("ALTER TABLE parsed_documents ADD COLUMN parser_version TEXT");
+      }
     }
 
     // Ensure FTS triggers exist (may be missing on DBs created before triggers
@@ -246,7 +265,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
 
     // Try creating the vec0 virtual table for ANN vector search when the
     // sqlite-vec extension is loaded. No-op when the extension is unavailable.
-    tryCreateVecTable(sqlite);
+    tryCreateVecTable(sqlite, dimensions);
     return;
   }
 
@@ -263,7 +282,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
   // Try creating the vec0 virtual table for ANN vector search when the
   // sqlite-vec extension is loaded. When the extension is unavailable (e.g.
   // under bun:sqlite), this is skipped and retrieval falls back to linear scan.
-  tryCreateVecTable(sqlite);
+  tryCreateVecTable(sqlite, dimensions);
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
@@ -341,6 +360,9 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
   }>;
   const embeddingCol = info.find((c) => c.name === "embedding");
   if (embeddingCol && embeddingCol.type.toUpperCase() === "TEXT") {
+    console.error(
+      "[openez] Migrating embeddings from TEXT to BLOB — existing embeddings will be dropped, full reindex required.",
+    );
     // Drop and recreate — full reindex required
     sqlite.exec("DELETE FROM embeddings");
     sqlite.exec("DROP TABLE embeddings");
@@ -368,15 +390,19 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
 /**
  * Create the vec0 virtual table for ANN vector search when the sqlite-vec
  * extension is loaded. The dimension defaults to 768 (bge-m3 / Ollama
- * nomic-embed-text). When the extension is unavailable (e.g. under
+ * nomic-embed-text) but can be overridden via `dimensions` to match the
+ * embedding model in use. When the extension is unavailable (e.g. under
  * bun:sqlite, which is compiled without dynamic extension loading), this
  * is a no-op and retrieval falls back to a linear scan over `embeddings`.
  */
-function tryCreateVecTable(sqlite: ReturnType<typeof createNativeDatabase>) {
+function tryCreateVecTable(
+  sqlite: ReturnType<typeof createNativeDatabase>,
+  dimensions: number = 768,
+) {
   if (!hasVecExtension()) return;
   try {
     sqlite.exec(
-      "CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vec USING vec0(chunk_id INTEGER PRIMARY KEY, embedding float[768])",
+      `CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vec USING vec0(chunk_id TEXT PRIMARY KEY, embedding float[${dimensions}])`,
     );
   } catch {
     // Table creation failed (e.g. dimension mismatch, extension quirks) —
@@ -492,6 +518,8 @@ function getWorkspaceTableDefinitions(): string[] {
       symbols TEXT,
       imports TEXT,
       calls TEXT,
+      called_identifiers TEXT,
+      parser_version TEXT,
       parsed_at INTEGER NOT NULL
     )`,
   ];

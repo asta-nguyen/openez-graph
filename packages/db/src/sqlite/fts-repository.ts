@@ -4,9 +4,11 @@ import { safeParseJson, sanitizeFtsQuery } from "./utils";
 /**
  * Prepared statements used by the FTS operations.
  *
- * These are prepared once in `createWorkspaceRepository()` and reused across
- * thousands of calls. Only the statements needed by this module are declared
- * here.
+ * These are prepared once in `createWorkspaceRepository()` (the facade in
+ * `workspace-repository.ts`) and reused across thousands of calls. Only the
+ * statements needed by this module are declared here; the remaining
+ * statements are declared in the other split repository modules
+ * (`document-repository.ts`, `graph-ops-shared.ts`, `embedding-repository.ts`).
  */
 export interface FtsStmts {
   insertFtsRow: ReturnType<NativeDatabase["prepare"]>;
@@ -16,8 +18,8 @@ export interface FtsStmts {
  * Dependencies that the FTS lifecycle methods need from the parent repository.
  *
  * `ensureFtsReady` reads/writes the `index_meta` table via `getMeta`/`setMeta`
- * (which still live in `repository.ts`). Passing them in keeps the FTS module
- * decoupled from the meta/lifecycle operations that remain in the parent.
+ * (which are defined in the `workspace-repository.ts` facade). Passing them in
+ * keeps the FTS module decoupled from the meta/lifecycle operations.
  */
 export interface FtsOpsDeps {
   getMeta: (key: string) => string | null;

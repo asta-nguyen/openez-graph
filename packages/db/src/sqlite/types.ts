@@ -504,6 +504,8 @@ export interface WorkspaceRepository {
     symbols: string;
     imports: string;
     calls: string;
+    calledIdentifiers: string;
+    parserVersion: string;
   }): void;
 
   getParsedDocument(documentId: string): {
@@ -512,6 +514,8 @@ export interface WorkspaceRepository {
     symbols: string | null;
     imports: string | null;
     calls: string | null;
+    calledIdentifiers: string | null;
+    parserVersion: string | null;
     parsedAt: number;
   } | null;
 
