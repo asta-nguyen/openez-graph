@@ -1,0 +1,23 @@
+packages/db/src/sqlite/graph-repository.ts
+  s_fb4f32c665b8c6::t_bd4fbb4f542e4c 1-683
+packages/db/src/sqlite/repository.ts
+  s_fb4f32c665b8c6::t_199c1354188ba7 8
+  s_fb4f32c665b8c6::t_cb0e526d00002a 409-421
+  s_fb4f32c665b8c6::t_033ff43a683ccb 425
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7accc7b84ea914f7ee86685f8806e89c92dbb54a",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
