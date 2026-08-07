@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@openez-graph/config": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "sqlite-vec": "^0.1.9"
   }
 }

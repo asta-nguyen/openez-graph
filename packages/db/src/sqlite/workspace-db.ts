@@ -4,7 +4,7 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import * as schema from "./schema";
-import { createNativeDatabase } from "./database-loader";
+import { createNativeDatabase, hasVecExtension } from "./database-loader";
 import { restoreFtsTriggerDefinitions } from "./fts-repository";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
@@ -224,6 +224,10 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     // Ensure FTS triggers exist (may be missing on DBs created before triggers
     // were added, or on fresh DBs that only ran getFullWorkspaceDdl).
     restoreFtsTriggerDefinitions(sqlite);
+
+    // Try creating the vec0 virtual table for ANN vector search when the
+    // sqlite-vec extension is loaded. No-op when the extension is unavailable.
+    tryCreateVecTable(sqlite);
     return;
   }
 
@@ -236,6 +240,11 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
   // Create FTS triggers — getFullWorkspaceDdl creates the chunks_fts table but
   // not the triggers that auto-populate it on INSERT/DELETE/UPDATE.
   restoreFtsTriggerDefinitions(sqlite);
+
+  // Try creating the vec0 virtual table for ANN vector search when the
+  // sqlite-vec extension is loaded. When the extension is unavailable (e.g.
+  // under bun:sqlite), this is skipped and retrieval falls back to linear scan.
+  tryCreateVecTable(sqlite);
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
@@ -334,6 +343,25 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
     sqlite.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
     );
+  }
+}
+
+/**
+ * Create the vec0 virtual table for ANN vector search when the sqlite-vec
+ * extension is loaded. The dimension defaults to 768 (bge-m3 / Ollama
+ * nomic-embed-text). When the extension is unavailable (e.g. under
+ * bun:sqlite, which is compiled without dynamic extension loading), this
+ * is a no-op and retrieval falls back to a linear scan over `embeddings`.
+ */
+function tryCreateVecTable(sqlite: ReturnType<typeof createNativeDatabase>) {
+  if (!hasVecExtension()) return;
+  try {
+    sqlite.exec(
+      "CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vec USING vec0(chunk_id INTEGER PRIMARY KEY, embedding float[768])",
+    );
+  } catch {
+    // Table creation failed (e.g. dimension mismatch, extension quirks) —
+    // linear scan fallback remains available via the embeddings table.
   }
 }
 
