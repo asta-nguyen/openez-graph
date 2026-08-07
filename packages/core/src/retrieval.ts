@@ -1,5 +1,6 @@
 import { getBrainSettings } from "@openez-graph/config";
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
+import { hasVecExtension } from "../../db/src/sqlite/database-loader";
 
 import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
 import type { EmbeddingProvider } from "./embeddings";
@@ -85,6 +86,66 @@ export async function rankStoredEmbeddings(
   if (queryEmbedding.length === 0) return [];
 
   const repo = createWorkspaceRepository(rootPath);
+
+  // Try sqlite-vec ANN search first. When the extension is unavailable
+  // (e.g. under bun:sqlite today), this branch is skipped and we fall
+  // through to the linear scan below.
+  if (hasVecExtension()) {
+    try {
+      const queryBlob = new Uint8Array(new Float32Array(queryEmbedding).buffer);
+      const vecResults = await repo.queryRaw(
+        `SELECT
+          chunks.id, chunks.content, chunks.heading, chunks.metadata,
+          documents.path, embeddings_vec.distance
+        FROM embeddings_vec
+        INNER JOIN embeddings ON embeddings.chunk_id = embeddings_vec.chunk_id
+        INNER JOIN chunks ON chunks.id = embeddings.chunk_id
+        INNER JOIN documents ON documents.id = chunks.document_id
+        WHERE embeddings.provider = ?
+          AND embeddings.model = ?
+          AND embeddings.dimensions = ?
+        ORDER BY embeddings_vec.embedding MATCH ?
+        LIMIT ?`,
+        [
+          provider.provider,
+          embeddingStorageModel(provider),
+          queryEmbedding.length,
+          queryBlob,
+          limit * 2,
+        ],
+      );
+
+      if (vecResults.length > 0) {
+        const seenPaths = new Set<string>();
+        return vecResults
+          .map((row) => {
+            const path = String(row.path);
+            const distance = Number(row.distance ?? 1);
+            const score = 1 - distance;
+            return {
+              id: String(row.id),
+              path,
+              content: String(row.content),
+              score: isCodeFile(path) ? score + CODE_FILE_BOOST : score,
+              heading: row.heading ? String(row.heading) : null,
+              metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+            };
+          })
+          .filter((hit) => hit.score >= MIN_COSINE_SIMILARITY)
+          .sort((left, right) => right.score - left.score)
+          .filter((hit) => {
+            if (seenPaths.has(hit.path)) return false;
+            seenPaths.add(hit.path);
+            return true;
+          })
+          .slice(0, limit);
+      }
+    } catch (error) {
+      console.error("[retrieval] vec search failed, falling back to linear scan:", error);
+    }
+  }
+
+  // Linear scan fallback (sufficient for local SQLite workspaces).
   const results = await repo.queryRaw(
     `SELECT
       chunks.id, chunks.content, chunks.heading, chunks.metadata,
@@ -98,7 +159,6 @@ export async function rankStoredEmbeddings(
     [provider.provider, embeddingStorageModel(provider), queryEmbedding.length],
   );
 
-  // Linear scan is sufficient for local SQLite; switch to sqlite-vec if profiling proves otherwise.
   const seenPaths = new Set<string>();
   return results
     .map((row) => {
