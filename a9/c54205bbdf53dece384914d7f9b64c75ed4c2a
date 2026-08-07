@@ -1,0 +1,28 @@
+docs/superpowers/plans/2026-08-07-fix-fast-indexing-critical.md
+  s_6ce5be3eed0fbe::t_e2fe83e3465e9c 11-18,599
+  s_fb4f32c665b8c6::t_d5f89ec23ab665 600
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a9c54205bbdf53dece384914d7f9b64c75ed4c2a",
+  "prompts": {},
+  "sessions": {
+    "s_6ce5be3eed0fbe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd81d-f4b3-7bc3-8de2-006b924cf03a",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
