@@ -1,0 +1,27 @@
+packages/db/src/sqlite/graph-traversal-ops.ts
+  s_fb4f32c665b8c6::t_5824edbfb727e0 1-250
+packages/db/src/sqlite/graph-repository.ts
+  s_fb4f32c665b8c6::t_218b7c2aed93bd 2-5,7-10,13,16-21,23,35-38
+packages/db/src/sqlite/graph-node-ops.ts
+  s_fb4f32c665b8c6::t_ca3387c6c46ab7 1-259
+packages/db/src/sqlite/graph-ops-shared.ts
+  s_fb4f32c665b8c6::t_10cf52a301adfb 1-47
+packages/db/src/sqlite/graph-edge-ops.ts
+  s_fb4f32c665b8c6::t_2fb0adf4e9e2dd 1-162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "09f4a12630944ca0d5edf11d1a1d178887e21bbe",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
