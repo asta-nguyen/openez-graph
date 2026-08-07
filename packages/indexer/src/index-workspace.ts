@@ -580,507 +580,513 @@ export async function indexWorkspace(input: {
   mode?: "incremental" | "full";
   onProgress?: (progress: { message: string; progress: number }) => Promise<void> | void;
 }): Promise<IndexWorkspaceSummary> {
-  // Use fast token counting during indexing — BPE encoding is 100x slower
+  // Use fast token counting during indexing — BPE encoding is 100x slower.
+  // Wrap the entire body in try/finally so the flag is ALWAYS reset, even on
+  // early errors (e.g. missing workspace ID) or unexpected throws.
   setFastTokenCount(true);
-  const registry = createRegistryRepository();
-  let workspace: RegistryWorkspace;
+  try {
+    const registry = createRegistryRepository();
+    let workspace: RegistryWorkspace;
 
-  if (input.workspaceId) {
-    const w = await registry.getWorkspace(input.workspaceId);
-    if (!w) throw new Error(`Workspace '${input.workspaceId}' not found`);
-    workspace = w;
-  } else if (input.rootPath) {
-    workspace = await registry.ensureWorkspace({
-      rootPath: path.resolve(input.rootPath),
-    });
-  } else {
-    throw new Error("Either workspaceId or rootPath is required");
-  }
-
-  await writeLocalWorkspaceConfig(workspace);
-
-  const repo = createWorkspaceRepository(workspace.rootPath);
-  const settings = await getBrainSettings();
-  const config = await loadBrainConfig(workspace.rootPath);
-  const configuredWorkspace = config.workspaces?.find(
-    (candidate) =>
-      candidate.id === workspace.id ||
-      path.resolve(candidate.root) === path.resolve(workspace.rootPath),
-  );
-  const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
-  const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
-  const embeddingProvider = await getEmbeddingProvider();
-  const runMode = input.mode ?? "incremental";
-
-  if (embeddingProvider) {
-    process.stdout.write(
-      `[embedding] provider=${embeddingProvider.provider} model=${embeddingProvider.model}\n`,
-    );
-  } else {
-    process.stdout.write(`[embedding] disabled (no provider configured)\n`);
-  }
-
-  const reportProgress = async (message: string, progress: number) => {
-    await input.onProgress?.({ message, progress });
-  };
-
-  if (runMode === "full") {
-    repo.resetIndexArtifacts();
-    invalidateGraphForWorkspace(workspace.id);
-  }
-
-  const runId = await repo.createIndexRun({ mode: runMode });
-
-  await reportProgress("Scanning workspace files...", 5);
-
-  const files = await scanWorkspaceFiles({
-    rootPath: workspace.rootPath,
-    include: includeGlobs,
-    exclude: excludeGlobs,
-  });
-
-  const existingDocuments = await repo.listDocuments();
-  const existingDocumentsByPath = new Map(
-    existingDocuments.map((document) => [document.path, document]),
-  );
-
-  if (runMode === "incremental") {
-    const scannedPaths = new Set(files.map((file) => file.relativePath));
-    let deletedAny = false;
-    for (const document of existingDocuments) {
-      if (!scannedPaths.has(document.path)) {
-        await resetDocumentArtifacts(repo, document.id);
-        await repo.deleteDocument(document.id);
-        deletedAny = true;
-      }
+    if (input.workspaceId) {
+      const w = await registry.getWorkspace(input.workspaceId);
+      if (!w) throw new Error(`Workspace '${input.workspaceId}' not found`);
+      workspace = w;
+    } else if (input.rootPath) {
+      workspace = await registry.ensureWorkspace({
+        rootPath: path.resolve(input.rootPath),
+      });
+    } else {
+      throw new Error("Either workspaceId or rootPath is required");
     }
-    if (deletedAny) {
+
+    await writeLocalWorkspaceConfig(workspace);
+
+    const repo = createWorkspaceRepository(workspace.rootPath);
+    const settings = await getBrainSettings();
+    const config = await loadBrainConfig(workspace.rootPath);
+    const configuredWorkspace = config.workspaces?.find(
+      (candidate) =>
+        candidate.id === workspace.id ||
+        path.resolve(candidate.root) === path.resolve(workspace.rootPath),
+    );
+    const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
+    const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
+    const embeddingProvider = await getEmbeddingProvider();
+    const runMode = input.mode ?? "incremental";
+
+    if (embeddingProvider) {
+      process.stdout.write(
+        `[embedding] provider=${embeddingProvider.provider} model=${embeddingProvider.model}\n`,
+      );
+    } else {
+      process.stdout.write(`[embedding] disabled (no provider configured)\n`);
+    }
+
+    const reportProgress = async (message: string, progress: number) => {
+      await input.onProgress?.({ message, progress });
+    };
+
+    if (runMode === "full") {
+      repo.resetIndexArtifacts();
       invalidateGraphForWorkspace(workspace.id);
     }
-  }
 
-  const workspaceFileResolver = createWorkspaceFileResolver(
-    workspace.rootPath,
-    files.map((file) => ({
-      relativePath: file.relativePath,
-      absolutePath: file.absolutePath,
-    })),
-  );
+    const runId = await repo.createIndexRun({ mode: runMode });
 
-  let filesUpdated = 0;
-  let chunksWritten = 0;
-  let embeddingsWritten = 0;
-  let embeddingFailures = 0;
-  let bulkWriteMode = false;
-  let needsWriteModeRestore = false;
-  // FTS inputs collected during transaction, inserted after finalize (no DB contention)
-  let ftsInputsForBackground: Array<{
-    chunkId: string;
-    path: string;
-    heading: string | null;
-    language: string | null;
-    content: string;
-    metadata: string;
-  }> = [];
-  const _T0 = Date.now();
-  const symbolNodeIdsByFileAndName = new Map<string, string>();
-  const pendingCallEdges: Array<{
-    callerName: string;
-    calleeName: string;
-    filePath: string;
-    parser: string;
-  }> = [];
+    await reportProgress("Scanning workspace files...", 5);
 
-  try {
-    await reportProgress(
-      files.length === 0
-        ? "No files matched the workspace filters"
-        : `Queued ${files.length} file(s) for indexing`,
-      files.length === 0 ? 100 : 10,
-    );
-
-    // ── Phase 1: Check which files changed (fast DB lookups, no file reads) ──
-    const parseTasks: ParseTask[] = [];
-    const unchangedFiles: Array<{
-      existingDocument: NonNullable<Awaited<ReturnType<typeof repo.getDocumentByPath>>>;
-    }> = [];
-    const filesToRead: typeof files = [];
-
-    for (const file of files) {
-      const existingDocument = existingDocumentsByPath.get(file.relativePath);
-      // Fast path: skip file read if mtime and size match (incremental only)
-      const statUnchanged =
-        runMode === "incremental" &&
-        existingDocument &&
-        existingDocument.mtimeMs === file.mtimeMs &&
-        existingDocument.sizeBytes === file.sizeBytes;
-
-      if (statUnchanged) {
-        unchangedFiles.push({ existingDocument: existingDocument! });
-      } else {
-        filesToRead.push(file);
-      }
-    }
-
-    // ── Phase 2: Read only changed files in parallel (concurrency-limited) ──
-    process.stderr.write(
-      `[t] phase1 stat-check: ${Date.now() - _T0}ms (${filesToRead.length} to read)\n`,
-    );
-    const _T1 = Date.now();
-    const fileContents = new Map<string, string>();
-    const READ_CONCURRENCY = 32;
-    let readIndex = 0;
-    async function readWorker() {
-      while (readIndex < filesToRead.length) {
-        const i = readIndex++;
-        fileContents.set(
-          filesToRead[i].relativePath,
-          await fs.readFile(filesToRead[i].absolutePath, "utf8"),
-        );
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(READ_CONCURRENCY, filesToRead.length) }, () => readWorker()),
-    );
-
-    // ── Phase 2b: Verify content hash for changed files ──
-    process.stderr.write(`[t] phase2 file-read: ${Date.now() - _T1}ms\n`);
-    const _T2 = Date.now();
-    for (const file of filesToRead) {
-      const content = fileContents.get(file.relativePath)!;
-      const contentHash = hashContent(content);
-      const existingDocument = existingDocumentsByPath.get(file.relativePath);
-      const unchanged =
-        runMode === "incremental" &&
-        existingDocument &&
-        existingDocument.contentHash === contentHash;
-
-      if (unchanged) {
-        await repo.updateDocument(existingDocument.id, {
-          absolutePath: file.absolutePath,
-          sizeBytes: file.sizeBytes,
-          mtimeMs: file.mtimeMs,
-        });
-        unchangedFiles.push({ existingDocument });
-      } else {
-        parseTasks.push({
-          id: file.relativePath,
-          content,
-          relativePath: file.relativePath,
-          absolutePath: file.absolutePath,
-          sizeBytes: file.sizeBytes,
-          mtimeMs: file.mtimeMs,
-          targetTokens: settings.chunking.targetTokens,
-          overlapTokens: settings.chunking.overlapTokens,
-        });
-      }
-    }
-
-    // ── Phase 3: Parse changed files ──
-    process.stderr.write(
-      `[t] phase2b hash-check: ${Date.now() - _T2}ms (${parseTasks.length} to parse)\n`,
-    );
-    const _T3 = Date.now();
-    const parseResults = await parseInline(parseTasks, (done, total) => {
-      reportProgress(
-        `Parsing ${done}/${total} files...`,
-        Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)),
-      );
+    const files = await scanWorkspaceFiles({
+      rootPath: workspace.rootPath,
+      include: includeGlobs,
+      exclude: excludeGlobs,
     });
 
-    // Backfill unchanged embeddings only when embeddings are enabled.
-    if (embeddingProvider) {
-      for (const { existingDocument } of unchangedFiles) {
-        const existingChunks = await repo.getChunksByDocument(existingDocument.id);
+    const existingDocuments = await repo.listDocuments();
+    const existingDocumentsByPath = new Map(
+      existingDocuments.map((document) => [document.path, document]),
+    );
+
+    if (runMode === "incremental") {
+      const scannedPaths = new Set(files.map((file) => file.relativePath));
+      let deletedAny = false;
+      for (const document of existingDocuments) {
+        if (!scannedPaths.has(document.path)) {
+          await resetDocumentArtifacts(repo, document.id);
+          await repo.deleteDocument(document.id);
+          deletedAny = true;
+        }
+      }
+      if (deletedAny) {
+        invalidateGraphForWorkspace(workspace.id);
+      }
+    }
+
+    const workspaceFileResolver = createWorkspaceFileResolver(
+      workspace.rootPath,
+      files.map((file) => ({
+        relativePath: file.relativePath,
+        absolutePath: file.absolutePath,
+      })),
+    );
+
+    let filesUpdated = 0;
+    let chunksWritten = 0;
+    let embeddingsWritten = 0;
+    let embeddingFailures = 0;
+    let bulkWriteMode = false;
+    let needsWriteModeRestore = false;
+    // FTS inputs collected during transaction, inserted after finalize (no DB contention)
+    let ftsInputsForBackground: Array<{
+      chunkId: string;
+      path: string;
+      heading: string | null;
+      language: string | null;
+      content: string;
+      metadata: string;
+    }> = [];
+    const _T0 = Date.now();
+    const symbolNodeIdsByFileAndName = new Map<string, string>();
+    const pendingCallEdges: Array<{
+      callerName: string;
+      calleeName: string;
+      filePath: string;
+      parser: string;
+    }> = [];
+
+    try {
+      await reportProgress(
+        files.length === 0
+          ? "No files matched the workspace filters"
+          : `Queued ${files.length} file(s) for indexing`,
+        files.length === 0 ? 100 : 10,
+      );
+
+      // ── Phase 1: Check which files changed (fast DB lookups, no file reads) ──
+      const parseTasks: ParseTask[] = [];
+      const unchangedFiles: Array<{
+        existingDocument: NonNullable<Awaited<ReturnType<typeof repo.getDocumentByPath>>>;
+      }> = [];
+      const filesToRead: typeof files = [];
+
+      for (const file of files) {
+        const existingDocument = existingDocumentsByPath.get(file.relativePath);
+        // Fast path: skip file read if mtime and size match (incremental only)
+        const statUnchanged =
+          runMode === "incremental" &&
+          existingDocument &&
+          existingDocument.mtimeMs === file.mtimeMs &&
+          existingDocument.sizeBytes === file.sizeBytes;
+
+        if (statUnchanged) {
+          unchangedFiles.push({ existingDocument: existingDocument! });
+        } else {
+          filesToRead.push(file);
+        }
+      }
+
+      // ── Phase 2: Read only changed files in parallel (concurrency-limited) ──
+      process.stderr.write(
+        `[t] phase1 stat-check: ${Date.now() - _T0}ms (${filesToRead.length} to read)\n`,
+      );
+      const _T1 = Date.now();
+      const fileContents = new Map<string, string>();
+      const READ_CONCURRENCY = 32;
+      let readIndex = 0;
+      async function readWorker() {
+        while (readIndex < filesToRead.length) {
+          const i = readIndex++;
+          fileContents.set(
+            filesToRead[i].relativePath,
+            await fs.readFile(filesToRead[i].absolutePath, "utf8"),
+          );
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(READ_CONCURRENCY, filesToRead.length) }, () => readWorker()),
+      );
+
+      // ── Phase 2b: Verify content hash for changed files ──
+      process.stderr.write(`[t] phase2 file-read: ${Date.now() - _T1}ms\n`);
+      const _T2 = Date.now();
+      for (const file of filesToRead) {
+        const content = fileContents.get(file.relativePath)!;
+        const contentHash = hashContent(content);
+        const existingDocument = existingDocumentsByPath.get(file.relativePath);
+        const unchanged =
+          runMode === "incremental" &&
+          existingDocument &&
+          existingDocument.contentHash === contentHash;
+
+        if (unchanged) {
+          await repo.updateDocument(existingDocument.id, {
+            absolutePath: file.absolutePath,
+            sizeBytes: file.sizeBytes,
+            mtimeMs: file.mtimeMs,
+          });
+          unchangedFiles.push({ existingDocument });
+        } else {
+          parseTasks.push({
+            id: file.relativePath,
+            content,
+            relativePath: file.relativePath,
+            absolutePath: file.absolutePath,
+            sizeBytes: file.sizeBytes,
+            mtimeMs: file.mtimeMs,
+            targetTokens: settings.chunking.targetTokens,
+            overlapTokens: settings.chunking.overlapTokens,
+          });
+        }
+      }
+
+      // ── Phase 3: Parse changed files ──
+      process.stderr.write(
+        `[t] phase2b hash-check: ${Date.now() - _T2}ms (${parseTasks.length} to parse)\n`,
+      );
+      const _T3 = Date.now();
+      const parseResults = await parseInline(parseTasks, (done, total) => {
+        reportProgress(
+          `Parsing ${done}/${total} files...`,
+          Math.min(50, 10 + Math.round((done / Math.max(total, 1)) * 40)),
+        );
+      });
+
+      // Backfill unchanged embeddings only when embeddings are enabled.
+      if (embeddingProvider) {
+        for (const { existingDocument } of unchangedFiles) {
+          const existingChunks = await repo.getChunksByDocument(existingDocument.id);
+          const embeddingResult = await writeEmbeddingsToRepo(
+            repo,
+            existingChunks.map((chunk) => ({
+              id: chunk.id,
+              content: chunk.content,
+              path: existingDocument.path,
+              heading: chunk.heading,
+            })),
+            embeddingProvider,
+          );
+          embeddingsWritten += embeddingResult.written;
+          embeddingFailures += embeddingResult.failedBatches;
+        }
+      }
+
+      // A true no-op never changes SQLite write pragmas or FTS triggers.
+      process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
+      const _T4 = Date.now();
+      if (parseTasks.length > 0) {
+        // ── Phase 4: Write all results to DB (main thread, transactioned) ──
+        repo.setOptimizedWriteMode(true);
+        repo.dropFtsTriggers();
+        bulkWriteMode = true;
+        // At least one file changed — graph is stale.
+        invalidateGraphForWorkspace(workspace.id);
+      }
+
+      const allChunkRowsForEmbeddings: Array<{
+        id: string;
+        content: string;
+        path: string;
+        heading?: string | null;
+      }> = [];
+
+      // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
+      const _dbSub: Record<string, number> = {};
+      await repo.transaction(async () => {
+        const _dbT0 = Date.now();
+        // Step 1: Handle existing documents (reset artifacts + update) in bulk
+        const newDocs: Array<{
+          path: string;
+          absolutePath: string;
+          kind: string;
+          language?: string | null;
+          contentHash: string;
+          sizeBytes: number;
+          mtimeMs: number;
+        }> = [];
+        const docIdMap = new Map<string, string>(); // relativePath -> documentId
+
+        for (const file of parseTasks) {
+          const indexed = parseResults.get(file.id)!;
+          const contentHash = hashContent(file.content);
+          const existingDocument = existingDocumentsByPath.get(file.relativePath);
+
+          if (existingDocument) {
+            await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
+            await repo.updateDocument(existingDocument.id, {
+              absolutePath: file.absolutePath,
+              kind: indexed.kind,
+              language: indexed.language,
+              contentHash,
+              sizeBytes: file.sizeBytes,
+              mtimeMs: file.mtimeMs,
+            });
+            docIdMap.set(file.relativePath, existingDocument.id);
+          } else {
+            newDocs.push({
+              path: file.relativePath,
+              absolutePath: file.absolutePath,
+              kind: indexed.kind,
+              language: indexed.language,
+              contentHash,
+              sizeBytes: file.sizeBytes,
+              mtimeMs: file.mtimeMs,
+            });
+          }
+        }
+
+        // Batch insert all new documents in one query
+        _dbSub["existing-update"] = Date.now() - _dbT0;
+        const _dbT1 = Date.now();
+        if (newDocs.length > 0) {
+          const newDocIds = await repo.insertDocumentsBatch(newDocs);
+          for (let i = 0; i < newDocs.length; i++) {
+            docIdMap.set(newDocs[i].path, newDocIds[i]);
+          }
+        }
+
+        // Step 2: Batch insert ALL chunks across all files in one call
+        const allChunkInputs: Array<{
+          documentId: string;
+          chunkIndex: number;
+          heading: string | null;
+          content: string;
+          tokenCount: number;
+          contentHash: string;
+          metadata: string;
+        }> = [];
+        const chunkFileMap: Array<{ fileRelativePath: string; chunkIndex: number }> = [];
+        for (const file of parseTasks) {
+          const indexed = parseResults.get(file.id)!;
+          const documentId = docIdMap.get(file.relativePath)!;
+          for (let ci = 0; ci < indexed.chunks.length; ci++) {
+            const chunk = indexed.chunks[ci];
+            allChunkInputs.push({
+              documentId,
+              chunkIndex: ci,
+              heading: chunk.heading ?? null,
+              content: chunk.content,
+              tokenCount: chunk.tokenCount,
+              contentHash: chunk.contentHash,
+              metadata: JSON.stringify(chunk.metadata),
+            });
+            chunkFileMap.push({ fileRelativePath: file.relativePath, chunkIndex: ci });
+          }
+        }
+        const allChunkIds = await repo.insertChunks(allChunkInputs);
+        _dbSub["insert-chunks"] = Date.now() - _dbT1;
+
+        // Precompute chunk offsets (prefix sum) for O(1) lookup
+        const chunkOffsets: number[] = new Array(parseTasks.length);
+        let totalChunks = 0;
+        for (let fi = 0; fi < parseTasks.length; fi++) {
+          chunkOffsets[fi] = totalChunks;
+          totalChunks += parseResults.get(parseTasks[fi].id)!.chunks.length;
+        }
+
+        // Collect FTS inputs for bulk insert after transaction (triggers down — no double-write)
+        const ftsInputs = ftsInputsForBackground;
+        for (let fi = 0; fi < parseTasks.length; fi++) {
+          const file = parseTasks[fi];
+          const indexed = parseResults.get(file.id)!;
+          const chunkOffset = chunkOffsets[fi];
+          for (let ci = 0; ci < indexed.chunks.length; ci++) {
+            const chunk = indexed.chunks[ci];
+            ftsInputs.push({
+              chunkId: allChunkIds[chunkOffset + ci],
+              path: file.relativePath,
+              heading: chunk.heading ?? null,
+              language: indexed.language ?? null,
+              content: chunk.content,
+              metadata: JSON.stringify(chunk.metadata),
+            });
+          }
+        }
+        _dbSub["collect-fts"] = Date.now() - _dbT1;
+
+        // Step 3: Collect chunk rows for embeddings — skip graph building (lazy, on-demand)
+        for (let fi = 0; fi < parseTasks.length; fi++) {
+          const file = parseTasks[fi];
+          const indexed = parseResults.get(file.id)!;
+          const chunkOffset = chunkOffsets[fi];
+
+          for (let ci = 0; ci < indexed.chunks.length; ci++) {
+            allChunkRowsForEmbeddings.push({
+              id: allChunkIds[chunkOffset + ci],
+              content: indexed.chunks[ci].content,
+              path: file.relativePath,
+              heading: indexed.chunks[ci].heading,
+            });
+          }
+          chunksWritten += indexed.chunks.length;
+          filesUpdated += 1;
+        }
+        // Graph (nodes + edges + call edges) is built lazily on first
+        // graph_neighbors/code_context query — see buildGraphFromIndexedFiles()
+
+        await reportProgress(`Writing ${parseTasks.length}/${parseTasks.length}...`, 95);
+      });
+      process.stderr.write(`[t]   db sub: ${JSON.stringify(_dbSub)}\n`);
+
+      // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
+      if (allChunkRowsForEmbeddings.length > 0 && embeddingProvider) {
+        await reportProgress(
+          `Embedding ${allChunkRowsForEmbeddings.length} chunks via ${embeddingProvider.provider}/${embeddingProvider.model}...`,
+          90,
+        );
         const embeddingResult = await writeEmbeddingsToRepo(
           repo,
-          existingChunks.map((chunk) => ({
-            id: chunk.id,
-            content: chunk.content,
-            path: existingDocument.path,
-            heading: chunk.heading,
-          })),
+          allChunkRowsForEmbeddings,
           embeddingProvider,
         );
         embeddingsWritten += embeddingResult.written;
         embeddingFailures += embeddingResult.failedBatches;
       }
-    }
 
-    // A true no-op never changes SQLite write pragmas or FTS triggers.
-    process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
-    const _T4 = Date.now();
-    if (parseTasks.length > 0) {
-      // ── Phase 4: Write all results to DB (main thread, transactioned) ──
-      repo.setOptimizedWriteMode(true);
-      repo.dropFtsTriggers();
-      bulkWriteMode = true;
-      // At least one file changed — graph is stale.
-      invalidateGraphForWorkspace(workspace.id);
-    }
+      // ── Phase 5: FTS insert (triggers still down — no double-write) + restore ──
+      process.stderr.write(`[t] phase4 db-write: ${Date.now() - _T4}ms\n`);
+      const _T5 = Date.now();
 
-    const allChunkRowsForEmbeddings: Array<{
-      id: string;
-      content: string;
-      path: string;
-      heading?: string | null;
-    }> = [];
-
-    // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
-    const _dbSub: Record<string, number> = {};
-    await repo.transaction(async () => {
-      const _dbT0 = Date.now();
-      // Step 1: Handle existing documents (reset artifacts + update) in bulk
-      const newDocs: Array<{
-        path: string;
-        absolutePath: string;
-        kind: string;
-        language?: string | null;
-        contentHash: string;
-        sizeBytes: number;
-        mtimeMs: number;
-      }> = [];
-      const docIdMap = new Map<string, string>(); // relativePath -> documentId
-
-      for (const file of parseTasks) {
-        const indexed = parseResults.get(file.id)!;
-        const contentHash = hashContent(file.content);
-        const existingDocument = existingDocumentsByPath.get(file.relativePath);
-
-        if (existingDocument) {
-          await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
-          await repo.updateDocument(existingDocument.id, {
-            absolutePath: file.absolutePath,
-            kind: indexed.kind,
-            language: indexed.language,
-            contentHash,
-            sizeBytes: file.sizeBytes,
-            mtimeMs: file.mtimeMs,
-          });
-          docIdMap.set(file.relativePath, existingDocument.id);
-        } else {
-          newDocs.push({
-            path: file.relativePath,
-            absolutePath: file.absolutePath,
-            kind: indexed.kind,
-            language: indexed.language,
-            contentHash,
-            sizeBytes: file.sizeBytes,
-            mtimeMs: file.mtimeMs,
-          });
+      // Insert FTS entries while triggers are still down (no trigger overhead)
+      if (ftsInputsForBackground.length > 0) {
+        _ftsBuildingWorkspaces.set(workspace.id, true);
+        const _ftsT = Date.now();
+        try {
+          await repo.bulkInsertFts(ftsInputsForBackground);
+          process.stderr.write(
+            `[t]   fts-insert: ${Date.now() - _ftsT}ms (${ftsInputsForBackground.length} entries)\n`,
+          );
+        } catch (e) {
+          process.stderr.write(`[fts] ERROR: ${e}\n`);
+        } finally {
+          _ftsBuildingWorkspaces.delete(workspace.id);
         }
       }
 
-      // Batch insert all new documents in one query
-      _dbSub["existing-update"] = Date.now() - _dbT0;
-      const _dbT1 = Date.now();
-      if (newDocs.length > 0) {
-        const newDocIds = await repo.insertDocumentsBatch(newDocs);
-        for (let i = 0; i < newDocs.length; i++) {
-          docIdMap.set(newDocs[i].path, newDocIds[i]);
+      // Now restore FTS triggers (entries already inserted, no backfill needed)
+      if (bulkWriteMode) {
+        repo.restoreFtsTriggersOnly();
+        needsWriteModeRestore = true;
+        bulkWriteMode = false;
+      }
+      process.stderr.write(`[t] phase5 fts-restore: ${Date.now() - _T5}ms\n`);
+      const _T7 = Date.now();
+      await reportProgress("Finalizing index run...", 98);
+      await repo.completeIndexRun(runId, {
+        status: "completed",
+        filesScanned: files.length,
+        filesUpdated,
+        chunksWritten,
+        embeddingsWritten,
+        errorMessage:
+          embeddingFailures > 0
+            ? `${embeddingFailures} embedding batch(es) failed; retry indexing to complete embeddings`
+            : undefined,
+      });
+
+      const docCount = await repo.getDocumentCount();
+      const chunkCountResult = await repo.getChunkCount();
+      const nodeCount = await repo.getNodeCount();
+      const edgeCount = await repo.getEdgeCount();
+
+      await registry.updateWorkspace(workspace.id, {
+        status: "indexed",
+        indexingStatus: "completed",
+        lastIndexedAt: new Date().toISOString(),
+        documentCount: docCount,
+        chunkCount: chunkCountResult,
+        nodeCount,
+        edgeCount,
+        lastError: "",
+      });
+
+      // Switch out of optimized write mode AFTER all writes are done.
+      // Doing it earlier causes fsync to flush ~70MB of dirty pages mid-finalize.
+      if (needsWriteModeRestore) {
+        repo.setOptimizedWriteMode(false);
+      }
+      process.stderr.write(`[t] phase7 finalize: ${Date.now() - _T7}ms\n`);
+    } catch (error) {
+      if (bulkWriteMode || needsWriteModeRestore) {
+        try {
+          repo.restoreFtsTriggers();
+        } catch {
+          /* preserve original indexing error */
         }
+        repo.setOptimizedWriteMode(false);
       }
 
-      // Step 2: Batch insert ALL chunks across all files in one call
-      const allChunkInputs: Array<{
-        documentId: string;
-        chunkIndex: number;
-        heading: string | null;
-        content: string;
-        tokenCount: number;
-        contentHash: string;
-        metadata: string;
-      }> = [];
-      const chunkFileMap: Array<{ fileRelativePath: string; chunkIndex: number }> = [];
-      for (const file of parseTasks) {
-        const indexed = parseResults.get(file.id)!;
-        const documentId = docIdMap.get(file.relativePath)!;
-        for (let ci = 0; ci < indexed.chunks.length; ci++) {
-          const chunk = indexed.chunks[ci];
-          allChunkInputs.push({
-            documentId,
-            chunkIndex: ci,
-            heading: chunk.heading ?? null,
-            content: chunk.content,
-            tokenCount: chunk.tokenCount,
-            contentHash: chunk.contentHash,
-            metadata: JSON.stringify(chunk.metadata),
-          });
-          chunkFileMap.push({ fileRelativePath: file.relativePath, chunkIndex: ci });
-        }
-      }
-      const allChunkIds = await repo.insertChunks(allChunkInputs);
-      _dbSub["insert-chunks"] = Date.now() - _dbT1;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await repo.completeIndexRun(runId, {
+        status: "failed",
+        filesScanned: files.length,
+        filesUpdated,
+        chunksWritten,
+        embeddingsWritten,
+        errorMessage,
+      });
 
-      // Precompute chunk offsets (prefix sum) for O(1) lookup
-      const chunkOffsets: number[] = new Array(parseTasks.length);
-      let totalChunks = 0;
-      for (let fi = 0; fi < parseTasks.length; fi++) {
-        chunkOffsets[fi] = totalChunks;
-        totalChunks += parseResults.get(parseTasks[fi].id)!.chunks.length;
-      }
-
-      // Collect FTS inputs for bulk insert after transaction (triggers down — no double-write)
-      const ftsInputs = ftsInputsForBackground;
-      for (let fi = 0; fi < parseTasks.length; fi++) {
-        const file = parseTasks[fi];
-        const indexed = parseResults.get(file.id)!;
-        const chunkOffset = chunkOffsets[fi];
-        for (let ci = 0; ci < indexed.chunks.length; ci++) {
-          const chunk = indexed.chunks[ci];
-          ftsInputs.push({
-            chunkId: allChunkIds[chunkOffset + ci],
-            path: file.relativePath,
-            heading: chunk.heading ?? null,
-            language: indexed.language ?? null,
-            content: chunk.content,
-            metadata: JSON.stringify(chunk.metadata),
-          });
-        }
-      }
-      _dbSub["collect-fts"] = Date.now() - _dbT1;
-
-      // Step 3: Collect chunk rows for embeddings — skip graph building (lazy, on-demand)
-      for (let fi = 0; fi < parseTasks.length; fi++) {
-        const file = parseTasks[fi];
-        const indexed = parseResults.get(file.id)!;
-        const chunkOffset = chunkOffsets[fi];
-
-        for (let ci = 0; ci < indexed.chunks.length; ci++) {
-          allChunkRowsForEmbeddings.push({
-            id: allChunkIds[chunkOffset + ci],
-            content: indexed.chunks[ci].content,
-            path: file.relativePath,
-            heading: indexed.chunks[ci].heading,
-          });
-        }
-        chunksWritten += indexed.chunks.length;
-        filesUpdated += 1;
-      }
-      // Graph (nodes + edges + call edges) is built lazily on first
-      // graph_neighbors/code_context query — see buildGraphFromIndexedFiles()
-
-      await reportProgress(`Writing ${parseTasks.length}/${parseTasks.length}...`, 95);
-    });
-    process.stderr.write(`[t]   db sub: ${JSON.stringify(_dbSub)}\n`);
-
-    // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
-    if (allChunkRowsForEmbeddings.length > 0 && embeddingProvider) {
-      await reportProgress(
-        `Embedding ${allChunkRowsForEmbeddings.length} chunks via ${embeddingProvider.provider}/${embeddingProvider.model}...`,
-        90,
-      );
-      const embeddingResult = await writeEmbeddingsToRepo(
-        repo,
-        allChunkRowsForEmbeddings,
-        embeddingProvider,
-      );
-      embeddingsWritten += embeddingResult.written;
-      embeddingFailures += embeddingResult.failedBatches;
+      await registry.updateWorkspace(workspace.id, {
+        status: "error",
+        indexingStatus: "failed",
+        lastError: errorMessage,
+      });
+      throw error;
     }
 
-    // ── Phase 5: FTS insert (triggers still down — no double-write) + restore ──
-    process.stderr.write(`[t] phase4 db-write: ${Date.now() - _T4}ms\n`);
-    const _T5 = Date.now();
+    await reportProgress("Index complete", 100);
+    process.stderr.write("[t] TOTAL: " + (Date.now() - _T0) + "ms\n");
 
-    // Insert FTS entries while triggers are still down (no trigger overhead)
-    if (ftsInputsForBackground.length > 0) {
-      _ftsBuildingWorkspaces.set(workspace.id, true);
-      const _ftsT = Date.now();
-      try {
-        await repo.bulkInsertFts(ftsInputsForBackground);
-        process.stderr.write(
-          `[t]   fts-insert: ${Date.now() - _ftsT}ms (${ftsInputsForBackground.length} entries)\n`,
-        );
-      } catch (e) {
-        process.stderr.write(`[fts] ERROR: ${e}\n`);
-      } finally {
-        _ftsBuildingWorkspaces.delete(workspace.id);
-      }
-    }
-
-    // Now restore FTS triggers (entries already inserted, no backfill needed)
-    if (bulkWriteMode) {
-      repo.restoreFtsTriggersOnly();
-      needsWriteModeRestore = true;
-      bulkWriteMode = false;
-    }
-    process.stderr.write(`[t] phase5 fts-restore: ${Date.now() - _T5}ms\n`);
-    const _T7 = Date.now();
-    await reportProgress("Finalizing index run...", 98);
-    await repo.completeIndexRun(runId, {
-      status: "completed",
+    return {
+      workspaceId: workspace.id,
       filesScanned: files.length,
       filesUpdated,
       chunksWritten,
       embeddingsWritten,
-      errorMessage:
-        embeddingFailures > 0
-          ? `${embeddingFailures} embedding batch(es) failed; retry indexing to complete embeddings`
-          : undefined,
-    });
-
-    const docCount = await repo.getDocumentCount();
-    const chunkCountResult = await repo.getChunkCount();
-    const nodeCount = await repo.getNodeCount();
-    const edgeCount = await repo.getEdgeCount();
-
-    await registry.updateWorkspace(workspace.id, {
-      status: "indexed",
-      indexingStatus: "completed",
-      lastIndexedAt: new Date().toISOString(),
-      documentCount: docCount,
-      chunkCount: chunkCountResult,
-      nodeCount,
-      edgeCount,
-      lastError: "",
-    });
-
-    // Switch out of optimized write mode AFTER all writes are done.
-    // Doing it earlier causes fsync to flush ~70MB of dirty pages mid-finalize.
-    if (needsWriteModeRestore) {
-      repo.setOptimizedWriteMode(false);
-    }
-    process.stderr.write(`[t] phase7 finalize: ${Date.now() - _T7}ms\n`);
-  } catch (error) {
-    if (bulkWriteMode || needsWriteModeRestore) {
-      try {
-        repo.restoreFtsTriggers();
-      } catch {
-        /* preserve original indexing error */
-      }
-      repo.setOptimizedWriteMode(false);
-    }
-
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    await repo.completeIndexRun(runId, {
-      status: "failed",
-      filesScanned: files.length,
-      filesUpdated,
-      chunksWritten,
-      embeddingsWritten,
-      errorMessage,
-    });
-
-    await registry.updateWorkspace(workspace.id, {
-      status: "error",
-      indexingStatus: "failed",
-      lastError: errorMessage,
-    });
-    throw error;
+      embeddingFailures,
+    };
+  } finally {
+    setFastTokenCount(false);
   }
-
-  await reportProgress("Index complete", 100);
-  process.stderr.write("[t] TOTAL: " + (Date.now() - _T0) + "ms\n");
-
-  return {
-    workspaceId: workspace.id,
-    filesScanned: files.length,
-    filesUpdated,
-    chunksWritten,
-    embeddingsWritten,
-    embeddingFailures,
-  };
 }
 
 // ── Background FTS tracking ──
