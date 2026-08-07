@@ -1,0 +1,23 @@
+tests/workspace-db.test.ts
+  s_fb4f32c665b8c6::t_7edd9b41e1529d 264-287
+packages/db/src/sqlite/repository.ts
+  s_fb4f32c665b8c6::t_22e1cfb7813c55 1213-1215,1223-1227
+packages/db/src/sqlite/database-loader.ts
+  s_fb4f32c665b8c6::t_8f3b89ccb3ab78 71-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8e3fb8b8d995c6c74173ec0b8dad77a6e9744064",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
