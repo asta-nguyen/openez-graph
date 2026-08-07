@@ -2,19 +2,19 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 const testEmbeddingProvider = {
   provider: "ollama" as const,
   model: "test-model",
-  embed: vi.fn(async () => [[1, 0]]),
+  embed: mock(async () => [[1, 0]]),
 };
 
-vi.mock("../packages/core/src/embeddings", async () => {
-  const actual = await vi.importActual<typeof import("../packages/core/src/embeddings")>(
-    "../packages/core/src/embeddings",
-  );
-  return { ...actual, getEmbeddingProvider: async () => testEmbeddingProvider };
+mock.module("../packages/core/src/embeddings", () => {
+  return {
+    getEmbeddingProvider: async () => testEmbeddingProvider,
+    embeddingStorageModel: (provider: { model: string }) => `${provider.model}:openez-code-v1`,
+  };
 });
 
 import { embeddingStorageModel } from "../packages/core/src/embeddings";

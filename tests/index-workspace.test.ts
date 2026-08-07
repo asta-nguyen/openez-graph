@@ -3,7 +3,7 @@ import fsPromises from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 
 import {
   closeAllWorkspaceDbs,
@@ -276,7 +276,7 @@ describe("indexWorkspace", () => {
     const touchedAt = new Date(Date.now() + 5_000);
     fs.utimesSync(sourcePath, touchedAt, touchedAt);
 
-    const readSpy = vi.spyOn(fsPromises, "readFile");
+    const readSpy = spyOn(fsPromises, "readFile");
     const sourceWasRead = () =>
       readSpy.mock.calls.some(
         ([filePath]) => fs.realpathSync(String(filePath)) === fs.realpathSync(sourcePath),
