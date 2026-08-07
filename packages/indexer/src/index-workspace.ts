@@ -1209,6 +1209,22 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
   const parsedFiles = new Map<string, ParsedFile>();
 
   for (const doc of registryDocs) {
+    // Try cache first — skip re-parsing if content_hash matches.
+    const cached = repo.getParsedDocument(doc.id);
+    if (cached && cached.contentHash === doc.contentHash) {
+      parsedFiles.set(doc.path, {
+        filePath: doc.path,
+        language: doc.language,
+        kind: doc.kind,
+        parser: "cached",
+        definedSymbols: cached.symbols ? JSON.parse(cached.symbols) : [],
+        importPaths: cached.imports ? JSON.parse(cached.imports) : [],
+        calledIdentifiers: [],
+        callExpressions: cached.calls ? JSON.parse(cached.calls) : [],
+      });
+      continue;
+    }
+
     try {
       const content = await fs.readFile(doc.absolutePath, "utf8");
       const parsed = await parseDocument({
@@ -1228,6 +1244,14 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
         calledIdentifiers: parsed.calledIdentifiers,
         callExpressions: parsed.callExpressions,
       });
+      // Cache the parse result so future graph builds skip re-parsing.
+      repo.insertParsedDocument({
+        documentId: doc.id,
+        contentHash: doc.contentHash,
+        symbols: JSON.stringify(parsed.definedSymbols ?? []),
+        imports: JSON.stringify(parsed.importPaths ?? []),
+        calls: JSON.stringify(parsed.callExpressions ?? []),
+      });
     } catch {
       /* file may have been deleted */
     }
@@ -1235,22 +1259,44 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
 
   // ── Parse native docs (Python/Go/Rust) with native batch, fallback to parseDocument ──
   if (nativeDocs.length > 0) {
-    let native: any = null;
-    try {
-      const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
-      native = require(nativePath);
-    } catch {
-      try {
-        native = require("@openez-graph/native");
-      } catch {
-        /* not installed — will fall back to parseDocument */
+    // Serve cached native docs first; only batch-parse the misses.
+    const nativeToParse: typeof nativeDocs = [];
+    for (const doc of nativeDocs) {
+      const cached = repo.getParsedDocument(doc.id);
+      if (cached && cached.contentHash === doc.contentHash) {
+        parsedFiles.set(doc.path, {
+          filePath: doc.path,
+          language: doc.language,
+          kind: doc.kind,
+          parser: "cached",
+          definedSymbols: cached.symbols ? JSON.parse(cached.symbols) : [],
+          importPaths: cached.imports ? JSON.parse(cached.imports) : [],
+          calledIdentifiers: [],
+          callExpressions: cached.calls ? JSON.parse(cached.calls) : [],
+        });
+      } else {
+        nativeToParse.push(doc);
       }
     }
 
-    if (native?.parseCodeBatch) {
+    let native: any = null;
+    if (nativeToParse.length > 0) {
+      try {
+        const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
+        native = require(nativePath);
+      } catch {
+        try {
+          native = require("@openez-graph/native");
+        } catch {
+          /* not installed — will fall back to parseDocument */
+        }
+      }
+    }
+
+    if (native?.parseCodeBatch && nativeToParse.length > 0) {
       const batchItems: Array<{ language: string; content: string }> = [];
       const batchDocPaths: string[] = [];
-      for (const doc of nativeDocs) {
+      for (const doc of nativeToParse) {
         try {
           const content = await fs.readFile(doc.absolutePath, "utf8");
           const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
@@ -1267,29 +1313,39 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
           const nr = nativeResults[i];
           if (!nr) continue;
           const filePath = batchDocPaths[i];
-          const doc = nativeDocs.find((d) => d.path === filePath)!;
+          const doc = nativeToParse.find((d) => d.path === filePath)!;
           const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
+          const definedSymbols = nr.symbols.map((s: any) => ({
+            name: s.name,
+            symbolType: s.symbolType,
+            type: s.symbolType,
+            exported: s.exported,
+          }));
+          const callExpressions = nr.callExpressions.slice(0, 20);
           parsedFiles.set(filePath, {
             filePath,
             language: lang,
             kind: "code",
             parser: "tree-sitter-native",
-            definedSymbols: nr.symbols.map((s: any) => ({
-              name: s.name,
-              symbolType: s.symbolType,
-              type: s.symbolType,
-              exported: s.exported,
-            })),
+            definedSymbols,
             importPaths: nr.importPaths,
             calledIdentifiers: nr.calledIdentifiers,
-            callExpressions: nr.callExpressions.slice(0, 20),
+            callExpressions,
+          });
+          // Cache the native parse result.
+          repo.insertParsedDocument({
+            documentId: doc.id,
+            contentHash: doc.contentHash,
+            symbols: JSON.stringify(definedSymbols),
+            imports: JSON.stringify(nr.importPaths ?? []),
+            calls: JSON.stringify(callExpressions),
           });
         }
       }
     }
 
     // Fallback: parse native docs that weren't handled by native batch
-    for (const doc of nativeDocs) {
+    for (const doc of nativeToParse) {
       if (parsedFiles.has(doc.path)) continue;
       try {
         const content = await fs.readFile(doc.absolutePath, "utf8");
@@ -1309,6 +1365,14 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
           importPaths: parsed.importPaths,
           calledIdentifiers: parsed.calledIdentifiers,
           callExpressions: parsed.callExpressions,
+        });
+        // Cache the fallback parse result.
+        repo.insertParsedDocument({
+          documentId: doc.id,
+          contentHash: doc.contentHash,
+          symbols: JSON.stringify(parsed.definedSymbols ?? []),
+          imports: JSON.stringify(parsed.importPaths ?? []),
+          calls: JSON.stringify(parsed.callExpressions ?? []),
         });
       } catch {
         /* file may have been deleted */
