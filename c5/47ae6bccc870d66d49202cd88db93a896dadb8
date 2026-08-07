@@ -1,0 +1,22 @@
+packages/indexer/src/index-workspace.ts
+  s_fb4f32c665b8c6::t_fffb3de10834da 583-585,587-601,603,605-611,613-616,618-624,626-628,630-631,635,637,639-643,645-647,650-658,660-661,665-671,673-681,683-694,697-708,710,712,714-726,728-761,767,769-772,776-777,782-809,813-826,828-829,832-874,877-885,887-924,926-974,976-982,985-1003,1005-1045,1047-1073,1076-1080,1085-1088
+tests/index-workspace.test.ts
+  s_fb4f32c665b8c6::t_eac336896e62be 20
+  s_fb4f32c665b8c6::t_77ff91c835e1bf 525-555
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c547ae6bccc870d66d49202cd88db93a896dadb8",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
