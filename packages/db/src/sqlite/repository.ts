@@ -370,7 +370,7 @@ function getNativeWorkspaceDb(rootPath: string): {
   return { db, native };
 }
 
-function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
+export function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
   native.exec(`
     CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
     BEGIN

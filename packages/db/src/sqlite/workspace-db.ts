@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import * as schema from "./schema";
 import { createNativeDatabase } from "./database-loader";
+import { restoreFtsTriggerDefinitions } from "./repository";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
@@ -162,6 +163,14 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
       sqlite.exec(
         `CREATE VIRTUAL TABLE chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61')`,
       );
+      // Backfill existing chunks into the newly created FTS table.
+      sqlite.exec(`
+        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
+        SELECT c.id, d.path, coalesce(c.heading, ''),
+          coalesce(d.language, ''), substr(c.content, 1, 400)
+        FROM chunks c
+        INNER JOIN documents d ON d.id = c.document_id;
+      `);
     }
 
     const hasTypeLabelIdx =
@@ -188,6 +197,20 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
           .get() as { c: number }
       ).c > 0;
     if (!hasEdgeIdx) {
+      // Deduplicate legacy edges before creating the unique index.
+      sqlite.exec(`
+        DELETE FROM graph_edges
+        WHERE id NOT IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (
+              PARTITION BY from_node_id, to_node_id, type
+              ORDER BY created_at DESC, id
+            ) AS rn
+            FROM graph_edges
+          )
+          WHERE rn = 1
+        );
+      `);
       sqlite.exec(
         `CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type)`,
       );
@@ -196,6 +219,10 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     migrateQueryLogColumns(sqlite);
     migrateEmbeddingColumns(sqlite);
     migrateEmbeddingDedup(sqlite);
+
+    // Ensure FTS triggers exist (may be missing on DBs created before triggers
+    // were added, or on fresh DBs that only ran getFullWorkspaceDdl).
+    restoreFtsTriggerDefinitions(sqlite);
     return;
   }
 
@@ -203,6 +230,10 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
   migrateQueryLogColumns(sqlite);
   migrateEmbeddingColumns(sqlite);
   migrateEmbeddingDedup(sqlite);
+
+  // Create FTS triggers — getFullWorkspaceDdl creates the chunks_fts table but
+  // not the triggers that auto-populate it on INSERT/DELETE/UPDATE.
+  restoreFtsTriggerDefinitions(sqlite);
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
