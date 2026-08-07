@@ -1,0 +1,37 @@
+packages/db/src/sqlite/workspace-db.ts
+  s_fb4f32c665b8c6::t_00ce75cd67c262 372
+  s_fb4f32c665b8c6::t_acf0944a415916 309-339
+  s_fb4f32c665b8c6::t_5d0b8f0a9b3443 222,234
+packages/core/src/retrieval.ts
+  s_fb4f32c665b8c6::t_d697de3090a778 57-63
+packages/db/src/sqlite/embedding-repository.ts
+  s_fb4f32c665b8c6::t_e06e119765eac6 33
+packages/db/src/sqlite/types.ts
+  s_fb4f32c665b8c6::t_1dcd5f7d714601 313
+tests/hybrid-retrieval.test.ts
+  s_fb4f32c665b8c6::t_0a5912045e26fe 23-24
+  s_fb4f32c665b8c6::t_1ca9add7556eba 108,165
+tests/vector-search.test.ts
+  s_fb4f32c665b8c6::t_71101e7bc4c760 14-15
+  s_fb4f32c665b8c6::t_cdeedbd8c277c1 175-178
+  s_fb4f32c665b8c6::t_5a7f920d7fc33a 79,86,126,164,167,174,179-182
+packages/indexer/src/index-workspace.ts
+  s_fb4f32c665b8c6::t_5fa6b0d55feb1a 304,317-320,322,333
+  s_fb4f32c665b8c6::t_961d501270b777 405
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b13932ed2abe689cf69b659480319d8c57dddee6",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
