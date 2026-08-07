@@ -29,14 +29,25 @@ interface SqliteDb {
   close(): void;
 }
 
-const { Database: BunDatabase } = require("bun:sqlite");
-// Wrap to add .pragma() shim — bun:sqlite doesn't have it natively
-const Database = class extends BunDatabase {
-  constructor(filename: string, options?: any) {
-    super(filename, options);
-    (this as any).pragma = (cmd: string) => this.exec(`PRAGMA ${cmd}`);
-  }
-} as unknown as new (filename: string, options?: any) => SqliteDb;
+// Try bun:sqlite first (production), fall back to better-sqlite3 (test/dev under Node).
+let Database: new (filename: string, options?: any) => SqliteDb;
+try {
+  const { Database: BunDatabase } = require("bun:sqlite");
+  // Wrap to add .pragma() shim — bun:sqlite doesn't have it natively
+  Database = class extends BunDatabase {
+    constructor(filename: string, options?: any) {
+      super(filename, options);
+      (this as any).pragma = (cmd: string) => this.exec(`PRAGMA ${cmd}`);
+    }
+  } as unknown as new (filename: string, options?: any) => SqliteDb;
+} catch {
+  const BetterSqlite = require("better-sqlite3");
+  Database = class extends BetterSqlite {
+    constructor(filename: string, options?: any) {
+      super(filename, options);
+    }
+  } as unknown as new (filename: string, options?: any) => SqliteDb;
+}
 
 let registryDb: SqliteDb | null = null;
 const workspaceDbs = new Map<string, SqliteDb>();
