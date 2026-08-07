@@ -805,7 +805,7 @@ const WATCH_IGNORE_PATTERNS = [
   "**/.openez/**",
 ];
 
-async function autoIndexAndSync(searchRoot: string): Promise<void> {
+export async function autoIndexAndSync(searchRoot: string): Promise<void> {
   const resolvedRoot = path.resolve(searchRoot);
 
   if (!fs.existsSync(resolvedRoot) || !fs.statSync(resolvedRoot).isDirectory()) {
