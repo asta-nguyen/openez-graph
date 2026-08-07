@@ -381,7 +381,6 @@ export class OxcParser implements CodeParser {
       const lines = input.content.split("\n");
       const chunks: IndexedChunk[] = [
         {
-          id: "",
           heading: input.relativePath,
           content: input.content,
           tokenCount: countTokens(input.content),
