@@ -39,66 +39,9 @@ type NativeDatabaseConstructor = new (
   options?: { nativeBinding?: string },
 ) => NativeDatabase;
 
-/**
- * Wrap a better-sqlite3 database to match the bun:sqlite API surface used by
- * drizzle-orm/bun-sqlite and the raw repository layer. The key difference is
- * that bun:sqlite prepared statements have a `.values()` method (returns rows
- * as arrays of raw values) which better-sqlite3 lacks natively.
- */
-function adaptBetterSqlite3(db: any): NativeDatabase {
-  const originalPrepare = db.prepare.bind(db);
-  (db as any).prepare = (sql: string): NativeStatement => {
-    const stmt = originalPrepare(sql);
-    return {
-      all: (...params: unknown[]) => stmt.all(...params),
-      get: (...params: unknown[]) => stmt.get(...params),
-      run: (...params: unknown[]) => stmt.run(...params),
-      values: (...params: unknown[]) => stmt.raw().all(...params),
-      bind: (...params: unknown[]) => {
-        const bound = stmt.bind(...params);
-        return {
-          all: () => bound.all(),
-          get: () => bound.get(),
-          run: () => bound.run(),
-          values: () => bound.raw().all(),
-          bind: (...p: unknown[]) => bound.bind(...p),
-        };
-      },
-    };
-  };
-  // Add .pragma() shim — bun:sqlite doesn't have it natively.
-  // Under better-sqlite3, certain pragmas cause "database is locked" errors
-  // in single-threaded test runs because they require exclusive locks that
-  // conflict with open connections. Skip the ones that are pure performance
-  // optimizations for bulk indexing. journal_mode=WAL must NOT be skipped —
-  // it is required for crash-recoverable indexing.
-  (db as any).pragma = (cmd: string) => {
-    if (/locking_mode\s*=\s*EXCLUSIVE/i.test(cmd)) return;
-    if (/mmap_size/i.test(cmd)) return;
-    try {
-      db.exec(`PRAGMA ${cmd}`);
-    } catch {
-      // Ignore pragma errors under better-sqlite3 (e.g. wal_checkpoint
-      // when there is no WAL file) — they are non-critical for tests.
-    }
-  };
-  return db as unknown as NativeDatabase;
-}
-
 export function createNativeDatabase(dbPath: string): NativeDatabase {
-  let Database: NativeDatabaseConstructor;
-  let isBetterSqlite3 = false;
-  try {
-    Database = _require("bun:sqlite").Database;
-  } catch {
-    // Running under Node/vitest (not Bun) — fall back to better-sqlite3.
-    Database = _require("better-sqlite3");
-    isBetterSqlite3 = true;
-  }
+  const Database = _require("bun:sqlite").Database as NativeDatabaseConstructor;
   const db = new Database(dbPath, { create: true } as { nativeBinding?: string });
-  if (isBetterSqlite3) {
-    return adaptBetterSqlite3(db);
-  }
   // Add .pragma() shim — bun:sqlite doesn't have it natively
   (db as any).pragma = (cmd: string) => db.exec(`PRAGMA ${cmd}`);
   return db as unknown as NativeDatabase;
