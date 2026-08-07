@@ -95,7 +95,7 @@ export function createNativeDatabase(dbPath: string): NativeDatabase {
     Database = _require("better-sqlite3");
     isBetterSqlite3 = true;
   }
-  const db = new Database(dbPath, { create: true });
+  const db = new Database(dbPath, { create: true } as { nativeBinding?: string });
   if (isBetterSqlite3) {
     return adaptBetterSqlite3(db);
   }
