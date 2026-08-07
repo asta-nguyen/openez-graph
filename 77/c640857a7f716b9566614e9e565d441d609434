@@ -1,0 +1,30 @@
+tests/embedding-blob.test.ts
+  s_fb4f32c665b8c6::t_6b89bd07df9474 1-97
+packages/core/src/retrieval.ts
+  s_fb4f32c665b8c6::t_fa9189e677f80f 57
+tests/parsed-documents-cache.test.ts
+  s_fb4f32c665b8c6::t_74cc9921e1425d 1-109
+  s_fb4f32c665b8c6::t_b1393620728b2f 110-117
+tests/embedding-migration.test.ts
+  s_fb4f32c665b8c6::t_c78cb153db8ae2 1-82
+tests/vector-search.test.ts
+  s_fb4f32c665b8c6::t_a27dedfbb9d4a9 223-237
+  s_fb4f32c665b8c6::t_ad9ec2f7698830 8
+  s_fb4f32c665b8c6::t_4d258a7da5be87 9-12,238-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "77c640857a7f716b9566614e9e565d441d609434",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
