@@ -5,9 +5,9 @@ import {
   FallbackParser,
   getParserForPath,
   MarkdownParser,
+  OxcParser,
   parseDocument,
   TreeSitterParser,
-  TsMorphParser,
 } from "../packages/indexer/src/parsers";
 
 describe("parser registry dispatch", () => {
@@ -16,11 +16,11 @@ describe("parser registry dispatch", () => {
     expect(getParserForPath("docs/guide.md")).toBeInstanceOf(MarkdownParser);
   });
 
-  it("selects TsMorphParser for TS/JS files", () => {
-    expect(getParserForPath("src/index.ts")).toBeInstanceOf(TsMorphParser);
-    expect(getParserForPath("src/component.tsx")).toBeInstanceOf(TsMorphParser);
-    expect(getParserForPath("src/legacy.js")).toBeInstanceOf(TsMorphParser);
-    expect(getParserForPath("src/legacy.jsx")).toBeInstanceOf(TsMorphParser);
+  it("selects OxcParser for TS/JS files", () => {
+    expect(getParserForPath("src/index.ts")).toBeInstanceOf(OxcParser);
+    expect(getParserForPath("src/component.tsx")).toBeInstanceOf(OxcParser);
+    expect(getParserForPath("src/legacy.js")).toBeInstanceOf(OxcParser);
+    expect(getParserForPath("src/legacy.jsx")).toBeInstanceOf(OxcParser);
   });
 
   it("selects TreeSitterParser for Python/Go/Rust files", () => {
@@ -56,7 +56,7 @@ describe("parseDocument metadata", () => {
     expect(result.language).toBe("markdown");
   });
 
-  it("tags TS output with parser=ts-morph", async () => {
+  it("tags TS output with parser=oxc", async () => {
     const result = await parseDocument({
       relativePath: "example.ts",
       absolutePath: "/tmp/example.ts",
@@ -64,7 +64,7 @@ describe("parseDocument metadata", () => {
       targetTokens: 500,
       overlapTokens: 50,
     });
-    expect(result.parser).toBe("ts-morph");
+    expect(result.parser).toBe("oxc");
     expect(result.kind).toBe("code");
     expect(result.language).toBe("typescript");
   });
@@ -139,7 +139,7 @@ describe("CodeParser interface contract", () => {
     const parsers = [
       new MarkdownParser(),
       new ConfigParser(),
-      new TsMorphParser(),
+      new OxcParser(),
       new TreeSitterParser(),
       new FallbackParser(),
     ];
