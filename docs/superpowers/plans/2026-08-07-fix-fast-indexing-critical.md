@@ -8,6 +8,14 @@
 
 **Tech Stack:** TypeScript, `oxc-parser`, native Rust/tree-sitter parser, SQLite/WAL, Vitest, pnpm.
 
+## Runtime Matrix
+
+- Production CLI/MCP/web processes run under Bun and use built-in `bun:sqlite`; do not replace this with `better-sqlite3` in production.
+- Node/Vitest tests use the existing `packages/db/src/sqlite/database-loader.ts` fallback to `better-sqlite3`.
+- `apps/web/src/server/sqlite.ts` has its own Bun-first/Node-fallback loader and is not part of the repository driver change.
+- `vitest.config.ts` must keep the existing `bun:sqlite` alias and inline settings for `drizzle-orm`, `@openez-graph/db`, and `@openez-graph/core`; these are test-runtime compatibility, not production architecture.
+- Do not switch the project to `bun test` or remove Vitest features as part of this fix.
+
 ## Global Constraints
 
 - Keep SQLite as the default storage path; do not add Postgres, Redis, or vector database dependencies.
@@ -587,6 +595,8 @@ pnpm format:check
 ```
 
 Expected: no TypeScript errors and no formatting changes required.
+
+Before interpreting a Vitest failure, verify the test process is using the repository `vitest.config.ts` alias for `bun:sqlite`. A raw Node import of `drizzle-orm/bun-sqlite` is not a valid production/test signal.
 
 - [ ] **Step 3: Run the full suite**
 
