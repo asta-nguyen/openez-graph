@@ -1,0 +1,25 @@
+packages/db/src/sqlite/embedding-repository.ts
+  s_fb4f32c665b8c6::t_2560e50b715543 74-84
+  s_fb4f32c665b8c6::t_e276e02c18695c 3
+  s_fb4f32c665b8c6::t_6198240915f416 51-65
+  s_fb4f32c665b8c6::t_65fa20499022d1 72-73
+packages/core/src/retrieval.ts
+  s_fb4f32c665b8c6::t_f6788d39756263 3
+  s_fb4f32c665b8c6::t_ae007695a52b02 89-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "37fd9cea90ed0659c4e01328f470fddbc68226a2",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
