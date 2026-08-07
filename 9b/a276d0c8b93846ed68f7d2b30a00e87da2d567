@@ -1,0 +1,19 @@
+packages/db/src/sqlite/repository.ts
+  s_fb4f32c665b8c6::t_be694552cdf582 1215-1218,1225-1227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "9ba276d0c8b93846ed68f7d2b30a00e87da2d567",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
