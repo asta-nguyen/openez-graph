@@ -1,0 +1,32 @@
+apps/cli/README.md
+  s_fb4f32c665b8c6::t_67e584aec32197 13,16
+  s_fb4f32c665b8c6::t_4446cc79b64455 12,17
+  s_fb4f32c665b8c6::t_7479d51c459aa1 108-115
+CHANGELOG.md
+  s_fb4f32c665b8c6::t_e731112af8db0e 16-17
+  s_fb4f32c665b8c6::t_51d9579dac0afd 40
+  s_fb4f32c665b8c6::t_d4e244470fa560 236
+  s_fb4f32c665b8c6::t_dbaebbee162c56 10-15,18-23,26,30-35,43,48-52
+  s_fb4f32c665b8c6::t_2529ad075b4517 27
+README.md
+  s_fb4f32c665b8c6::t_16a87af06820ec 36
+  s_fb4f32c665b8c6::t_0339806a740540 35
+apps/cli/package.json
+  s_fb4f32c665b8c6::t_6e3dd09f9528da 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5e486df3d84e9e8ed69082cb808254e9bbaa056b",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": null
+    }
+  }
+}
