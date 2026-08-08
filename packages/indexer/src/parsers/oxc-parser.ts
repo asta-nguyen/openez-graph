@@ -335,20 +335,6 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
  * - ImportNamespaceSpecifier -> .local.name
  * - ImportSpecifier          -> .local.name
  */
-function extractImportBindings(body: OxcNode[]): string[] {
-  const bindings: string[] = [];
-  for (const node of body) {
-    if (node.type !== "ImportDeclaration") continue;
-    for (const spec of (node.specifiers ?? []) as OxcNode[]) {
-      const local = (spec as any).local as OxcNode | undefined;
-      if (local?.type === "Identifier" && typeof local.name === "string") {
-        bindings.push(local.name);
-      }
-    }
-  }
-  return bindings;
-}
-
 function extractImports(body: OxcNode[]): string[] {
   const imports: string[] = [];
   for (const node of body) {
@@ -406,10 +392,6 @@ export class OxcParser implements CodeParser {
     const symbolAsts = extractSymbols(body, input.content);
     const symbols = symbolAsts.map((s) => s.symbol);
     const importPaths = extractImports(body);
-    // Local import bindings are extracted by `extractImportBindings` (defined
-    // below) for downstream call resolution. ParsedDocument has no field for
-    // them yet (schema is frozen), so the result is not stored here; a later
-    // task wires it into graph building.
     // Discover nested callable declarations so calls inside them attribute to
     // the inner symbol, not the outer one. These are internal-only — the public
     // definedSymbols list is unchanged.
