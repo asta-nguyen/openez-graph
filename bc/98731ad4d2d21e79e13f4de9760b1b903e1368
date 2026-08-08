@@ -1,0 +1,32 @@
+.agents/skills/release-cli/SKILL.md
+  s_fb4f32c665b8c6::t_6e201c1ccd65c2 38-39
+CONTRIBUTING.md
+  s_fb4f32c665b8c6::t_4084db6e5ce526 62-63
+  s_fb4f32c665b8c6::t_d9e12ea31ca3f5 84
+  s_fb4f32c665b8c6::t_9be6b3027a377e 9
+README.md
+  s_fb4f32c665b8c6::t_cf6f18f2156f90 14
+.windsurf/skills/release-cli/SKILL.md
+  s_fb4f32c665b8c6::t_dfff7266a0d5c6 65-66,75-76
+  s_fb4f32c665b8c6::t_1fcabe12bdc290 33
+CHANGELOG.md
+  s_fb4f32c665b8c6::t_47cff721719522 8-25
+apps/cli/README.md
+  s_fb4f32c665b8c6::t_d69f60f9277f10 150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "bc98731ad4d2d21e79e13f4de9760b1b903e1368",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
