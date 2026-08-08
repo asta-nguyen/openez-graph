@@ -71,6 +71,7 @@ function getRegistryDbRaw() {
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   if (!usedTemplate) initializeRegistrySchema(sqlite);
+  else migrateRegistryColumns(sqlite);
   return { sqlite, db: drizzle(sqlite as any, { schema }) };
 }
 
