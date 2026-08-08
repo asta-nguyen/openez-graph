@@ -120,6 +120,31 @@ fn go_normalize_receiver(text: &str) -> String {
     .to_string()
 }
 
+/// Extract the receiver variable name from Go receiver text.
+/// `(f Foo)` → `f`, `(b *Bar)` → `b`
+fn go_receiver_name(text: &str) -> Option<String> {
+  let inner = text.trim_matches(|c| c == '(' || c == ')').trim();
+  let parts: Vec<&str> = inner.split_whitespace().collect();
+  parts.first().map(|s| s.to_string())
+}
+
+/// Extract the receiver type name from Go receiver text.
+/// `(f Foo)` → `Foo`, `(b *Bar)` → `Bar`, `(s []byte)` → `byte`
+fn go_receiver_type(text: &str) -> Option<String> {
+  let inner = text.trim_matches(|c| c == '(' || c == ')').trim();
+  let parts: Vec<&str> = inner.split_whitespace().collect();
+  let type_part = parts.last()?;
+  // Strip pointer marker: *Bar → Bar
+  let cleaned = type_part.trim_start_matches('*');
+  // Strip slice/brackets: []byte → byte
+  let cleaned = cleaned.trim_start_matches("[]");
+  if cleaned.is_empty() {
+    None
+  } else {
+    Some(cleaned.to_string())
+  }
+}
+
 // ── Call name normalization ──
 
 fn normalize_dot_call(value: &str) -> String {
@@ -539,8 +564,10 @@ fn walk_tree(
   let mut called_identifiers: HashSet<String> = HashSet::new();
   let mut call_expressions: Vec<NativeCallExpression> = Vec::new();
 
-  // Context stack for nested symbol naming
-  let mut context_stack: Vec<(String, usize)> = Vec::new(); // (name, end_row)
+  // Context stack for nested symbol naming.
+  // Carries optional receiver (var_name, type_name) for Go methods so calls
+  // through the receiver variable can be qualified as Type::method.
+  let mut context_stack: Vec<(String, usize, Option<(String, String)>)> = Vec::new();
 
   // Build lookup maps
   let symbol_rule_map: Vec<(&str, &SymbolRule)> = config
@@ -559,7 +586,7 @@ fn walk_tree(
     let end_row = node.end_position().row + 1;
 
     // Pop expired contexts
-    while let Some((_, ctx_end)) = context_stack.last() {
+    while let Some((_, ctx_end, _)) = context_stack.last() {
       if start_row > *ctx_end {
         context_stack.pop();
       } else {
@@ -584,23 +611,34 @@ fn walk_tree(
       };
 
       if let Some(name) = name {
-        let parent_name = context_stack.last().map(|(n, _)| n.clone());
-        let full_name = parent_name
-          .map(|p| format!("{}::{}", p, name))
-          .unwrap_or_else(|| name.clone());
+        let parent_name = context_stack.last().map(|(n, _, _)| n.clone());
+
+        // Extract receiver info for Go methods
+        let receiver_raw = rule.receiver_field.and_then(|field| {
+          node.child_by_field_name(field).map(|r| text_of(&r, source))
+        });
+        let receiver_type = receiver_raw.as_deref().and_then(go_receiver_type);
+        let receiver_var = receiver_raw.as_deref().and_then(go_receiver_name);
+
+        // Qualify method name with receiver type: Save → Foo::Save
+        // This prevents same-named methods on different types from colliding.
+        let full_name = if let Some(ref rt) = receiver_type {
+          format!("{}::{}", rt, name)
+        } else {
+          parent_name
+            .map(|p| format!("{}::{}", p, name))
+            .unwrap_or_else(|| name.clone())
+        };
 
         let node_text_20 = text_first_n(&node, source, 20);
         let exported = (rule.is_exported)(&name, &node_text_20);
 
-        let receiver = rule.receiver_field.and_then(|field| {
-          node.child_by_field_name(field).map(|r| {
-            let raw = text_of(&r, source);
-            if let Some(normalize) = rule.normalize_receiver {
-              normalize(&raw)
-            } else {
-              raw
-            }
-          })
+        let receiver = receiver_raw.as_deref().map(|raw| {
+          if let Some(normalize) = rule.normalize_receiver {
+            normalize(raw)
+          } else {
+            raw.to_string()
+          }
         });
 
         symbols.push(NativeSymbol {
@@ -622,7 +660,12 @@ fn walk_tree(
           } else {
             full_name.clone()
           };
-          context_stack.push((context_name, end_row));
+          // Carry receiver (var, type) so calls through the receiver variable
+          // can be qualified as Type::method.
+          let ctx_receiver = receiver_type
+            .as_ref()
+            .and_then(|rt| receiver_var.as_ref().map(|rv| (rv.clone(), rt.clone())));
+          context_stack.push((context_name, end_row, ctx_receiver));
         }
       }
     } else if node_kind == config.call_node_type {
@@ -631,16 +674,29 @@ fn walk_tree(
         let callee_raw = text_of(&func_node, source);
         let normalized = (config.normalize_call_name)(&callee_raw);
 
+        // Qualify calls through the receiver variable: f.Validate() → Foo::Validate
+        // This matches the TS parser behavior and prevents call edges from
+        // targeting the wrong same-named method on a different type.
+        let qualified_callee = if let Some((_, _, Some((rv, rt)))) = context_stack.last() {
+          if callee_raw.starts_with(&format!("{}.", rv)) {
+            format!("{}::{}", rt, normalized)
+          } else {
+            normalized.clone()
+          }
+        } else {
+          normalized.clone()
+        };
+
         if !normalized.is_empty()
           && !config.call_ignores.contains(callee_raw.as_str())
           && !config.call_ignores.contains(normalized.as_str())
         {
-          called_identifiers.insert(normalized.clone());
-          if let Some((caller, _)) = context_stack.last() {
-            if normalized != *caller {
+          called_identifiers.insert(qualified_callee.clone());
+          if let Some((caller, _, _)) = context_stack.last() {
+            if qualified_callee != *caller {
               call_expressions.push(NativeCallExpression {
                 caller_name: caller.clone(),
-                callee_name: normalized,
+                callee_name: qualified_callee,
               });
             }
           }
