@@ -32,6 +32,7 @@ export default defineConfig({
     "tree-sitter-python",
     "tree-sitter-go",
     "tree-sitter-rust",
+    "better-sqlite3",
   ],
   // Bundle everything else (workspace packages + npm deps)
   noExternal: [

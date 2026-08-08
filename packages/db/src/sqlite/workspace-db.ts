@@ -1,16 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { drizzle } from "drizzle-orm/bun-sqlite";
-
 import * as schema from "./schema";
 import { createNativeDatabase, hasVecExtension } from "./database-loader";
+import { createDrizzleInstance } from "./drizzle-driver";
 import { restoreFtsTriggerDefinitions } from "./fts-repository";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
 
-const dbCache = new Map<string, ReturnType<typeof drizzle>>();
+const dbCache = new Map<string, ReturnType<typeof createDrizzleInstance>>();
 const nativeCache = new Map<string, ReturnType<typeof createNativeDatabase>>();
 
 // Resolve a bundled file (template.sqlite, registry-template.sqlite) that ships alongside the CLI binary.
@@ -61,7 +60,7 @@ function getWorkspaceDbRaw(rootPath: string) {
   sqlite.pragma("page_size = 16384");
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
-  return { sqlite, db: drizzle(sqlite as any, { schema }) };
+  return { sqlite, db: createDrizzleInstance(sqlite, schema) };
 }
 
 export function getWorkspaceDb(rootPath: string) {

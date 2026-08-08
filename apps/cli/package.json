@@ -48,6 +48,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "better-sqlite3": "^12.10.0",
     "tree-sitter-go": "^0.25.0",
     "tree-sitter-python": "^0.25.0",
     "tree-sitter-rust": "^0.24.0",
