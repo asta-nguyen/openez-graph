@@ -1,0 +1,32 @@
+packages/native/src/parser.rs
+  s_fb4f32c665b8c6::t_49e2c25000aa54 567-570
+  s_fb4f32c665b8c6::t_5aadb39b98c903 589
+  s_fb4f32c665b8c6::t_3eafcce5f5aa19 677-689,694-696,699
+  s_fb4f32c665b8c6::t_c0b0548f46cd94 123-147
+  s_fb4f32c665b8c6::t_2bef5b84d56a44 614-631,636-641,663-668
+tests/tree-sitter-parser.test.ts
+  s_fb4f32c665b8c6::t_b0df7c11ea9c8a 176,182
+packages/indexer/src/tree-sitter/parse.ts
+  s_fb4f32c665b8c6::t_89183dcb7d286d 64-79
+  s_fb4f32c665b8c6::t_7146c2a184e933 167-168,175-176,180-186
+  s_fb4f32c665b8c6::t_1660cb4b8fe118 113-120
+  s_fb4f32c665b8c6::t_e23c885753af8c 283-287
+  s_fb4f32c665b8c6::t_38f87240ee84a5 201-203
+  s_fb4f32c665b8c6::t_ca1f9c38c62174 187,204-212,222,254,279-282,292,296-297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7f91ec8b28a955890fd052bf6cb0a7a1715fea24",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
