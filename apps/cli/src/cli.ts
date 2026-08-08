@@ -116,7 +116,7 @@ program
       };
     }
 
-    const summary = await indexWorkspace({ rootPath: workspace.rootPath });
+    const summary = await indexWorkspace({ rootPath: resolvedPath });
     console.log(JSON.stringify(summary, null, 2));
   });
 
