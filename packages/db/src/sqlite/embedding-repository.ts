@@ -54,12 +54,16 @@ export function createEmbeddingOps(native: NativeDatabase, stmts: EmbeddingStmts
       // Sync to sqlite-vec virtual table for ANN search when the extension is
       // loaded. Failures (missing table, dimension mismatch) are swallowed so
       // the linear-scan path remains authoritative.
+      // Include provider/model so KNN queries can filter by embedding model,
+      // preventing cross-model ranking when multiple providers exist.
       if (hasVecExtension()) {
         for (const input of inputs) {
           try {
             native
-              .prepare("INSERT OR REPLACE INTO embeddings_vec (chunk_id, embedding) VALUES (?, ?)")
-              .run(input.chunkId, input.embedding);
+              .prepare(
+                "INSERT OR REPLACE INTO embeddings_vec (chunk_id, embedding, provider, model) VALUES (?, ?, ?, ?)",
+              )
+              .run(input.chunkId, input.embedding, input.provider, input.model);
           } catch {
             // Vec table might not exist or dimension mismatch — skip
           }

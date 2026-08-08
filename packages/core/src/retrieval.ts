@@ -101,21 +101,13 @@ export async function rankStoredEmbeddings(
           chunks.id, chunks.content, chunks.heading, chunks.metadata,
           documents.path, embeddings_vec.distance
         FROM embeddings_vec
-        INNER JOIN embeddings ON embeddings.chunk_id = embeddings_vec.chunk_id
-        INNER JOIN chunks ON chunks.id = embeddings.chunk_id
+        INNER JOIN chunks ON chunks.id = embeddings_vec.chunk_id
         INNER JOIN documents ON documents.id = chunks.document_id
-        WHERE embeddings.provider = ?
-          AND embeddings.model = ?
-          AND embeddings.dimensions = ?
+        WHERE embeddings_vec.provider = ?
+          AND embeddings_vec.model = ?
         ORDER BY embeddings_vec.embedding MATCH ?
         LIMIT ?`,
-        [
-          provider.provider,
-          embeddingStorageModel(provider),
-          queryEmbedding.length,
-          queryBlob,
-          limit * 2,
-        ],
+        [provider.provider, embeddingStorageModel(provider), queryBlob, limit * 2],
       );
 
       if (vecResults.length > 0) {
