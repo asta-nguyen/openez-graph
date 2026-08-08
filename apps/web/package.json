@@ -7,7 +7,7 @@
   "types": "./src/server/index.ts",
   "scripts": {
     "dev": "vite",
-    "dev:api": "tsx src/server/start.ts",
+    "dev:api": "bun src/server/start.ts",
     "dev:all": "concurrently \"pnpm dev\" \"pnpm dev:api\"",
     "build": "vite build && tsc --noEmit",
     "preview": "vite preview",
