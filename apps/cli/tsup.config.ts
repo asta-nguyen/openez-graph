@@ -32,6 +32,12 @@ export default defineConfig({
     "tree-sitter-python",
     "tree-sitter-go",
     "tree-sitter-rust",
+    "oxc-parser",
+    "@oxc-parser/binding-darwin-arm64",
+    "@oxc-parser/binding-darwin-x64",
+    "@oxc-parser/binding-linux-x64-gnu",
+    "@oxc-parser/binding-linux-arm64-gnu",
+    "@oxc-parser/binding-win32-x64-msvc",
   ],
   // Bundle everything else (workspace packages + npm deps)
   noExternal: [
