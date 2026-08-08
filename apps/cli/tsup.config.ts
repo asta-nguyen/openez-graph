@@ -32,7 +32,6 @@ export default defineConfig({
     "tree-sitter-python",
     "tree-sitter-go",
     "tree-sitter-rust",
-    "better-sqlite3",
   ],
   // Bundle everything else (workspace packages + npm deps)
   noExternal: [
@@ -57,7 +56,7 @@ export default defineConfig({
     "ollama",
   ],
   banner: {
-    js: "#!/usr/bin/env node",
+    js: "#!/usr/bin/env bun",
   },
   onSuccess: async () => {
     // Copy frontend dist into CLI dist/web for bundled web serving

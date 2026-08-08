@@ -94,8 +94,7 @@ export function createRegistryRepository(): RegistryRepository {
 
       const allRows = db.select().from(schema.workspaces).all();
       const legacyRow = allRows.find(
-        (candidate: (typeof allRows)[number]) =>
-          normalizeRootPath(candidate.rootPath) === normalizedRootPath,
+        (candidate) => normalizeRootPath(candidate.rootPath) === normalizedRootPath,
       );
       return legacyRow ? mapWorkspaceRow(legacyRow) : null;
     },
