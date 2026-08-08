@@ -1,5 +1,5 @@
 export { getRegistryDb, closeRegistryDb, resolveRegistryDbPath } from "./sqlite/registry-db";
-export { getWorkspaceDb, closeAllWorkspaceDbs } from "./sqlite/workspace-db";
+export { getWorkspaceDb, closeWorkspaceDb, closeAllWorkspaceDbs } from "./sqlite/workspace-db";
 export { createRegistryRepository, createWorkspaceRepository } from "./sqlite/repository";
 export {
   findLocalWorkspaceConfig,
