@@ -1027,7 +1027,7 @@ export async function indexWorkspace(input: {
             `[t]   fts-insert: ${Date.now() - _ftsT}ms (${ftsInputsForBackground.length} entries)\n`,
           );
         } catch (e) {
-          process.stderr.write(`[fts] ERROR: ${e}\n`);
+          throw e;
         } finally {
           _ftsBuildingWorkspaces.delete(workspace.id);
         }
