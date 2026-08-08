@@ -1,0 +1,20 @@
+CHANGELOG.md
+  s_fb4f32c665b8c6::t_3bd5f53dca8bb4 54-56,58
+  s_fb4f32c665b8c6::t_e282f76d4a6e90 57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1dcf7a67564174667e38f1bb1cf418e8292f8d21",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": null
+    }
+  }
+}
