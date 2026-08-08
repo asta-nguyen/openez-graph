@@ -1,0 +1,21 @@
+apps/cli/package.json
+  s_fb4f32c665b8c6::t_01e43d97e1d4a4 46
+apps/web/package.json
+  s_fb4f32c665b8c6::t_daa3cd145fa056 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "28e4761a2a135c2e4519fb57f8dd3b16e2595858",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
