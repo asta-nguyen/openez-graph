@@ -1,6 +1,6 @@
 export { getParserForPath, parseDocument } from "./parser-registry";
 export type { CodeParser, ParseInput, ParsedDocument, ParsedSymbol } from "./types";
-export { TsMorphParser } from "./ts-morph-parser";
+export { OxcParser } from "./oxc-parser";
 export { TreeSitterParser } from "./tree-sitter-parser";
 export { MarkdownParser } from "./markdown-parser";
 export { ConfigParser } from "./config-parser";

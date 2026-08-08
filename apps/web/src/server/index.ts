@@ -51,7 +51,7 @@ import {
   createWorkspaceRepository,
   removeWorkspace,
 } from "@openez-graph/db";
-import { indexWorkspace } from "@openez-graph/indexer";
+import { buildGraphForWorkspace, indexWorkspace } from "@openez-graph/indexer";
 
 const app = new Hono();
 app.use(
@@ -389,10 +389,19 @@ app.post("/api/workspaces/:id/index", async (c) => {
 });
 
 // Workspace graph
-app.get("/api/workspaces/:id/graph", (c) => {
+app.get("/api/workspaces/:id/graph", async (c) => {
   const id = c.req.param("id");
   const workspace = getRegistryWorkspace(id);
   if (!workspace) return c.json(null);
+
+  // Lazy graph build: if graph hasn't been built yet (pending status or
+  // empty nodes), build it now before reading. This mirrors the MCP
+  // code_context/graph_neighbors flow which also builds lazily on demand.
+  const repo = createWorkspaceRepository(workspace.rootPath);
+  const nodeCount = await repo.getNodeCount();
+  if (nodeCount === 0 || workspace.graphStatus === "pending") {
+    await buildGraphForWorkspace(id, workspace.rootPath);
+  }
 
   // ponytail: canvas-first ceiling; move to WebGL/streaming for larger full graphs.
   const maxNodes = Math.min(parseInt(c.req.query("limit") ?? "25000", 10) || 25000, 25000);

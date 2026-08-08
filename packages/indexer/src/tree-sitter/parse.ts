@@ -61,6 +61,22 @@ export interface LanguageConfig {
 
 // ── Extraction core ──
 
+/** Extract receiver variable name from Go receiver text: `(f Foo)` → `f` */
+function goReceiverName(text: string): string | null {
+  const inner = text.replace(/^\(+|\)+$/g, "").trim();
+  const parts = inner.split(/\s+/);
+  return parts[0] ?? null;
+}
+
+/** Extract receiver type from Go receiver text: `(f Foo)` → `Foo`, `(b *Bar)` → `Bar` */
+function goReceiverType(text: string): string | null {
+  const inner = text.replace(/^\(+|\)+$/g, "").trim();
+  const parts = inner.split(/\s+/);
+  const typePart = parts[parts.length - 1];
+  if (!typePart) return null;
+  return typePart.replace(/^\*/, "").replace(/^\[\]/, "") || null;
+}
+
 function getNodeName(node: Node, field: string): string | null {
   const nameNode = node.childForFieldName(field);
   if (nameNode) return nameNode.text;
@@ -94,8 +110,14 @@ function walkTree(
   const calledIdentifiers = new Set<string>();
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
 
-  // Stack of parent contexts for nested symbol naming (e.g. Class::method)
-  const contextStack: Array<{ name: string; endRow: number }> = [];
+  // Stack of parent contexts for nested symbol naming (e.g. Class::method).
+  // Carries optional receiver (varName, typeName) for Go methods so calls
+  // through the receiver variable can be qualified as Type::method.
+  const contextStack: Array<{
+    name: string;
+    endRow: number;
+    receiver?: { varName: string; typeName: string };
+  }> = [];
 
   // Map node types to symbol rules for quick lookup
   const symbolRuleMap = new Map<string, SymbolRule>();
@@ -130,6 +152,53 @@ function walkTree(
       importPaths.push(...paths);
     }
 
+    // Check for Python decorated_definition — extract decorator call edges
+    // linking the inner function/class to each decorator name.
+    if (node.type === "decorated_definition") {
+      // Find the inner definition (function_definition or class_definition)
+      let innerName: string | null = null;
+      for (let i = 0; i < node.namedChildCount; i++) {
+        const child = node.namedChild(i);
+        if (!child) continue;
+        if (child.type === "function_definition" || child.type === "class_definition") {
+          const nameNode = child.childForFieldName("name");
+          if (nameNode) {
+            const rawName = nameNode.text;
+            const parentName =
+              contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
+            innerName = parentName ? `${parentName}::${rawName}` : rawName;
+          }
+          break;
+        }
+      }
+
+      // Extract decorator names and create call edges
+      if (innerName) {
+        for (let i = 0; i < node.namedChildCount; i++) {
+          const child = node.namedChild(i);
+          if (!child || child.type !== "decorator") continue;
+          // Decorator contains an expression: identifier, attribute, or call
+          const expr = child.namedChild(0);
+          if (!expr) continue;
+          let decName: string | null = null;
+          if (expr.type === "call") {
+            // @app.route("/api") → extract function name
+            const funcNode = expr.childForFieldName("function");
+            if (funcNode) {
+              decName = config.normalizeCallName(funcNode.text);
+            }
+          } else {
+            // @lru_cache or @app.route → normalize the expression text
+            decName = config.normalizeCallName(expr.text);
+          }
+          if (decName && !config.callIgnores.has(decName) && decName !== innerName) {
+            calledIdentifiers.add(decName);
+            callExpressions.push({ callerName: innerName, calleeName: decName });
+          }
+        }
+      }
+    }
+
     // Check for symbol
     const symbolRule = symbolRuleMap.get(node.type);
     if (symbolRule) {
@@ -139,18 +208,29 @@ function walkTree(
       if (name) {
         const parentName =
           contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
-        const fullName = parentName ? `${parentName}::${name}` : name;
         const exported = symbolRule.isExported ? symbolRule.isExported(name, node) : false;
 
         let receiver: string | undefined;
+        let receiverVar: string | null = null;
+        let receiverType: string | null = null;
         if (symbolRule.receiverField) {
           const rawReceiver = node.childForFieldName(symbolRule.receiverField)?.text;
           if (rawReceiver) {
             receiver = symbolRule.normalizeReceiver
               ? symbolRule.normalizeReceiver(rawReceiver)
               : rawReceiver;
+            receiverVar = goReceiverName(rawReceiver);
+            receiverType = goReceiverType(rawReceiver);
           }
         }
+
+        // Qualify method name with receiver type: Save → Foo::Save
+        // This prevents same-named methods on different types from colliding.
+        const fullName = receiverType
+          ? `${receiverType}::${name}`
+          : parentName
+            ? `${parentName}::${name}`
+            : name;
 
         symbols.push({
           name: fullName,
@@ -165,7 +245,18 @@ function walkTree(
         // Extract calls within this symbol's body, skipping calls that are
         // inside nested symbols (those are extracted when processing the nested
         // symbol itself — avoids double-counting).
-        extractCallsInNode(node, config, fullName, calledIdentifiers, callExpressions);
+        const receiverInfo =
+          receiverVar && receiverType
+            ? { varName: receiverVar, typeName: receiverType }
+            : undefined;
+        extractCallsInNode(
+          node,
+          config,
+          fullName,
+          receiverInfo,
+          calledIdentifiers,
+          callExpressions,
+        );
 
         const isContextNode =
           symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
@@ -175,7 +266,7 @@ function walkTree(
           const contextName = symbolRule.extractContextName
             ? (symbolRule.extractContextName(node) ?? fullName)
             : fullName;
-          contextStack.push({ name: contextName, endRow });
+          contextStack.push({ name: contextName, endRow, receiver: receiverInfo });
         }
       }
     } else if (isCallNode(node, config.callRule)) {
@@ -207,6 +298,7 @@ function extractCallsInNode(
   symbolNode: Node,
   config: LanguageConfig,
   callerName: string,
+  receiverInfo: { varName: string; typeName: string } | undefined,
   calledIdentifiers: Set<string>,
   callExpressions: Array<{ callerName: string; calleeName: string }>,
 ): void {
@@ -231,16 +323,25 @@ function extractCallsInNode(
     if (!calleeName) continue;
 
     const normalized = config.normalizeCallName(calleeName);
+
+    // Qualify calls through the receiver variable: f.Validate() → Foo::Validate
+    // This matches the regex parser behavior and prevents call edges from
+    // targeting the wrong same-named method on a different type.
+    const qualifiedCallee =
+      receiverInfo && calleeName.startsWith(`${receiverInfo.varName}.`)
+        ? `${receiverInfo.typeName}::${normalized}`
+        : normalized;
+
     if (
       !normalized ||
       config.callIgnores.has(calleeName) ||
       config.callIgnores.has(normalized) ||
-      normalized === callerName
+      qualifiedCallee === callerName
     ) {
       continue;
     }
-    calledIdentifiers.add(normalized);
-    callExpressions.push({ callerName, calleeName: normalized });
+    calledIdentifiers.add(qualifiedCallee);
+    callExpressions.push({ callerName, calleeName: qualifiedCallee });
   }
 }
 

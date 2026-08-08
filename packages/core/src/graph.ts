@@ -97,7 +97,7 @@ export async function codeContext(input: {
   const referencedChunkIds = [
     ...new Set(
       neighbors.nodes
-        .filter((node) => node.type === "symbol" || node.type === "chunk")
+        .filter((node) => node.type === "symbol")
         .map((node) => node.ref_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
     ),
@@ -126,7 +126,8 @@ export async function codeContext(input: {
     if (typeof filePath === "string") result.path = filePath;
     if (typeof chunkMeta.startLine === "number") result.startLine = chunkMeta.startLine;
     if (typeof chunkMeta.endLine === "number") result.endLine = chunkMeta.endLine;
-    if (includeSnippet && typeof chunk?.content === "string") result.snippet = chunk.content;
+    if (includeSnippet && typeof chunk?.content === "string")
+      result.snippet = String(chunk.content);
     return result;
   };
 
@@ -150,7 +151,7 @@ export async function codeContext(input: {
       .filter((node) => node.type === "file")
       .map((node) => ({ path: String(node.label) })),
     relatedChunks: neighbors.nodes
-      .filter((node) => node.type === "chunk")
+      .filter((node) => node.type === "symbol")
       .flatMap((node) => {
         const chunk = chunksById.get(String(node.ref_id ?? ""));
         if (!chunk) return [];

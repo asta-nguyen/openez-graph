@@ -3,6 +3,9 @@ import fsAsync from "node:fs/promises";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 
+// @ts-expect-error — picomatch v4 ships no type declarations
+import picomatch from "picomatch";
+
 import type { FileToIndex } from "./types";
 import { codeExtensions, configExtensions, markdownExtensions } from "./languages";
 
@@ -11,6 +14,12 @@ const DEFAULT_INCLUDE_PATTERNS = [
   ...Array.from(configExtensions.keys()).map((ext) => `**/*${ext}`),
   ...Array.from(markdownExtensions).map((ext) => `**/*${ext}`),
 ];
+
+const ALLOWED_EXTENSIONS = new Set([
+  ...codeExtensions.keys(),
+  ...configExtensions.keys(),
+  ...markdownExtensions,
+]);
 
 const DEFAULT_EXCLUDE_PATTERNS = [
   "**/node_modules",
@@ -90,6 +99,45 @@ export async function scanWorkspaceFiles(input: {
         .filter(Boolean)
         .map((p) => p.trim())
     : DEFAULT_INCLUDE_PATTERNS;
+
+  // Native Rust scanner (rayon parallel walk) — fast path for default includes
+  if (!input.include) {
+    try {
+      let nativeBinding: any = null;
+      try {
+        nativeBinding = require(
+          require("path").join(__dirname, "native", "index.linux-x64-gnu.node"),
+        );
+      } catch {
+        nativeBinding = require("@openez-graph/native");
+      }
+      if (nativeBinding && typeof nativeBinding.scanWorkspaceFast === "function") {
+        const rawFiles: Array<{
+          absolutePath: string;
+          relativePath: string;
+          sizeBytes: number;
+          mtimeMs: number;
+        }> = nativeBinding.scanWorkspaceFast(rootPath, ALLOWED_EXTENSIONS);
+        if (rawFiles && rawFiles.length > 0) {
+          const isIgnored = picomatch(ignorePatterns, { dot: true });
+          const results: FileToIndex[] = [];
+          for (const f of rawFiles) {
+            if (!isIgnored(f.relativePath)) {
+              results.push({
+                absolutePath: f.absolutePath,
+                relativePath: f.relativePath,
+                sizeBytes: Number(f.sizeBytes),
+                mtimeMs: Number(f.mtimeMs),
+              });
+            }
+          }
+          return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+        }
+      }
+    } catch {
+      /* fallback to fast-glob */
+    }
+  }
 
   const entries = await fg(includePatterns, {
     cwd: rootPath,

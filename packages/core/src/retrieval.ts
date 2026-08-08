@@ -1,5 +1,9 @@
 import { getBrainSettings } from "@openez-graph/config";
-import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
+import {
+  createRegistryRepository,
+  createWorkspaceRepository,
+  hasVecExtension,
+} from "@openez-graph/db";
 
 import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
 import type { EmbeddingProvider } from "./embeddings";
@@ -53,7 +57,14 @@ export function cosineSimilarity(left: number[], right: number[]): number {
   return leftNorm === 0 || rightNorm === 0 ? 0 : dot / Math.sqrt(leftNorm * rightNorm);
 }
 
-function parseEmbedding(value: unknown): number[] {
+export function parseEmbedding(value: unknown): number[] {
+  if (value instanceof Uint8Array) {
+    return Array.from(new Float32Array(value.buffer, value.byteOffset, value.byteLength / 4));
+  }
+  if (value instanceof ArrayBuffer) {
+    return Array.from(new Float32Array(value));
+  }
+  // Fallback for old JSON data
   try {
     const parsed = JSON.parse(String(value));
     return Array.isArray(parsed) && parsed.every((item) => typeof item === "number") ? parsed : [];
@@ -78,6 +89,59 @@ export async function rankStoredEmbeddings(
   if (queryEmbedding.length === 0) return [];
 
   const repo = createWorkspaceRepository(rootPath);
+
+  // Try sqlite-vec ANN search first. When the extension is unavailable
+  // (e.g. under bun:sqlite today), this branch is skipped and we fall
+  // through to the linear scan below.
+  if (hasVecExtension()) {
+    try {
+      const queryBlob = new Uint8Array(new Float32Array(queryEmbedding).buffer);
+      const vecResults = await repo.queryRaw(
+        `SELECT
+          chunks.id, chunks.content, chunks.heading, chunks.metadata,
+          documents.path, embeddings_vec.distance
+        FROM embeddings_vec
+        INNER JOIN chunks ON chunks.id = embeddings_vec.chunk_id
+        INNER JOIN documents ON documents.id = chunks.document_id
+        WHERE embeddings_vec.embedding MATCH ?
+          AND embeddings_vec.provider = ?
+          AND embeddings_vec.model = ?
+        ORDER BY embeddings_vec.distance
+        LIMIT ?`,
+        [queryBlob, provider.provider, embeddingStorageModel(provider), limit * 2],
+      );
+
+      if (vecResults.length > 0) {
+        const seenPaths = new Set<string>();
+        return vecResults
+          .map((row) => {
+            const path = String(row.path);
+            const distance = Number(row.distance ?? 1);
+            const score = 1 - distance;
+            return {
+              id: String(row.id),
+              path,
+              content: String(row.content),
+              score: isCodeFile(path) ? score + CODE_FILE_BOOST : score,
+              heading: row.heading ? String(row.heading) : null,
+              metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+            };
+          })
+          .filter((hit) => hit.score >= MIN_COSINE_SIMILARITY)
+          .sort((left, right) => right.score - left.score)
+          .filter((hit) => {
+            if (seenPaths.has(hit.path)) return false;
+            seenPaths.add(hit.path);
+            return true;
+          })
+          .slice(0, limit);
+      }
+    } catch (error) {
+      console.error("[retrieval] vec search failed, falling back to linear scan:", error);
+    }
+  }
+
+  // Linear scan fallback (sufficient for local SQLite workspaces).
   const results = await repo.queryRaw(
     `SELECT
       chunks.id, chunks.content, chunks.heading, chunks.metadata,
@@ -91,7 +155,6 @@ export async function rankStoredEmbeddings(
     [provider.provider, embeddingStorageModel(provider), queryEmbedding.length],
   );
 
-  // Linear scan is sufficient for local SQLite; switch to sqlite-vec if profiling proves otherwise.
   const seenPaths = new Set<string>();
   return results
     .map((row) => {
@@ -172,7 +235,7 @@ async function graphExpand(
     `WITH RECURSIVE walk(node_id, depth) AS (
       SELECT id, 0
       FROM graph_nodes
-      WHERE type = 'chunk'
+      WHERE type = 'symbol'
         AND ref_id IN (${placeholders})
       UNION
       SELECT
@@ -192,7 +255,7 @@ async function graphExpand(
       FROM walk
       INNER JOIN graph_nodes ON graph_nodes.id = walk.node_id
       INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
-      WHERE graph_nodes.type = 'chunk'
+      WHERE graph_nodes.type = 'symbol'
         AND walk.depth > 0
         AND chunks.id NOT IN (${placeholders})
       GROUP BY chunks.id
@@ -248,6 +311,7 @@ export async function codeQuery(input: {
   const maxTokens = input.maxTokens ?? retrieval.maxContextTokens;
 
   const repo = createWorkspaceRepository(workspace.rootPath);
+  repo.ensureFtsReady();
 
   console.error(
     `[retrieval] query: "${input.query}" | fts_limit=${retrieval.textLimit} vector_limit=${retrieval.vectorLimit}`,

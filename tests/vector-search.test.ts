@@ -2,14 +2,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import { embeddingStorageModel, formatEmbeddingInput } from "../packages/core/src/embeddings";
-import { cosineSimilarity, rankStoredEmbeddings } from "../packages/core/src/retrieval";
+import {
+  cosineSimilarity,
+  parseEmbedding,
+  rankStoredEmbeddings,
+} from "../packages/core/src/retrieval";
 import { reciprocalRankFusion } from "../packages/core/src/rrf";
 import { closeAllWorkspaceDbs, createWorkspaceRepository } from "../packages/db/src/sqlite";
 
 const roots: string[] = [];
+
+const toBlob = (values: number[]): Uint8Array => new Uint8Array(new Float32Array(values).buffer);
 
 afterEach(() => {
   closeAllWorkspaceDbs();
@@ -74,14 +80,14 @@ describe("vector search", () => {
         provider: "ollama",
         model: embeddingStorageModel(ollama),
         dimensions: 2,
-        embedding: "[1,0]",
+        embedding: toBlob([1, 0]),
       },
       {
         chunkId: chunkB,
         provider: "ollama",
         model: embeddingStorageModel(ollama),
         dimensions: 2,
-        embedding: "[0.9,0.1]",
+        embedding: toBlob([0.9, 0.1]),
       },
     ]);
 
@@ -121,7 +127,7 @@ describe("vector search", () => {
         provider: "ollama",
         model: embeddingStorageModel(ollama),
         dimensions: 2,
-        embedding: "[0,1]",
+        embedding: toBlob([0, 1]),
       },
     ]);
 
@@ -159,17 +165,25 @@ describe("vector search", () => {
       provider: "ollama",
       model: embeddingStorageModel(ollama),
       dimensions: 2,
-      embedding: "[1,0]",
+      embedding: toBlob([1, 0]),
     };
     await repo.insertEmbeddings([embedding]);
-    await repo.insertEmbeddings([{ ...embedding, embedding: "[0,1]" }]);
+    await repo.insertEmbeddings([{ ...embedding, embedding: toBlob([0, 1]) }]);
 
     const rows = await repo.queryRaw(
       "SELECT embedding FROM embeddings WHERE chunk_id = ? AND provider = ? AND model = ?",
       [chunkId, embedding.provider, embedding.model],
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].embedding).toBe("[0,1]");
+    expect(
+      Array.from(
+        new Float32Array(
+          rows[0].embedding.buffer,
+          rows[0].embedding.byteOffset,
+          rows[0].embedding.byteLength / 4,
+        ),
+      ),
+    ).toEqual([0, 1]);
   });
 
   it("adds code context and honors fusion weights", () => {
@@ -205,5 +219,24 @@ describe("vector search", () => {
     expect(fused).toHaveLength(1);
     expect(fused[0].item.id).toBe("fts-chunk");
     expect(fused[0].score).toBeCloseTo(3 / 61);
+  });
+
+  it("parseEmbedding handles Float32Array BLOB", () => {
+    const original = [0.1, 0.2, 0.3, 0.4, 0.5];
+    const blob = new Uint8Array(new Float32Array(original).buffer);
+    const parsed = parseEmbedding(blob);
+    expect(parsed).toHaveLength(5);
+    expect(parsed[0]).toBeCloseTo(0.1, 5);
+    expect(parsed[4]).toBeCloseTo(0.5, 5);
+  });
+
+  it("parseEmbedding falls back to JSON for old data", () => {
+    const parsed = parseEmbedding("[0.1, 0.2, 0.3]");
+    expect(parsed).toEqual([0.1, 0.2, 0.3]);
+  });
+
+  it("parseEmbedding returns empty for invalid data", () => {
+    expect(parseEmbedding("not json")).toEqual([]);
+    expect(parseEmbedding(null)).toEqual([]);
   });
 });

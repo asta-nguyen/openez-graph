@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -259,6 +259,30 @@ describe("createWorkspaceRepository", () => {
     expect(await repo.getChunkCount()).toBe(0);
     expect(await repo.getNodeCount()).toBe(0);
     expect(await repo.getEdgeCount()).toBe(0);
+  });
+
+  it("keeps optimized write mode in WAL with synchronous OFF", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+
+    repo.setOptimizedWriteMode(true);
+    expect(await repo.queryRaw("PRAGMA journal_mode")).toEqual([{ journal_mode: "wal" }]);
+    expect(await repo.queryRaw("PRAGMA synchronous")).toEqual([{ synchronous: 0 }]);
+
+    repo.setOptimizedWriteMode(false);
+    expect(await repo.queryRaw("PRAGMA journal_mode")).toEqual([{ journal_mode: "wal" }]);
+    expect(await repo.queryRaw("PRAGMA synchronous")).toEqual([{ synchronous: 1 }]);
+    expect(await repo.queryRaw("PRAGMA locking_mode")).toEqual([{ locking_mode: "normal" }]);
+  });
+
+  it("migrates a MEMORY journal database back to WAL on disable", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    // Force the database into MEMORY journal mode (the old broken state).
+    await repo.executeRaw("PRAGMA journal_mode = MEMORY");
+    expect(await repo.queryRaw("PRAGMA journal_mode")).toEqual([{ journal_mode: "memory" }]);
+
+    repo.setOptimizedWriteMode(false);
+    expect(await repo.queryRaw("PRAGMA journal_mode")).toEqual([{ journal_mode: "wal" }]);
+    expect(await repo.queryRaw("PRAGMA synchronous")).toEqual([{ synchronous: 1 }]);
   });
 
   it("inserts and queries memories", async () => {

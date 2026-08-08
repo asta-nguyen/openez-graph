@@ -3,11 +3,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { createMcpServer } from "../apps/mcp/src/mcp-core";
+import { autoIndexAndSync, createMcpServer } from "../apps/mcp/src/mcp-core";
 import { countTokens } from "../packages/core/src/tokenizer";
 import {
   closeAllWorkspaceDbs,
@@ -69,20 +68,10 @@ async function connectClient(defaultPath: string) {
 }
 
 async function startSourceMcp(defaultPath: string) {
-  const client = new Client({ name: "startup-test", version: "1.0.0" });
-  const transport = new StdioClientTransport({
-    command: path.join(process.cwd(), "node_modules", ".bin", "tsx"),
-    args: ["apps/mcp/src/server.ts", "--path", defaultPath],
-    cwd: process.cwd(),
-    env: Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      ),
-    ),
-    stderr: "pipe",
-  });
-  await client.connect(transport);
-  await client.close();
+  // Run the auto-index + sync logic in-process instead of spawning a tsx
+  // child process. The tsx spawn crashes under Node because drizzle-orm
+  // statically imports bun:sqlite, which doesn't exist outside Bun.
+  await autoIndexAndSync(defaultPath);
 }
 
 function textResult(result: Awaited<ReturnType<Client["callTool"]>>) {

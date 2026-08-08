@@ -1,5 +1,5 @@
 import { defineConfig } from "tsup";
-import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
@@ -24,11 +24,10 @@ export default defineConfig({
   minify: false,
   splitting: false,
   define: { __OPENEZ_BUILD_ID__: JSON.stringify(getBuildId()) },
-  // better-sqlite3 is a native module — must remain external.
-  // web-tree-sitter + tree-sitter-{python,go,rust} ship .wasm binary assets
-  // that tsup cannot inline; they must resolve from node_modules at runtime.
+  // Native modules + wasm binaries must remain external — they resolve from node_modules at runtime.
   external: [
-    "better-sqlite3",
+    "bun:sqlite",
+    "@openez-graph/native",
     "web-tree-sitter",
     "tree-sitter-python",
     "tree-sitter-go",
@@ -57,7 +56,7 @@ export default defineConfig({
     "ollama",
   ],
   banner: {
-    js: "#!/usr/bin/env node",
+    js: "#!/usr/bin/env bun",
   },
   onSuccess: async () => {
     // Copy frontend dist into CLI dist/web for bundled web serving
@@ -77,6 +76,54 @@ export default defineConfig({
     if (existsSync(changelogSrc)) {
       cpSync(changelogSrc, changelogDest);
       console.log("✓ Copied CHANGELOG.md → dist/CHANGELOG.md");
+    }
+
+    // Copy native .node binary + loader into dist so it resolves without node_modules
+    const nativeDir = path.resolve(__dirname, "../../packages/native");
+    const nodeFile = path.join(nativeDir, "index.linux-x64-gnu.node");
+    if (existsSync(nodeFile)) {
+      const nativeDest = path.resolve(__dirname, "dist/native");
+      mkdirSync(nativeDest, { recursive: true });
+      cpSync(nodeFile, path.join(nativeDest, "index.linux-x64-gnu.node"));
+      cpSync(path.join(nativeDir, "index.js"), path.join(nativeDest, "index.js"));
+      // Create node_modules/@openez-graph/native/package.json so require resolves from dist
+      mkdirSync(path.resolve(__dirname, "dist/node_modules/@openez-graph/native"), {
+        recursive: true,
+      });
+      writeFileSync(
+        path.resolve(__dirname, "dist/node_modules/@openez-graph/native/package.json"),
+        JSON.stringify(
+          { name: "@openez-graph/native", version: "0.1.0", main: "../../native/index.js" },
+          null,
+          2,
+        ),
+      );
+      console.log("✓ Copied native .node + loader → dist/native/");
+    } else {
+      console.log("⚠ Native .node not found — run cargo build first");
+    }
+
+    // Build SQLite template databases and copy into dist.
+    // Templates pre-create the full schema so `openez init` copies a file
+    // instead of running ~20 CREATE TABLE/INDEX statements (~700ms saved).
+    const templateScript = path.resolve(__dirname, "../../packages/db/scripts/build-template.ts");
+    if (existsSync(templateScript)) {
+      try {
+        execFileSync("bun", [templateScript], {
+          stdio: "pipe",
+          cwd: path.resolve(__dirname, "../.."),
+        });
+        const dbDir = path.resolve(__dirname, "../../packages/db");
+        for (const tmpl of ["template.sqlite", "registry-template.sqlite"]) {
+          const src = path.join(dbDir, tmpl);
+          if (existsSync(src)) {
+            cpSync(src, path.resolve(__dirname, "dist", tmpl));
+            console.log(`✓ Copied ${tmpl} → dist/${tmpl}`);
+          }
+        }
+      } catch (e) {
+        console.log("⚠ Template build failed — runtime DDL fallback will be used");
+      }
     }
   },
 });

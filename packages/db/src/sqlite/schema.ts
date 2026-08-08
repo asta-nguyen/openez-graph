@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { blob, integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
 // ── Global Registry DB Schema ──
 
@@ -96,7 +96,7 @@ export const embeddings = sqliteTable("embeddings", {
   provider: text("provider").notNull(),
   model: text("model").notNull(),
   dimensions: integer("dimensions").notNull(),
-  embedding: text("embedding").notNull(),
+  embedding: blob("embedding", { mode: "buffer" }).notNull(),
   inputHash: text("input_hash"),
   createdAt: text("created_at")
     .notNull()

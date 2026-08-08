@@ -29,9 +29,14 @@ interface SqliteDb {
   close(): void;
 }
 
-type SqliteConstructor = new (filename: string, options?: { nativeBinding?: string }) => SqliteDb;
-
-const Database = require("better-sqlite3") as SqliteConstructor;
+const { Database: BunDatabase } = require("bun:sqlite");
+// Wrap to add .pragma() shim — bun:sqlite doesn't have it natively
+const Database = class extends BunDatabase {
+  constructor(filename: string, options?: any) {
+    super(filename, options);
+    (this as any).pragma = (cmd: string) => this.exec(`PRAGMA ${cmd}`);
+  }
+} as unknown as new (filename: string, options?: any) => SqliteDb;
 
 let registryDb: SqliteDb | null = null;
 const workspaceDbs = new Map<string, SqliteDb>();

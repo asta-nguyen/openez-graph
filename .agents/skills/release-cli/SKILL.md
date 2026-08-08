@@ -35,8 +35,8 @@ Run from monorepo root, in order:
 ```bash
 pnpm build:web    # rebuild frontend (CLI bundles it)
 pnpm build:cli    # build CLI with tsup
-node apps/cli/dist/cli.cjs --version   # must print the new version
-node apps/cli/dist/cli.cjs --help      # must list all commands
+bun apps/cli/dist/cli.cjs --version   # must print the new version
+bun apps/cli/dist/cli.cjs --help      # must list all commands
 ```
 
 Then smoke test in a temp dir: `init` + `status` must succeed.
