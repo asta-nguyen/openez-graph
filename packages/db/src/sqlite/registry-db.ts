@@ -2,9 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { drizzle } from "drizzle-orm/bun-sqlite";
+
 import * as schema from "./schema";
 import { createNativeDatabase } from "./database-loader";
-import { createDrizzleInstance } from "./drizzle-driver";
 import { resolveBundledFile } from "./workspace-db";
 
 let registryDb: ReturnType<typeof getRegistryDbRaw> | null = null;
@@ -70,7 +71,7 @@ function getRegistryDbRaw() {
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   if (!usedTemplate) initializeRegistrySchema(sqlite);
-  return { sqlite, db: createDrizzleInstance(sqlite, schema) };
+  return { sqlite, db: drizzle(sqlite as any, { schema }) };
 }
 
 export function resolveRegistryDbPath(): string {
