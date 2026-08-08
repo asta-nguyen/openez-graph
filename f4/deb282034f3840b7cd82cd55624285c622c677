@@ -1,0 +1,22 @@
+packages/core/src/retrieval.ts
+  s_fb4f32c665b8c6::t_f2cb7f0a0beee4 2
+  s_fb4f32c665b8c6::t_1b80f7b7ba9811 3-6
+packages/db/src/sqlite/index.ts
+  s_fb4f32c665b8c6::t_447131b0a6ce07 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f4deb282034f3840b7cd82cd55624285c622c677",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
