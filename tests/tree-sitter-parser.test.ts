@@ -173,13 +173,13 @@ describe("tree-sitter go parser", () => {
 
     expect(result).not.toBeNull();
     const symbols = result!.definedSymbols.map((s) => s.name);
-    expect(symbols).toEqual(expect.arrayContaining(["greet", "Greeter", "Greet", "main"]));
+    expect(symbols).toEqual(expect.arrayContaining(["greet", "Greeter", "Greeter::Greet", "main"]));
 
     const greeterType = result!.definedSymbols.find((s) => s.name === "Greeter");
     expect(greeterType?.symbolType).toBe("type");
     expect(greeterType?.exported).toBe(true);
 
-    const greetMethod = result!.definedSymbols.find((s) => s.name === "Greet");
+    const greetMethod = result!.definedSymbols.find((s) => s.name === "Greeter::Greet");
     expect(greetMethod?.receiver).toBe("g *Greeter");
     expect(greetMethod?.exported).toBe(true);
 
