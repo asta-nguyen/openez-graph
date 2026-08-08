@@ -1,6 +1,9 @@
 import { getBrainSettings } from "@openez-graph/config";
-import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
-import { hasVecExtension } from "../../db/src/sqlite/database-loader";
+import {
+  createRegistryRepository,
+  createWorkspaceRepository,
+  hasVecExtension,
+} from "@openez-graph/db";
 
 import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
 import type { EmbeddingProvider } from "./embeddings";
