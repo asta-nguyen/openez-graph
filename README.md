@@ -32,6 +32,8 @@ The MCP runtime registers the current project, creates its first index when need
 
 Coding agents repeatedly spend context reading the same files. OpenEZ creates a reusable local index so agents can retrieve relevant code and relationships without sending the whole codebase to an external database.
 
+- **Bun-powered for speed** — runs on [Bun](https://bun.sh) 1.1+ with native `bun:sqlite`, no native compilation step, near-instant startup, and faster indexing than Node.js + `better-sqlite3`
+- **Rust-native parsing** — TS/JS parsed with [oxc-parser](https://oxc.rs) (~13x faster than Babel); Python/Go/Rust parsed with tree-sitter in rayon-parallel batches
 - Local SQLite storage in WAL mode
 - Multi-workspace indexing and retrieval
 - Full-text search with graph expansion and optional embedding reranking

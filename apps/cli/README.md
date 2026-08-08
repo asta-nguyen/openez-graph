@@ -9,8 +9,12 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 
 **Zero config. No Docker. No Postgres. No Redis. Just install and go.**
 
+> **v1.0: Bun-powered, Rust-native parsing.** The CLI now runs exclusively on [Bun](https://bun.sh) 1.1+ with native `bun:sqlite` (no `better-sqlite3` compilation step). TS/JS parsing uses [oxc-parser](https://oxc.rs) (Rust-based, ~13x faster than Babel) instead of `ts-morph`. Python/Go/Rust use tree-sitter in rayon-parallel batches. Requires Bun 1.1+.
+
 ## Features
 
+- **Bun-powered** — native `bun:sqlite` driver, no native compilation, near-instant startup
+- **Rust-native parsing** — [oxc-parser](https://oxc.rs) for TS/JS (~13x faster than Babel), tree-sitter for Python/Go/Rust in rayon-parallel batches
 - **Zero-config** — auto-registers workspace, auto-indexes, auto-syncs on file changes
 - **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
 - **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
@@ -101,14 +105,14 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 
 ## Supported languages
 
-| Language                | Indexing depth                                         |
-| ----------------------- | ------------------------------------------------------ |
-| TypeScript / JavaScript | Richest — `ts-morph` symbol extraction, imports, calls |
-| Python                  | Basic top-level symbol extraction                      |
-| Go                      | Basic top-level symbol extraction                      |
-| Rust                    | Basic top-level symbol extraction                      |
-| YAML / JSON / TOML      | Structure-aware chunking                               |
-| Markdown                | Section-oriented chunking                              |
+| Language                | Parser                       | Indexing depth                                                       |
+| ----------------------- | ---------------------------- | -------------------------------------------------------------------- |
+| TypeScript / JavaScript | [oxc-parser](https://oxc.rs) | Richest — symbol extraction, imports, calls (~13x faster than Babel) |
+| Python                  | tree-sitter (Rust, rayon)    | Symbol extraction, decorators, imports, calls                        |
+| Go                      | tree-sitter (Rust, rayon)    | Symbol extraction, receiver-qualified methods, calls                 |
+| Rust                    | tree-sitter (Rust, rayon)    | Symbol extraction, impl blocks, calls                                |
+| YAML / JSON / TOML      | Structure-aware              | Structure-aware chunking                                             |
+| Markdown                | Section-oriented             | Section-oriented chunking                                            |
 
 ## Retrieval quality
 
