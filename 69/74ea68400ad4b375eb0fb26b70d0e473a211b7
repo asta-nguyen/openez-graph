@@ -1,0 +1,38 @@
+apps/cli/package.json
+  s_fb4f32c665b8c6::t_00e6069fad4e3f 51
+packages/db/src/sqlite/registry-db.ts
+  s_fb4f32c665b8c6::t_e1c42dceab2750 73
+  s_fb4f32c665b8c6::t_a1029bdc6627d4 7
+packages/db/src/sqlite/workspace-db.ts
+  s_fb4f32c665b8c6::t_9164ad431ac7a1 6
+  s_fb4f32c665b8c6::t_e718373bfe84cb 63
+  s_fb4f32c665b8c6::t_c9175176a8cf5e 12
+packages/db/src/sqlite/database-loader.ts
+  s_fb4f32c665b8c6::t_b230caa4a78b6e 94-98,102-106,139,142-161,163-173,175-177
+  s_fb4f32c665b8c6::t_36626a3b226e9c 109-110,124-126,128-130,135-138
+  s_fb4f32c665b8c6::t_de303ad51f6781 99-101,107-108,111-123,127,131-134,140-141
+packages/db/src/sqlite/registry-repository.ts
+  s_fb4f32c665b8c6::t_d3446c1e6f47e7 97-98
+apps/cli/tsup.config.ts
+  s_fb4f32c665b8c6::t_244854c875c166 35
+packages/db/src/sqlite/drizzle-driver.ts
+  s_fb4f32c665b8c6::t_41916b2f63dc0d 1-50
+pnpm-lock.yaml
+  s_fb4f32c665b8c6::t_d6623d4b66979b 71-73,6813,6917,7059,7252,7333,7360,7422,7479,7490,8006,8014,8033,8564,8717,8818
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6974ea68400ad4b375eb0fb26b70d0e473a211b7",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
