@@ -147,7 +147,7 @@ Opens a full web dashboard at `http://localhost:17881` with:
 
 ## Requirements
 
-- [Bun](https://bun.sh) 1.1+ (single-binary install: `curl -fsSL https://bun.sh | bash`)
+- [Bun](https://bun.sh) 1.1+ (single-binary install: `curl -fsSL https://bun.sh/install | bash`)
 - No external services needed
 
 ## Changelog
