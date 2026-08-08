@@ -109,7 +109,6 @@ fn split_to_token_limit(value: &str, max_tokens: i32, overlap_tokens: i32) -> Ve
     return vec![value.to_string()];
   }
 
-  let step = max_bytes - overlap_bytes;
   let mut chunks = Vec::new();
   let mut start = 0usize;
   while start < value.len() {
@@ -121,7 +120,10 @@ fn split_to_token_limit(value: &str, max_tokens: i32, overlap_tokens: i32) -> Ve
     if end >= value.len() {
       break;
     }
-    start += step;
+    // Advance start from the adjusted `end`, not from the unadjusted window.
+    // Using a fixed step would skip bytes between `end` and `start + step`
+    // when `end` was moved back to a char boundary — dropping code points.
+    start = end.saturating_sub(overlap_bytes);
     while start < value.len() && !value.is_char_boundary(start) {
       start += 1;
     }
