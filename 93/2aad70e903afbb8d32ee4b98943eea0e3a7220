@@ -1,0 +1,22 @@
+AGENTS.md
+  s_fb4f32c665b8c6::t_349373899b97ee 190,200
+  s_fb4f32c665b8c6::t_4fa7135e6f91ce 103
+  s_fb4f32c665b8c6::t_6699a73891305a 119-120,124
+  s_fb4f32c665b8c6::t_7c22e251560c21 125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "932aad70e903afbb8d32ee4b98943eea0e3a7220",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
