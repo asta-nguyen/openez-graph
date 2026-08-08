@@ -152,6 +152,53 @@ function walkTree(
       importPaths.push(...paths);
     }
 
+    // Check for Python decorated_definition — extract decorator call edges
+    // linking the inner function/class to each decorator name.
+    if (node.type === "decorated_definition") {
+      // Find the inner definition (function_definition or class_definition)
+      let innerName: string | null = null;
+      for (let i = 0; i < node.namedChildCount; i++) {
+        const child = node.namedChild(i);
+        if (!child) continue;
+        if (child.type === "function_definition" || child.type === "class_definition") {
+          const nameNode = child.childForFieldName("name");
+          if (nameNode) {
+            const rawName = nameNode.text;
+            const parentName =
+              contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
+            innerName = parentName ? `${parentName}::${rawName}` : rawName;
+          }
+          break;
+        }
+      }
+
+      // Extract decorator names and create call edges
+      if (innerName) {
+        for (let i = 0; i < node.namedChildCount; i++) {
+          const child = node.namedChild(i);
+          if (!child || child.type !== "decorator") continue;
+          // Decorator contains an expression: identifier, attribute, or call
+          const expr = child.namedChild(0);
+          if (!expr) continue;
+          let decName: string | null = null;
+          if (expr.type === "call") {
+            // @app.route("/api") → extract function name
+            const funcNode = expr.childForFieldName("function");
+            if (funcNode) {
+              decName = config.normalizeCallName(funcNode.text);
+            }
+          } else {
+            // @lru_cache or @app.route → normalize the expression text
+            decName = config.normalizeCallName(expr.text);
+          }
+          if (decName && !config.callIgnores.has(decName) && decName !== innerName) {
+            calledIdentifiers.add(decName);
+            callExpressions.push({ callerName: innerName, calleeName: decName });
+          }
+        }
+      }
+    }
+
     // Check for symbol
     const symbolRule = symbolRuleMap.get(node.type);
     if (symbolRule) {

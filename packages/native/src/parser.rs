@@ -602,6 +602,74 @@ fn walk_tree(
       import_paths.extend(paths);
     }
 
+    // Check for Python decorated_definition — extract decorator call edges
+    // linking the inner function/class to each decorator name.
+    if node_kind == "decorated_definition" {
+      // Find the inner definition (function_definition or class_definition)
+      let mut inner_name: Option<String> = None;
+      for i in 0..node.named_child_count() {
+        if let Some(child) = node.named_child(i) {
+          let child_kind = child.kind();
+          if child_kind == "function_definition" || child_kind == "class_definition" {
+            if let Some(name_node) = child.child_by_field_name("name") {
+              let raw_name = text_of(&name_node, source);
+              let parent_name = context_stack.last().map(|(n, _, _)| n.clone());
+              inner_name = Some(
+                parent_name
+                  .map(|p| format!("{}::{}", p, raw_name))
+                  .unwrap_or(raw_name),
+              );
+            }
+            break;
+          }
+        }
+      }
+
+      // Extract decorator names and create call edges
+      if let Some(ref def_name) = inner_name {
+        for i in 0..node.named_child_count() {
+          if let Some(child) = node.named_child(i) {
+            if child.kind() != "decorator" {
+              continue;
+            }
+            // Decorator contains an expression: identifier, attribute, or call
+            if let Some(expr) = child.named_child(0) {
+              let dec_name = match expr.kind() {
+                "call" => {
+                  // @app.route("/api") → extract function name
+                  if let Some(func_node) = expr.child_by_field_name("function") {
+                    let raw = text_of(&func_node, source);
+                    let normalized = (config.normalize_call_name)(&raw);
+                    Some(normalized)
+                  } else {
+                    None
+                  }
+                }
+                _ => {
+                  // @lru_cache or @app.route → normalize the expression text
+                  let raw = text_of(&expr, source);
+                  let normalized = (config.normalize_call_name)(&raw);
+                  Some(normalized)
+                }
+              };
+              if let Some(dec) = dec_name {
+                if !dec.is_empty()
+                  && !config.call_ignores.contains(dec.as_str())
+                  && dec != *def_name
+                {
+                  called_identifiers.insert(dec.clone());
+                  call_expressions.push(NativeCallExpression {
+                    caller_name: def_name.clone(),
+                    callee_name: dec,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     // Check for symbol
     if let Some((_, rule)) = symbol_rule_map.iter().find(|(t, _)| *t == node_kind) {
       let name = if let Some(extract) = rule.extract_name {
