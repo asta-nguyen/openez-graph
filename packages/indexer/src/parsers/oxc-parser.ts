@@ -73,6 +73,39 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
       continue;
     }
 
+    // VariableDeclaration must be handled before the getNodeId guard below:
+    // VariableDeclaration nodes have .declarations[], not .id, so getNodeId
+    // returns null and would skip them. This handles both exported and
+    // non-exported arrow/function expressions assigned to variables.
+    if (node.type === "VariableDeclaration") {
+      for (const decl of node.declarations ?? []) {
+        if (decl.id?.type === "Identifier") {
+          const declName = decl.id.name;
+          const isArrow = decl.init?.type === "ArrowFunctionExpression";
+          const isFunc = decl.init?.type === "FunctionExpression";
+          if (isArrow || isFunc) {
+            const startLine = source.slice(0, decl.start).split("\n").length;
+            const endLine = source.slice(0, decl.end).split("\n").length;
+            // Associate the symbol with the function initializer node so its
+            // body subtree is walked for call extraction.
+            const bodyNode = (decl.init as OxcNode) ?? decl;
+            results.push({
+              symbol: {
+                name: declName,
+                symbolType: "function",
+                type: "function",
+                exported: node.exportKind === "value" || (node as any).exported,
+                startLine,
+                endLine,
+              },
+              node: bodyNode,
+            });
+          }
+        }
+      }
+      continue;
+    }
+
     const name = getNodeId(node);
     if (!name) continue;
 
@@ -95,34 +128,6 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
       case "TSEnumDeclaration":
         symbolType = "enum";
         break;
-      case "VariableDeclaration":
-        // const foo = () => {} or const foo = function() {}
-        for (const decl of node.declarations ?? []) {
-          if (decl.id?.type === "Identifier") {
-            const declName = decl.id.name;
-            const isArrow = decl.init?.type === "ArrowFunctionExpression";
-            const isFunc = decl.init?.type === "FunctionExpression";
-            if (isArrow || isFunc) {
-              const startLine = source.slice(0, decl.start).split("\n").length;
-              const endLine = source.slice(0, decl.end).split("\n").length;
-              // Associate the symbol with the function initializer node so its
-              // body subtree is walked for call extraction.
-              const bodyNode = (decl.init as OxcNode) ?? decl;
-              results.push({
-                symbol: {
-                  name: declName,
-                  symbolType: "function",
-                  type: "function",
-                  exported: node.exportKind === "value" || (node as any).exported,
-                  startLine,
-                  endLine,
-                },
-                node: bodyNode,
-              });
-            }
-          }
-        }
-        continue;
       default:
         continue;
     }
