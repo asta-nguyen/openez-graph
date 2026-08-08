@@ -5,6 +5,24 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- CLI runtime changed from Node.js 20+ to [Bun](https://bun.sh) 1.1+ — `bun:sqlite` is now the only SQLite driver, removing the `better-sqlite3` fallback and runtime detection layer
+- CLI shebang changed from `#!/usr/bin/env node` to `#!/usr/bin/env bun`
+- `engines` field in `apps/cli/package.json` changed from `node >=20` to `bun >=1.1.0`
+
+### Removed
+
+- `better-sqlite3` dependency and `drizzle-orm/better-sqlite3` driver path
+- `drizzle-driver.ts` (runtime driver selection module)
+- `adaptBetterSqlite3()` adapter in `database-loader.ts` (60-line Proxy wrapper)
+
+### Fixed
+
+- npm-installed CLI no longer crashes with `Cannot find module 'bun:sqlite'` — the CLI now requires Bun and uses it as the runtime
+
 ## [0.12.0] - 2026-08-06
 
 ### Added

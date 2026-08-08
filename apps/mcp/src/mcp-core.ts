@@ -26,7 +26,7 @@ import {
   findLocalWorkspaceConfig,
   removeWorkspace,
 } from "@openez-graph/db";
-import { indexWorkspace } from "@openez-graph/indexer";
+import { indexWorkspace, buildGraphForWorkspace, waitForFts } from "@openez-graph/indexer";
 
 const MIN_RESPONSE_TOKENS = 32;
 
@@ -549,6 +549,8 @@ export function createMcpServer(options?: McpServerOptions) {
         const responseBudget = input.maxTokens ?? 4000;
         const workspaceBudget = Math.max(100, Math.floor(responseBudget / workspaces.length));
         await catchUpReadWorkspaces(workspaces);
+        // Wait for background FTS build if still in progress
+        await Promise.all(workspaces.map((w) => waitForFts(w.id)));
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspace,
@@ -651,6 +653,8 @@ export function createMcpServer(options?: McpServerOptions) {
         const input = codeContextSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
+        // Lazy graph build — one-time cost on first graph query
+        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.id, w.rootPath)));
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
@@ -671,6 +675,8 @@ export function createMcpServer(options?: McpServerOptions) {
         const input = graphNeighborsSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
+        // Lazy graph build — one-time cost on first graph query
+        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.id, w.rootPath)));
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
@@ -799,7 +805,7 @@ const WATCH_IGNORE_PATTERNS = [
   "**/.openez/**",
 ];
 
-async function autoIndexAndSync(searchRoot: string): Promise<void> {
+export async function autoIndexAndSync(searchRoot: string): Promise<void> {
   const resolvedRoot = path.resolve(searchRoot);
 
   if (!fs.existsSync(resolvedRoot) || !fs.statSync(resolvedRoot).isDirectory()) {
@@ -828,6 +834,21 @@ async function autoIndexAndSync(searchRoot: string): Promise<void> {
     } catch {
       // Indexing failure is non-fatal — MCP server still starts
     }
+  }
+
+  // Kick off lazy graph build in background — AI will likely query graph soon.
+  // Non-blocking: if it's not done by first query, ensureGraphBuilt() finishes it.
+  try {
+    const repo = createWorkspaceRepository(workspace.rootPath);
+    setImmediate(() => {
+      try {
+        repo.ensureGraphBuilt();
+      } catch {
+        /* non-fatal */
+      }
+    });
+  } catch {
+    /* non-fatal */
   }
 
   // The stdio MCP server must stay cheap to start and robust on large repos.

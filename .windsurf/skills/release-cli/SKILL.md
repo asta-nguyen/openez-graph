@@ -30,7 +30,7 @@ If unsure, ask the user. Default to **minor** when multiple fixes ship together.
 
 Edit `apps/cli/package.json` — update the `"version"` field only.
 
-**Completion criterion**: `node apps/cli/dist/cli.cjs --version` would show the new version after rebuild (verify in step 4).
+**Completion criterion**: `bun apps/cli/dist/cli.cjs --version` would show the new version after rebuild (verify in step 4).
 
 ### 3. Update CHANGELOG.md
 
@@ -62,8 +62,8 @@ Run in order from the monorepo root:
 ```bash
 pnpm build:web    # rebuild frontend (CLI bundles it)
 pnpm build:cli    # build CLI with tsup
-node apps/cli/dist/cli.cjs --version   # must print the new version
-node apps/cli/dist/cli.cjs --help      # must list all commands
+bun apps/cli/dist/cli.cjs --version   # must print the new version
+bun apps/cli/dist/cli.cjs --help      # must list all commands
 ```
 
 Then run a smoke test in a temp directory:
@@ -72,8 +72,8 @@ Then run a smoke test in a temp directory:
 tmpdir=$(mktemp -d)
 echo 'export const greet = (name: string) => `Hello, ${name}!`;' > "$tmpdir/greet.ts"
 echo 'import { greet } from "./greet"; console.log(greet("world"));' > "$tmpdir/main.ts"
-node apps/cli/dist/cli.cjs init "$tmpdir"
-node apps/cli/dist/cli.cjs status "$tmpdir"
+bun apps/cli/dist/cli.cjs init "$tmpdir"
+bun apps/cli/dist/cli.cjs status "$tmpdir"
 rm -rf "$tmpdir"
 ```
 

@@ -3,8 +3,8 @@ import type { CodeParser, ParseInput, ParsedDocument } from "./types";
 import { ConfigParser } from "./config-parser";
 import { FallbackParser } from "./fallback-parser";
 import { MarkdownParser } from "./markdown-parser";
+import { OxcParser } from "./oxc-parser";
 import { TreeSitterParser } from "./tree-sitter-parser";
-import { TsMorphParser } from "./ts-morph-parser";
 
 /**
  * Ordered list of parsers. The first parser whose canParse() returns true
@@ -14,7 +14,7 @@ import { TsMorphParser } from "./ts-morph-parser";
 const parsers: CodeParser[] = [
   new MarkdownParser(),
   new ConfigParser(),
-  new TsMorphParser(),
+  new OxcParser(),
   new TreeSitterParser(),
   new FallbackParser(),
 ];

@@ -125,6 +125,18 @@ export interface WorkspaceRepository {
     mtimeMs: number;
   }): Promise<string>;
 
+  insertDocumentsBatch(
+    inputs: Array<{
+      path: string;
+      absolutePath: string;
+      kind: string;
+      language?: string | null;
+      contentHash: string;
+      sizeBytes: number;
+      mtimeMs: number;
+    }>,
+  ): Promise<string[]>;
+
   updateDocument(
     id: string,
     updates: Partial<{
@@ -179,6 +191,17 @@ export interface WorkspaceRepository {
       metadata: string;
     }>,
   ): Promise<string[]>;
+
+  bulkInsertFts(
+    inputs: Array<{
+      chunkId: string;
+      path: string;
+      heading: string | null;
+      language: string | null;
+      content: string;
+      metadata: string;
+    }>,
+  ): Promise<void>;
 
   deleteChunksByDocument(documentId: string): Promise<void>;
 
@@ -287,7 +310,7 @@ export interface WorkspaceRepository {
       provider: string;
       model: string;
       dimensions: number;
-      embedding: string;
+      embedding: Uint8Array;
       inputHash?: string | null;
     }>,
   ): Promise<void>;
@@ -358,10 +381,109 @@ export interface WorkspaceRepository {
   /** Toggle fast-write pragmas (synchronous=OFF, big cache, mmap). Call before/after bulk indexing. */
   setOptimizedWriteMode(enabled: boolean): void;
 
+  /** Checkpoint WAL to bound file growth during long indexing runs. */
+  walCheckpoint(): void;
+
   /** Drop FTS triggers so chunk INSERTs don't fire per-row trigger subqueries. */
   dropFtsTriggers(): void;
+  dropNonUniqueIndexes(): void;
+  restoreNonUniqueIndexes(): void;
+  ensureGraphBuilt(): void;
+  /** Bulk insert FTS rows without triggers (used during optimized write phase). */
+  insertFtsBatch(
+    rows: Array<{
+      chunkId: string;
+      path: string;
+      heading: string;
+      language: string;
+      searchText: string;
+      content: string;
+    }>,
+  ): void;
   /** Recreate FTS triggers and backfill any missing FTS rows. */
   restoreFtsTriggers(): void;
+  /** Recreate FTS triggers only (no backfill — use when FTS rows were inserted inline). */
+  restoreFtsTriggersOnly(): void;
+
+  // ── Streaming inserts — cached prepared statements, no dynamic SQL ──
+  streamDocument(input: {
+    id: string;
+    path: string;
+    absolutePath: string;
+    kind: string;
+    language?: string | null;
+    contentHash: string;
+    sizeBytes: number;
+    mtimeMs: number;
+  }): void;
+  streamChunk(input: {
+    id: string;
+    documentId: string;
+    chunkIndex: number;
+    heading: string | null;
+    content: string;
+    tokenCount: number;
+    contentHash: string;
+    metadata: string;
+  }): void;
+  streamChunksBatch(
+    inputs: Array<{
+      id: string;
+      documentId: string;
+      chunkIndex: number;
+      heading: string | null;
+      content: string;
+      tokenCount: number;
+      contentHash: string;
+      metadata: string;
+    }>,
+  ): void;
+  streamGraphNode(input: {
+    id: string;
+    type: string;
+    label: string;
+    refId?: string | null;
+    metadata?: string;
+  }): void;
+  streamGraphNodesBatch(
+    inputs: Array<{
+      id: string;
+      type: string;
+      label: string;
+      refId?: string | null;
+      metadata?: string;
+    }>,
+  ): void;
+  streamEdgesBatch(
+    inputs: Array<{
+      id: string;
+      fromNodeId: string;
+      toNodeId: string;
+      type: string;
+      weight?: number;
+      metadata?: string;
+    }>,
+  ): void;
+  streamEdge(input: {
+    id: string;
+    fromNodeId: string;
+    toNodeId: string;
+    type: string;
+    weight?: number;
+    metadata?: string;
+  }): void;
+  streamFtsRow(input: {
+    chunkId: string;
+    path: string;
+    heading: string;
+    language: string;
+    searchText: string;
+    content: string;
+  }): void;
+  refreshStreamTimestamp(): void;
+  setMeta(key: string, value: string): void;
+  getMeta(key: string): string | null;
+  ensureFtsReady(): void;
 
   /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
   loadAllSymbolNodes(): Promise<Map<string, string>>;
@@ -369,4 +491,33 @@ export interface WorkspaceRepository {
   /** Delete only rebuildable index artifacts (documents, chunks, embeddings, graph_nodes, graph_edges).
    *  Preserves memories, query_logs, index_runs, and graph_runs. */
   resetIndexArtifacts(): void;
+
+  /** Delete only graph nodes and edges (preserves documents, chunks, embeddings,
+   *  memories, query logs, and index runs). Used by the lazy graph builder to
+   *  invalidate stale graph state before rebuilding. */
+  clearGraphArtifacts(): void;
+
+  /** Cache parsed symbols/imports/calls for graph build. */
+  insertParsedDocument(input: {
+    documentId: string;
+    contentHash: string;
+    symbols: string;
+    imports: string;
+    calls: string;
+    calledIdentifiers: string;
+    parserVersion: string;
+  }): void;
+
+  getParsedDocument(documentId: string): {
+    documentId: string;
+    contentHash: string;
+    symbols: string | null;
+    imports: string | null;
+    calls: string | null;
+    calledIdentifiers: string | null;
+    parserVersion: string | null;
+    parsedAt: number;
+  } | null;
+
+  deleteParsedDocumentsByDocumentIds(documentIds: string[]): void;
 }
