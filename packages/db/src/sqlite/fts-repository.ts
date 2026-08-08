@@ -187,7 +187,6 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
         input.heading,
         input.language,
         input.searchText,
-        input.content,
       );
     },
 
