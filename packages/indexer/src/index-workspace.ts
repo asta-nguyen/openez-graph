@@ -1566,4 +1566,14 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
   process.stderr.write(
     `[t] graph-build: ${Date.now() - _graphStart}ms (${parsedFiles.size} files, ${allNodeInputs.length} nodes, ${allEdges.length} edges)\n`,
   );
+
+  // Update registry so the UI reflects the built graph
+  const nodeCount = await repo.getNodeCount();
+  const edgeCount = await repo.getEdgeCount();
+  const registry = createRegistryRepository();
+  await registry.updateWorkspace(workspaceId, {
+    graphStatus: "completed",
+    nodeCount,
+    edgeCount,
+  });
 }
