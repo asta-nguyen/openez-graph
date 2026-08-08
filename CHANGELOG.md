@@ -5,13 +5,23 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.3] - 2026-08-08
+
+### Fixed
+
+- **Registry `graph_status` not updated after graph build** — `_buildGraphInternal` built the graph correctly but never updated the registry's `graph_status`/`node_count`/`edge_count`, so the web UI showed 0 nodes and 0 edges even though the workspace DB had the data. Now updates the registry after a successful build.
+
+### Contributors
+
+- **Asta Nguyen** — [@asta-nguyen](https://github.com/asta-nguyen)
+- **JoeJoe** — [@JoeJoeflyn](https://github.com/JoeJoeflyn)
 
 ## [1.0.2] - 2026-08-08
 
 ### Fixed
 
 - **Graph build produced 0 symbol nodes and 0 edges** — `oxc-parser` (NAPI-RS native binding) was not declared in CLI `dependencies` and was not listed in tsup `external`, so `require("oxc-parser")` failed silently in the bundled CLI, falling back to line-based chunking with 0 symbols. Added `oxc-parser` to `dependencies` and `oxc-parser` + `@oxc-parser/binding-*` to tsup `external` so the native binding resolves from `node_modules` at runtime.
+- **Registry `graph_status` not updated after graph build** — `_buildGraphInternal` built the graph correctly but never updated the registry's `graph_status`/`node_count`/`edge_count`, so the web UI showed 0 nodes and 0 edges even though the workspace DB had the data. Now updates the registry after a successful build.
 
 ### Contributors
 
@@ -224,6 +234,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[1.0.3]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.0...v1.0.1
 [0.12.0]: https://github.com/asta-nguyen/openez-graph/compare/v0.11.1...v0.12.0
