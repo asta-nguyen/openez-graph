@@ -394,6 +394,10 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
  * embedding model in use. When the extension is unavailable (e.g. under
  * bun:sqlite, which is compiled without dynamic extension loading), this
  * is a no-op and retrieval falls back to a linear scan over `embeddings`.
+ *
+ * The table includes provider and model metadata columns so that KNN
+ * queries can filter by embedding model — preventing cross-model ranking
+ * when a workspace has vectors from multiple providers.
  */
 function tryCreateVecTable(
   sqlite: ReturnType<typeof createNativeDatabase>,
@@ -402,7 +406,7 @@ function tryCreateVecTable(
   if (!hasVecExtension()) return;
   try {
     sqlite.exec(
-      `CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vec USING vec0(chunk_id TEXT PRIMARY KEY, embedding float[${dimensions}])`,
+      `CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vec USING vec0(chunk_id TEXT PRIMARY KEY, embedding float[${dimensions}], provider TEXT, model TEXT)`,
     );
   } catch {
     // Table creation failed (e.g. dimension mismatch, extension quirks) —
