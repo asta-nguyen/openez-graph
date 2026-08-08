@@ -102,5 +102,28 @@ export default defineConfig({
     } else {
       console.log("⚠ Native .node not found — run cargo build first");
     }
+
+    // Build SQLite template databases and copy into dist.
+    // Templates pre-create the full schema so `openez init` copies a file
+    // instead of running ~20 CREATE TABLE/INDEX statements (~700ms saved).
+    const templateScript = path.resolve(__dirname, "../../packages/db/scripts/build-template.ts");
+    if (existsSync(templateScript)) {
+      try {
+        execFileSync("bun", [templateScript], {
+          stdio: "pipe",
+          cwd: path.resolve(__dirname, "../.."),
+        });
+        const dbDir = path.resolve(__dirname, "../../packages/db");
+        for (const tmpl of ["template.sqlite", "registry-template.sqlite"]) {
+          const src = path.join(dbDir, tmpl);
+          if (existsSync(src)) {
+            cpSync(src, path.resolve(__dirname, "dist", tmpl));
+            console.log(`✓ Copied ${tmpl} → dist/${tmpl}`);
+          }
+        }
+      } catch (e) {
+        console.log("⚠ Template build failed — runtime DDL fallback will be used");
+      }
+    }
   },
 });

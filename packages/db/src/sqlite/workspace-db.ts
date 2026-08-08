@@ -16,10 +16,10 @@ const nativeCache = new Map<string, ReturnType<typeof createNativeDatabase>>();
 // Resolve a bundled file (template.sqlite, registry-template.sqlite) that ships alongside the CLI binary.
 export function resolveBundledFile(filename: string): string | null {
   const candidates = [
-    // Bundled CLI: dist/apps/cli/src/cli.cjs → dist/<filename> (up 4)
-    path.join(__dirname, "..", "..", "..", "..", filename),
-    // Bundled CLI alt: relative to process.argv[1]
-    path.join(path.dirname(process.argv[1] || __filename), "..", "..", "..", "..", filename),
+    // Bundled CLI: __dirname is dist/ → template sits next to cli.cjs
+    path.join(__dirname, filename),
+    // Bundled CLI alt: relative to process.argv[1] (same dir as cli.cjs)
+    path.join(path.dirname(process.argv[1] || __filename), filename),
     // Dev: packages/db/src/sqlite/ → packages/db/<filename> (up 3)
     path.join(__dirname, "..", "..", "..", filename),
     // Fallback: cwd
