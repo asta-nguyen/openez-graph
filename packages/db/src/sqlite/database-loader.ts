@@ -91,9 +91,90 @@ function tryLoadVecExtension(db: NativeDatabase): void {
   }
 }
 
+/**
+ * Wrap a better-sqlite3 database to match the bun:sqlite API surface used by
+ * the raw repository layer. The key difference is that bun:sqlite prepared
+ * statements have a `.values()` method (returns rows as arrays of raw values)
+ * which better-sqlite3 lacks natively.
+ *
+ * The wrapper also proxies unknown methods (like `.raw()`) to the underlying
+ * better-sqlite3 statement so drizzle-orm/better-sqlite3 works transparently.
+ */
+function adaptBetterSqlite3(db: any): NativeDatabase {
+  const originalPrepare = db.prepare.bind(db);
+  (db as any).prepare = (sql: string): NativeStatement => {
+    const stmt = originalPrepare(sql);
+    // Wrap the statement to add .values() while preserving all native
+    // better-sqlite3 methods (e.g. .raw() used by drizzle-orm).
+    // Bind methods to the original statement to avoid "Illegal invocation"
+    // errors caused by Proxy losing the `this` context.
+    const wrapped: any = new Proxy(stmt, {
+      get(target, prop, receiver) {
+        if (prop === "values") {
+          // bun:sqlite .values() returns rows as arrays — use .raw().all()
+          return (...params: unknown[]) => target.raw().all(...params);
+        }
+        if (prop === "bind") {
+          // bun:sqlite .bind() returns a bound statement — wrap it too
+          return (...params: unknown[]) => {
+            const bound = target.bind(...params);
+            return new Proxy(bound, {
+              get(bTarget: any, bProp: string) {
+                if (bProp === "values") return () => bTarget.raw().all();
+                if (bProp === "all") return bTarget.all.bind(bTarget);
+                if (bProp === "get") return bTarget.get.bind(bTarget);
+                if (bProp === "run") return bTarget.run.bind(bTarget);
+                if (bProp === "bind") return (...p: unknown[]) => bTarget.bind(...p);
+                if (bProp === "raw") return bTarget.raw.bind(bTarget);
+                const val = bTarget[bProp];
+                return typeof val === "function" ? val.bind(bTarget) : val;
+              },
+            });
+          };
+        }
+        const val = Reflect.get(target, prop, receiver);
+        // Bind native methods to the original statement to preserve `this`
+        if (typeof val === "function") return val.bind(target);
+        return val;
+      },
+    });
+    return wrapped;
+  };
+  // Add .pragma() shim — bun:sqlite doesn't have it natively.
+  // Under better-sqlite3, certain pragmas cause "database is locked" errors
+  // in single-threaded test runs because they require exclusive locks that
+  // conflict with open connections. Skip the ones that are pure performance
+  // optimizations for bulk indexing. journal_mode=WAL must NOT be skipped —
+  // it is required for crash-recoverable indexing.
+  (db as any).pragma = (cmd: string) => {
+    if (/locking_mode\s*=\s*EXCLUSIVE/i.test(cmd)) return;
+    if (/mmap_size/i.test(cmd)) return;
+    try {
+      db.exec(`PRAGMA ${cmd}`);
+    } catch {
+      // Ignore pragma errors under better-sqlite3 (e.g. wal_checkpoint
+      // when there is no WAL file) — they are non-critical for tests.
+    }
+  };
+  return db as unknown as NativeDatabase;
+}
+
 export function createNativeDatabase(dbPath: string): NativeDatabase {
-  const Database = _require("bun:sqlite").Database as NativeDatabaseConstructor;
+  let Database: NativeDatabaseConstructor;
+  let isBetterSqlite3 = false;
+  try {
+    Database = _require("bun:sqlite").Database as NativeDatabaseConstructor;
+  } catch {
+    // Running under Node (not Bun) — fall back to better-sqlite3.
+    // The npm-published CLI targets Node >=20, so this path is used by
+    // all npm-installed CLI users. Under Bun, bun:sqlite is used instead.
+    Database = _require("better-sqlite3") as unknown as NativeDatabaseConstructor;
+    isBetterSqlite3 = true;
+  }
   const db = new Database(dbPath, { create: true } as { nativeBinding?: string });
+  if (isBetterSqlite3) {
+    return adaptBetterSqlite3(db);
+  }
   // Add .pragma() shim — bun:sqlite doesn't have it natively
   (db as any).pragma = (cmd: string) => db.exec(`PRAGMA ${cmd}`);
 
