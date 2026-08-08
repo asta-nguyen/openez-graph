@@ -1,0 +1,36 @@
+packages/db/src/sqlite/database-loader.ts
+  s_fb4f32c665b8c6::t_cf512e46fc0693 62-63,94
+AGENTS.md
+  s_fb4f32c665b8c6::t_ec7e1315df50e1 171-172
+apps/cli/package.json
+  s_fb4f32c665b8c6::t_6133721efb51ce 32
+apps/cli/tsup.config.ts
+  s_fb4f32c665b8c6::t_973127c7d6d2d0 59
+packages/db/src/sqlite/workspace-db.ts
+  s_fb4f32c665b8c6::t_b7928078db3771 13
+  s_fb4f32c665b8c6::t_8991ed81c181b2 64
+  s_fb4f32c665b8c6::t_6bf896b08a8900 4-5
+packages/db/src/sqlite/registry-db.ts
+  s_fb4f32c665b8c6::t_13a0036759a5de 74
+  s_fb4f32c665b8c6::t_7aeb37ff2dc79d 5-6
+packages/db/src/sqlite/registry-repository.ts
+  s_fb4f32c665b8c6::t_2cd9ef1aaa2b20 97
+pnpm-lock.yaml
+  s_fb4f32c665b8c6::t_892071bfb2dbd4 6810-6811,6819,6824,6831,6869,6919-6920,7059,7063-7064,7129,7258-7259,7340-7341,7368-7369,7431-7432,7489-7490,7501-7502,8018-8019,8027-8028,8047-8048,8080,8309,8339,8425,8583-8584,8737-8738,8745,8840-8841,8889,8898,9000
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3b86cccc2ddac21aace2e49384931f2e06ade531",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
