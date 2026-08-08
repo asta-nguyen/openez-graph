@@ -508,27 +508,27 @@ async function parseInline(
       const nr = nativeResults[i];
       if (nr) {
         const lang = batchItems[i].language;
-        // Build line-based chunks from native parse results
         const lines = task.content.split("\n");
-        const chunks: any[] = [];
-        for (let ci = 0; ci < lines.length; ci += 80) {
-          const slice = lines
-            .slice(ci, ci + 80)
-            .join("\n")
-            .trim();
-          if (!slice) continue;
-          chunks.push({
-            content: slice,
-            tokenCount: 0,
-            contentHash: "",
-            metadata: {
-              kind: "code",
-              fallback: true,
-              startLine: ci + 1,
-              endLine: Math.min(ci + 80, lines.length),
-            },
-          });
+        // Build symbol-aware chunks so code_context can match symbol names
+        // to chunks via metadata.symbolName. Fall back to line-based chunks
+        // only when no symbols were extracted.
+        const symbols: ExtractedSymbol[] = nr.symbols.map((s: any) => ({
+          name: s.name,
+          symbolType: s.symbolType,
+          type: s.symbolType,
+          exported: s.exported,
+          startLine: s.startLine,
+          endLine: s.endLine,
+          ...(s.receiver ? { receiver: s.receiver } : {}),
+        }));
+        let chunks: any[];
+        if (symbols.length > 0) {
+          chunks = createSymbolChunks(symbols, lines, lang);
+        } else {
+          chunks = makeFallbackChunks(task.content, lines).chunks;
         }
+        // Bound chunks to configured token limits
+        chunks = boundChunks(chunks, task.targetTokens, task.overlapTokens);
         results.set(task.id, {
           kind: "code",
           language: lang,
@@ -536,15 +536,7 @@ async function parseInline(
           chunks,
           importPaths: nr.importPaths,
           wikilinks: [],
-          definedSymbols: nr.symbols.map((s: any) => ({
-            name: s.name,
-            symbolType: s.symbolType,
-            type: s.symbolType,
-            exported: s.exported,
-            startLine: s.startLine,
-            endLine: s.endLine,
-            receiver: s.receiver || undefined,
-          })),
+          definedSymbols: symbols,
           calledIdentifiers: nr.calledIdentifiers,
           callExpressions: nr.callExpressions.slice(0, 20),
         });
