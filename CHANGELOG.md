@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-08
+
+### Changed
+
+- README.md and apps/cli/README.md updated to document Bun runtime and [oxc-parser](https://oxc.rs) migration
+
+## [1.0.0] - 2026-08-08
+
 ### Changed
 
 - CLI runtime changed from Node.js 20+ to [Bun](https://bun.sh) 1.1+ — `bun:sqlite` is now the only SQLite driver, removing the `better-sqlite3` fallback and runtime detection layer
@@ -205,6 +213,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[1.0.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.0...v1.0.1
 [0.12.0]: https://github.com/asta-nguyen/openez-graph/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/asta-nguyen/openez-graph/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/asta-nguyen/openez-graph/compare/v0.10.0...v0.11.0
