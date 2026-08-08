@@ -11,7 +11,7 @@ Local-first code intelligence for coding agents. OpenEZ indexes code and documen
 
 ## Quick start
 
-Requires Node.js 20 or newer.
+Requires [Bun](https://bun.sh) 1.1+ (single-binary install: `curl -fsSL https://bun.sh | bash`).
 
 ```bash
 npm install -g @openez-graph/cli

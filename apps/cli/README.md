@@ -147,7 +147,7 @@ Opens a full web dashboard at `http://localhost:17881` with:
 
 ## Requirements
 
-- Node.js 20+
+- [Bun](https://bun.sh) 1.1+ (single-binary install: `curl -fsSL https://bun.sh | bash`)
 - No external services needed
 
 ## Changelog

@@ -6,7 +6,7 @@ Thanks for helping improve OpenEZ Graph. Keep changes focused, local-first, and 
 
 Requirements:
 
-- Node.js 20 or newer
+- [Bun](https://bun.sh) 1.1 or newer
 - pnpm 10
 
 ```bash
@@ -59,8 +59,8 @@ For CLI changes:
 ```bash
 pnpm build:web
 pnpm build:cli
-node apps/cli/dist/cli.cjs --version
-node apps/cli/dist/cli.cjs --help
+bun apps/cli/dist/cli.cjs --version
+bun apps/cli/dist/cli.cjs --help
 ```
 
 Also smoke-test `init` and `status` in a temporary project when changing workspace registration, indexing, storage, or CLI behavior.
@@ -81,7 +81,7 @@ Open an issue at <https://github.com/asta-nguyen/openez-graph/issues> with:
 
 - steps to reproduce
 - expected and actual behavior
-- OpenEZ, Node.js, and operating system versions
+- OpenEZ, Bun, and operating system versions
 - relevant logs with secrets and private source code removed
 
 Feature requests should explain the workflow being improved, not only the proposed implementation.
