@@ -1,0 +1,22 @@
+apps/web/src/server/index.ts
+  s_fb4f32c665b8c6::t_54cfe996481f7d 401
+  s_fb4f32c665b8c6::t_9ff83329ff5711 54
+  s_fb4f32c665b8c6::t_2d3aca6375fdd9 392,397-400,402-404
+  s_fb4f32c665b8c6::t_aa2862a6a06464 405
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "bbece7ac42e7d5677c1e5c7141b69bcc0fb56611",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
