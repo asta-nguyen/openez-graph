@@ -68,6 +68,9 @@ importers:
 
   apps/cli:
     dependencies:
+      oxc-parser:
+        specifier: ^0.143.0
+        version: 0.143.0
       tree-sitter-go:
         specifier: ^0.25.0
         version: 0.25.0
