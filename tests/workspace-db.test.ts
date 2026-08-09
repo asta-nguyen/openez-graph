@@ -274,6 +274,7 @@ describe("createWorkspaceRepository", () => {
 
     closeAllWorkspaceDbs();
     const reopened = createWorkspaceRepository(tempRoot);
+    expect(await reopened.getMeta("fts_schema_version")).toBe("1");
     expect(await reopened.fullTextSearch("endNeedle", 5)).toHaveLength(1);
     expect(await reopened.getMeta("fts_schema_version")).toBe("2");
   });
