@@ -3,15 +3,9 @@ import { safeParseJson, sanitizeFtsQuery } from "./utils";
 
 export const FTS_SCHEMA_VERSION = "2";
 
-function normalizeFtsSearchText(value: unknown): string {
-  if (typeof value !== "string") return "";
-  // SQLite trim() defaults to U+0020; preserve other whitespace in every writer.
-  return value.replace(/^ +| +$/g, "");
-}
-
 export function composeFtsSearchText(content: string, metadata: string): string {
   const parsed = safeParseJson(metadata, {}) as { searchText?: unknown };
-  const searchText = normalizeFtsSearchText(parsed.searchText);
+  const searchText = typeof parsed.searchText === "string" ? parsed.searchText.trim() : "";
   return searchText ? `${searchText}\n${content}` : content;
 }
 
@@ -19,7 +13,11 @@ export function composeFtsSearchTextSql(metadata: string, content: string): stri
   const normalizedSearchText = `CASE
     WHEN json_valid(${metadata}) THEN CASE
       WHEN json_type(${metadata}, '$.searchText') = 'text'
-        THEN trim(json_extract(${metadata}, '$.searchText'))
+        THEN trim(
+          json_extract(${metadata}, '$.searchText'),
+          char(9, 10, 11, 12, 13, 32, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198,
+            8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279)
+        )
       ELSE ''
     END
     ELSE ''

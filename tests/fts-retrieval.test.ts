@@ -63,6 +63,12 @@ async function expectStoredSearchText(
       inputs.map((input) => [input.chunkId, composeFtsSearchText(input.content, input.metadata)]),
     ),
   );
+  const unicodeInput = inputs.find((input) => input.metadata.includes("unicode needle"));
+  if (unicodeInput) {
+    expect(rows.find((row) => String(row.chunk_id) === unicodeInput.chunkId)?.search_text).toBe(
+      `unicode needle\n${unicodeInput.content}`,
+    );
+  }
 }
 
 describe("FTS retrieval", () => {

@@ -296,6 +296,10 @@ describe("createWorkspaceRepository", () => {
         ]),
       ),
     );
+    const unicodeIndex = cases.findIndex((testCase) => testCase.name === "unicode");
+    expect(rows.find((row) => String(row.chunk_id) === chunkIds[unicodeIndex])?.search_text).toBe(
+      `unicode needle\n${inputs[unicodeIndex].content}`,
+    );
   });
 
   it("rebuilds legacy FTS rows when the schema version is stale", async () => {
