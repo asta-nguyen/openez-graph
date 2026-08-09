@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import * as schema from "./schema";
 import { createNativeDatabase, hasVecExtension } from "./database-loader";
-import { restoreFtsTriggerDefinitions } from "./fts-repository";
+import { FTS_SCHEMA_VERSION, restoreFtsTriggerDefinitions } from "./fts-repository";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
@@ -170,7 +170,8 @@ export function initializeWorkspaceSchema(
       sqlite.exec(`
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
         SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''), substr(c.content, 1, 400)
+          coalesce(d.language, ''),
+          coalesce(json_extract(c.metadata, '$.searchText'), '') || char(10) || c.content
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id;
       `);
@@ -182,7 +183,8 @@ export function initializeWorkspaceSchema(
       sqlite.exec(`
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
         SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''), substr(c.content, 1, 400)
+          coalesce(d.language, ''),
+          coalesce(json_extract(c.metadata, '$.searchText'), '') || char(10) || c.content
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id
         LEFT JOIN chunks_fts f ON f.chunk_id = c.id
@@ -298,6 +300,9 @@ export function initializeWorkspaceSchema(
   // Create FTS triggers — getFullWorkspaceDdl creates the chunks_fts table but
   // not the triggers that auto-populate it on INSERT/DELETE/UPDATE.
   restoreFtsTriggerDefinitions(sqlite);
+  sqlite
+    .prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES ('fts_schema_version', ?)")
+    .run(FTS_SCHEMA_VERSION);
 
   // Try creating the vec0 virtual table for ANN vector search when the
   // sqlite-vec extension is loaded. When the extension is unavailable (e.g.

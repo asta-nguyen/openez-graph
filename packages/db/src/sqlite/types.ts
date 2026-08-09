@@ -396,8 +396,8 @@ export interface WorkspaceRepository {
       path: string;
       heading: string;
       language: string;
-      searchText: string;
       content: string;
+      metadata: string;
     }>,
   ): void;
   /** Recreate FTS triggers and backfill any missing FTS rows. */
@@ -477,8 +477,8 @@ export interface WorkspaceRepository {
     path: string;
     heading: string;
     language: string;
-    searchText: string;
     content: string;
+    metadata: string;
   }): void;
   refreshStreamTimestamp(): void;
   setMeta(key: string, value: string): void;
