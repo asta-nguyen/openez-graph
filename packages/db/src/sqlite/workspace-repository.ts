@@ -80,7 +80,6 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
   const documentOps = createDocumentOps(native, stmts, streamNow);
 
-  // Meta helpers needed by ensureGraphBuilt (defined below, hoisted via closure).
   const getMeta = (key: string): string | null => {
     const row = native.prepare("SELECT value FROM index_meta WHERE key = ?").get(key) as
       | { value: string }
@@ -91,7 +90,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     native.prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)").run(key, value);
   };
 
-  const graphOps = createGraphOps(native, stmts, streamNow, { getMeta, setMeta });
+  const graphOps = createGraphOps(native, stmts, streamNow);
   const ftsOps = createFtsOps(native, stmts, { getMeta, setMeta });
   const embeddingOps = createEmbeddingOps(native, stmts);
   const memoryOps = createMemoryOps(native, stmts);
