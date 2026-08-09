@@ -3,21 +3,32 @@ import { safeParseJson, sanitizeFtsQuery } from "./utils";
 
 export const FTS_SCHEMA_VERSION = "2";
 
+function normalizeFtsSearchText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  // SQLite trim() defaults to U+0020; preserve other whitespace in every writer.
+  return value.replace(/^ +| +$/g, "");
+}
+
 export function composeFtsSearchText(content: string, metadata: string): string {
   const parsed = safeParseJson(metadata, {}) as { searchText?: unknown };
-  const searchText = typeof parsed.searchText === "string" ? parsed.searchText.trim() : "";
+  const searchText = normalizeFtsSearchText(parsed.searchText);
   return searchText ? `${searchText}\n${content}` : content;
 }
 
 export function composeFtsSearchTextSql(metadata: string, content: string): string {
-  return `CASE
+  const normalizedSearchText = `CASE
     WHEN json_valid(${metadata}) THEN CASE
       WHEN json_type(${metadata}, '$.searchText') = 'text'
         THEN trim(json_extract(${metadata}, '$.searchText'))
       ELSE ''
     END
     ELSE ''
-  END || char(10) || ${content}`;
+  END`;
+  return `CASE
+    WHEN (${normalizedSearchText}) <> ''
+      THEN (${normalizedSearchText}) || char(10) || ${content}
+    ELSE ${content}
+  END`;
 }
 
 /**
