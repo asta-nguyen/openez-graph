@@ -1,0 +1,59 @@
+packages/indexer/src/index-workspace.ts
+  s_fb4f32c665b8c6::t_3446bd6684d172 292,295,301,314
+  s_fb4f32c665b8c6::t_ad0d8191be46b5 511,524,549,562,573,575,578,598,600-605,620,626-631
+  s_fb4f32c665b8c6::t_12940ee0bfe73b 847-850
+  s_fb4f32c665b8c6::t_6e29ce1d94431f 1319-1326
+  s_fb4f32c665b8c6::t_a408f16ca19ac2 9,12
+  s_fb4f32c665b8c6::t_0c4c5652d32a01 54-108
+  s_fb4f32c665b8c6::t_c4a9d3d115e1fd 1327-1328,1336,1353,1368,1375
+packages/indexer/src/tokenizer.ts
+  s_fb4f32c665b8c6::t_1cda81eb545c65 1-14
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_fb4f32c665b8c6::t_16c7f86d46a358 1-2,13
+  s_fb4f32c665b8c6::t_6a659a051a3aae 14-16,41,43,48,63-67,70
+packages/indexer/src/parsers/fallback-parser.ts
+  s_fb4f32c665b8c6::t_cd4554edcf143f 1-2,19,23
+packages/core/src/tokenizer.ts
+  s_fb4f32c665b8c6::t_a4f32a778a1672 1-8,14,24-27,72-75,82,97-107,116-135
+tests/parsed-documents-cache.test.ts
+  s_fb4f32c665b8c6::t_e8e9f2730c08bf 7-18
+  s_fb4f32c665b8c6::t_c2ca5a69fec85e 129-203
+  s_fb4f32c665b8c6::t_ad4c2c710ae485 204-205
+packages/indexer/src/markdown.ts
+  s_fb4f32c665b8c6::t_6b2853d403ff64 118-123
+  s_fb4f32c665b8c6::t_f06c75944b370b 60,62
+  s_fb4f32c665b8c6::t_2d6cd6ac41ad92 3
+  s_fb4f32c665b8c6::t_31d1b76e1f26a3 13-18,25,38
+  s_fb4f32c665b8c6::t_d559d69bfd461a 128
+packages/indexer/src/languages.ts
+  s_fb4f32c665b8c6::t_190843adba96b6 1000-1001
+  s_fb4f32c665b8c6::t_5f9529c9fea5fe 194-197,312,314-317,392-395,508,510,554-557,797,799,813-817,1119-1120
+  s_fb4f32c665b8c6::t_d83d231a50b3ab 925
+  s_fb4f32c665b8c6::t_8859054afb9950 3
+  s_fb4f32c665b8c6::t_869642314d4bf0 820,822,824,830,846,898,904,913,928,934,949,1002-1004,1008,1090,1098,1121-1123,1134
+packages/indexer/src/parsers/config-parser.ts
+  s_fb4f32c665b8c6::t_442d6152e7dece 12
+packages/indexer/src/parsers/markdown-parser.ts
+  s_fb4f32c665b8c6::t_a1829896f2cdfd 16
+tests/tokenizer-concurrency.test.ts
+  s_fb4f32c665b8c6::t_d8516e2978dc1d 1-55
+packages/indexer/src/parsers/types.ts
+  s_fb4f32c665b8c6::t_23f24e1a9b18a0 44-50
+  s_fb4f32c665b8c6::t_a347402b46cbcf 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "378d20807ad6add3198ab3984f79d29b9f79b643",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
