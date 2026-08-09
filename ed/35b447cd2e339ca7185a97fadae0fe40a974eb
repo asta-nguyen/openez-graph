@@ -1,0 +1,28 @@
+packages/db/src/sqlite/fts-repository.ts
+  s_d405640fc9c957::t_a4c8c8608e58dc 4-11,67,208,211,215,218-219,221,225,243-244,271-274,276,280-281,286,292,297-298
+  s_d405640fc9c957::t_2bd59e60f3fabe 164,174-180,196,203
+tests/workspace-db.test.ts
+  s_d405640fc9c957::t_056caf4920fc12 245-280
+packages/db/src/sqlite/workspace-db.ts
+  s_d405640fc9c957::t_a4c8c8608e58dc 8,173-174,186-187,303-305
+tests/fts-retrieval.test.ts
+  s_d405640fc9c957::t_056caf4920fc12 1-68
+packages/db/src/sqlite/types.ts
+  s_d405640fc9c957::t_2bd59e60f3fabe 400,481
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ed35b447cd2e339ca7185a97fadae0fe40a974eb",
+  "prompts": {},
+  "sessions": {
+    "s_d405640fc9c957": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd9f3-09db-7420-972b-855e6a3ba333",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
