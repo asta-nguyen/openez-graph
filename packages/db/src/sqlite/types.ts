@@ -7,6 +7,8 @@ export interface RegistryWorkspace {
   status: "pending" | "indexing" | "indexed" | "error";
   indexingStatus: "pending" | "running" | "completed" | "failed";
   graphStatus: "pending" | "running" | "completed" | "failed";
+  indexGeneration: number;
+  graphGeneration: number;
   lastIndexedAt: string | undefined;
   lastGraphBuiltAt: string | undefined;
   documentCount: number;
@@ -61,6 +63,8 @@ export interface RegistryRepository {
         | "status"
         | "indexingStatus"
         | "graphStatus"
+        | "indexGeneration"
+        | "graphGeneration"
         | "lastIndexedAt"
         | "lastGraphBuiltAt"
         | "documentCount"
@@ -71,6 +75,7 @@ export interface RegistryRepository {
       >
     >,
   ): Promise<void>;
+  invalidateWorkspaceGraph(id: string): Promise<number>;
   deleteWorkspace(id: string): Promise<void>;
   setPinned(id: string, pinned: boolean): Promise<void>;
 

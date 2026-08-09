@@ -618,6 +618,14 @@ export async function indexWorkspace(input: {
     const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
     const embeddingProvider = await getEmbeddingProvider();
     const runMode = input.mode ?? "incremental";
+    let graphInvalidated = false;
+
+    const invalidateGraph = async () => {
+      if (graphInvalidated) return;
+      await registry.invalidateWorkspaceGraph(workspace.id);
+      invalidateGraphForWorkspace(workspace.id);
+      graphInvalidated = true;
+    };
 
     if (embeddingProvider) {
       process.stdout.write(
@@ -633,7 +641,7 @@ export async function indexWorkspace(input: {
 
     if (runMode === "full") {
       repo.resetIndexArtifacts();
-      invalidateGraphForWorkspace(workspace.id);
+      await invalidateGraph();
     }
 
     const runId = await repo.createIndexRun({ mode: runMode });
@@ -662,7 +670,7 @@ export async function indexWorkspace(input: {
         }
       }
       if (deletedAny) {
-        invalidateGraphForWorkspace(workspace.id);
+        await invalidateGraph();
       }
     }
 
@@ -818,12 +826,11 @@ export async function indexWorkspace(input: {
       process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
       const _T4 = Date.now();
       if (parseTasks.length > 0) {
+        await invalidateGraph();
         // ── Phase 4: Write all results to DB (main thread, transactioned) ──
         repo.setOptimizedWriteMode(true);
         repo.dropFtsTriggers();
         bulkWriteMode = true;
-        // At least one file changed — graph is stale.
-        invalidateGraphForWorkspace(workspace.id);
       }
 
       const allChunkRowsForEmbeddings: Array<{
