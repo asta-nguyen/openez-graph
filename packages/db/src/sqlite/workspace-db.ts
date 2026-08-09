@@ -4,7 +4,7 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import * as schema from "./schema";
-import { createNativeDatabase, hasVecExtension } from "./database-loader";
+import { createNativeDatabase } from "./database-loader";
 import {
   composeFtsSearchTextSql,
   FTS_SCHEMA_VERSION,
@@ -288,10 +288,6 @@ export function initializeWorkspaceSchema(
     // Ensure FTS triggers exist (may be missing on DBs created before triggers
     // were added, or on fresh DBs that only ran getFullWorkspaceDdl).
     restoreFtsTriggerDefinitions(sqlite);
-
-    // Try creating the vec0 virtual table for ANN vector search when the
-    // sqlite-vec extension is loaded. No-op when the extension is unavailable.
-    tryCreateVecTable(sqlite, dimensions);
     return;
   }
 
@@ -307,11 +303,6 @@ export function initializeWorkspaceSchema(
   sqlite
     .prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES ('fts_schema_version', ?)")
     .run(FTS_SCHEMA_VERSION);
-
-  // Try creating the vec0 virtual table for ANN vector search when the
-  // sqlite-vec extension is loaded. When the extension is unavailable (e.g.
-  // under bun:sqlite), this is skipped and retrieval falls back to linear scan.
-  tryCreateVecTable(sqlite, dimensions);
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
@@ -389,57 +380,11 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
   }>;
   const embeddingCol = info.find((c) => c.name === "embedding");
   if (embeddingCol && embeddingCol.type.toUpperCase() === "TEXT") {
-    console.error(
-      "[openez] Migrating embeddings from TEXT to BLOB — existing embeddings will be dropped, full reindex required.",
+    // Do NOT drop/delete/recreate the table — that would destroy legacy data.
+    // The full reindex path (resetIndexArtifacts) handles table recreation.
+    throw new Error(
+      "Workspace uses legacy TEXT embeddings. Run 'openez reindex <path>' to rebuild BLOB embeddings.",
     );
-    // Drop and recreate — full reindex required
-    sqlite.exec("DELETE FROM embeddings");
-    sqlite.exec("DROP TABLE embeddings");
-    sqlite.exec(`CREATE TABLE IF NOT EXISTS embeddings (
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL,
-      model TEXT NOT NULL,
-      dimensions INTEGER NOT NULL,
-      embedding BLOB NOT NULL,
-      input_hash TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`);
-    // Recreate indexes
-    sqlite.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
-    sqlite.exec(
-      "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
-    );
-    sqlite.exec(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
-    );
-  }
-}
-
-/**
- * Create the vec0 virtual table for ANN vector search when the sqlite-vec
- * extension is loaded. The dimension defaults to 768 (bge-m3 / Ollama
- * nomic-embed-text) but can be overridden via `dimensions` to match the
- * embedding model in use. When the extension is unavailable (e.g. under
- * bun:sqlite, which is compiled without dynamic extension loading), this
- * is a no-op and retrieval falls back to a linear scan over `embeddings`.
- *
- * The table includes provider and model metadata columns so that KNN
- * queries can filter by embedding model — preventing cross-model ranking
- * when a workspace has vectors from multiple providers.
- */
-function tryCreateVecTable(
-  sqlite: ReturnType<typeof createNativeDatabase>,
-  dimensions: number = 768,
-) {
-  if (!hasVecExtension()) return;
-  try {
-    sqlite.exec(
-      `CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vec USING vec0(chunk_id TEXT PRIMARY KEY, embedding float[${dimensions}], provider TEXT, model TEXT)`,
-    );
-  } catch {
-    // Table creation failed (e.g. dimension mismatch, extension quirks) —
-    // linear scan fallback remains available via the embeddings table.
   }
 }
 

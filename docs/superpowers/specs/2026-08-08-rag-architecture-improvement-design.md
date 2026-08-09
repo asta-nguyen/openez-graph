@@ -10,7 +10,7 @@
 Improve 4 architectural bottlenecks in the OpenEZ RAG pipeline:
 
 1. `repository.ts` too large (1824 lines) — split into focused modules
-2. Vector search linear scan — replace with sqlite-vec ANN
+2. Vector search linear scan — ~~replace with sqlite-vec ANN~~ BLOB cosine linear scan is the supported path (sqlite-vec deferred, see Phase 3)
 3. Graph build re-parses all docs — cache parse results
 4. Embeddings stored as JSON TEXT — switch to BLOB (Float32Array)
 
@@ -95,55 +95,34 @@ embedding BLOB NOT NULL
 
 ## Phase 3: sqlite-vec ANN Index
 
+> **Status: Deferred.** The sqlite-vec ANN path was implemented but never
+> reachable under `bun:sqlite` (which is compiled without dynamic extension
+> loading support). It has been removed to eliminate dead code and a native
+> dependency that never executed. **BLOB cosine linear scan is now the
+> supported and only vector search path.** This is sufficient for local
+> SQLite workspaces. If ANN becomes necessary in the future, it should be
+> re-evaluated against a SQLite build that supports extension loading.
+
 ### Problem
 
 `rankStoredEmbeddings()` does linear cosine similarity scan over all embeddings. O(n) per query. With 10K+ chunks, latency becomes noticeable.
 
-### Design
+### Design (deferred)
 
-Add `sqlite-vec` extension for approximate nearest neighbor (ANN) search.
+~~Add `sqlite-vec` extension for approximate nearest neighbor (ANN) search.~~
 
-```sql
-CREATE VIRTUAL TABLE embeddings_vec USING vec0(
-  chunk_id INTEGER PRIMARY KEY,
-  embedding FLOAT[768]
-);
-```
+The BLOB cosine linear scan over `embeddings` (Phase 2) is the supported
+local vector search path. It filters by `provider`, `model`, and
+`dimensions` so cross-model ranking is prevented. No native extension is
+required.
 
-### Changes
+### Decision record
 
-- Load `sqlite-vec` extension in `createNativeDatabase()` via `db.loadExtension()`
-- Sync `embeddings` → `embeddings_vec` on insert/delete
-- `vectorSearch()` — `SELECT chunk_id FROM embeddings_vec WHERE embedding MATCH ? ORDER BY distance LIMIT k`
-- Fallback: if extension fails to load, keep linear scan (graceful degradation)
-
-### Constraints
-
-- `sqlite-vec` is an optional native dependency — graceful fallback to linear scan if not installed (per AGENTS.md: "Embeddings are optional")
-- Extension path resolved at runtime (platform-specific)
-- Dimensions must match provider config (768 for bge-m3, 1536 for OpenAI)
-- If dimensions change (different model), vec table must be rebuilt
-- Full reindex required for initial setup
-- If embeddings disabled (`embedding.provider = "none"`), vec table stays empty — no overhead
-
-### Affected files
-
-- `packages/db/src/sqlite/database-loader.ts` — load extension
-- `packages/db/src/sqlite/embedding-repository.ts` — sync to vec table
-- `packages/db/src/sqlite/workspace-db.ts` — vec table schema
-- `packages/core/src/retrieval.ts` — `vectorSearch()` query
-
-### Fallback strategy
-
-```ts
-let hasVecExtension = false;
-try {
-  db.loadExtension(sqliteVecPath);
-  hasVecExtension = true;
-} catch {
-  // Graceful degradation — linear scan
-}
-```
+- **BLOB cosine linear scan** is the supported and only vector search path.
+- `sqlite-vec` dependency and all `embeddings_vec` sync code have been removed.
+- `hasVecExtension()` / `tryLoadVecExtension()` have been removed.
+- Opening a workspace with legacy TEXT embeddings throws an actionable error
+  (`Run 'openez reindex <path>'`) instead of silently deleting data.
 
 ---
 
@@ -192,12 +171,12 @@ CREATE TABLE parsed_documents (
 
 ## Execution Order
 
-| Phase | What                | Risk                      | Reindex?                     |
-| ----- | ------------------- | ------------------------- | ---------------------------- |
-| 1     | Split repository.ts | Low — move only           | No                           |
-| 2     | Embedding BLOB      | Medium — schema change    | Yes                          |
-| 3     | sqlite-vec ANN      | Medium — native extension | Yes                          |
-| 4     | Cache parse results | Low — additive            | No (populated on next index) |
+| Phase | What                | Risk                                                    | Reindex?                     |
+| ----- | ------------------- | ------------------------------------------------------- | ---------------------------- |
+| 1     | Split repository.ts | Low — move only                                         | No                           |
+| 2     | Embedding BLOB      | Medium — schema change                                  | Yes                          |
+| 3     | sqlite-vec ANN      | ~~Medium~~ Deferred — BLOB cosine is the supported path | ~~Yes~~ N/A                  |
+| 4     | Cache parse results | Low — additive                                          | No (populated on next index) |
 
 Phases 2 and 3 both require reindex, so they're ordered consecutively. Phase 1 (split) must come first since Phases 2-4 modify files created by the split.
 

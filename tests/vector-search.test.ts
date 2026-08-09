@@ -239,4 +239,115 @@ describe("vector search", () => {
     expect(parseEmbedding("not json")).toEqual([]);
     expect(parseEmbedding(null)).toEqual([]);
   });
+
+  it("isolates results by provider and model dimensions", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-vector-iso-"));
+    roots.push(root);
+    const repo = createWorkspaceRepository(root);
+    const docId = await repo.insertDocument({
+      path: "multi.ts",
+      absolutePath: path.join(root, "multi.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "hash",
+      sizeBytes: 1,
+      mtimeMs: 1,
+    });
+    const [chunk768] = await repo.insertChunks([
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        content: "768d",
+        tokenCount: 1,
+        contentHash: "c1",
+        metadata: "{}",
+      },
+    ]);
+    const [chunk1536] = await repo.insertChunks([
+      {
+        documentId: docId,
+        chunkIndex: 1,
+        content: "1536d",
+        tokenCount: 1,
+        contentHash: "c2",
+        metadata: "{}",
+      },
+    ]);
+    await repo.insertEmbeddings([
+      {
+        chunkId: chunk768,
+        provider: "ollama",
+        model: embeddingStorageModel({ model: "bge-m3" }),
+        dimensions: 3,
+        embedding: toBlob([1, 0, 0]),
+      },
+      {
+        chunkId: chunk1536,
+        provider: "openai",
+        model: embeddingStorageModel({ model: "text-embedding-3-small" }),
+        dimensions: 3,
+        embedding: toBlob([0, 1, 0]),
+      },
+    ]);
+
+    const ollamaResults = await rankStoredEmbeddings(
+      root,
+      { provider: "ollama", model: "bge-m3" },
+      [1, 0, 0],
+      10,
+    );
+    expect(ollamaResults.map((r) => r.content)).toEqual(["768d"]);
+
+    const openaiResults = await rankStoredEmbeddings(
+      root,
+      { provider: "openai", model: "text-embedding-3-small" },
+      [0, 1, 0],
+      10,
+    );
+    expect(openaiResults.map((r) => r.content)).toEqual(["1536d"]);
+  });
+
+  it("returns similarity 0 for invalid BLOB length instead of throwing", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-vector-invalid-"));
+    roots.push(root);
+    const repo = createWorkspaceRepository(root);
+    const docId = await repo.insertDocument({
+      path: "invalid.ts",
+      absolutePath: path.join(root, "invalid.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "hash",
+      sizeBytes: 1,
+      mtimeMs: 1,
+    });
+    const [chunkId] = await repo.insertChunks([
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        content: "invalid",
+        tokenCount: 1,
+        contentHash: "c",
+        metadata: "{}",
+      },
+    ]);
+    // Insert a malformed embedding (1 byte — not a valid Float32Array)
+    await repo.insertEmbeddings([
+      {
+        chunkId,
+        provider: "ollama",
+        model: "bge-m3",
+        dimensions: 3,
+        embedding: new Uint8Array([42]),
+      },
+    ]);
+
+    const results = await rankStoredEmbeddings(
+      root,
+      { provider: "ollama", model: "bge-m3" },
+      [1, 0, 0],
+      10,
+    );
+    // Should not throw, should return empty or score 0
+    expect(results).toEqual([]);
+  });
 });
