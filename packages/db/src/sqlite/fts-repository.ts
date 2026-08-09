@@ -1,6 +1,14 @@
 import type { NativeDatabase } from "./shared-types";
 import { safeParseJson, sanitizeFtsQuery } from "./utils";
 
+export const FTS_SCHEMA_VERSION = "2";
+
+export function composeFtsSearchText(content: string, metadata: string): string {
+  const parsed = safeParseJson(metadata, {}) as { searchText?: unknown };
+  const searchText = typeof parsed.searchText === "string" ? parsed.searchText.trim() : "";
+  return searchText ? `${searchText}\n${content}` : content;
+}
+
 /**
  * Prepared statements used by the FTS operations.
  *
@@ -56,7 +64,7 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
         const placeholders = batch.map(() => "(?, ?, ?, ?, ?)").join(",");
         const params: unknown[] = [];
         for (const item of batch) {
-          const searchText = item.content.slice(0, 400);
+          const searchText = composeFtsSearchText(item.content, item.metadata);
           params.push(item.chunkId, item.path, item.heading ?? "", item.language ?? "", searchText);
         }
         native
@@ -152,8 +160,8 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
         path: string;
         heading: string;
         language: string;
-        searchText: string;
         content: string;
+        metadata: string;
       }>,
     ): void {
       if (rows.length === 0) return;
@@ -163,7 +171,13 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
         const placeholders = batch.map(() => "(?, ?, ?, ?, ?)").join(",");
         const params: unknown[] = [];
         for (const r of batch) {
-          params.push(r.chunkId, r.path, r.heading, r.language, r.searchText);
+          params.push(
+            r.chunkId,
+            r.path,
+            r.heading,
+            r.language,
+            composeFtsSearchText(r.content, r.metadata),
+          );
         }
         native
           .prepare(
@@ -178,42 +192,37 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
       path: string;
       heading: string;
       language: string;
-      searchText: string;
       content: string;
+      metadata: string;
     }): void {
       stmts.insertFtsRow.run(
         input.chunkId,
         input.path,
         input.heading,
         input.language,
-        input.searchText,
+        composeFtsSearchText(input.content, input.metadata),
       );
     },
 
     ensureFtsReady(): void {
-      if (deps.getMeta("fts_backfill_pending") !== "1") return;
+      if (deps.getMeta("fts_schema_version") === FTS_SCHEMA_VERSION) return;
       native.exec("BEGIN IMMEDIATE");
       try {
-        if (deps.getMeta("fts_backfill_pending") !== "1") {
+        if (deps.getMeta("fts_schema_version") === FTS_SCHEMA_VERSION) {
           native.exec("COMMIT");
           return;
         }
-        // Clean up orphaned FTS rows
-        native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
-
-        // Backfill missing FTS entries via SQL (content is uncompressed TEXT)
+        native.exec("DELETE FROM chunks_fts");
         native.exec(`
           INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-          SELECT c.id, d.path, coalesce(c.heading, ''),
-            coalesce(d.language, ''), substr(c.content, 1, 400)
+          SELECT c.id, d.path, coalesce(c.heading, ''), coalesce(d.language, ''),
+            coalesce(json_extract(c.metadata, '$.searchText'), '') || char(10) || c.content
           FROM chunks c
-          INNER JOIN documents d ON d.id = c.document_id
-          LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-          WHERE f.chunk_id IS NULL;
+          JOIN documents d ON d.id = c.document_id;
         `);
 
         restoreFtsTriggerDefinitions(native);
-        deps.setMeta("fts_backfill_pending", "0");
+        deps.setMeta("fts_schema_version", FTS_SCHEMA_VERSION);
         native.exec("COMMIT");
       } catch (error) {
         try {
@@ -231,7 +240,8 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
       native.exec(`
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
         SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''), substr(c.content, 1, 400)
+          coalesce(d.language, ''),
+          coalesce(json_extract(c.metadata, '$.searchText'), '') || char(10) || c.content
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id
         LEFT JOIN chunks_fts f ON f.chunk_id = c.id
@@ -258,28 +268,34 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
 }
 
 export function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
+  // Recreate rather than IF NOT EXISTS so stale trigger definitions are upgraded.
+  native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
+  native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
+  native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
   native.exec(`
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks
+    CREATE TRIGGER chunks_fts_insert AFTER INSERT ON chunks
     BEGIN
       INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
       SELECT new.id, documents.path, coalesce(new.heading, ''),
-        coalesce(documents.language, ''), substr(new.content, 1, 400)
+        coalesce(documents.language, ''),
+        coalesce(json_extract(new.metadata, '$.searchText'), '') || char(10) || new.content
       FROM documents WHERE documents.id = new.document_id;
     END;
   `);
   native.exec(`
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks
+    CREATE TRIGGER chunks_fts_delete AFTER DELETE ON chunks
     BEGIN
       DELETE FROM chunks_fts WHERE chunk_id = old.id;
     END;
   `);
   native.exec(`
-    CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks
+    CREATE TRIGGER chunks_fts_update AFTER UPDATE ON chunks
     BEGIN
       DELETE FROM chunks_fts WHERE chunk_id = old.id;
       INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
       SELECT new.id, documents.path, coalesce(new.heading, ''),
-        coalesce(documents.language, ''), substr(new.content, 1, 400)
+        coalesce(documents.language, ''),
+        coalesce(json_extract(new.metadata, '$.searchText'), '') || char(10) || new.content
       FROM documents WHERE documents.id = new.document_id;
     END;
   `);

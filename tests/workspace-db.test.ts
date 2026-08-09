@@ -242,6 +242,42 @@ describe("createWorkspaceRepository", () => {
     expect(await reopened.fullTextSearch("searchable", 5)).toHaveLength(1);
   });
 
+  it("rebuilds legacy FTS rows when the schema version is stale", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const docId = await repo.insertDocument({
+      path: "legacy-long.ts",
+      absolutePath: path.join(tempRoot, "legacy-long.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "legacy-long",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    const content = `${"padding ".repeat(100)} endNeedle`;
+    const [chunkId] = await repo.insertChunks([
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        content,
+        tokenCount: 200,
+        contentHash: "legacy-long-chunk",
+        metadata: "{}",
+      },
+    ]);
+
+    await repo.executeRaw("DELETE FROM chunks_fts");
+    await repo.executeRaw(
+      "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES (?, ?, ?, ?, ?)",
+      [chunkId, "legacy-long.ts", "", "typescript", content.slice(0, 400)],
+    );
+    repo.setMeta("fts_schema_version", "1");
+
+    closeAllWorkspaceDbs();
+    const reopened = createWorkspaceRepository(tempRoot);
+    expect(await reopened.fullTextSearch("endNeedle", 5)).toHaveLength(1);
+    expect(await reopened.getMeta("fts_schema_version")).toBe("2");
+  });
+
   it("counts documents, chunks, nodes, edges", async () => {
     const repo = createWorkspaceRepository(tempRoot);
 
