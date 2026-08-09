@@ -1,0 +1,30 @@
+packages/db/src/sqlite/schema.ts
+  s_d405640fc9c957::t_193ad0aee3f3fb 17-18
+packages/indexer/src/index-workspace.ts
+  s_d405640fc9c957::t_193ad0aee3f3fb 621-628,644,673,829
+tests/graph-lifecycle.test.ts
+  s_d405640fc9c957::t_5e8906204887e7 1-85
+packages/db/src/sqlite/types.ts
+  s_d405640fc9c957::t_193ad0aee3f3fb 10-11,66-67,78
+packages/db/src/sqlite/registry-db.ts
+  s_d405640fc9c957::t_193ad0aee3f3fb 24-25,154-155
+packages/db/src/sqlite/registry-repository.ts
+  s_d405640fc9c957::t_193ad0aee3f3fb 43-44,180-181,207-214,248-264
+  s_d405640fc9c957::t_8b95cecccc6e39 265-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0e9b40d26ecc52de117195b1e4a84dc3d7982b7a",
+  "prompts": {},
+  "sessions": {
+    "s_d405640fc9c957": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd9f3-09db-7420-972b-855e6a3ba333",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
