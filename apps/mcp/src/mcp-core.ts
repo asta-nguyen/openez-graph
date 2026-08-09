@@ -26,7 +26,7 @@ import {
   findLocalWorkspaceConfig,
   removeWorkspace,
 } from "@openez-graph/db";
-import { indexWorkspace, buildGraphForWorkspace, waitForFts } from "@openez-graph/indexer";
+import { ensureGraphReady, indexWorkspace, waitForFts } from "@openez-graph/indexer";
 
 const MIN_RESPONSE_TOKENS = 32;
 
@@ -653,8 +653,7 @@ export function createMcpServer(options?: McpServerOptions) {
         const input = codeContextSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
-        // Lazy graph build — one-time cost on first graph query
-        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.id, w.rootPath)));
+        await Promise.all(workspaces.map((w) => ensureGraphReady(w.id)));
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
@@ -675,8 +674,7 @@ export function createMcpServer(options?: McpServerOptions) {
         const input = graphNeighborsSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
-        // Lazy graph build — one-time cost on first graph query
-        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.id, w.rootPath)));
+        await Promise.all(workspaces.map((w) => ensureGraphReady(w.id)));
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
@@ -834,21 +832,6 @@ export async function autoIndexAndSync(searchRoot: string): Promise<void> {
     } catch {
       // Indexing failure is non-fatal — MCP server still starts
     }
-  }
-
-  // Kick off lazy graph build in background — AI will likely query graph soon.
-  // Non-blocking: if it's not done by first query, ensureGraphBuilt() finishes it.
-  try {
-    const repo = createWorkspaceRepository(workspace.rootPath);
-    setImmediate(() => {
-      try {
-        repo.ensureGraphBuilt();
-      } catch {
-        /* non-fatal */
-      }
-    });
-  } catch {
-    /* non-fatal */
   }
 
   // The stdio MCP server must stay cheap to start and robust on large repos.

@@ -623,7 +623,6 @@ export async function indexWorkspace(input: {
     const invalidateGraph = async () => {
       if (graphInvalidated) return;
       await registry.invalidateWorkspaceGraph(workspace.id);
-      invalidateGraphForWorkspace(workspace.id);
       graphInvalidated = true;
     };
 
@@ -1136,47 +1135,16 @@ export async function waitForFts(workspaceId: string): Promise<void> {
 // batch (Python/Go/Rust), inserts graph nodes + edges + call edges.
 // One-time cost (~5s for 2K files). Subsequent queries use cached graph.
 
-/** In-flight graph builds: workspaceId -> Promise. Concurrent callers share
- *  the same promise. A resolved promise remaining in the map means "built". */
-const graphBuilds = new Map<string, Promise<void>>();
-
-/** Workspaces whose graph is stale and must be rebuilt on next access. */
-const _graphDirtyWorkspaces = new Set<string>();
-
-/** Mark a workspace's graph as stale so the next buildGraphForWorkspace call
- *  rebuilds from current documents. Called by indexWorkspace after changes. */
-function invalidateGraphForWorkspace(workspaceId: string): void {
-  _graphDirtyWorkspaces.add(workspaceId);
-  // Remove any cached "built" promise so the next call rebuilds.
-  graphBuilds.delete(workspaceId);
-}
-
-export async function buildGraphForWorkspace(workspaceId: string, rootPath: string): Promise<void> {
-  // If already built and not dirty, return immediately.
-  const existing = graphBuilds.get(workspaceId);
-  if (existing && !_graphDirtyWorkspaces.has(workspaceId)) {
-    return existing;
-  }
-
-  // Start a new build (race-safe: concurrent callers share the same promise).
-  // On success, replace the in-flight promise with a resolved one so the
-  // workspace is marked "built". On failure, delete the entry so the next
-  // call can retry — otherwise the rejected promise would be cached forever.
-  const buildPromise = _buildGraphInternal(workspaceId, rootPath)
-    .then(() => {
-      graphBuilds.set(workspaceId, Promise.resolve());
-    })
-    .catch((err) => {
-      graphBuilds.delete(workspaceId);
-      throw err;
-    });
-
-  graphBuilds.set(workspaceId, buildPromise);
-  return buildPromise;
-}
-
-async function _buildGraphInternal(workspaceId: string, rootPath: string): Promise<void> {
-  _graphDirtyWorkspaces.delete(workspaceId);
+/**
+ * Build graph artifacts for one captured index generation. Graph lifecycle
+ * state is intentionally owned by graph-service.ts; this function only
+ * persists nodes and edges for the root resolved by that service.
+ */
+export async function buildGraphGeneration(
+  _workspaceId: string,
+  rootPath: string,
+  _generation: number,
+): Promise<{ nodeCount: number; edgeCount: number }> {
   const _graphStart = Date.now();
 
   const repo = createWorkspaceRepository(rootPath);
@@ -1195,7 +1163,7 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
 
   if (graphDocs.length === 0) {
     process.stderr.write(`[t] graph-build: 0 docs (${Date.now() - _graphStart}ms)\n`);
-    return;
+    return { nodeCount: await repo.getNodeCount(), edgeCount: await repo.getEdgeCount() };
   }
 
   // Read file contents
@@ -1421,7 +1389,7 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
 
   if (parsedFiles.size === 0) {
     process.stderr.write(`[t] graph-build: 0 parsed (${Date.now() - _graphStart}ms)\n`);
-    return;
+    return { nodeCount: await repo.getNodeCount(), edgeCount: await repo.getEdgeCount() };
   }
 
   // ── Build known files set for import resolution ──
@@ -1574,13 +1542,7 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
     `[t] graph-build: ${Date.now() - _graphStart}ms (${parsedFiles.size} files, ${allNodeInputs.length} nodes, ${allEdges.length} edges)\n`,
   );
 
-  // Update registry so the UI reflects the built graph
   const nodeCount = await repo.getNodeCount();
   const edgeCount = await repo.getEdgeCount();
-  const registry = createRegistryRepository();
-  await registry.updateWorkspace(workspaceId, {
-    graphStatus: "completed",
-    nodeCount,
-    edgeCount,
-  });
+  return { nodeCount, edgeCount };
 }

@@ -393,7 +393,6 @@ export interface WorkspaceRepository {
   dropFtsTriggers(): void;
   dropNonUniqueIndexes(): void;
   restoreNonUniqueIndexes(): void;
-  ensureGraphBuilt(): void;
   /** Bulk insert FTS rows without triggers (used during optimized write phase). */
   insertFtsBatch(
     rows: Array<{

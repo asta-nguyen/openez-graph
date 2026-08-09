@@ -320,6 +320,9 @@ importers:
       '@openez-graph/db':
         specifier: workspace:*
         version: link:../db
+      '@openez-graph/indexer':
+        specifier: workspace:*
+        version: link:../indexer
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.0)(gel@2.2.0)(pg@8.20.0)

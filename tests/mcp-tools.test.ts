@@ -187,7 +187,7 @@ describe("MCP agent contracts", () => {
   });
 
   it("resolves code_context callers and source snippets", async () => {
-    await createIndexedWorkspace("context", tempRoot);
+    const workspace = await createIndexedWorkspace("context", tempRoot);
     const { client, server } = await connectClient(tempRoot);
     try {
       const text = textResult(
@@ -211,6 +211,9 @@ describe("MCP agent contracts", () => {
         expect.objectContaining({ symbol: "caller", path: "src/caller.ts" }),
       );
       expect(countTokens(text)).toBeLessThanOrEqual(1200);
+      expect((await createRegistryRepository().getWorkspace(workspace.id))?.graphStatus).toBe(
+        "completed",
+      );
     } finally {
       await client.close();
       await server.close();

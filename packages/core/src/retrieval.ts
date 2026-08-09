@@ -333,6 +333,14 @@ export async function codeQuery(input: {
   );
 
   if (!input.skipGraphExpand) {
+    // The indexer owns graph lifecycle; retrieve against a generation-matched
+    // persisted graph rather than triggering repository-local construction.
+    // Keep this lazy to avoid eagerly initializing the indexer from core.
+    const indexerModule = "@openez-graph/indexer";
+    const { ensureGraphReady } = (await import(indexerModule)) as {
+      ensureGraphReady(workspaceId: string): Promise<void>;
+    };
+    await ensureGraphReady(workspace.id);
     const graphResults = await graphExpand(
       workspace.rootPath,
       fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),
