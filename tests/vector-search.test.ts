@@ -175,12 +175,13 @@ describe("vector search", () => {
       [chunkId, embedding.provider, embedding.model],
     );
     expect(rows).toHaveLength(1);
+    const row = rows[0] as { embedding: Uint8Array };
     expect(
       Array.from(
         new Float32Array(
-          rows[0].embedding.buffer,
-          rows[0].embedding.byteOffset,
-          rows[0].embedding.byteLength / 4,
+          row.embedding.buffer,
+          row.embedding.byteOffset,
+          row.embedding.byteLength / 4,
         ),
       ),
     ).toEqual([0, 1]);

@@ -86,7 +86,9 @@ describe("createRegistryRepository", () => {
       createdAt: "2026-08-01T00:00:00.000Z",
       updatedAt: "2026-08-01T01:00:00.000Z",
       indexGeneration: 0,
-      graphGeneration: 0,
+      // Migration invalidates old completed graphs by setting graph_generation
+      // to -1, forcing a rebuild on next access (picks up parser changes).
+      graphGeneration: -1,
     };
     const repository = createRegistryRepository();
     const migrated = await repository.getWorkspace("legacy-ws");

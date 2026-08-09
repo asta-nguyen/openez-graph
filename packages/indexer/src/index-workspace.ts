@@ -47,7 +47,7 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
 // Parser version tags stored alongside cached parse results in
 // `parsed_documents`. Bump these when parser logic changes so stale cache
 // entries are invalidated on the next index/graph build.
-const PARSER_VERSION_TS_MORPH = "ts-morph-v1";
+const PARSER_VERSION_OXC = "oxc-v2";
 const PARSER_VERSION_NATIVE = "native-v1";
 const PARSER_VERSION_FALLBACK = "fallback-v1";
 
@@ -110,14 +110,17 @@ export function resetNativeParserCache(): void {
  * Map a parser name (returned by `parseDocument`/`parseInline`) to the
  * version tag stored in `parsed_documents.parser_version`. Native
  * tree-sitter results use `native-v1`, the fallback parser uses
- * `fallback-v1`, and every other parser (oxc, tree-sitter, markdown,
- * config, regex) is grouped under `ts-morph-v1` since they share the same
- * chunking/call-extraction contract.
+ * `fallback-v1`, and every other parser (oxc, markdown, config, regex)
+ * is grouped under `oxc-v2` since they share the same chunking/call-
+ * extraction contract. Non-native tree-sitter/regex fallbacks for
+ * Python/Go/Rust use `fallback-v1` so cache validation matches the
+ * expected version when the native extension is unavailable.
  */
 function parserVersionFor(parserName: string): string {
   if (parserName === "tree-sitter-native") return PARSER_VERSION_NATIVE;
-  if (parserName === "fallback") return PARSER_VERSION_FALLBACK;
-  return PARSER_VERSION_TS_MORPH;
+  if (parserName === "fallback" || parserName === "tree-sitter" || parserName === "regex")
+    return PARSER_VERSION_FALLBACK;
+  return PARSER_VERSION_OXC;
 }
 
 function normalizeRelativePath(filePath: string): string {
@@ -1265,7 +1268,7 @@ export async function buildGraphGeneration(
     if (
       cached &&
       cached.contentHash === doc.contentHash &&
-      cached.parserVersion === PARSER_VERSION_TS_MORPH
+      cached.parserVersion === PARSER_VERSION_OXC
     ) {
       parsedFiles.set(doc.path, {
         filePath: doc.path,

@@ -360,11 +360,43 @@ function extractCalls(symbolAsts: SymbolAst[]): {
  */
 function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolAst[] {
   const nested: SymbolAst[] = [];
+  // Track all symbol names in this file to detect collisions. When a nested
+  // function has the same name as an existing symbol, qualify it with its
+  // parent's name (e.g. `outer.helper`) to avoid graph node collisions.
+  const allNames = new Set<string>();
+  for (const { symbol } of topLevel) {
+    allNames.add(symbol.name);
+  }
+
+  function registerNested(
+    name: string,
+    parentNode: OxcNode,
+    bodyNode: OxcNode,
+    parentName: string,
+  ): void {
+    const qualifiedName = allNames.has(name) ? `${parentName}.${name}` : name;
+    allNames.add(qualifiedName);
+    const startLine = source.slice(0, bodyNode.start).split("\n").length;
+    const endLine = source.slice(0, bodyNode.end).split("\n").length;
+    nested.push({
+      symbol: {
+        name: qualifiedName,
+        symbolType: "function",
+        type: "function",
+        exported: false,
+        startLine,
+        endLine,
+      },
+      node: bodyNode,
+    });
+  }
+
   for (const { symbol, node } of topLevel) {
     // Walk function and method bodies for nested callable declarations.
     // Class symbols themselves are not walked here — their methods are
     // already extracted as separate top-level symbols by extractClassMethods.
     if (symbol.symbolType !== "function" && symbol.symbolType !== "method") continue;
+    const parentName = symbol.name;
     const visited = new WeakSet<object>();
     walkNodes(
       node,
@@ -372,35 +404,22 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
         if (current === node) return; // skip the root (already a symbol)
         // Nested FunctionDeclaration — always has an .id Identifier.
         if (current.type === "FunctionDeclaration" && current.id?.type === "Identifier") {
-          const startLine = source.slice(0, current.start).split("\n").length;
-          const endLine = source.slice(0, current.end).split("\n").length;
-          nested.push({
-            symbol: {
-              name: current.id.name,
-              symbolType: "function",
-              type: "function",
-              exported: false,
-              startLine,
-              endLine,
-            },
-            node: current,
-          });
+          registerNested(current.id.name, current, current, parentName);
         }
         // Named FunctionExpression — has an .id Identifier.
         if (current.type === "FunctionExpression" && current.id?.type === "Identifier") {
-          const startLine = source.slice(0, current.start).split("\n").length;
-          const endLine = source.slice(0, current.end).split("\n").length;
-          nested.push({
-            symbol: {
-              name: current.id.name,
-              symbolType: "function",
-              type: "function",
-              exported: false,
-              startLine,
-              endLine,
-            },
-            node: current,
-          });
+          registerNested(current.id.name, current, current, parentName);
+        }
+        // Arrow function assigned to a const/let/var: `const inner = () => { ... }`
+        // The VariableDeclarator's .init is the ArrowFunctionExpression, and
+        // the binding name comes from .id (the Identifier on the left-hand side).
+        if (
+          current.type === "VariableDeclarator" &&
+          current.id?.type === "Identifier" &&
+          (current.init?.type === "ArrowFunctionExpression" ||
+            current.init?.type === "FunctionExpression")
+        ) {
+          registerNested(current.id.name, current, current.init, parentName);
         }
       },
       visited,

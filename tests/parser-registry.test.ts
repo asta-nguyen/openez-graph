@@ -151,7 +151,6 @@ describe("CodeParser interface contract", () => {
 
   it("FallbackParser.canParse always returns true", () => {
     const p = new FallbackParser();
-    expect(p.canParse("anything.txt", null, "text")).toBe(true);
-    expect(p.canParse("anything.unknown", "unknown", "code")).toBe(true);
+    expect(p.canParse()).toBe(true);
   });
 });

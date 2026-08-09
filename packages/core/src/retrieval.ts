@@ -244,6 +244,13 @@ export async function codeQuery(input: {
   maxTokens?: number;
   skipGraphExpand?: boolean;
   recordMetrics?: boolean;
+  /**
+   * Optional callback to ensure the graph is built before graph expansion.
+   * MCP/web pass `ensureGraphReady` from `@openez-graph/indexer`. When omitted
+   * and `skipGraphExpand` is false, graph expansion runs against whatever
+   * graph state currently exists (may be empty on a fresh workspace).
+   */
+  ensureGraph?: (workspaceId: string) => Promise<void>;
 }): Promise<CodeQueryResult> {
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
@@ -279,8 +286,11 @@ export async function codeQuery(input: {
   );
 
   if (!input.skipGraphExpand) {
-    // Graph readiness is ensured by the caller (MCP/web) before invoking
-    // codeQuery. Core must not import the indexer to avoid a package cycle.
+    // Ensure the graph is built before expansion. The callback is injected
+    // by the caller (MCP/web) to avoid a core→indexer package cycle.
+    if (input.ensureGraph) {
+      await input.ensureGraph(input.workspaceId);
+    }
     const graphResults = await graphExpand(
       workspace.rootPath,
       fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),

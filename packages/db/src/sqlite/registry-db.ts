@@ -154,6 +154,20 @@ function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>)
   addColumnIfMissing("index_generation", "index_generation INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing("graph_generation", "graph_generation INTEGER NOT NULL DEFAULT 0");
 
+  // Invalidate graphs on workspaces that existed before generation tracking.
+  // Both columns default to 0, which would make `graphGeneration === indexGeneration`
+  // true and skip rebuild. Set graph_generation to -1 for any workspace whose
+  // graph was built before generations were tracked (graph_generation = 0 and
+  // graph_status = 'completed'). This forces a rebuild on next access, picking
+  // up parser behavior changes (e.g. oxc nested symbols).
+  if (getColumns().has("graph_generation")) {
+    sqlite
+      .prepare(
+        "UPDATE workspaces SET graph_generation = -1 WHERE graph_status = 'completed' AND graph_generation = 0 AND index_generation = 0",
+      )
+      .run();
+  }
+
   // Backfill pin_order for pre-existing pinned workspaces that lack it.
   // Assign sequential values ordered by pinned_at so the initial state is
   // consistent with the "newest pin on top" intent.

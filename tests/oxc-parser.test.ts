@@ -113,4 +113,62 @@ describe("OxcParser", () => {
       calleeName: "helper",
     });
   });
+
+  it("emits nested arrow functions as graphable symbols", () => {
+    const content = `
+    function outer() {
+      const inner = () => { helper(); };
+      inner();
+    }
+    function helper() {}
+  `;
+    const result = new OxcParser().parse(
+      {
+        relativePath: "arrow.ts",
+        absolutePath: "/tmp/arrow.ts",
+        content,
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.definedSymbols.map((symbol) => symbol.name)).toEqual(
+      expect.arrayContaining(["outer", "inner", "helper"]),
+    );
+    expect(result.callExpressions).toContainEqual({ callerName: "inner", calleeName: "helper" });
+  });
+
+  it("qualifies duplicate nested names to avoid graph collisions", () => {
+    const content = `
+    function outer() {
+      function helper() { deep(); }
+      helper();
+    }
+    function helper() {}
+    function deep() {}
+  `;
+    const result = new OxcParser().parse(
+      {
+        relativePath: "dup.ts",
+        absolutePath: "/tmp/dup.ts",
+        content,
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    const names = result.definedSymbols.map((symbol) => symbol.name);
+    // Top-level `helper` stays as `helper`; nested `helper` is qualified as `outer.helper`
+    expect(names).toContain("helper");
+    expect(names).toContain("outer.helper");
+    expect(names).toContain("deep");
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer.helper",
+      calleeName: "deep",
+    });
+  });
 });

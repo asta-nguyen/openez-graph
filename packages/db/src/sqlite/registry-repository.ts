@@ -264,6 +264,19 @@ export function createRegistryRepository(): RegistryRepository {
       return Number(row.index_generation);
     },
 
+    async tryClaimGraphBuild(id: string): Promise<boolean> {
+      // Atomic compare-and-set: only transition to 'running' if not already running.
+      // This prevents two processes (web + MCP) from building the same graph.
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_status = 'running', updated_at = ?
+           WHERE id = ? AND graph_status != 'running'`,
+        )
+        .run(new Date().toISOString(), id) as { changes: number };
+      return result.changes > 0;
+    },
+
     async deleteWorkspace(id: string): Promise<void> {
       db.delete(schema.workspaces).where(eq(schema.workspaces.id, id)).run();
     },

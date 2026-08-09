@@ -76,6 +76,14 @@ export interface RegistryRepository {
     >,
   ): Promise<void>;
   invalidateWorkspaceGraph(id: string): Promise<number>;
+  /**
+   * Atomically claim the graph build for a workspace. Transitions
+   * `graph_status` to 'running' only if it is not already 'running'.
+   * Returns true if this caller acquired the claim, false if another
+   * process is already building. This prevents cross-process duplicate
+   * builds (web + MCP + CLI running in separate processes).
+   */
+  tryClaimGraphBuild(id: string): Promise<boolean>;
   deleteWorkspace(id: string): Promise<void>;
   setPinned(id: string, pinned: boolean): Promise<void>;
 
