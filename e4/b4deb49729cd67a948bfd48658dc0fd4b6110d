@@ -1,0 +1,50 @@
+tests/graph-lifecycle.test.ts
+  s_d405640fc9c957::t_70163441cef6a1 165
+  s_d405640fc9c957::t_0f92842de139cd 10,12-14,44,62,79,97,116,128-164,166-230
+packages/db/src/sqlite/graph-traversal-ops.ts
+  s_d405640fc9c957::t_2fcdc466211f4b 3,5-6,13
+apps/mcp/src/mcp-core.ts
+  s_d405640fc9c957::t_eee30a13d2aeeb 29,656,677
+packages/indexer/src/index.ts
+  s_d405640fc9c957::t_f2ddd0b1229429 2
+apps/web/src/server/index.ts
+  s_d405640fc9c957::t_eee30a13d2aeeb 54,397,485
+packages/db/src/sqlite/graph-repository.ts
+  s_d405640fc9c957::t_2fcdc466211f4b 5,7,33
+tests/mcp-tools.test.ts
+  s_d405640fc9c957::t_55b7a2d5fe11b5 190,214-216
+tests/index-workspace.test.ts
+  s_d405640fc9c957::t_b016994b09e0b0 411,430,439,476,492
+  s_d405640fc9c957::t_f2c85d9fc09e2f 14-15,50,111,131,142,162,175,195,206,226,230,234,254,331,380,410
+packages/core/package.json
+  s_d405640fc9c957::t_c9f03301b8417f 13
+packages/indexer/src/graph-service.ts
+  s_d405640fc9c957::t_55b7a2d5fe11b5 54
+  s_d405640fc9c957::t_70163441cef6a1 81-86
+  s_d405640fc9c957::t_f2ddd0b1229429 1-53,55-80,87-91
+packages/indexer/src/index-workspace.ts
+  s_d405640fc9c957::t_f2ddd0b1229429 1138-1147,1166,1392,1547
+packages/db/src/sqlite/workspace-repository.ts
+  s_d405640fc9c957::t_2fcdc466211f4b 93
+packages/core/src/retrieval.ts
+  s_d405640fc9c957::t_a99bf9ea874e8c 338-342
+  s_d405640fc9c957::t_eee30a13d2aeeb 336-337,343
+pnpm-lock.yaml
+  s_d405640fc9c957::t_e9b2512d9a1a65 323-325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e4b4deb49729cd67a948bfd48658dc0fd4b6110d",
+  "prompts": {},
+  "sessions": {
+    "s_d405640fc9c957": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd9f3-09db-7420-972b-855e6a3ba333",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
