@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { closeAllWorkspaceDbs, createWorkspaceRepository } from "../packages/db/src/sqlite/index";
+import { composeFtsSearchText } from "../packages/db/src/sqlite/fts-repository";
 
 let tempRoot: string;
 
@@ -240,6 +241,61 @@ describe("createWorkspaceRepository", () => {
     closeAllWorkspaceDbs();
     const reopened = createWorkspaceRepository(tempRoot);
     expect(await reopened.fullTextSearch("searchable", 5)).toHaveLength(1);
+  });
+
+  it("keeps stale rebuild and backfill FTS text identical to application writes", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const docId = await repo.insertDocument({
+      path: "stale-text.ts",
+      absolutePath: path.join(tempRoot, "stale-text.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "stale-text",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    const cases = [
+      { name: "empty", metadata: "{}" },
+      { name: "malformed", metadata: "not json" },
+      { name: "numeric", metadata: JSON.stringify({ searchText: 123 }) },
+      { name: "blank", metadata: JSON.stringify({ searchText: "   " }) },
+      { name: "ascii", metadata: JSON.stringify({ searchText: "  ascii needle  " }) },
+      { name: "unicode", metadata: JSON.stringify({ searchText: "\u00a0unicode needle\u00a0" }) },
+    ];
+    const inputs = cases.map((testCase, chunkIndex) => ({
+      documentId: docId,
+      chunkIndex,
+      content: `stale content ${testCase.name}`,
+      tokenCount: 4,
+      contentHash: `stale:${testCase.name}`,
+      metadata: testCase.metadata,
+    }));
+    const chunkIds = await repo.insertChunks(inputs);
+
+    await repo.executeRaw("DELETE FROM chunks_fts");
+    await repo.executeRaw(
+      "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES (?, ?, ?, ?, ?)",
+      [chunkIds[0], "stale-text.ts", "", "typescript", "v1"],
+    );
+    repo.setMeta("fts_schema_version", "1");
+
+    closeAllWorkspaceDbs();
+    const reopened = createWorkspaceRepository(tempRoot);
+    await reopened.fullTextSearch("stale", 10);
+    const rows = await reopened.queryRaw(
+      `SELECT chunk_id, search_text FROM chunks_fts WHERE chunk_id IN (${chunkIds.map(() => "?").join(", ")})`,
+      chunkIds,
+    );
+    expect(
+      Object.fromEntries(rows.map((row) => [String(row.chunk_id), String(row.search_text)])),
+    ).toEqual(
+      Object.fromEntries(
+        inputs.map((input, index) => [
+          chunkIds[index],
+          composeFtsSearchText(input.content, input.metadata),
+        ]),
+      ),
+    );
   });
 
   it("rebuilds legacy FTS rows when the schema version is stale", async () => {

@@ -8,8 +8,21 @@ import {
   createWorkspaceRepository,
   type WorkspaceRepository,
 } from "../packages/db/src/sqlite/index";
+import { composeFtsSearchText } from "../packages/db/src/sqlite/fts-repository";
 
 let tempRoot: string;
+
+const ftsTextCases = [
+  { name: "empty", metadata: "{}" },
+  { name: "malformed", metadata: "not json" },
+  { name: "numeric", metadata: JSON.stringify({ searchText: 123 }) },
+  { name: "blank", metadata: JSON.stringify({ searchText: "   " }) },
+  { name: "ascii whitespace", metadata: JSON.stringify({ searchText: "  ascii needle  " }) },
+  {
+    name: "unicode whitespace",
+    metadata: JSON.stringify({ searchText: "\u00a0unicode needle\u00a0" }),
+  },
+];
 
 beforeEach(() => {
   tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-fts-"));
@@ -33,6 +46,23 @@ async function insertTestDocument(
     sizeBytes: 1,
     mtimeMs: 1,
   });
+}
+
+async function expectStoredSearchText(
+  repo: WorkspaceRepository,
+  inputs: Array<{ chunkId: string; content: string; metadata: string }>,
+): Promise<void> {
+  const rows = await repo.queryRaw(
+    `SELECT chunk_id, search_text FROM chunks_fts WHERE chunk_id IN (${inputs.map(() => "?").join(", ")})`,
+    inputs.map((input) => input.chunkId),
+  );
+  expect(
+    Object.fromEntries(rows.map((row) => [String(row.chunk_id), String(row.search_text)])),
+  ).toEqual(
+    Object.fromEntries(
+      inputs.map((input) => [input.chunkId, composeFtsSearchText(input.content, input.metadata)]),
+    ),
+  );
 }
 
 describe("FTS retrieval", () => {
@@ -66,57 +96,85 @@ describe("FTS retrieval", () => {
     expect(await repo.fullTextSearch("payment", 5)).toHaveLength(1);
   });
 
+  it("stores trigger FTS rows with the shared text policy", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const documentId = await insertTestDocument(repo, "src/trigger.ts");
+    const inputs = ftsTextCases.map((testCase, chunkIndex) => ({
+      documentId,
+      chunkIndex,
+      content: `trigger content ${testCase.name}`,
+      tokenCount: 4,
+      contentHash: `trigger:${testCase.name}`,
+      metadata: testCase.metadata,
+    }));
+    const chunkIds = await repo.insertChunks(inputs);
+
+    await expectStoredSearchText(
+      repo,
+      inputs.map((input, index) => ({ ...input, chunkId: chunkIds[index] })),
+    );
+  });
+
   it("uses the composer for bulk and streaming FTS writes", async () => {
     const repo = createWorkspaceRepository(tempRoot);
     repo.dropFtsTriggers();
 
     const bulkDocumentId = await insertTestDocument(repo, "src/bulk.ts");
-    const bulkContent = `${"padding ".repeat(90)} bulkTailNeedle`;
-    const [bulkChunkId] = await repo.insertChunks([
-      {
-        documentId: bulkDocumentId,
-        chunkIndex: 0,
-        content: bulkContent,
-        tokenCount: 200,
-        contentHash: "bulk",
-        metadata: JSON.stringify({ searchText: "bulk metadata needle" }),
-      },
-    ]);
-    await repo.bulkInsertFts([
-      {
-        chunkId: bulkChunkId,
+    const bulkInputs = ftsTextCases.map((testCase, chunkIndex) => ({
+      documentId: bulkDocumentId,
+      chunkIndex,
+      content: `bulk content ${testCase.name}`,
+      tokenCount: 4,
+      contentHash: `bulk:${testCase.name}`,
+      metadata: testCase.metadata,
+    }));
+    const bulkChunkIds = await repo.insertChunks(bulkInputs);
+    await repo.bulkInsertFts(
+      bulkInputs.map((input, index) => ({
+        chunkId: bulkChunkIds[index],
         path: "src/bulk.ts",
         heading: null,
         language: "typescript",
-        content: bulkContent,
-        metadata: JSON.stringify({ searchText: "bulk metadata needle" }),
-      },
-    ]);
+        content: input.content,
+        metadata: input.metadata,
+      })),
+    );
+    await expectStoredSearchText(
+      repo,
+      bulkInputs.map((input, index) => ({ ...input, chunkId: bulkChunkIds[index] })),
+    );
 
     const streamDocumentId = await insertTestDocument(repo, "src/stream.ts");
-    const streamContent = `${"padding ".repeat(90)} streamTailNeedle`;
-    repo.streamChunk({
-      id: "stream-chunk",
+    const streamInputs = ftsTextCases.map((testCase, chunkIndex) => ({
+      chunkId: `stream-chunk-${chunkIndex}`,
       documentId: streamDocumentId,
-      chunkIndex: 0,
-      heading: null,
-      content: streamContent,
-      tokenCount: 200,
-      contentHash: "stream",
-      metadata: JSON.stringify({ searchText: "stream metadata needle" }),
-    });
-    repo.streamFtsRow({
-      chunkId: "stream-chunk",
-      path: "src/stream.ts",
-      heading: "",
-      language: "typescript",
-      content: streamContent,
-      metadata: JSON.stringify({ searchText: "stream metadata needle" }),
-    });
-
-    expect(await repo.fullTextSearch("metadata", 5)).toHaveLength(2);
-    expect(await repo.fullTextSearch("bulkTailNeedle", 5)).toHaveLength(1);
-    expect(await repo.fullTextSearch("streamTailNeedle", 5)).toHaveLength(1);
+      chunkIndex,
+      content: `stream content ${testCase.name}`,
+      tokenCount: 4,
+      contentHash: `stream:${testCase.name}`,
+      metadata: testCase.metadata,
+    }));
+    for (const input of streamInputs) {
+      repo.streamChunk({
+        id: input.chunkId,
+        documentId: input.documentId,
+        chunkIndex: input.chunkIndex,
+        heading: null,
+        content: input.content,
+        tokenCount: input.tokenCount,
+        contentHash: input.contentHash,
+        metadata: input.metadata,
+      });
+      repo.streamFtsRow({
+        chunkId: input.chunkId,
+        path: "src/stream.ts",
+        heading: "",
+        language: "typescript",
+        content: input.content,
+        metadata: input.metadata,
+      });
+    }
+    await expectStoredSearchText(repo, streamInputs);
   });
 
   it("accepts malformed metadata and indexes the content", async () => {
