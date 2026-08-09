@@ -1,0 +1,19 @@
+tests/workspace-db.test.ts
+  s_d405640fc9c957::t_dbfa6390ebf936 277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5ad5902ea11019af89862d3b5097352fd790788c",
+  "prompts": {},
+  "sessions": {
+    "s_d405640fc9c957": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd9f3-09db-7420-972b-855e6a3ba333",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
