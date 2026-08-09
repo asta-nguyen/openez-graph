@@ -1,0 +1,27 @@
+CONTRIBUTING.md
+  s_fb4f32c665b8c6::t_dbf2d53ace52f0 42
+.prettierignore
+  s_fb4f32c665b8c6::t_0d67900895161e 16
+  s_fb4f32c665b8c6::t_b8ad71c05c28c2 14-15,17
+  s_fb4f32c665b8c6::t_41d66a4c2c9866 12-13
+apps/mcp/src/mcp-core.ts
+  s_fb4f32c665b8c6::t_891dd6414b2304 554-555
+tests/graph-lifecycle.test.ts
+  s_fb4f32c665b8c6::t_9e995d3daf2f6d 140-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4b078a9b90ba4eafe5b56150c22c1ba00e920af1",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
