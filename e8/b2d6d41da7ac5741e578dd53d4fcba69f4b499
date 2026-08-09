@@ -1,0 +1,25 @@
+tests/fts-retrieval.test.ts
+  s_d405640fc9c957::t_8e589c517196bc 159-168
+  s_d405640fc9c957::t_30b155f83c7a4e 11,15-26,51-67,99-117,123-134,138-145,148-149,151-158,169-177
+tests/workspace-db.test.ts
+  s_d405640fc9c957::t_38de2013061b8c 7,246-296,300
+  s_d405640fc9c957::t_ae551aa47c69c5 297-299
+packages/db/src/sqlite/fts-repository.ts
+  s_d405640fc9c957::t_f983aea9f284ba 6-11,14,19,26-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e8b2d6d41da7ac5741e578dd53d4fcba69f4b499",
+  "prompts": {},
+  "sessions": {
+    "s_d405640fc9c957": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd9f3-09db-7420-972b-855e6a3ba333",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
