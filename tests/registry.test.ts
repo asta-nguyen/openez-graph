@@ -8,6 +8,7 @@ import {
   createRegistryRepository,
   resolveRegistryDbPath,
 } from "../packages/db/src/sqlite/index";
+import { createNativeDatabase } from "../packages/db/src/sqlite/database-loader";
 
 let tempDir: string;
 
@@ -30,6 +31,88 @@ describe("resolveRegistryDbPath", () => {
 });
 
 describe("createRegistryRepository", () => {
+  it("migrates legacy registries without changing completed workspaces", async () => {
+    const dbPath = resolveRegistryDbPath();
+    const legacy = createNativeDatabase(dbPath);
+    legacy.exec(`
+      CREATE TABLE workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        root_path TEXT NOT NULL UNIQUE,
+        include_globs TEXT NOT NULL DEFAULT '',
+        exclude_globs TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        indexing_status TEXT NOT NULL DEFAULT 'pending',
+        graph_status TEXT NOT NULL DEFAULT 'pending',
+        last_indexed_at TEXT,
+        last_graph_built_at TEXT,
+        document_count INTEGER NOT NULL DEFAULT 0,
+        chunk_count INTEGER NOT NULL DEFAULT 0,
+        node_count INTEGER NOT NULL DEFAULT 0,
+        edge_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO workspaces (
+        id, name, root_path, include_globs, exclude_globs, status, indexing_status, graph_status,
+        last_indexed_at, last_graph_built_at, document_count, chunk_count, node_count, edge_count,
+        last_error, created_at, updated_at
+      ) VALUES (
+        'legacy-ws', 'legacy workspace', '/tmp/legacy-workspace', '**/*.ts', 'node_modules',
+        'indexed', 'completed', 'completed', '2026-08-01T00:00:00.000Z',
+        '2026-08-01T01:00:00.000Z', 3, 7, 11, 13, NULL,
+        '2026-08-01T00:00:00.000Z', '2026-08-01T01:00:00.000Z'
+      );
+    `);
+    legacy.close();
+
+    const expectedWorkspace = {
+      id: "legacy-ws",
+      name: "legacy workspace",
+      rootPath: "/tmp/legacy-workspace",
+      includeGlobs: "**/*.ts",
+      excludeGlobs: "node_modules",
+      status: "indexed",
+      indexingStatus: "completed",
+      graphStatus: "completed",
+      lastIndexedAt: "2026-08-01T00:00:00.000Z",
+      lastGraphBuiltAt: "2026-08-01T01:00:00.000Z",
+      documentCount: 3,
+      chunkCount: 7,
+      nodeCount: 11,
+      edgeCount: 13,
+      lastError: undefined,
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T01:00:00.000Z",
+      indexGeneration: 0,
+      graphGeneration: 0,
+    };
+    const repository = createRegistryRepository();
+    const migrated = await repository.getWorkspace("legacy-ws");
+    expect(migrated).toMatchObject(expectedWorkspace);
+    const firstInspection = createNativeDatabase(dbPath);
+    const columnsAfterFirstOpen = firstInspection
+      .prepare("PRAGMA table_info(workspaces)")
+      .all() as Array<{ name: string }>;
+    firstInspection.close();
+    expect(columnsAfterFirstOpen.map((column) => column.name)).toEqual(
+      expect.arrayContaining(["index_generation", "graph_generation"]),
+    );
+    closeRegistryDb();
+
+    const reopened = await createRegistryRepository().getWorkspace("legacy-ws");
+    expect(reopened).toMatchObject(expectedWorkspace);
+    const secondInspection = createNativeDatabase(dbPath);
+    const columnsAfterReopen = secondInspection
+      .prepare("PRAGMA table_info(workspaces)")
+      .all() as Array<{ name: string }>;
+    secondInspection.close();
+    expect(columnsAfterReopen.map((column) => column.name)).toEqual(
+      expect.arrayContaining(["index_generation", "graph_generation"]),
+    );
+  });
+
   it("creates and lists workspaces", async () => {
     const repo = createRegistryRepository();
 

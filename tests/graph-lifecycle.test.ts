@@ -39,6 +39,7 @@ describe("graph lifecycle persistence", () => {
     const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
     await indexWorkspace({ workspaceId: workspace.id });
     await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    const before = await registry.getWorkspace(workspace.id);
 
     fs.writeFileSync(source, "export function newName() {}\n");
     await indexWorkspace({ workspaceId: workspace.id, mode: "incremental" });
@@ -46,7 +47,7 @@ describe("graph lifecycle persistence", () => {
 
     const reopened = await createRegistryRepository().getWorkspace(workspace.id);
     expect(reopened?.graphStatus).toBe("pending");
-    expect(reopened?.indexGeneration).toBeGreaterThan(reopened?.graphGeneration ?? -1);
+    expect(reopened?.indexGeneration).toBe((before?.indexGeneration ?? -1) + 1);
   });
 
   it("preserves completed graph state and generations for a no-op incremental index", async () => {
@@ -73,6 +74,7 @@ describe("graph lifecycle persistence", () => {
     const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
     await indexWorkspace({ workspaceId: workspace.id });
     await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    const before = await registry.getWorkspace(workspace.id);
 
     fs.unlinkSync(source);
     await indexWorkspace({ workspaceId: workspace.id, mode: "incremental" });
@@ -80,6 +82,44 @@ describe("graph lifecycle persistence", () => {
 
     const reopened = await createRegistryRepository().getWorkspace(workspace.id);
     expect(reopened?.graphStatus).toBe("pending");
-    expect(reopened?.indexGeneration).toBeGreaterThan(reopened?.graphGeneration ?? -1);
+    expect(reopened?.indexGeneration).toBe((before?.indexGeneration ?? -1) + 1);
+  });
+
+  it("persists one graph generation after a full reset", async () => {
+    const source = path.join(workspaceRoot, "symbol.ts");
+    fs.writeFileSync(source, "export function symbol() {}\n");
+    const registry = createRegistryRepository();
+    const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    const before = await registry.getWorkspace(workspace.id);
+
+    await indexWorkspace({ workspaceId: workspace.id, mode: "full" });
+    closeRegistryDb();
+
+    const reopened = await createRegistryRepository().getWorkspace(workspace.id);
+    expect(reopened?.graphStatus).toBe("pending");
+    expect(reopened?.indexGeneration).toBe((before?.indexGeneration ?? -1) + 1);
+  });
+
+  it("coalesces deletion and source changes into one graph generation", async () => {
+    const deletedSource = path.join(workspaceRoot, "deleted.ts");
+    const changedSource = path.join(workspaceRoot, "changed.ts");
+    fs.writeFileSync(deletedSource, "export function deleted() {}\n");
+    fs.writeFileSync(changedSource, "export function oldName() {}\n");
+    const registry = createRegistryRepository();
+    const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    const before = await registry.getWorkspace(workspace.id);
+
+    fs.unlinkSync(deletedSource);
+    fs.writeFileSync(changedSource, "export function newName() {}\n");
+    await indexWorkspace({ workspaceId: workspace.id, mode: "incremental" });
+    closeRegistryDb();
+
+    const reopened = await createRegistryRepository().getWorkspace(workspace.id);
+    expect(reopened?.graphStatus).toBe("pending");
+    expect(reopened?.indexGeneration).toBe((before?.indexGeneration ?? -1) + 1);
   });
 });
