@@ -85,4 +85,32 @@ describe("OxcParser", () => {
       result.callExpressions.filter((c) => c.callerName === "outer" && c.calleeName === "doThing"),
     ).toHaveLength(0);
   });
+
+  it("emits nested functions and class methods as graphable symbols", () => {
+    const content = `
+    function outer() { function inner() { helper(); } inner(); }
+    class Service { run() { helper(); } }
+    function helper() {}
+  `;
+    const result = new OxcParser().parse(
+      {
+        relativePath: "symbols.ts",
+        absolutePath: "/tmp/symbols.ts",
+        content,
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.definedSymbols.map((symbol) => symbol.name)).toEqual(
+      expect.arrayContaining(["outer", "inner", "Service", "Service.run", "helper"]),
+    );
+    expect(result.callExpressions).toContainEqual({ callerName: "inner", calleeName: "helper" });
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Service.run",
+      calleeName: "helper",
+    });
+  });
 });

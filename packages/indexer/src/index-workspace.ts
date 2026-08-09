@@ -9,7 +9,6 @@ import {
   embeddingStorageModel,
   formatEmbeddingInput,
   getEmbeddingProvider,
-  setFastTokenCount,
   splitToTokenLimit,
 } from "@openez-graph/core";
 import type { EmbeddingProvider } from "@openez-graph/core";
@@ -584,10 +583,9 @@ export async function indexWorkspace(input: {
   mode?: "incremental" | "full";
   onProgress?: (progress: { message: string; progress: number }) => Promise<void> | void;
 }): Promise<IndexWorkspaceSummary> {
-  // Use fast token counting during indexing — BPE encoding is 100x slower.
-  // Wrap the entire body in try/finally so the flag is ALWAYS reset, even on
-  // early errors (e.g. missing workspace ID) or unexpected throws.
-  setFastTokenCount(true);
+  // Token counting is now scoped via the TokenCounter interface — no global
+  // fast-mode toggle to reset. The try/finally is retained for structural
+  // stability but no longer toggles global tokenizer state.
   try {
     const registry = createRegistryRepository();
     let workspace: RegistryWorkspace;
@@ -1112,7 +1110,7 @@ export async function indexWorkspace(input: {
       embeddingFailures,
     };
   } finally {
-    setFastTokenCount(false);
+    // No global tokenizer state to reset — token counting is scoped.
   }
 }
 
