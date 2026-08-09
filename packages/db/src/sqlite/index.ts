@@ -1,6 +1,5 @@
 export { getRegistryDb, closeRegistryDb, resolveRegistryDbPath } from "./registry-db";
 export { getWorkspaceDb, closeAllWorkspaceDbs } from "./workspace-db";
-export { hasVecExtension } from "./database-loader";
 export { createRegistryRepository, createWorkspaceRepository } from "./repository";
 export { encryptValue, decryptValue, isEncrypted, isSensitiveKey } from "./secure-storage";
 export {

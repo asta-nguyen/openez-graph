@@ -1,9 +1,5 @@
 import { getBrainSettings } from "@openez-graph/config";
-import {
-  createRegistryRepository,
-  createWorkspaceRepository,
-  hasVecExtension,
-} from "@openez-graph/db";
+import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
 import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
 import type { EmbeddingProvider } from "./embeddings";
@@ -64,7 +60,7 @@ export function parseEmbedding(value: unknown): number[] {
   if (value instanceof ArrayBuffer) {
     return Array.from(new Float32Array(value));
   }
-  // Fallback for old JSON data
+  // Legacy JSON TEXT embeddings (pre-BLOB migration)
   try {
     const parsed = JSON.parse(String(value));
     return Array.isArray(parsed) && parsed.every((item) => typeof item === "number") ? parsed : [];
@@ -90,58 +86,8 @@ export async function rankStoredEmbeddings(
 
   const repo = createWorkspaceRepository(rootPath);
 
-  // Try sqlite-vec ANN search first. When the extension is unavailable
-  // (e.g. under bun:sqlite today), this branch is skipped and we fall
-  // through to the linear scan below.
-  if (hasVecExtension()) {
-    try {
-      const queryBlob = new Uint8Array(new Float32Array(queryEmbedding).buffer);
-      const vecResults = await repo.queryRaw(
-        `SELECT
-          chunks.id, chunks.content, chunks.heading, chunks.metadata,
-          documents.path, embeddings_vec.distance
-        FROM embeddings_vec
-        INNER JOIN chunks ON chunks.id = embeddings_vec.chunk_id
-        INNER JOIN documents ON documents.id = chunks.document_id
-        WHERE embeddings_vec.embedding MATCH ?
-          AND embeddings_vec.provider = ?
-          AND embeddings_vec.model = ?
-        ORDER BY embeddings_vec.distance
-        LIMIT ?`,
-        [queryBlob, provider.provider, embeddingStorageModel(provider), limit * 2],
-      );
-
-      if (vecResults.length > 0) {
-        const seenPaths = new Set<string>();
-        return vecResults
-          .map((row) => {
-            const path = String(row.path);
-            const distance = Number(row.distance ?? 1);
-            const score = 1 - distance;
-            return {
-              id: String(row.id),
-              path,
-              content: String(row.content),
-              score: isCodeFile(path) ? score + CODE_FILE_BOOST : score,
-              heading: row.heading ? String(row.heading) : null,
-              metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
-            };
-          })
-          .filter((hit) => hit.score >= MIN_COSINE_SIMILARITY)
-          .sort((left, right) => right.score - left.score)
-          .filter((hit) => {
-            if (seenPaths.has(hit.path)) return false;
-            seenPaths.add(hit.path);
-            return true;
-          })
-          .slice(0, limit);
-      }
-    } catch (error) {
-      console.error("[retrieval] vec search failed, falling back to linear scan:", error);
-    }
-  }
-
-  // Linear scan fallback (sufficient for local SQLite workspaces).
+  // BLOB cosine linear scan — the supported local vector search path.
+  // Sufficient for local SQLite workspaces; no native extension required.
   const results = await repo.queryRaw(
     `SELECT
       chunks.id, chunks.content, chunks.heading, chunks.metadata,
@@ -215,7 +161,7 @@ async function vectorSearch(rootPath: string, query: string, limit: number): Pro
     return hits;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error(`Vector search failed (falling back to FTS): ${msg}`);
+    console.error(`Vector search failed (deferring to FTS): ${msg}`);
     return [];
   }
 }
@@ -333,14 +279,8 @@ export async function codeQuery(input: {
   );
 
   if (!input.skipGraphExpand) {
-    // The indexer owns graph lifecycle; retrieve against a generation-matched
-    // persisted graph rather than triggering repository-local construction.
-    // Keep this lazy to avoid eagerly initializing the indexer from core.
-    const indexerModule = "@openez-graph/indexer";
-    const { ensureGraphReady } = (await import(indexerModule)) as {
-      ensureGraphReady(workspaceId: string): Promise<void>;
-    };
-    await ensureGraphReady(workspace.id);
+    // Graph readiness is ensured by the caller (MCP/web) before invoking
+    // codeQuery. Core must not import the indexer to avoid a package cycle.
     const graphResults = await graphExpand(
       workspace.rootPath,
       fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),
