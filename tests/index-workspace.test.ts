@@ -13,8 +13,8 @@ import {
 } from "../packages/db/src/sqlite";
 import { indexWorkspace, waitForFts } from "../packages/indexer/src/index-workspace";
 import { ensureGraphReady } from "../packages/indexer/src/graph-service";
-import { codeContext } from "../packages/core/src/graph";
-import { countTokens, setFastTokenCount } from "../packages/core/src/tokenizer";
+import { codeContext, graphNeighbors } from "../packages/core/src/graph";
+import { countTokens } from "../packages/core/src/tokenizer";
 
 let registryRoot: string;
 let workspaceRoot: string;
@@ -518,9 +518,8 @@ describe("indexWorkspace", () => {
   });
 
   it("restores exact token counting after indexing (fast token reset)", async () => {
-    // Disable fast mode and record an exact BPE count for text whose count
-    // differs from the Math.ceil(length / 4) approximation.
-    setFastTokenCount(false);
+    // Record an exact BPE count for text whose count differs from the
+    // Math.ceil(length / 4) approximation.
     const sample = "The tokenizer must leave fast mode after indexing.";
     const exact = countTokens(sample);
     expect(exact).not.toBe(Math.ceil(sample.length / 4));
@@ -530,13 +529,12 @@ describe("indexWorkspace", () => {
 
     await indexWorkspace({ workspaceId: workspace.id });
 
-    // After indexing, exact BPE counting must be restored — not the fast
-    // length/4 approximation used during indexing.
+    // After indexing, exact BPE counting must be unchanged — indexing no
+    // longer mutates global token-counting state.
     expect(countTokens(sample)).toBe(exact);
   });
 
   it("resets fast token flag even when indexing fails early (missing workspace ID)", async () => {
-    setFastTokenCount(false);
     const sample = "The tokenizer must leave fast mode after indexing.";
     const exact = countTokens(sample);
     expect(exact).not.toBe(Math.ceil(sample.length / 4));
@@ -544,7 +542,42 @@ describe("indexWorkspace", () => {
     // No workspaceId and no rootPath — throws before runId is created.
     await expect(indexWorkspace({})).rejects.toThrow();
 
-    // The finally block must have reset the flag despite the early error.
+    // Token counting must remain exact even after an early indexing error.
     expect(countTokens(sample)).toBe(exact);
+  });
+
+  it("graphs nested functions and class methods as first-class symbols", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "symbols.ts"),
+      [
+        "function outer() { function inner() { helper(); } inner(); }",
+        "class Service { run() { helper(); } }",
+        "function helper() {}",
+      ].join("\n"),
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    // `inner` (nested function) should have a calls edge to `helper`.
+    const innerNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "inner",
+      depth: 1,
+    });
+    expect(innerNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "inner", to: "helper", type: "calls" }),
+    );
+
+    // `Service.run` (class method) should have a calls edge to `helper`.
+    const methodNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "Service.run",
+      depth: 1,
+    });
+    expect(methodNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "Service.run", to: "helper", type: "calls" }),
+    );
   });
 });

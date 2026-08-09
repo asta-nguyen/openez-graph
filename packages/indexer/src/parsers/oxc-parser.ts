@@ -1,4 +1,4 @@
-import { countTokens } from "@openez-graph/core";
+import { exactTokenCounter } from "@openez-graph/core";
 
 import { hashContent } from "../hash";
 import { codeSearchText, createSymbolChunks, type ExtractedSymbol } from "../languages";
@@ -145,9 +145,84 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
       },
       node,
     });
+
+    // For class declarations, also extract methods as first-class symbols
+    // with qualified `ClassName.methodName` naming so they appear in the
+    // public definedSymbols list and the graph.
+    if (node.type === "ClassDeclaration") {
+      for (const methodAst of extractClassMethods(node, name, source)) {
+        results.push(methodAst);
+      }
+    }
   }
 
   return results;
+}
+
+/**
+ * Extract class methods (and arrow-function properties) from a ClassDeclaration
+ * body as first-class SymbolAst entries. Each method is named
+ * `ClassName.methodName` to avoid collisions with free functions of the same
+ * name. The body node is the method's FunctionExpression/ArrowFunctionExpression
+ * value so call extraction walks the method's own scope.
+ */
+function extractClassMethods(classNode: OxcNode, className: string, source: string): SymbolAst[] {
+  const methods: SymbolAst[] = [];
+  const classBody = classNode.body as OxcNode | undefined;
+  if (!classBody || !Array.isArray(classBody.body)) return methods;
+
+  for (const member of classBody.body as OxcNode[]) {
+    // MethodDefinition: { run() { ... } } or { constructor() { ... } }
+    if (member.type === "MethodDefinition") {
+      const key = member.key as OxcNode | undefined;
+      if (key?.type !== "Identifier" || typeof key.name !== "string") continue;
+      const value = member.value as OxcNode | undefined;
+      if (!value) continue;
+      const methodName = key.name;
+      const qualifiedName = `${className}.${methodName}`;
+      const startLine = source.slice(0, value.start).split("\n").length;
+      const endLine = source.slice(0, value.end).split("\n").length;
+      methods.push({
+        symbol: {
+          name: qualifiedName,
+          symbolType: "method",
+          type: "method",
+          exported: false,
+          startLine,
+          endLine,
+        },
+        node: value,
+      });
+    }
+    // PropertyDefinition with an arrow/function initializer:
+    // { handler = () => { ... } }
+    if (member.type === "PropertyDefinition") {
+      const key = member.key as OxcNode | undefined;
+      if (key?.type !== "Identifier" || typeof key.name !== "string") continue;
+      const init = member.value as OxcNode | undefined;
+      if (!init) continue;
+      const isArrow = init.type === "ArrowFunctionExpression";
+      const isFunc = init.type === "FunctionExpression";
+      if (!isArrow && !isFunc) continue;
+      const propName = key.name;
+      const qualifiedName = `${className}.${propName}`;
+      const startLine = source.slice(0, init.start).split("\n").length;
+      const endLine = source.slice(0, init.end).split("\n").length;
+      methods.push({
+        symbol: {
+          name: qualifiedName,
+          symbolType: "method",
+          type: "method",
+          exported: false,
+          startLine,
+          endLine,
+        },
+        node: init,
+      });
+    }
+  }
+
+  return methods;
 }
 
 /**
@@ -251,7 +326,7 @@ function extractCalls(symbolAsts: SymbolAst[]): {
 
   for (const { symbol, node } of symbolAsts) {
     // Only function-like symbols can contain calls.
-    if (symbol.symbolType !== "function") continue;
+    if (symbol.symbolType !== "function" && symbol.symbolType !== "method") continue;
     const visited = new WeakSet<object>();
     walkNodes(
       node,
@@ -277,16 +352,19 @@ function extractCalls(symbolAsts: SymbolAst[]): {
 
 /**
  * Discover nested callable declarations (FunctionDeclaration, named
- * FunctionExpression) within each function symbol's subtree and return them as
- * additional SymbolAst entries. This ensures calls inside a nested function are
- * attributed to the nested symbol, not the outer one. The public
- * `definedSymbols` list is NOT extended — only the internal call-extraction
- * walk uses these entries.
+ * FunctionExpression) within each function/method symbol's subtree and return
+ * them as additional SymbolAst entries. This ensures calls inside a nested
+ * function are attributed to the nested symbol, not the outer one. These
+ * nested callables are also included in the public `definedSymbols` list so
+ * they appear as first-class graph symbols.
  */
 function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolAst[] {
   const nested: SymbolAst[] = [];
   for (const { symbol, node } of topLevel) {
-    if (symbol.symbolType !== "function") continue;
+    // Walk function and method bodies for nested callable declarations.
+    // Class symbols themselves are not walked here — their methods are
+    // already extracted as separate top-level symbols by extractClassMethods.
+    if (symbol.symbolType !== "function" && symbol.symbolType !== "method") continue;
     const visited = new WeakSet<object>();
     walkNodes(
       node,
@@ -366,6 +444,7 @@ export class OxcParser implements CodeParser {
   }
 
   parse(input: ParseInput, language: string | null, _kind: string): ParsedDocument {
+    const counter = input.counter ?? exactTokenCounter;
     const oxc = getOxc();
     if (!oxc) {
       // Fallback: simple line-based chunking
@@ -374,7 +453,7 @@ export class OxcParser implements CodeParser {
         {
           heading: input.relativePath,
           content: input.content,
-          tokenCount: countTokens(input.content),
+          tokenCount: counter.count(input.content),
           contentHash: hashContent(input.content),
           metadata: {},
         },
@@ -395,19 +474,18 @@ export class OxcParser implements CodeParser {
     const result = oxc.parseSync(input.relativePath, input.content);
     const body = result.program.body as OxcNode[];
     const symbolAsts = extractSymbols(body, input.content);
-    const symbols = symbolAsts.map((s) => s.symbol);
     const importPaths = extractImports(body);
     // Discover nested callable declarations so calls inside them attribute to
-    // the inner symbol, not the outer one. These are internal-only — the public
-    // definedSymbols list is unchanged.
+    // the inner symbol, not the outer one. These nested callables are now
+    // included in the public definedSymbols list so they appear as first-class
+    // graph symbols (nodes + call edges).
     const nestedCallables = discoverNestedCallables(symbolAsts, input.content);
-    const { callExpressions, calledIdentifiers } = extractCalls([
-      ...symbolAsts,
-      ...nestedCallables,
-    ]);
+    const allSymbolAsts = [...symbolAsts, ...nestedCallables];
+    const allSymbols = allSymbolAsts.map((s) => s.symbol);
+    const { callExpressions, calledIdentifiers } = extractCalls(allSymbolAsts);
     const lines = input.content.split("\n");
 
-    const chunks = createSymbolChunks(symbols, lines, language ?? "typescript");
+    const chunks = createSymbolChunks(allSymbols, lines, language ?? "typescript", counter);
 
     return {
       parser: this.name,
@@ -416,7 +494,7 @@ export class OxcParser implements CodeParser {
       chunks,
       importPaths,
       wikilinks: [],
-      definedSymbols: symbols,
+      definedSymbols: allSymbols,
       calledIdentifiers: [...calledIdentifiers],
       callExpressions,
     };
