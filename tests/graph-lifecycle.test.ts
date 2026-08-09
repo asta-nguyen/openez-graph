@@ -137,6 +137,8 @@ describe("graph lifecycle persistence", () => {
     await indexWorkspace({ workspaceId: workspace.id });
 
     expect(await createWorkspaceRepository(workspaceRoot).getNodeCount()).toBe(0);
+    // Callers (MCP/web) ensure graph readiness before codeQuery
+    await ensureGraphReady(workspace.id);
     await codeQuery({ workspaceId: workspace.id, query: "target" });
 
     expect(await createWorkspaceRepository(workspaceRoot).getNodeCount()).toBeGreaterThan(0);
