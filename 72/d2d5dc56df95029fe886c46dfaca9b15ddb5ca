@@ -1,0 +1,63 @@
+tests/embedding-migration.test.ts
+  s_fb4f32c665b8c6::t_71fe1eed42a0a4 23,41-55
+packages/indexer/src/parsers/oxc-parser.ts
+  s_fb4f32c665b8c6::t_f766ed33f6d3ae 363-393,399,407,411,422
+  s_fb4f32c665b8c6::t_c8dc605d1d7656 413-421
+  s_fb4f32c665b8c6::t_fec8c87e772fef 412
+packages/indexer/src/index-workspace.ts
+  s_fb4f32c665b8c6::t_65b84d668b6079 1271
+  s_fb4f32c665b8c6::t_7e0acbe71f17e5 113-117,121-123
+  s_fb4f32c665b8c6::t_8866b603b52831 50
+tests/vector-search.test.ts
+  s_fb4f32c665b8c6::t_50d87033a24bdf 178,182-184
+package.json
+  s_fb4f32c665b8c6::t_2d683bf13ffba7 32
+packages/core/src/retrieval.ts
+  s_fb4f32c665b8c6::t_5407c597be6c14 247-253
+  s_fb4f32c665b8c6::t_159f2670454b01 289-293
+packages/db/src/sqlite/workspace-db.ts
+  s_fb4f32c665b8c6::t_97f7b7a665ab05 383-405
+packages/db/src/sqlite/registry-db.ts
+  s_fb4f32c665b8c6::t_4604c6b43a2507 157-170
+packages/db/src/sqlite/registry-repository.ts
+  s_fb4f32c665b8c6::t_a4f243fba90992 267-275,277-279
+  s_fb4f32c665b8c6::t_faa68e8c48ecf1 276
+tests/parsed-documents-cache.test.ts
+  s_fb4f32c665b8c6::t_dce4a7bde590d9 57,67,87,100,121
+tests/oxc-parser.test.ts
+  s_fb4f32c665b8c6::t_f15e89dad50134 116-173
+packages/db/src/sqlite/types.ts
+  s_fb4f32c665b8c6::t_8dd3b0c6dbdfa6 79-86
+apps/mcp/src/mcp-core.ts
+  s_fb4f32c665b8c6::t_bfca126795d623 554,564
+tests/registry.test.ts
+  s_fb4f32c665b8c6::t_04ef93cff9f6d0 89-91
+packages/indexer/src/graph-service.ts
+  s_fb4f32c665b8c6::t_6c98ae3daf9e9a 104
+  s_fb4f32c665b8c6::t_75b888ba7bfe8d 19-22,38-45,47-53
+tsconfig.json
+  s_fb4f32c665b8c6::t_6a5e1b5102c72b 4
+tests/parser-registry.test.ts
+  s_fb4f32c665b8c6::t_576de44b41ee84 154
+tests/graph-lifecycle.test.ts
+  s_fb4f32c665b8c6::t_3f9cb37b0365ff 140-146,151-169
+  s_fb4f32c665b8c6::t_15291ec60b1c39 170-171
+pnpm-lock.yaml
+  s_fb4f32c665b8c6::t_f6f10ba0e9f884 38-40,328,349,2488-2490,2663-2665,6656-6659,6856-6859,7084,7089
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "72d2d5dc56df95029fe886c46dfaca9b15ddb5ca",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
