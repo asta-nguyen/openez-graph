@@ -5,7 +5,11 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import * as schema from "./schema";
 import { createNativeDatabase, hasVecExtension } from "./database-loader";
-import { FTS_SCHEMA_VERSION, restoreFtsTriggerDefinitions } from "./fts-repository";
+import {
+  composeFtsSearchTextSql,
+  FTS_SCHEMA_VERSION,
+  restoreFtsTriggerDefinitions,
+} from "./fts-repository";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
@@ -171,7 +175,7 @@ export function initializeWorkspaceSchema(
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
         SELECT c.id, d.path, coalesce(c.heading, ''),
           coalesce(d.language, ''),
-          coalesce(json_extract(c.metadata, '$.searchText'), '') || char(10) || c.content
+          ${composeFtsSearchTextSql("c.metadata", "c.content")}
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id;
       `);
@@ -184,7 +188,7 @@ export function initializeWorkspaceSchema(
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
         SELECT c.id, d.path, coalesce(c.heading, ''),
           coalesce(d.language, ''),
-          coalesce(json_extract(c.metadata, '$.searchText'), '') || char(10) || c.content
+          ${composeFtsSearchTextSql("c.metadata", "c.content")}
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id
         LEFT JOIN chunks_fts f ON f.chunk_id = c.id

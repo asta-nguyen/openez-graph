@@ -261,7 +261,7 @@ describe("createWorkspaceRepository", () => {
         content,
         tokenCount: 200,
         contentHash: "legacy-long-chunk",
-        metadata: "{}",
+        metadata: "not json",
       },
     ]);
 
@@ -277,6 +277,60 @@ describe("createWorkspaceRepository", () => {
     expect(await reopened.getMeta("fts_schema_version")).toBe("1");
     expect(await reopened.fullTextSearch("endNeedle", 5)).toHaveLength(1);
     expect(await reopened.getMeta("fts_schema_version")).toBe("2");
+
+    const postRebuildDocumentId = await reopened.insertDocument({
+      path: "post-rebuild.ts",
+      absolutePath: path.join(tempRoot, "post-rebuild.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "post-rebuild",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    await reopened.insertChunks([
+      {
+        documentId: postRebuildDocumentId,
+        chunkIndex: 0,
+        content: "return true",
+        tokenCount: 2,
+        contentHash: "post-rebuild-chunk",
+        metadata: JSON.stringify({ searchText: "post rebuild metadata needle" }),
+      },
+    ]);
+    expect(await reopened.fullTextSearch("metadata", 5)).toHaveLength(1);
+  });
+
+  it("restores all FTS triggers before accepting new chunks", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    repo.dropFtsTriggers();
+    repo.restoreFtsTriggersOnly();
+
+    expect(
+      await repo.queryRaw(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*'",
+      ),
+    ).toHaveLength(3);
+
+    const docId = await repo.insertDocument({
+      path: "restored.ts",
+      absolutePath: path.join(tempRoot, "restored.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "restored",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    await repo.insertChunks([
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        content: "restored trigger content",
+        tokenCount: 3,
+        contentHash: "restored-chunk",
+        metadata: "{}",
+      },
+    ]);
+    expect(await repo.fullTextSearch("trigger", 5)).toHaveLength(1);
   });
 
   it("counts documents, chunks, nodes, edges", async () => {

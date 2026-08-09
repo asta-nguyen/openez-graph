@@ -65,4 +65,74 @@ describe("FTS retrieval", () => {
 
     expect(await repo.fullTextSearch("payment", 5)).toHaveLength(1);
   });
+
+  it("uses the composer for bulk and streaming FTS writes", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    repo.dropFtsTriggers();
+
+    const bulkDocumentId = await insertTestDocument(repo, "src/bulk.ts");
+    const bulkContent = `${"padding ".repeat(90)} bulkTailNeedle`;
+    const [bulkChunkId] = await repo.insertChunks([
+      {
+        documentId: bulkDocumentId,
+        chunkIndex: 0,
+        content: bulkContent,
+        tokenCount: 200,
+        contentHash: "bulk",
+        metadata: JSON.stringify({ searchText: "bulk metadata needle" }),
+      },
+    ]);
+    await repo.bulkInsertFts([
+      {
+        chunkId: bulkChunkId,
+        path: "src/bulk.ts",
+        heading: null,
+        language: "typescript",
+        content: bulkContent,
+        metadata: JSON.stringify({ searchText: "bulk metadata needle" }),
+      },
+    ]);
+
+    const streamDocumentId = await insertTestDocument(repo, "src/stream.ts");
+    const streamContent = `${"padding ".repeat(90)} streamTailNeedle`;
+    repo.streamChunk({
+      id: "stream-chunk",
+      documentId: streamDocumentId,
+      chunkIndex: 0,
+      heading: null,
+      content: streamContent,
+      tokenCount: 200,
+      contentHash: "stream",
+      metadata: JSON.stringify({ searchText: "stream metadata needle" }),
+    });
+    repo.streamFtsRow({
+      chunkId: "stream-chunk",
+      path: "src/stream.ts",
+      heading: "",
+      language: "typescript",
+      content: streamContent,
+      metadata: JSON.stringify({ searchText: "stream metadata needle" }),
+    });
+
+    expect(await repo.fullTextSearch("metadata", 5)).toHaveLength(2);
+    expect(await repo.fullTextSearch("bulkTailNeedle", 5)).toHaveLength(1);
+    expect(await repo.fullTextSearch("streamTailNeedle", 5)).toHaveLength(1);
+  });
+
+  it("accepts malformed metadata and indexes the content", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const documentId = await insertTestDocument(repo, "src/malformed.ts");
+    await repo.insertChunks([
+      {
+        documentId,
+        chunkIndex: 0,
+        content: "malformedMetadataNeedle",
+        tokenCount: 2,
+        contentHash: "malformed",
+        metadata: "not json",
+      },
+    ]);
+
+    expect(await repo.fullTextSearch("malformedMetadataNeedle", 5)).toHaveLength(1);
+  });
 });
