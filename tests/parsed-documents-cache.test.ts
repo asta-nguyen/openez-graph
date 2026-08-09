@@ -4,7 +4,18 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { closeAllWorkspaceDbs, createWorkspaceRepository } from "../packages/db/src/sqlite";
+import {
+  closeAllWorkspaceDbs,
+  closeRegistryDb,
+  createRegistryRepository,
+  createWorkspaceRepository,
+} from "../packages/db/src/sqlite";
+import {
+  buildGraphGeneration,
+  indexWorkspace,
+  resetNativeParserCache,
+  resolveNativeParser,
+} from "../packages/indexer/src/index-workspace";
 
 describe("parsed_documents cache", () => {
   let tmpDir: string;
@@ -113,5 +124,82 @@ describe("parsed_documents cache", () => {
     expect(repo.getParsedDocument(docId)).not.toBeNull();
     await repo.deleteDocument(docId);
     expect(repo.getParsedDocument(docId)).toBeNull();
+  });
+});
+
+describe("parsed_documents fallback cache (native parser unavailable)", () => {
+  let registryRoot: string;
+  let workspaceRoot: string;
+
+  beforeEach(() => {
+    registryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-fallback-cache-reg-"));
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-fallback-cache-ws-"));
+    process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(registryRoot, "registry.sqlite");
+    process.env.EMBEDDING_PROVIDER = "none";
+    closeRegistryDb();
+    closeAllWorkspaceDbs();
+    // Force the native parser to resolve as unavailable so native-language
+    // docs are served from the fallback-v1 cache instead of native-v1.
+    resetNativeParserCache();
+  });
+
+  afterEach(() => {
+    closeAllWorkspaceDbs();
+    closeRegistryDb();
+    fs.rmSync(registryRoot, { recursive: true, force: true });
+    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    delete process.env.EMBEDDING_PROVIDER;
+    resetNativeParserCache();
+  });
+
+  test("second graph build reuses fallback-v1 cache and performs zero fallback parses", async () => {
+    // On platforms without the native extension, resolveNativeParser() is null
+    // and native-language docs are expected to be cached as fallback-v1.
+    resetNativeParserCache();
+    expect(resolveNativeParser()).toBeNull();
+
+    fs.mkdirSync(path.join(workspaceRoot, "src"), { recursive: true });
+    const pyPath = path.join(workspaceRoot, "src", "app.py");
+    fs.writeFileSync(pyPath, "def add(a, b):\n    return a + b\n");
+
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const doc = await repo.getDocumentByPath("src/app.py");
+    expect(doc).not.toBeNull();
+
+    // Overwrite the cached parse result with a fallback-v1 tag, simulating a
+    // prior build that parsed via the fallback parser (the version
+    // buildGraphGeneration expects when native is unavailable).
+    repo.insertParsedDocument({
+      documentId: doc!.id,
+      contentHash: doc!.contentHash,
+      symbols: JSON.stringify([
+        { name: "add", symbolType: "function", type: "function", exported: true },
+      ]),
+      imports: "[]",
+      calls: "[]",
+      calledIdentifiers: "[]",
+      parserVersion: "fallback-v1",
+    });
+
+    const cachedBefore = repo.getParsedDocument(doc!.id);
+    expect(cachedBefore?.parserVersion).toBe("fallback-v1");
+    const parsedAtFirst = cachedBefore!.parsedAt;
+
+    // First graph build: cache hit (fallback-v1 matches expected version) —
+    // no re-parse, so parsed_at must not advance.
+    await buildGraphGeneration(workspace.id, workspaceRoot, 1);
+    const cachedAfterFirst = repo.getParsedDocument(doc!.id);
+    expect(cachedAfterFirst?.parserVersion).toBe("fallback-v1");
+    expect(cachedAfterFirst!.parsedAt).toBe(parsedAtFirst);
+
+    // Second graph build: still a cache hit — zero fallback parses.
+    await buildGraphGeneration(workspace.id, workspaceRoot, 2);
+    const cachedAfterSecond = repo.getParsedDocument(doc!.id);
+    expect(cachedAfterSecond?.parserVersion).toBe("fallback-v1");
+    expect(cachedAfterSecond!.parsedAt).toBe(parsedAtFirst);
   });
 });

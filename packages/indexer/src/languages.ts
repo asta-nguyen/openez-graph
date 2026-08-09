@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { countTokens } from "@openez-graph/core";
+import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
 import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
@@ -191,7 +191,10 @@ const PYTHON_CALL_IGNORES = new Set([
   "cls",
 ]);
 
-export function parsePython(content: string): IndexedCodeResult {
+export function parsePython(
+  content: string,
+  counter: TokenCounter = exactTokenCounter,
+): IndexedCodeResult {
   const lines = content.split("\n");
   const codeLines = stripNonCode(content, { hashComments: true, tripleStrings: true }).split("\n");
   const definedSymbols: ExtractedSymbol[] = [];
@@ -306,9 +309,12 @@ export function parsePython(content: string): IndexedCodeResult {
     importPaths.push(...parsePythonImportLine(line));
   }
 
-  const chunks = createSymbolChunks(definedSymbols, lines, "python");
+  const chunks = createSymbolChunks(definedSymbols, lines, "python", counter);
   if (chunks.length === 0) {
-    return { ...makeFallbackChunks(content, lines), importPaths: [...new Set(importPaths)] };
+    return {
+      ...makeFallbackChunks(content, lines, counter),
+      importPaths: [...new Set(importPaths)],
+    };
   }
 
   return {
@@ -383,7 +389,10 @@ function parseGoImports(lines: string[]): string[] {
   return imports;
 }
 
-export function parseGo(content: string): IndexedCodeResult {
+export function parseGo(
+  content: string,
+  counter: TokenCounter = exactTokenCounter,
+): IndexedCodeResult {
   const lines = content.split("\n");
   const codeLines = stripNonCode(content, { backtickStrings: true }).split("\n");
   const definedSymbols: ExtractedSymbol[] = [];
@@ -496,9 +505,9 @@ export function parseGo(content: string): IndexedCodeResult {
     }
   }
 
-  const chunks = createSymbolChunks(definedSymbols, lines, "go");
+  const chunks = createSymbolChunks(definedSymbols, lines, "go", counter);
   if (chunks.length === 0) {
-    return { ...makeFallbackChunks(content, lines), importPaths };
+    return { ...makeFallbackChunks(content, lines, counter), importPaths };
   }
 
   return {
@@ -542,7 +551,10 @@ function normalizeRustCallName(value: string): string {
   return dotParts[dotParts.length - 1] ?? last;
 }
 
-export function parseRust(content: string): IndexedCodeResult {
+export function parseRust(
+  content: string,
+  counter: TokenCounter = exactTokenCounter,
+): IndexedCodeResult {
   const lines = content.split("\n");
   const codeLines = stripNonCode(content, { rawStrings: true, byteStrings: true }).split("\n");
   const definedSymbols: ExtractedSymbol[] = [];
@@ -782,9 +794,9 @@ export function parseRust(content: string): IndexedCodeResult {
     }
   }
 
-  const chunks = createSymbolChunks(definedSymbols, lines, "rust");
+  const chunks = createSymbolChunks(definedSymbols, lines, "rust", counter);
   if (chunks.length === 0) {
-    return { ...makeFallbackChunks(content, lines), importPaths };
+    return { ...makeFallbackChunks(content, lines, counter), importPaths };
   }
 
   return {
@@ -798,20 +810,24 @@ export function parseRust(content: string): IndexedCodeResult {
 
 // ── YAML/JSON/TOML config chunkers ──
 
-export function indexConfig(content: string, language: string): IndexedChunk[] {
+export function indexConfig(
+  content: string,
+  language: string,
+  counter: TokenCounter = exactTokenCounter,
+): IndexedChunk[] {
   switch (language) {
     case "yaml":
-      return parseYamlConfig(content);
+      return parseYamlConfig(content, counter);
     case "json":
-      return parseJsonConfig(content);
+      return parseJsonConfig(content, counter);
     case "toml":
-      return parseTomlConfig(content);
+      return parseTomlConfig(content, counter);
     default:
       return [];
   }
 }
 
-function parseYamlConfig(content: string): IndexedChunk[] {
+function parseYamlConfig(content: string, counter: TokenCounter): IndexedChunk[] {
   const chunks: IndexedChunk[] = [];
   const lines = content.split("\n");
 
@@ -827,7 +843,7 @@ function parseYamlConfig(content: string): IndexedChunk[] {
     chunks.push({
       heading: currentKey,
       content: text,
-      tokenCount: countTokens(text),
+      tokenCount: counter.count(text),
       contentHash: hashContent(text),
       metadata: {
         kind: "config",
@@ -879,13 +895,13 @@ function parseYamlConfig(content: string): IndexedChunk[] {
   return chunks;
 }
 
-function parseJsonConfig(content: string): IndexedChunk[] {
+function parseJsonConfig(content: string, counter: TokenCounter): IndexedChunk[] {
   const chunks: IndexedChunk[] = [];
 
   try {
     const parsed = JSON.parse(content);
     if (typeof parsed !== "object" || parsed === null) {
-      return makeFallbackConfigChunk(content, "json");
+      return makeFallbackConfigChunk(content, "json", counter);
     }
 
     const entries = Object.entries(parsed);
@@ -894,7 +910,7 @@ function parseJsonConfig(content: string): IndexedChunk[] {
       chunks.push({
         heading: key,
         content: text,
-        tokenCount: countTokens(text),
+        tokenCount: counter.count(text),
         contentHash: hashContent(text),
         metadata: {
           kind: "config",
@@ -906,16 +922,16 @@ function parseJsonConfig(content: string): IndexedChunk[] {
     }
 
     if (chunks.length === 0) {
-      return makeFallbackConfigChunk(content, "json");
+      return makeFallbackConfigChunk(content, "json", counter);
     }
   } catch {
-    return makeFallbackConfigChunk(content, "json");
+    return makeFallbackConfigChunk(content, "json", counter);
   }
 
   return chunks;
 }
 
-function parseTomlConfig(content: string): IndexedChunk[] {
+function parseTomlConfig(content: string, counter: TokenCounter): IndexedChunk[] {
   const chunks: IndexedChunk[] = [];
   const lines = content.split("\n");
   let currentSection: string[] = [];
@@ -930,7 +946,7 @@ function parseTomlConfig(content: string): IndexedChunk[] {
     chunks.push({
       heading: currentKey,
       content: text,
-      tokenCount: countTokens(text),
+      tokenCount: counter.count(text),
       contentHash: hashContent(text),
       metadata: {
         kind: "config",
@@ -981,11 +997,15 @@ function parseTomlConfig(content: string): IndexedChunk[] {
   return chunks;
 }
 
-function makeFallbackConfigChunk(content: string, language: string): IndexedChunk[] {
+function makeFallbackConfigChunk(
+  content: string,
+  language: string,
+  counter: TokenCounter,
+): IndexedChunk[] {
   return [
     {
       content,
-      tokenCount: countTokens(content),
+      tokenCount: counter.count(content),
       contentHash: hashContent(content),
       metadata: {
         kind: "config",
@@ -1067,6 +1087,7 @@ export function createSymbolChunks(
   symbols: ExtractedSymbol[],
   allLines: string[],
   language: string,
+  counter: TokenCounter = exactTokenCounter,
 ): IndexedChunk[] {
   return symbols.map((symbol) => {
     const content =
@@ -1074,7 +1095,7 @@ export function createSymbolChunks(
     return {
       heading: symbol.name,
       content,
-      tokenCount: countTokens(content),
+      tokenCount: counter.count(content),
       contentHash: hashContent(content),
       symbolName: symbol.name,
       symbolType: symbol.symbolType,
@@ -1095,7 +1116,11 @@ export function createSymbolChunks(
   });
 }
 
-export function makeFallbackChunks(content: string, lines: string[]): IndexedCodeResult {
+export function makeFallbackChunks(
+  content: string,
+  lines: string[],
+  counter: TokenCounter = exactTokenCounter,
+): IndexedCodeResult {
   const chunks: IndexedChunk[] = [];
   for (let index = 0; index < lines.length; index += 80) {
     const slice = lines
@@ -1106,7 +1131,7 @@ export function makeFallbackChunks(content: string, lines: string[]): IndexedCod
 
     chunks.push({
       content: slice,
-      tokenCount: countTokens(slice),
+      tokenCount: counter.count(slice),
       contentHash: hashContent(slice),
       metadata: {
         kind: "code",

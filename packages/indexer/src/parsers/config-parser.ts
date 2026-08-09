@@ -9,7 +9,7 @@ export class ConfigParser implements CodeParser {
   }
 
   parse(input: ParseInput, language: string | null, _kind: string): ParsedDocument {
-    const configChunks = indexConfig(input.content, language ?? "");
+    const configChunks = indexConfig(input.content, language ?? "", input.counter);
 
     return {
       parser: this.name,

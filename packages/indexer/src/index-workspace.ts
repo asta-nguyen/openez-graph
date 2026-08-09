@@ -5,11 +5,11 @@ import path from "node:path";
 
 import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
 import {
-  countTokens,
   embeddingStorageModel,
+  fastTokenCounter,
   formatEmbeddingInput,
   getEmbeddingProvider,
-  splitToTokenLimit,
+  type TokenCounter,
 } from "@openez-graph/core";
 import type { EmbeddingProvider } from "@openez-graph/core";
 import {
@@ -50,6 +50,61 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
 const PARSER_VERSION_TS_MORPH = "ts-morph-v1";
 const PARSER_VERSION_NATIVE = "native-v1";
 const PARSER_VERSION_FALLBACK = "fallback-v1";
+
+/**
+ * Native tree-sitter parser surface used by the indexer. The native extension
+ * is optional (platform-specific .node binary); when unavailable the indexer
+ * falls back to the WASM/regex parsers and tags cache rows `fallback-v1`.
+ */
+export interface NativeParser {
+  readonly id: "native-v1";
+  parseCodeBatch(items: Array<{ language: string; content: string }>): Array<{
+    symbols: Array<{
+      name: string;
+      symbolType: string;
+      exported: boolean;
+      startLine: number;
+      endLine: number;
+      receiver?: string;
+    }>;
+    importPaths: string[];
+    calledIdentifiers: string[];
+    callExpressions: Array<{ callerName: string; calleeName: string }>;
+  } | null>;
+}
+
+let _nativeParser: NativeParser | null | undefined;
+
+/**
+ * Resolve the native tree-sitter parser once and cache the result. Returns
+ * `null` when the platform-specific native extension is unavailable — callers
+ * then fall back to the registry parsers and tag cached rows `fallback-v1`.
+ * The resolved capability also drives parsed_documents cache validation: a
+ * cache row is only reused when its `parser_version` matches the parser that
+ * the current capability would use (`native-v1` vs `fallback-v1`).
+ */
+export function resolveNativeParser(): NativeParser | null {
+  if (_nativeParser !== undefined) return _nativeParser;
+  try {
+    const nativePath = path.join(__dirname, "native", "index.linux-x64-gnu.node");
+    _nativeParser = require(nativePath) as NativeParser;
+  } catch {
+    try {
+      _nativeParser = require("@openez-graph/native") as NativeParser;
+    } catch {
+      _nativeParser = null;
+    }
+  }
+  return _nativeParser;
+}
+
+/**
+ * Reset the cached native parser resolution. Exposed for tests that need to
+ * simulate the native extension being unavailable.
+ */
+export function resetNativeParserCache(): void {
+  _nativeParser = undefined;
+}
 
 /**
  * Map a parser name (returned by `parseDocument`/`parseInline`) to the
@@ -234,15 +289,16 @@ export function boundChunks(
   chunks: IndexedChunk[],
   targetTokens: number,
   overlapTokens: number,
+  counter: TokenCounter = fastTokenCounter,
 ): IndexedChunk[] {
   return chunks.flatMap((chunk) => {
-    const parts = splitToTokenLimit(chunk.content, targetTokens, overlapTokens);
+    const parts = counter.split(chunk.content, targetTokens, overlapTokens);
     if (parts.length <= 1) return chunk;
 
     return parts.map((content, splitIndex) => ({
       ...chunk,
       content,
-      tokenCount: countTokens(content),
+      tokenCount: counter.count(content),
       contentHash: hashContent(content),
       metadata: { ...chunk.metadata, splitIndex, splitCount: parts.length },
     }));
@@ -255,6 +311,7 @@ export async function chunkDocument(input: {
   content: string;
   targetTokens: number;
   overlapTokens: number;
+  counter?: TokenCounter;
 }) {
   const parsed = await parseDocument(input);
   return {
@@ -451,6 +508,7 @@ interface ParseTask {
   mtimeMs: number;
   targetTokens: number;
   overlapTokens: number;
+  counter: TokenCounter;
 }
 
 type ParseResult = Awaited<ReturnType<typeof chunkDocument>>;
@@ -463,17 +521,7 @@ async function parseInline(
 
   // ── Batch native tree-sitter parse for Python/Go/Rust files ──
   const TS_LANGS = new Set(["python", "go", "rust"]);
-  let native: any = null;
-  try {
-    const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
-    native = require(nativePath);
-  } catch {
-    try {
-      native = require("@openez-graph/native");
-    } catch {
-      /* not installed */
-    }
-  }
+  const native = resolveNativeParser();
 
   const batchTasks: ParseTask[] = [];
   const otherTasks: ParseTask[] = [];
@@ -498,7 +546,7 @@ async function parseInline(
       content: t.content,
     }));
     // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust
-    const nativeResults = native.parseCodeBatch(batchItems);
+    const nativeResults = native!.parseCodeBatch(batchItems);
     process.stderr.write(
       `[t]   native-batch: ${Date.now() - _batchStart}ms (${batchTasks.length} files)\n`,
     );
@@ -511,7 +559,7 @@ async function parseInline(
         // Build symbol-aware chunks so code_context can match symbol names
         // to chunks via metadata.symbolName. Fall back to line-based chunks
         // only when no symbols were extracted.
-        const symbols: ExtractedSymbol[] = nr.symbols.map((s: any) => ({
+        const symbols: ExtractedSymbol[] = nr.symbols.map((s) => ({
           name: s.name,
           symbolType: s.symbolType,
           type: s.symbolType,
@@ -522,12 +570,12 @@ async function parseInline(
         }));
         let chunks: any[];
         if (symbols.length > 0) {
-          chunks = createSymbolChunks(symbols, lines, lang);
+          chunks = createSymbolChunks(symbols, lines, lang, task.counter);
         } else {
-          chunks = makeFallbackChunks(task.content, lines).chunks;
+          chunks = makeFallbackChunks(task.content, lines, task.counter).chunks;
         }
         // Bound chunks to configured token limits
-        chunks = boundChunks(chunks, task.targetTokens, task.overlapTokens);
+        chunks = boundChunks(chunks, task.targetTokens, task.overlapTokens, task.counter);
         results.set(task.id, {
           kind: "code",
           language: lang,
@@ -547,8 +595,14 @@ async function parseInline(
           content: task.content,
           targetTokens: task.targetTokens,
           overlapTokens: task.overlapTokens,
+          counter: task.counter,
         });
-        indexed.chunks = boundChunks(indexed.chunks, task.targetTokens, task.overlapTokens);
+        indexed.chunks = boundChunks(
+          indexed.chunks,
+          task.targetTokens,
+          task.overlapTokens,
+          task.counter,
+        );
         results.set(task.id, indexed);
       }
       onProgress?.(results.size, tasks.length);
@@ -563,12 +617,18 @@ async function parseInline(
       content: task.content,
       targetTokens: task.targetTokens,
       overlapTokens: task.overlapTokens,
+      counter: task.counter,
     });
     // Bound large symbol chunks (e.g. a 1000-line function) to the target
     // token limit. The OxcParser creates one chunk per symbol, which can
     // exceed the limit for very large functions.
     if (indexed.kind === "code") {
-      indexed.chunks = boundChunks(indexed.chunks, task.targetTokens, task.overlapTokens);
+      indexed.chunks = boundChunks(
+        indexed.chunks,
+        task.targetTokens,
+        task.overlapTokens,
+        task.counter,
+      );
     }
     results.set(task.id, indexed);
     onProgress?.(results.size, tasks.length);
@@ -784,6 +844,10 @@ export async function indexWorkspace(input: {
             mtimeMs: file.mtimeMs,
             targetTokens: settings.chunking.targetTokens,
             overlapTokens: settings.chunking.overlapTokens,
+            // Indexing uses the fast chars/4 counter — BPE encoding is 100x
+            // slower and unnecessary for chunk-size budgeting. Retrieval
+            // budgeting continues to use exactTokenCounter (countTokens).
+            counter: fastTokenCounter,
           });
         }
       }
@@ -1252,18 +1316,24 @@ export async function buildGraphGeneration(
 
   // ── Parse native docs (Python/Go/Rust) with native batch, fallback to parseDocument ──
   if (nativeDocs.length > 0) {
+    // Resolve the native parser capability once. The expected cache version
+    // for native-language docs depends on this: `native-v1` when the native
+    // extension is available, `fallback-v1` when it is not (the fallback
+    // parser would re-parse them). A cache row is only reused when both the
+    // content hash AND this expected version match.
+    const nativeCapability = resolveNativeParser();
+    const expectedNativeVersion = nativeCapability
+      ? PARSER_VERSION_NATIVE
+      : PARSER_VERSION_FALLBACK;
+
     // Serve cached native docs first; only batch-parse the misses.
     const nativeToParse: typeof nativeDocs = [];
     for (const doc of nativeDocs) {
       const cached = repo.getParsedDocument(doc.id);
-      // Cache hit requires matching content_hash AND a current parser
-      // version. Native docs may have been cached by the fallback parser
-      // (fallback-v1) — those are re-parsed by the native batch when the
-      // native extension is available, so only accept native-v1 here.
       if (
         cached &&
         cached.contentHash === doc.contentHash &&
-        cached.parserVersion === PARSER_VERSION_NATIVE
+        cached.parserVersion === expectedNativeVersion
       ) {
         parsedFiles.set(doc.path, {
           filePath: doc.path,
@@ -1280,21 +1350,7 @@ export async function buildGraphGeneration(
       }
     }
 
-    let native: any = null;
-    if (nativeToParse.length > 0) {
-      try {
-        const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
-        native = require(nativePath);
-      } catch {
-        try {
-          native = require("@openez-graph/native");
-        } catch {
-          /* not installed — will fall back to parseDocument */
-        }
-      }
-    }
-
-    if (native?.parseCodeBatch && nativeToParse.length > 0) {
+    if (nativeCapability?.parseCodeBatch && nativeToParse.length > 0) {
       const batchItems: Array<{ language: string; content: string }> = [];
       const batchDocPaths: string[] = [];
       for (const doc of nativeToParse) {
@@ -1309,14 +1365,14 @@ export async function buildGraphGeneration(
       }
 
       if (batchItems.length > 0) {
-        const nativeResults = native.parseCodeBatch(batchItems);
+        const nativeResults = nativeCapability.parseCodeBatch(batchItems);
         for (let i = 0; i < nativeResults.length; i++) {
           const nr = nativeResults[i];
           if (!nr) continue;
           const filePath = batchDocPaths[i];
           const doc = nativeToParse.find((d) => d.path === filePath)!;
           const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
-          const definedSymbols = nr.symbols.map((s: any) => ({
+          const definedSymbols = nr.symbols.map((s) => ({
             name: s.name,
             symbolType: s.symbolType,
             type: s.symbolType,
