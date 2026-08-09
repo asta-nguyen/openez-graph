@@ -1,0 +1,41 @@
+tests/embedding-migration.test.ts
+  s_fb4f32c665b8c6::t_e3def8445fdcc3 23,29,41-43
+  s_fb4f32c665b8c6::t_d7569f4b53ab04 44-45
+packages/core/src/retrieval.ts
+  s_fb4f32c665b8c6::t_d93dca131f9f80 63
+  s_fb4f32c665b8c6::t_d2b16c4bd80665 282-283
+  s_fb4f32c665b8c6::t_41b14ce098babb 89-90
+  s_fb4f32c665b8c6::t_2c8e5d5e292876 164
+  s_fb4f32c665b8c6::t_2316166f4f1676 2
+docs/superpowers/specs/2026-08-08-rag-architecture-improvement-design.md
+  s_fb4f32c665b8c6::t_43d810de9b7b75 98-105,110,112,114-117,119,121-125
+  s_fb4f32c665b8c6::t_276e3dd481db09 178
+  s_fb4f32c665b8c6::t_9a38dc120f51eb 13
+  s_fb4f32c665b8c6::t_d4eb4b68b9432f 174-177,179
+packages/db/package.json
+  s_fb4f32c665b8c6::t_1043f64ed2bc84 16
+packages/db/src/sqlite/workspace-db.ts
+  s_fb4f32c665b8c6::t_5f994e06ac0c6c 7
+  s_fb4f32c665b8c6::t_8232f3ad8e5ecd 383-386
+tests/vector-search.test.ts
+  s_fb4f32c665b8c6::t_f8cca26723b178 299
+  s_fb4f32c665b8c6::t_26caff0bf30b38 242-262,265-298
+  s_fb4f32c665b8c6::t_7f61bd5402e8cc 263-264
+  s_fb4f32c665b8c6::t_c7f88e13a2fd1a 300-352
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "10e68bdc0c6a5ea9631c3f1862d5c07fd8d3f08f",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
