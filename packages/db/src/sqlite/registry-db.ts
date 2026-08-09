@@ -21,6 +21,8 @@ export function getRegistryDdl(): string {
       status TEXT NOT NULL DEFAULT 'pending',
       indexing_status TEXT NOT NULL DEFAULT 'pending',
       graph_status TEXT NOT NULL DEFAULT 'pending',
+      index_generation INTEGER NOT NULL DEFAULT 0,
+      graph_generation INTEGER NOT NULL DEFAULT 0,
       last_indexed_at TEXT,
       last_graph_built_at TEXT,
       document_count INTEGER NOT NULL DEFAULT 0,
@@ -149,6 +151,8 @@ function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>)
 
   addColumnIfMissing("pinned_at", "pinned_at TEXT");
   addColumnIfMissing("pin_order", "pin_order INTEGER");
+  addColumnIfMissing("index_generation", "index_generation INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing("graph_generation", "graph_generation INTEGER NOT NULL DEFAULT 0");
 
   // Backfill pin_order for pre-existing pinned workspaces that lack it.
   // Assign sequential values ordered by pinned_at so the initial state is

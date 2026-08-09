@@ -40,6 +40,8 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     status: row.status as RegistryWorkspace["status"],
     indexingStatus: row.indexingStatus as RegistryWorkspace["indexingStatus"],
     graphStatus: row.graphStatus as RegistryWorkspace["graphStatus"],
+    indexGeneration: row.indexGeneration,
+    graphGeneration: row.graphGeneration,
     lastIndexedAt: row.lastIndexedAt ?? undefined,
     lastGraphBuiltAt: row.lastGraphBuiltAt ?? undefined,
     documentCount: row.documentCount,
@@ -175,6 +177,8 @@ export function createRegistryRepository(): RegistryRepository {
           | "status"
           | "indexingStatus"
           | "graphStatus"
+          | "indexGeneration"
+          | "graphGeneration"
           | "lastIndexedAt"
           | "lastGraphBuiltAt"
           | "documentCount"
@@ -199,6 +203,14 @@ export function createRegistryRepository(): RegistryRepository {
       if (updates.graphStatus !== undefined) {
         sets.push("graph_status = ?");
         params.push(updates.graphStatus);
+      }
+      if (updates.indexGeneration !== undefined) {
+        sets.push("index_generation = ?");
+        params.push(updates.indexGeneration);
+      }
+      if (updates.graphGeneration !== undefined) {
+        sets.push("graph_generation = ?");
+        params.push(updates.graphGeneration);
       }
       if (updates.lastIndexedAt !== undefined) {
         sets.push("last_indexed_at = ?");
@@ -231,6 +243,25 @@ export function createRegistryRepository(): RegistryRepository {
 
       params.push(id);
       native.prepare(`UPDATE workspaces SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+    },
+
+    async invalidateWorkspaceGraph(id: string): Promise<number> {
+      const row = native
+        .prepare(
+          `UPDATE workspaces
+           SET index_generation = index_generation + 1,
+               graph_status = 'pending',
+               updated_at = ?
+           WHERE id = ?
+           RETURNING index_generation`,
+        )
+        .get(new Date().toISOString(), id) as { index_generation: number } | undefined;
+
+      if (!row) {
+        throw new Error(`Workspace '${id}' not found`);
+      }
+
+      return Number(row.index_generation);
     },
 
     async deleteWorkspace(id: string): Promise<void> {

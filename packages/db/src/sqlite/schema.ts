@@ -14,6 +14,8 @@ export const workspaces = sqliteTable(
     status: text("status").notNull().default("pending"),
     indexingStatus: text("indexing_status").notNull().default("pending"),
     graphStatus: text("graph_status").notNull().default("pending"),
+    indexGeneration: integer("index_generation").notNull().default(0),
+    graphGeneration: integer("graph_generation").notNull().default(0),
     lastIndexedAt: text("last_indexed_at"),
     lastGraphBuiltAt: text("last_graph_built_at"),
     documentCount: integer("document_count").notNull().default(0),
