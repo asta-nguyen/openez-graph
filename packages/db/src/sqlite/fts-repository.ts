@@ -9,6 +9,17 @@ export function composeFtsSearchText(content: string, metadata: string): string 
   return searchText ? `${searchText}\n${content}` : content;
 }
 
+export function composeFtsSearchTextSql(metadata: string, content: string): string {
+  return `CASE
+    WHEN json_valid(${metadata}) THEN CASE
+      WHEN json_type(${metadata}, '$.searchText') = 'text'
+        THEN trim(json_extract(${metadata}, '$.searchText'))
+      ELSE ''
+    END
+    ELSE ''
+  END || char(10) || ${content}`;
+}
+
 /**
  * Prepared statements used by the FTS operations.
  *
@@ -216,12 +227,12 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
         native.exec(`
           INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
           SELECT c.id, d.path, coalesce(c.heading, ''), coalesce(d.language, ''),
-            coalesce(json_extract(c.metadata, '$.searchText'), '') || char(10) || c.content
+            ${composeFtsSearchTextSql("c.metadata", "c.content")}
           FROM chunks c
           JOIN documents d ON d.id = c.document_id;
         `);
 
-        restoreFtsTriggerDefinitions(native);
+        restoreFtsTriggerDefinitions(native, { withinTransaction: true });
         deps.setMeta("fts_schema_version", FTS_SCHEMA_VERSION);
         native.exec("COMMIT");
       } catch (error) {
@@ -241,7 +252,7 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
         SELECT c.id, d.path, coalesce(c.heading, ''),
           coalesce(d.language, ''),
-          coalesce(json_extract(c.metadata, '$.searchText'), '') || char(10) || c.content
+          ${composeFtsSearchTextSql("c.metadata", "c.content")}
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id
         LEFT JOIN chunks_fts f ON f.chunk_id = c.id
@@ -267,36 +278,57 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
   };
 }
 
-export function restoreFtsTriggerDefinitions(native: NativeDatabase): void {
-  // Recreate rather than IF NOT EXISTS so stale trigger definitions are upgraded.
-  native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
-  native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
-  native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
-  native.exec(`
-    CREATE TRIGGER chunks_fts_insert AFTER INSERT ON chunks
-    BEGIN
-      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-      SELECT new.id, documents.path, coalesce(new.heading, ''),
-        coalesce(documents.language, ''),
-        coalesce(json_extract(new.metadata, '$.searchText'), '') || char(10) || new.content
-      FROM documents WHERE documents.id = new.document_id;
-    END;
-  `);
-  native.exec(`
-    CREATE TRIGGER chunks_fts_delete AFTER DELETE ON chunks
-    BEGIN
-      DELETE FROM chunks_fts WHERE chunk_id = old.id;
-    END;
-  `);
-  native.exec(`
-    CREATE TRIGGER chunks_fts_update AFTER UPDATE ON chunks
-    BEGIN
-      DELETE FROM chunks_fts WHERE chunk_id = old.id;
-      INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-      SELECT new.id, documents.path, coalesce(new.heading, ''),
-        coalesce(documents.language, ''),
-        coalesce(json_extract(new.metadata, '$.searchText'), '') || char(10) || new.content
-      FROM documents WHERE documents.id = new.document_id;
-    END;
-  `);
+export function restoreFtsTriggerDefinitions(
+  native: NativeDatabase,
+  options: { withinTransaction?: boolean } = {},
+): void {
+  const replaceDefinitions = () => {
+    // Recreate rather than IF NOT EXISTS so stale trigger definitions are upgraded.
+    native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
+    native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
+    native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
+    native.exec(`
+      CREATE TRIGGER chunks_fts_insert AFTER INSERT ON chunks
+      BEGIN
+        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
+        SELECT new.id, documents.path, coalesce(new.heading, ''),
+          coalesce(documents.language, ''),
+          ${composeFtsSearchTextSql("new.metadata", "new.content")}
+        FROM documents WHERE documents.id = new.document_id;
+      END;
+    `);
+    native.exec(`
+      CREATE TRIGGER chunks_fts_delete AFTER DELETE ON chunks
+      BEGIN
+        DELETE FROM chunks_fts WHERE chunk_id = old.id;
+      END;
+    `);
+    native.exec(`
+      CREATE TRIGGER chunks_fts_update AFTER UPDATE ON chunks
+      BEGIN
+        DELETE FROM chunks_fts WHERE chunk_id = old.id;
+        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
+        SELECT new.id, documents.path, coalesce(new.heading, ''),
+          coalesce(documents.language, ''),
+          ${composeFtsSearchTextSql("new.metadata", "new.content")}
+        FROM documents WHERE documents.id = new.document_id;
+      END;
+    `);
+  };
+
+  if (options.withinTransaction) {
+    replaceDefinitions();
+    return;
+  }
+
+  native.exec("BEGIN IMMEDIATE");
+  try {
+    replaceDefinitions();
+    native.exec("COMMIT");
+  } catch (error) {
+    try {
+      native.exec("ROLLBACK");
+    } catch {}
+    throw error;
+  }
 }
