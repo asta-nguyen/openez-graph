@@ -551,8 +551,7 @@ export function createMcpServer(options?: McpServerOptions) {
         await catchUpReadWorkspaces(workspaces);
         // Wait for background FTS build if still in progress
         await Promise.all(workspaces.map((w) => waitForFts(w.id)));
-        // Ensure graph is built before query so graph expansion has data
-        await Promise.all(workspaces.map((w) => ensureGraphReady(w.id)));
+        // Graph is built lazily inside codeQuery via ensureGraph callback
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspace,
@@ -562,6 +561,7 @@ export function createMcpServer(options?: McpServerOptions) {
               limit: input.limit,
               maxTokens: workspaceBudget,
               recordMetrics: false,
+              ensureGraph: ensureGraphReady,
             }),
           })),
         );

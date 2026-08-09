@@ -16,6 +16,10 @@ export interface GraphServiceDeps {
 export function createGraphService(deps: GraphServiceDeps): {
   ensureGraphReady(workspaceId: string): Promise<void>;
 } {
+  // Process-local coalescing: if the same process already has a build in
+  // flight for this workspace, attach to that promise rather than starting
+  // a second one. Cross-process coordination is handled by the atomic
+  // `tryClaimGraphBuild` CAS in the registry.
   const graphBuilds = new Map<string, Promise<void>>();
 
   async function ensureGraphReadyInternal(workspaceId: string): Promise<void> {
@@ -31,8 +35,22 @@ export function createGraphService(deps: GraphServiceDeps): {
         return;
       }
 
+      // If another process is already building this graph, wait for it to
+      // finish, then re-check the state. This avoids duplicate builds across
+      // web/MCP/CLI processes that share the same registry DB.
+      if (workspace.graphStatus === "running") {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        continue;
+      }
+
       const generation = workspace.indexGeneration;
-      await deps.registry.updateWorkspace(workspaceId, { graphStatus: "running" });
+      // Atomic claim: only one process can transition to 'running'.
+      const claimed = await deps.registry.tryClaimGraphBuild(workspaceId);
+      if (!claimed) {
+        // Another process just claimed it — wait and retry.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        continue;
+      }
 
       try {
         const counts = await deps.buildGraphGeneration(workspaceId, workspace.rootPath, generation);
@@ -83,6 +101,7 @@ const defaultGraphService = createGraphService({
   registry: {
     getWorkspace: (id) => createRegistryRepository().getWorkspace(id),
     updateWorkspace: (id, updates) => createRegistryRepository().updateWorkspace(id, updates),
+    tryClaimGraphBuild: (id) => createRegistryRepository().tryClaimGraphBuild(id),
   } as RegistryRepository,
   buildGraphGeneration,
   now: () => new Date().toISOString(),

@@ -54,7 +54,7 @@ describe("parsed_documents cache", () => {
       imports: JSON.stringify(["./bar"]),
       calls: JSON.stringify([{ callerName: "foo", calleeName: "bar" }]),
       calledIdentifiers: JSON.stringify(["bar"]),
-      parserVersion: "ts-morph-v1",
+      parserVersion: "oxc-v2",
     });
 
     const cached = repo.getParsedDocument(docId);
@@ -64,7 +64,7 @@ describe("parsed_documents cache", () => {
     expect(JSON.parse(cached!.symbols!)).toEqual([
       { name: "foo", symbolType: "function", type: "function", exported: true },
     ]);
-    expect(cached!.parserVersion).toBe("ts-morph-v1");
+    expect(cached!.parserVersion).toBe("oxc-v2");
     expect(cached!.calledIdentifiers).not.toBeNull();
   });
 
@@ -84,7 +84,7 @@ describe("parsed_documents cache", () => {
       imports: "[]",
       calls: "[]",
       calledIdentifiers: "[]",
-      parserVersion: "ts-morph-v1",
+      parserVersion: "oxc-v2",
     });
 
     // Insert again with different data
@@ -97,7 +97,7 @@ describe("parsed_documents cache", () => {
       imports: "[]",
       calls: "[]",
       calledIdentifiers: "[]",
-      parserVersion: "ts-morph-v1",
+      parserVersion: "oxc-v2",
     });
 
     const cached = repo.getParsedDocument(docId);
@@ -118,7 +118,7 @@ describe("parsed_documents cache", () => {
       imports: "[]",
       calls: "[]",
       calledIdentifiers: "[]",
-      parserVersion: "ts-morph-v1",
+      parserVersion: "oxc-v2",
     });
 
     expect(repo.getParsedDocument(docId)).not.toBeNull();
