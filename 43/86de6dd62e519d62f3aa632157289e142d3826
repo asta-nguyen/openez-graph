@@ -1,0 +1,38 @@
+AGENTS.md
+  s_fb4f32c665b8c6::t_e0521430895094 119
+tests/oxc-parser.test.ts
+  s_fb4f32c665b8c6::t_48d2f8088bc2c0 88-115
+packages/indexer/src/index-workspace.ts
+  s_fb4f32c665b8c6::t_abb76614f6071b 1113
+  s_fb4f32c665b8c6::t_b8814f568f1995 587-588
+  s_fb4f32c665b8c6::t_098a31c467886c 586
+tests/index-workspace.test.ts
+  s_fb4f32c665b8c6::t_0f86f7eb5a488e 17
+  s_fb4f32c665b8c6::t_5f9529c9fea5fe 582
+  s_fb4f32c665b8c6::t_41ba78bbe69766 548-581
+  s_fb4f32c665b8c6::t_3e251b53951d3c 16
+  s_fb4f32c665b8c6::t_72f0c6d662eb3d 521-522,532-533,545
+packages/indexer/src/parsers/oxc-parser.ts
+  s_fb4f32c665b8c6::t_5f9529c9fea5fe 447,456,479-481,497
+  s_fb4f32c665b8c6::t_ec5ee68e7af31e 359
+  s_fb4f32c665b8c6::t_b39eca6b5df206 1
+  s_fb4f32c665b8c6::t_9696e8dbf20a60 148-156,162-227,357,364
+  s_fb4f32c665b8c6::t_3e461b1a574022 483-485,488
+  s_fb4f32c665b8c6::t_5416afabb54287 329,355-356,358,365-367
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4386de6dd62e519d62f3aa632157289e142d3826",
+  "prompts": {},
+  "sessions": {
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
