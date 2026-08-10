@@ -1,0 +1,75 @@
+packages/db/src/sqlite/schema.ts
+  s_6ce5be3eed0fbe::t_919d7abf2bcb19 19-21
+packages/db/src/sqlite/types.ts
+  s_6ce5be3eed0fbe::t_919d7abf2bcb19 12,99-100,103,536-554
+  s_6ce5be3eed0fbe::t_e6ae99082e14ac 83-84
+  s_6ce5be3eed0fbe::t_c36274e1ab9247 104
+  s_6ce5be3eed0fbe::t_a4f7ee5e79cbf0 88-92,97-98,101-102
+  s_6ce5be3eed0fbe::t_ca57f44279f5b9 555
+packages/db/src/sqlite/graph-traversal-ops.ts
+  s_6ce5be3eed0fbe::t_b4011374d999cb 76-95,98-101,106-159,168
+  s_6ce5be3eed0fbe::t_249b671da37dcf 96-97,102-105,160-167
+packages/core/src/retrieval.ts
+  s_6ce5be3eed0fbe::t_eb6c53768b73a1 247,253-274
+tests/oxc-parser.test.ts
+  s_6ce5be3eed0fbe::t_b46aacfe89e044 76,108,110-113,141,143-146
+packages/db/src/sqlite/workspace-db.ts
+  s_6ce5be3eed0fbe::t_82e34d14a0c483 251,298,339-343
+tests/registry.test.ts
+  s_6ce5be3eed0fbe::t_127b87b5dc631b 215-218,221-223,227-252,256-257
+  s_6ce5be3eed0fbe::t_a4f7ee5e79cbf0 219-220,224-226
+  s_6ce5be3eed0fbe::t_3200457aa7e88c 253-255
+packages/indexer/src/parsers/oxc-parser.ts
+  s_6ce5be3eed0fbe::t_82e34d14a0c483 362,364-366,393-394,398-407,409-440
+  s_6ce5be3eed0fbe::t_6c9f6565c3da8a 374,376,379,387,390,395-397
+  s_6ce5be3eed0fbe::t_a4f7ee5e79cbf0 408
+packages/indexer/src/graph-service.ts
+  s_6ce5be3eed0fbe::t_e6ae99082e14ac 107-112
+  s_6ce5be3eed0fbe::t_c36274e1ab9247 172-173
+  s_6ce5be3eed0fbe::t_a4f7ee5e79cbf0 45
+  s_6ce5be3eed0fbe::t_c35f2c5d8fc8e9 1-2,9-16,21-22,28,57-63,67,70-75,80-94,96-106,113-131,134-139,141-142,166-171,174
+packages/db/src/sqlite/fts-repository.ts
+  s_6ce5be3eed0fbe::t_41cf97b6bb2f70 310
+  s_6ce5be3eed0fbe::t_a4f7ee5e79cbf0 311
+tests/embedding-migration.test.ts
+  s_6ce5be3eed0fbe::t_9b99a88d352895 99,116-119
+  s_6ce5be3eed0fbe::t_127b87b5dc631b 40-42,49
+tests/graph-lifecycle.test.ts
+  s_6ce5be3eed0fbe::t_5d99a2b726a8c7 12
+  s_6ce5be3eed0fbe::t_d220ddde2ec557 247,252,258
+  s_6ce5be3eed0fbe::t_3200457aa7e88c 232-246,248-251,253-257
+  s_6ce5be3eed0fbe::t_f568585a639c99 259-298
+  s_6ce5be3eed0fbe::t_030b98f0b1c833 299-300
+tests/index-workspace.test.ts
+  s_6ce5be3eed0fbe::t_127b87b5dc631b 639-665
+  s_6ce5be3eed0fbe::t_c64c154135e384 241-260
+  s_6ce5be3eed0fbe::t_b46aacfe89e044 583,586,590
+packages/db/src/sqlite/registry-repository.ts
+  s_6ce5be3eed0fbe::t_c36274e1ab9247 335,341,343
+  s_6ce5be3eed0fbe::t_919d7abf2bcb19 45,254,268-272,281-282,289-290,293-297,306,308,312-334,336-340,342,344-345
+  s_6ce5be3eed0fbe::t_b4011374d999cb 286-287
+  s_6ce5be3eed0fbe::t_7dc465ba03e78e 346
+packages/indexer/src/index-workspace.ts
+  s_6ce5be3eed0fbe::t_8f7cf47a3231ea 1614-1618,1622,1626,1629
+  s_6ce5be3eed0fbe::t_d8922be4eb026b 1212-1213,1229-1230,1448-1449,1535-1537,1576-1580,1590-1600,1602-1604,1619-1621
+tests/workspace-db.test.ts
+  s_6ce5be3eed0fbe::t_76ca9b135a4038 109-130
+packages/db/src/sqlite/registry-db.ts
+  s_6ce5be3eed0fbe::t_919d7abf2bcb19 26-28,159-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "36722f9b6738e5490b6052ffd49766a9062d8be8",
+  "prompts": {},
+  "sessions": {
+    "s_6ce5be3eed0fbe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd81d-f4b3-7bc3-8de2-006b924cf03a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
