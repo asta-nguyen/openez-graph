@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-08-10-local-embedding-cli-design.md
+  s_345d52b8a6bfe3::t_1bd94fbc39a4db 1-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "085ce7288e128cfd095cd74211b59846d9d00cdb",
+  "prompts": {},
+  "sessions": {
+    "s_345d52b8a6bfe3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe992-ad1f-7791-bbdd-c412d8baf651",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
