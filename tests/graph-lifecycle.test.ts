@@ -148,7 +148,7 @@ describe("graph lifecycle persistence", () => {
     expect(await createWorkspaceRepository(workspaceRoot).getNodeCount()).toBeGreaterThan(0);
   });
 
-  it("codeQuery without ensureGraph does not build the graph", async () => {
+  it("codeQuery with skipGraphExpand does not build the graph", async () => {
     fs.writeFileSync(path.join(workspaceRoot, "a.ts"), "export function target() {}\n");
     fs.writeFileSync(
       path.join(workspaceRoot, "b.ts"),
@@ -159,11 +159,12 @@ describe("graph lifecycle persistence", () => {
     await indexWorkspace({ workspaceId: workspace.id });
 
     expect(await createWorkspaceRepository(workspaceRoot).getNodeCount()).toBe(0);
-    // Without ensureGraph, codeQuery skips graph building but still returns FTS results
+    // With skipGraphExpand, codeQuery skips graph building but still returns FTS results
     const result = await codeQuery({
       workspaceId: workspace.id,
       query: "target",
       skipGraphExpand: true,
+      ensureGraph: ensureGraphReady,
     });
     expect(result.sources.length).toBeGreaterThan(0);
     expect(await createWorkspaceRepository(workspaceRoot).getNodeCount()).toBe(0);

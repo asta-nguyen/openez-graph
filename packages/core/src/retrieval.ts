@@ -86,6 +86,13 @@ export async function rankStoredEmbeddings(
 
   const repo = createWorkspaceRepository(rootPath);
 
+  // Skip vector search when the workspace has legacy TEXT embeddings.
+  // They cannot be used with BLOB cosine search. Defer to FTS until the
+  // user runs `openez reindex` to rebuild embeddings as BLOB.
+  if (repo.hasLegacyEmbeddings()) {
+    return [];
+  }
+
   // BLOB cosine linear scan — the supported local vector search path.
   // Sufficient for local SQLite workspaces; no native extension required.
   const results = await repo.queryRaw(
@@ -245,10 +252,11 @@ export async function codeQuery(input: {
   skipGraphExpand?: boolean;
   recordMetrics?: boolean;
   /**
-   * Optional callback to ensure the graph is built before graph expansion.
-   * MCP/web pass `ensureGraphReady` from `@openez-graph/indexer`. When omitted
-   * and `skipGraphExpand` is false, graph expansion runs against whatever
-   * graph state currently exists (may be empty on a fresh workspace).
+   * Callback to ensure the graph is built before graph expansion. Required
+   * at runtime when `skipGraphExpand` is false (the default) — callers must
+   * inject `ensureGraphReady` from `@openez-graph/indexer`. This keeps core
+   * free of the indexer dependency while guaranteeing that direct consumers
+   * get graph expansion. Pass `skipGraphExpand: true` to bypass.
    */
   ensureGraph?: (workspaceId: string) => Promise<void>;
 }): Promise<CodeQueryResult> {
@@ -288,9 +296,13 @@ export async function codeQuery(input: {
   if (!input.skipGraphExpand) {
     // Ensure the graph is built before expansion. The callback is injected
     // by the caller (MCP/web) to avoid a core→indexer package cycle.
-    if (input.ensureGraph) {
-      await input.ensureGraph(input.workspaceId);
+    if (!input.ensureGraph) {
+      throw new Error(
+        "codeQuery: ensureGraph callback is required when skipGraphExpand is false. " +
+          "Pass ensureGraphReady from @openez-graph/indexer, or set skipGraphExpand: true.",
+      );
     }
+    await input.ensureGraph(input.workspaceId);
     const graphResults = await graphExpand(
       workspace.rootPath,
       fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),

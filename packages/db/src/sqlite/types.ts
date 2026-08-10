@@ -78,12 +78,18 @@ export interface RegistryRepository {
   invalidateWorkspaceGraph(id: string): Promise<number>;
   /**
    * Atomically claim the graph build for a workspace. Transitions
-   * `graph_status` to 'running' only if it is not already 'running'.
-   * Returns true if this caller acquired the claim, false if another
-   * process is already building. This prevents cross-process duplicate
-   * builds (web + MCP + CLI running in separate processes).
+   * `graph_status` to 'running' only if it is not already 'running' or
+   * if the existing lease has expired. Returns true if this caller
+   * acquired the claim, false if another process is already building.
+   * `leaseExpiresAt` is an ISO timestamp; stale leases allow takeover
+   * when a builder process dies mid-build.
    */
-  tryClaimGraphBuild(id: string): Promise<boolean>;
+  tryClaimGraphBuild(id: string, leaseExpiresAt: string): Promise<boolean>;
+  /**
+   * Refresh the graph build lease. Returns false if the lease was
+   * taken over by another process (caller should abort the build).
+   */
+  refreshGraphBuildLease(id: string, leaseExpiresAt: string): Promise<boolean>;
   deleteWorkspace(id: string): Promise<void>;
   setPinned(id: string, pinned: boolean): Promise<void>;
 
@@ -496,6 +502,12 @@ export interface WorkspaceRepository {
   setMeta(key: string, value: string): void;
   getMeta(key: string): string | null;
   ensureFtsReady(): void;
+  /**
+   * Returns true when the workspace has legacy TEXT embeddings that cannot
+   * be used with BLOB cosine search. Vector search should be skipped (defer
+   * to FTS) until `openez reindex` rebuilds embeddings as BLOB.
+   */
+  hasLegacyEmbeddings(): boolean;
 
   /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
   loadAllSymbolNodes(): Promise<Map<string, string>>;

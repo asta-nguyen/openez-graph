@@ -580,4 +580,40 @@ describe("indexWorkspace", () => {
       expect.objectContaining({ from: "Service.run", to: "helper", type: "calls" }),
     );
   });
+
+  it("resolves duplicate nested function calls to the correct lexical scope", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "shadow.ts"),
+      [
+        "function outer() { function helper() { deep(); } helper(); }",
+        "function helper() {}",
+        "function deep() {}",
+      ].join("\n"),
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    // `outer` calls `helper` — graph should resolve to `outer.helper` (nested),
+    // not the top-level `helper`, because of lexical scope.
+    const outerNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer",
+      depth: 1,
+    });
+    expect(outerNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer", to: "outer.helper", type: "calls" }),
+    );
+
+    // `outer.helper` calls `deep`
+    const nestedNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer.helper",
+      depth: 1,
+    });
+    expect(nestedNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer.helper", to: "deep", type: "calls" }),
+    );
+  });
 });

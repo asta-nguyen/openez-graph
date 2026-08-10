@@ -264,16 +264,36 @@ export function createRegistryRepository(): RegistryRepository {
       return Number(row.index_generation);
     },
 
-    async tryClaimGraphBuild(id: string): Promise<boolean> {
-      // Atomic compare-and-set: only transition to 'running' if not already running.
-      // This prevents two processes (web + MCP) from building the same graph.
+    async tryClaimGraphBuild(id: string, leaseExpiresAt: string): Promise<boolean> {
+      // Atomic compare-and-set: transition to 'running' only if:
+      // 1. status is not 'running', OR
+      // 2. status is 'running' but the lease has expired (takeover from dead process)
+      const now = new Date().toISOString();
       const result = native
         .prepare(
           `UPDATE workspaces
-           SET graph_status = 'running', updated_at = ?
-           WHERE id = ? AND graph_status != 'running'`,
+           SET graph_status = 'running',
+               graph_lease_expires_at = ?,
+               updated_at = ?
+           WHERE id = ?
+             AND (graph_status != 'running' OR graph_lease_expires_at IS NULL OR graph_lease_expires_at < ?)`,
         )
-        .run(new Date().toISOString(), id) as { changes: number };
+        .run(leaseExpiresAt, now, id, now) as { changes: number };
+      return result.changes > 0;
+    },
+
+    async refreshGraphBuildLease(id: string, leaseExpiresAt: string): Promise<boolean> {
+      // Refresh the lease only if we still own it (status is still 'running'
+      // and lease hasn't been taken over). Returns false if another process
+      // took over or the graph was completed/failed.
+      const now = new Date().toISOString();
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_lease_expires_at = ?, updated_at = ?
+           WHERE id = ? AND graph_status = 'running'`,
+        )
+        .run(leaseExpiresAt, now, id) as { changes: number };
       return result.changes > 0;
     },
 
