@@ -9,6 +9,7 @@ export interface RegistryWorkspace {
   graphStatus: "pending" | "running" | "completed" | "failed";
   indexGeneration: number;
   graphGeneration: number;
+  graphLeaseExpiresAt: string | undefined;
   lastIndexedAt: string | undefined;
   lastGraphBuiltAt: string | undefined;
   documentCount: number;
@@ -79,17 +80,28 @@ export interface RegistryRepository {
   /**
    * Atomically claim the graph build for a workspace. Transitions
    * `graph_status` to 'running' only if it is not already 'running' or
-   * if the existing lease has expired. Returns true if this caller
-   * acquired the claim, false if another process is already building.
+   * if the existing lease has expired. Returns the monotonically increasing
+   * fencing epoch when acquired, or null if another process is building.
    * `leaseExpiresAt` is an ISO timestamp; stale leases allow takeover
    * when a builder process dies mid-build.
    */
-  tryClaimGraphBuild(id: string, leaseExpiresAt: string): Promise<boolean>;
+  tryClaimGraphBuild(
+    id: string,
+    ownerToken: string,
+    leaseExpiresAt: string,
+  ): Promise<number | null>;
   /**
    * Refresh the graph build lease. Returns false if the lease was
    * taken over by another process (caller should abort the build).
    */
-  refreshGraphBuildLease(id: string, leaseExpiresAt: string): Promise<boolean>;
+  refreshGraphBuildLease(id: string, ownerToken: string, leaseExpiresAt: string): Promise<boolean>;
+  completeGraphBuild(
+    id: string,
+    ownerToken: string,
+    generation: number,
+    result: { nodeCount: number; edgeCount: number; completedAt: string },
+  ): Promise<boolean>;
+  failGraphBuild(id: string, ownerToken: string, error: string): Promise<boolean>;
   deleteWorkspace(id: string): Promise<void>;
   setPinned(id: string, pinned: boolean): Promise<void>;
 
@@ -520,6 +532,26 @@ export interface WorkspaceRepository {
    *  memories, query logs, and index runs). Used by the lazy graph builder to
    *  invalidate stale graph state before rebuilding. */
   clearGraphArtifacts(): void;
+
+  /** Atomically replace the live graph unless a newer build epoch already published. */
+  replaceGraphArtifacts(input: {
+    buildEpoch: number;
+    nodes: Array<{
+      id: string;
+      type: string;
+      label: string;
+      refId?: string;
+      metadata?: string;
+    }>;
+    edges: Array<{
+      id: string;
+      fromNodeId: string;
+      toNodeId: string;
+      type: string;
+      weight?: number;
+      metadata?: string;
+    }>;
+  }): boolean;
 
   /** Cache parsed symbols/imports/calls for graph build. */
   insertParsedDocument(input: {

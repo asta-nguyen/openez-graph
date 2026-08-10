@@ -307,8 +307,8 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
       native.exec(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
       );
-      // Clear legacy embedding format marker so vector search resumes
-      native.exec("DELETE FROM index_meta WHERE key = 'embedding_format'");
+      // A full rebuild starts a new graph fencing sequence and restores BLOB search.
+      native.exec("DELETE FROM index_meta WHERE key IN ('embedding_format', 'graph_build_epoch')");
     },
   };
 }

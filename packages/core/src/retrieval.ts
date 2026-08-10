@@ -244,22 +244,34 @@ async function graphExpand(
     .slice(0, limit);
 }
 
-export async function codeQuery(input: {
+interface CodeQueryBaseInput {
   workspaceId: string;
   query: string;
   limit?: number;
   maxTokens?: number;
-  skipGraphExpand?: boolean;
   recordMetrics?: boolean;
-  /**
-   * Callback to ensure the graph is built before graph expansion. Required
-   * at runtime when `skipGraphExpand` is false (the default) — callers must
-   * inject `ensureGraphReady` from `@openez-graph/indexer`. This keeps core
-   * free of the indexer dependency while guaranteeing that direct consumers
-   * get graph expansion. Pass `skipGraphExpand: true` to bypass.
-   */
-  ensureGraph?: (workspaceId: string) => Promise<void>;
-}): Promise<CodeQueryResult> {
+}
+
+export type CodeQueryInput = CodeQueryBaseInput &
+  (
+    | {
+        skipGraphExpand: true;
+        ensureGraph?: never;
+      }
+    | {
+        skipGraphExpand?: false;
+        ensureGraph: (workspaceId: string) => Promise<void>;
+      }
+  );
+
+export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult> {
+  if (!input.skipGraphExpand && !input.ensureGraph) {
+    throw new Error(
+      "codeQuery: ensureGraph callback is required when skipGraphExpand is false. " +
+        "Pass ensureGraphReady from @openez-graph/indexer, or set skipGraphExpand: true.",
+    );
+  }
+
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
   if (!workspace) {
@@ -296,12 +308,6 @@ export async function codeQuery(input: {
   if (!input.skipGraphExpand) {
     // Ensure the graph is built before expansion. The callback is injected
     // by the caller (MCP/web) to avoid a core→indexer package cycle.
-    if (!input.ensureGraph) {
-      throw new Error(
-        "codeQuery: ensureGraph callback is required when skipGraphExpand is false. " +
-          "Pass ensureGraphReady from @openez-graph/indexer, or set skipGraphExpand: true.",
-      );
-    }
     await input.ensureGraph(input.workspaceId);
     const graphResults = await graphExpand(
       workspace.rootPath,

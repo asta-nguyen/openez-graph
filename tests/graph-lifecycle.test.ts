@@ -9,6 +9,7 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
 } from "../packages/db/src/sqlite";
+import { getRegistryNativeDb } from "../packages/db/src/sqlite/registry-db";
 import { codeQuery } from "../packages/core/src/retrieval";
 import { createGraphService, ensureGraphReady } from "../packages/indexer/src/graph-service";
 import { indexWorkspace } from "../packages/indexer/src/index-workspace";
@@ -164,7 +165,6 @@ describe("graph lifecycle persistence", () => {
       workspaceId: workspace.id,
       query: "target",
       skipGraphExpand: true,
-      ensureGraph: ensureGraphReady,
     });
     expect(result.sources.length).toBeGreaterThan(0);
     expect(await createWorkspaceRepository(workspaceRoot).getNodeCount()).toBe(0);
@@ -227,6 +227,75 @@ describe("graph lifecycle persistence", () => {
     expect(current?.graphGeneration).toBe(1);
     expect(current?.nodeCount).toBe(2);
     expect(current?.edgeCount).toBe(3);
+  });
+
+  it("marks the owned graph build failed when indexing invalidates before a build error", async () => {
+    const registry = createRegistryRepository();
+    const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const service = createGraphService({
+      registry,
+      async buildGraphGeneration() {
+        await blocked;
+        throw new Error("parse failed");
+      },
+      now: () => "2026-08-10T00:00:00.000Z",
+    });
+
+    const ready = service.ensureGraphReady(workspace.id);
+    await Promise.resolve();
+    await registry.invalidateWorkspaceGraph(workspace.id);
+    release();
+
+    await expect(ready).rejects.toThrow("parse failed");
+    const current = await registry.getWorkspace(workspace.id);
+    expect(current?.graphStatus).toBe("failed");
+    expect(current?.lastError).toBe("parse failed");
+  }, 1_000);
+
+  it("takes over an expired cross-process lease without waiting for the old builder", async () => {
+    const registry = createRegistryRepository();
+    const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
+    let releaseOld!: () => void;
+    const oldBlocked = new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    });
+    let newBuilds = 0;
+    const oldService = createGraphService({
+      registry,
+      async buildGraphGeneration() {
+        await oldBlocked;
+        return { nodeCount: 99, edgeCount: 99 };
+      },
+      now: () => "2026-08-10T00:00:00.000Z",
+    });
+    const newService = createGraphService({
+      registry,
+      async buildGraphGeneration() {
+        newBuilds += 1;
+        return { nodeCount: 2, edgeCount: 1 };
+      },
+      now: () => "2026-08-10T00:00:00.000Z",
+    });
+
+    const oldReady = oldService.ensureGraphReady(workspace.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    getRegistryNativeDb()
+      .prepare("UPDATE workspaces SET graph_lease_expires_at = ? WHERE id = ?")
+      .run("2000-01-01T00:00:00.000Z", workspace.id);
+
+    await newService.ensureGraphReady(workspace.id);
+    releaseOld();
+    await oldReady;
+
+    const current = await registry.getWorkspace(workspace.id);
+    expect(newBuilds).toBe(1);
+    expect(current?.graphStatus).toBe("completed");
+    expect(current?.nodeCount).toBe(2);
+    expect(current?.edgeCount).toBe(1);
   });
 
   it("keeps graph builds scoped to canonical workspace IDs with matching basenames", async () => {

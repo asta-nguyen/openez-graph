@@ -73,7 +73,7 @@ describe("OxcParser", () => {
 
     // `doThing` belongs to `inner`, not `outer`.
     expect(result.callExpressions).toContainEqual({
-      callerName: "inner",
+      callerName: "outer.inner",
       calleeName: "doThing",
     });
     expect(result.callExpressions).toContainEqual({
@@ -105,9 +105,12 @@ describe("OxcParser", () => {
     );
 
     expect(result.definedSymbols.map((symbol) => symbol.name)).toEqual(
-      expect.arrayContaining(["outer", "inner", "Service", "Service.run", "helper"]),
+      expect.arrayContaining(["outer", "outer.inner", "Service", "Service.run", "helper"]),
     );
-    expect(result.callExpressions).toContainEqual({ callerName: "inner", calleeName: "helper" });
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer.inner",
+      calleeName: "helper",
+    });
     expect(result.callExpressions).toContainEqual({
       callerName: "Service.run",
       calleeName: "helper",
@@ -135,9 +138,12 @@ describe("OxcParser", () => {
     );
 
     expect(result.definedSymbols.map((symbol) => symbol.name)).toEqual(
-      expect.arrayContaining(["outer", "inner", "helper"]),
+      expect.arrayContaining(["outer", "outer.inner", "helper"]),
     );
-    expect(result.callExpressions).toContainEqual({ callerName: "inner", calleeName: "helper" });
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer.inner",
+      calleeName: "helper",
+    });
   });
 
   it("qualifies duplicate nested names to avoid graph collisions", () => {

@@ -359,26 +359,74 @@ function extractCalls(symbolAsts: SymbolAst[]): {
  * they appear as first-class graph symbols.
  */
 function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolAst[] {
-  const nested: SymbolAst[] = [];
-  // Track all symbol names in this file to detect collisions. When a nested
-  // function has the same name as an existing symbol, qualify it with its
-  // parent's name (e.g. `outer.helper`) to avoid graph node collisions.
-  const allNames = new Set<string>();
-  for (const { symbol } of topLevel) {
-    allNames.add(symbol.name);
+  const candidates: Array<{ name: string; node: OxcNode }> = [];
+
+  function registerCandidate(name: string, bodyNode: OxcNode): void {
+    if (candidates.some((candidate) => candidate.node === bodyNode)) return;
+    candidates.push({ name, node: bodyNode });
   }
 
-  function registerNested(
-    name: string,
-    parentNode: OxcNode,
-    bodyNode: OxcNode,
-    parentName: string,
-  ): void {
-    const qualifiedName = allNames.has(name) ? `${parentName}.${name}` : name;
-    allNames.add(qualifiedName);
+  for (const { symbol, node } of topLevel) {
+    if (symbol.symbolType !== "function" && symbol.symbolType !== "method") continue;
+    walkNodes(
+      node,
+      (current: OxcNode) => {
+        if (current === node) return;
+        if (current.type === "FunctionDeclaration" && current.id?.type === "Identifier") {
+          registerCandidate(current.id.name, current);
+        }
+        if (current.type === "FunctionExpression" && current.id?.type === "Identifier") {
+          registerCandidate(current.id.name, current);
+        }
+        if (
+          current.type === "VariableDeclarator" &&
+          current.id?.type === "Identifier" &&
+          (current.init?.type === "ArrowFunctionExpression" ||
+            current.init?.type === "FunctionExpression")
+        ) {
+          registerCandidate(current.id.name, current.init);
+        }
+      },
+      new WeakSet<object>(),
+    );
+  }
+
+  const qualifiedNames = new Map<OxcNode, string>();
+  const containingSymbol = (
+    candidate: OxcNode,
+  ): SymbolAst | { symbol: { name: string }; node: OxcNode } => {
+    const containers = [
+      ...topLevel,
+      ...candidates.map((item) => ({ symbol: { name: item.name }, node: item.node })),
+    ].filter(
+      (item) =>
+        item.node !== candidate &&
+        item.node.start <= candidate.start &&
+        item.node.end >= candidate.end,
+    );
+    containers.sort(
+      (left, right) => left.node.end - left.node.start - (right.node.end - right.node.start),
+    );
+    return containers[0]!;
+  };
+
+  const qualify = (candidate: { name: string; node: OxcNode }): string => {
+    const cached = qualifiedNames.get(candidate.node);
+    if (cached) return cached;
+    const parent = containingSymbol(candidate.node);
+    const parentCandidate = candidates.find((item) => item.node === parent.node);
+    const parentName = parentCandidate ? qualify(parentCandidate) : parent.symbol.name;
+    const qualified = `${parentName}.${candidate.name}`;
+    qualifiedNames.set(candidate.node, qualified);
+    return qualified;
+  };
+
+  return candidates.map((candidate) => {
+    const qualifiedName = qualify(candidate);
+    const bodyNode = candidate.node;
     const startLine = source.slice(0, bodyNode.start).split("\n").length;
     const endLine = source.slice(0, bodyNode.end).split("\n").length;
-    nested.push({
+    return {
       symbol: {
         name: qualifiedName,
         symbolType: "function",
@@ -388,47 +436,8 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
         endLine,
       },
       node: bodyNode,
-    });
-  }
-
-  for (const { symbol, node } of topLevel) {
-    // Walk function and method bodies for nested callable declarations.
-    // Class symbols themselves are not walked here — their methods are
-    // already extracted as separate top-level symbols by extractClassMethods.
-    if (symbol.symbolType !== "function" && symbol.symbolType !== "method") continue;
-    const parentName = symbol.name;
-    const visited = new WeakSet<object>();
-    walkNodes(
-      node,
-      (current: OxcNode) => {
-        if (current === node) return; // skip the root (already a symbol)
-        // Nested FunctionDeclaration — always has an .id Identifier.
-        if (current.type === "FunctionDeclaration" && current.id?.type === "Identifier") {
-          registerNested(current.id.name, current, current, parentName);
-        }
-        // Named FunctionExpression — has an .id Identifier.
-        if (current.type === "FunctionExpression" && current.id?.type === "Identifier") {
-          registerNested(current.id.name, current, current, parentName);
-        }
-        // Arrow function assigned to a const/let/var: `const inner = () => { ... }`
-        // The VariableDeclarator's .init is the ArrowFunctionExpression, and
-        // the binding name comes from .id (the Identifier on the left-hand side).
-        if (
-          current.type === "VariableDeclarator" &&
-          current.id?.type === "Identifier" &&
-          (current.init?.type === "ArrowFunctionExpression" ||
-            current.init?.type === "FunctionExpression")
-        ) {
-          registerNested(current.id.name, current, current.init, parentName);
-        }
-      },
-      visited,
-      // Do NOT skip nested callables here — we want to find ALL of them,
-      // including deeply nested ones. The skip logic only applies to call
-      // extraction, not to symbol discovery.
-    );
-  }
-  return nested;
+    };
+  });
 }
 
 /**

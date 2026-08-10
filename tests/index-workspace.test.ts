@@ -238,6 +238,26 @@ describe("indexWorkspace", () => {
     expect(edgesAfter2).toBe(edgesAfter3);
   });
 
+  it("deduplicates repeated calls within the same function", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "repeated-call.ts"),
+      "function caller() { helper(); helper(); }\nfunction helper() {}\n",
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    const rows = await createWorkspaceRepository(workspaceRoot).queryRaw(
+      `SELECT count(*) AS c
+       FROM graph_edges edge
+       JOIN graph_nodes source ON source.id = edge.from_node_id
+       JOIN graph_nodes target ON target.id = edge.to_node_id
+       WHERE edge.type = 'calls' AND source.label = 'caller' AND target.label = 'helper'`,
+    );
+    expect(Number(rows[0]?.c ?? 0)).toBe(1);
+  });
+
   it("deduplicates imports that resolve to the same file", async () => {
     fs.writeFileSync(
       path.join(workspaceRoot, "target.ts"),
@@ -560,14 +580,14 @@ describe("indexWorkspace", () => {
     await indexWorkspace({ workspaceId: workspace.id });
     await ensureGraphReady(workspace.id);
 
-    // `inner` (nested function) should have a calls edge to `helper`.
+    // `outer.inner` (nested function) should have a calls edge to `helper`.
     const innerNeighbors = await graphNeighbors({
       workspaceId: workspace.id,
-      label: "inner",
+      label: "outer.inner",
       depth: 1,
     });
     expect(innerNeighbors.edges).toContainEqual(
-      expect.objectContaining({ from: "inner", to: "helper", type: "calls" }),
+      expect.objectContaining({ from: "outer.inner", to: "helper", type: "calls" }),
     );
 
     // `Service.run` (class method) should have a calls edge to `helper`.
@@ -614,6 +634,33 @@ describe("indexWorkspace", () => {
     });
     expect(nestedNeighbors.edges).toContainEqual(
       expect.objectContaining({ from: "outer.helper", to: "deep", type: "calls" }),
+    );
+  });
+
+  it("resolves calls from a nested sibling through its parent lexical scope", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "nested-siblings.ts"),
+      [
+        "function outer() {",
+        "  function helper() {}",
+        "  function worker() { helper(); }",
+        "  worker();",
+        "}",
+        "function helper() {}",
+      ].join("\n"),
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    const workerNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer.worker",
+      depth: 1,
+    });
+    expect(workerNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer.worker", to: "outer.helper", type: "calls" }),
     );
   });
 });
