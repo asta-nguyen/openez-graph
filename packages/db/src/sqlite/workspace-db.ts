@@ -380,30 +380,25 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
   }>;
   const embeddingCol = info.find((c) => c.name === "embedding");
   if (embeddingCol && embeddingCol.type.toUpperCase() === "TEXT") {
-    // Legacy TEXT embeddings cannot be used with BLOB cosine search.
-    // Recreate the table as BLOB — old TEXT rows are dropped because they
-    // cannot be converted. A full reindex will regenerate embeddings.
-    console.error(
-      "[openez] Migrating embeddings from TEXT to BLOB — existing embeddings will be dropped, full reindex required.",
-    );
-    sqlite.exec("DROP TABLE embeddings");
-    sqlite.exec(`CREATE TABLE IF NOT EXISTS embeddings (
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL,
-      model TEXT NOT NULL,
-      dimensions INTEGER NOT NULL,
-      embedding BLOB NOT NULL,
-      input_hash TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`);
-    sqlite.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
-    sqlite.exec(
-      "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
-    );
-    sqlite.exec(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
-    );
+    // Legacy TEXT embeddings are preserved — do NOT drop or recreate the
+    // table on every DB open. Instead, record the legacy format in
+    // index_meta so the retrieval layer can skip vector search (defer to
+    // FTS) until an explicit `openez reindex` rebuilds embeddings as BLOB.
+    // The reindex path calls `resetIndexArtifacts()` which drops all rows
+    // and recreates the embeddings table with the current BLOB schema.
+    const existing = sqlite
+      .prepare("SELECT value FROM index_meta WHERE key = 'embedding_format'")
+      .get() as { value: string } | undefined;
+    if (!existing) {
+      sqlite
+        .prepare(
+          "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('embedding_format', 'text')",
+        )
+        .run();
+      console.error(
+        "[openez] Workspace has legacy TEXT embeddings. Vector search is disabled until 'openez reindex <path>' rebuilds them as BLOB.",
+      );
+    }
   }
 }
 

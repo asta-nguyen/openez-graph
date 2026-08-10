@@ -1577,8 +1577,14 @@ export async function buildGraphGeneration(
   for (const call of pendingCallEdges) {
     const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
     if (!callerNodeId) continue;
-    // Resolve call targets first in the caller file, then through the global symbol map
+    // Resolve call targets with lexical scope awareness:
+    // 1. Try qualified name (callerName.calleeName) — handles nested functions
+    //    that shadow top-level symbols (e.g. `two.helper` called from `two`)
+    // 2. Try same-file unqualified name
+    // 3. Try global symbol map (cross-file resolution)
+    const qualifiedName = `${call.callerName}.${call.calleeName}`;
     const calleeNodeId =
+      symbolNodeIdsByFileAndName.get(`${call.filePath}\0${qualifiedName}`) ??
       symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.calleeName}`) ??
       globalSymbolNodes.get(call.calleeName);
     if (!calleeNodeId || callerNodeId === calleeNodeId) continue;

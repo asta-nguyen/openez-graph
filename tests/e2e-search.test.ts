@@ -188,6 +188,7 @@ describe("end-to-end search pipeline", () => {
       workspaceId: "test-e2e",
       query: "authenticate user",
       limit: 5,
+      skipGraphExpand: true,
     });
 
     expect(result.sources.length).toBeGreaterThan(0);
@@ -204,6 +205,7 @@ describe("end-to-end search pipeline", () => {
       workspaceId: "test-e2e",
       query: "zzznomatchxyz",
       limit: 5,
+      skipGraphExpand: true,
     });
 
     expect(result.sources).toHaveLength(0);

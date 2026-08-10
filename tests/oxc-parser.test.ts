@@ -166,9 +166,17 @@ describe("OxcParser", () => {
     expect(names).toContain("helper");
     expect(names).toContain("outer.helper");
     expect(names).toContain("deep");
+    // The call inside outer.helper is attributed to the nested symbol
     expect(result.callExpressions).toContainEqual({
       callerName: "outer.helper",
       calleeName: "deep",
+    });
+    // The call from outer() to helper() — at parser level this is still
+    // `helper`, but graph resolution will prefer `outer.helper` over the
+    // top-level `helper` because of lexical scope (verified in graph tests).
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer",
+      calleeName: "helper",
     });
   });
 });

@@ -153,19 +153,41 @@ function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>)
   addColumnIfMissing("pin_order", "pin_order INTEGER");
   addColumnIfMissing("index_generation", "index_generation INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing("graph_generation", "graph_generation INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing("graph_lease_expires_at", "graph_lease_expires_at TEXT");
 
-  // Invalidate graphs on workspaces that existed before generation tracking.
-  // Both columns default to 0, which would make `graphGeneration === indexGeneration`
-  // true and skip rebuild. Set graph_generation to -1 for any workspace whose
-  // graph was built before generations were tracked (graph_generation = 0 and
-  // graph_status = 'completed'). This forces a rebuild on next access, picking
-  // up parser behavior changes (e.g. oxc nested symbols).
-  if (getColumns().has("graph_generation")) {
+  // One-shot graph invalidation for workspaces that existed before generation
+  // tracking. Uses a migration version marker in a settings-like table so the
+  // backfill only runs once, not on every registry open. Without this, every
+  // restart would re-invalidate graphs that were already rebuilt to generation 0.
+  const ensureMetaTable = () => {
+    sqlite.exec(`CREATE TABLE IF NOT EXISTS registry_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )`);
+  };
+  ensureMetaTable();
+  const getMeta = (key: string): string | null => {
+    const row = sqlite.prepare("SELECT value FROM registry_meta WHERE key = ?").get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  };
+  const setMeta = (key: string, value: string) => {
+    sqlite
+      .prepare("INSERT OR REPLACE INTO registry_meta (key, value) VALUES (?, ?)")
+      .run(key, value);
+  };
+
+  const GRAPH_INVALIDATION_MARKER = "graph_invalidation_v1";
+  if (getColumns().has("graph_generation") && getMeta(GRAPH_INVALIDATION_MARKER) === null) {
+    // Only run once: invalidate old completed graphs (generation 0/0) by
+    // setting graph_generation to -1, forcing a rebuild on next access.
     sqlite
       .prepare(
         "UPDATE workspaces SET graph_generation = -1 WHERE graph_status = 'completed' AND graph_generation = 0 AND index_generation = 0",
       )
       .run();
+    setMeta(GRAPH_INVALIDATION_MARKER, "done");
   }
 
   // Backfill pin_order for pre-existing pinned workspaces that lack it.

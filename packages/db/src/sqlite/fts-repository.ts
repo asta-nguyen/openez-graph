@@ -252,6 +252,10 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
       }
     },
 
+    hasLegacyEmbeddings(): boolean {
+      return deps.getMeta("embedding_format") === "text";
+    },
+
     restoreFtsTriggers(): void {
       // Remove orphaned FTS entries
       native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
@@ -280,9 +284,31 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
     resetIndexArtifacts(): void {
       native.exec("DELETE FROM graph_edges");
       native.exec("DELETE FROM graph_nodes");
-      native.exec("DELETE FROM embeddings");
       native.exec("DELETE FROM chunks");
       native.exec("DELETE FROM documents");
+      // Recreate embeddings table with current BLOB schema. This handles
+      // legacy TEXT embeddings: DROP the old table and CREATE with BLOB
+      // column type so reindex can insert new BLOB embeddings.
+      native.exec("DROP TABLE IF EXISTS embeddings");
+      native.exec(`CREATE TABLE embeddings (
+        id TEXT PRIMARY KEY,
+        chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        dimensions INTEGER NOT NULL,
+        embedding BLOB NOT NULL,
+        input_hash TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`);
+      native.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
+      native.exec(
+        "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
+      );
+      native.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
+      );
+      // Clear legacy embedding format marker so vector search resumes
+      native.exec("DELETE FROM index_meta WHERE key = 'embedding_format'");
     },
   };
 }

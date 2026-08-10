@@ -13,18 +13,28 @@ export interface GraphServiceDeps {
   now(): string;
 }
 
+/** Lease duration: a builder must refresh within this window or lose ownership. */
+const LEASE_DURATION_MS = 30_000;
+/** Max time to wait for another process's build before giving up. */
+const MAX_WAIT_MS = 120_000;
+const POLL_INTERVAL_MS = 200;
+
+function leaseExpiry(): string {
+  return new Date(Date.now() + LEASE_DURATION_MS).toISOString();
+}
+
 export function createGraphService(deps: GraphServiceDeps): {
   ensureGraphReady(workspaceId: string): Promise<void>;
 } {
   // Process-local coalescing: if the same process already has a build in
   // flight for this workspace, attach to that promise rather than starting
   // a second one. Cross-process coordination is handled by the atomic
-  // `tryClaimGraphBuild` CAS in the registry.
+  // `tryClaimGraphBuild` CAS + lease expiry in the registry.
   const graphBuilds = new Map<string, Promise<void>>();
 
   async function ensureGraphReadyInternal(workspaceId: string): Promise<void> {
-    // An index can invalidate while a graph build runs. Retry until the graph
-    // represents the generation that was current when it was published.
+    let waitStart = 0;
+
     for (;;) {
       const workspace = await deps.registry.getWorkspace(workspaceId);
       if (!workspace) throw new Error(`Workspace '${workspaceId}' not found`);
@@ -36,27 +46,48 @@ export function createGraphService(deps: GraphServiceDeps): {
       }
 
       // If another process is already building this graph, wait for it to
-      // finish, then re-check the state. This avoids duplicate builds across
-      // web/MCP/CLI processes that share the same registry DB.
+      // finish or for its lease to expire (then we can takeover).
       if (workspace.graphStatus === "running") {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        continue;
+        if (waitStart === 0) waitStart = Date.now();
+        if (Date.now() - waitStart > MAX_WAIT_MS) {
+          // Stale running status that never cleared — force a claim attempt.
+          // The CAS will succeed if the lease has expired.
+          waitStart = 0;
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+          continue;
+        }
       }
 
       const generation = workspace.indexGeneration;
-      // Atomic claim: only one process can transition to 'running'.
-      const claimed = await deps.registry.tryClaimGraphBuild(workspaceId);
+      // Atomic claim with lease: only one process can transition to 'running',
+      // unless the previous lease expired (takeover from dead process).
+      const claimed = await deps.registry.tryClaimGraphBuild(workspaceId, leaseExpiry());
       if (!claimed) {
-        // Another process just claimed it — wait and retry.
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
         continue;
       }
 
       try {
+        // Build the graph. The build writes directly to live tables, but we
+        // verify the generation is still current before publishing the result.
+        // If index invalidated during the build, we retry with the new generation.
         const counts = await deps.buildGraphGeneration(workspaceId, workspace.rootPath, generation);
+
+        // Re-check: did index invalidate while we were building?
         const current = await deps.registry.getWorkspace(workspaceId);
         if (!current) throw new Error(`Workspace '${workspaceId}' not found`);
-        if (current.indexGeneration !== generation) continue;
+        if (current.indexGeneration !== generation) {
+          // A newer index generation exists — our build is stale. Retry.
+          continue;
+        }
+
+        // Publish: only if we still own the lease.
+        const stillOwner = await deps.registry.refreshGraphBuildLease(workspaceId, leaseExpiry());
+        if (!stillOwner) {
+          // Another process took over — let them handle it.
+          continue;
+        }
 
         await deps.registry.updateWorkspace(workspaceId, {
           graphStatus: "completed",
@@ -101,7 +132,9 @@ const defaultGraphService = createGraphService({
   registry: {
     getWorkspace: (id) => createRegistryRepository().getWorkspace(id),
     updateWorkspace: (id, updates) => createRegistryRepository().updateWorkspace(id, updates),
-    tryClaimGraphBuild: (id) => createRegistryRepository().tryClaimGraphBuild(id),
+    tryClaimGraphBuild: (id, lease) => createRegistryRepository().tryClaimGraphBuild(id, lease),
+    refreshGraphBuildLease: (id, lease) =>
+      createRegistryRepository().refreshGraphBuildLease(id, lease),
   } as RegistryRepository,
   buildGraphGeneration,
   now: () => new Date().toISOString(),
