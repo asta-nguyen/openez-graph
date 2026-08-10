@@ -106,6 +106,28 @@ describe("createWorkspaceRepository", () => {
     expect((await repo.findGraphNode("function", "myFunc"))?.refId).toBe("chunk-2");
   });
 
+  it("atomically rejects graph snapshots from an older fencing epoch", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+
+    expect(
+      repo.replaceGraphArtifacts({
+        buildEpoch: 2,
+        nodes: [{ id: "new-node", type: "file", label: "new.ts", metadata: "{}" }],
+        edges: [],
+      }),
+    ).toBe(true);
+    expect(
+      repo.replaceGraphArtifacts({
+        buildEpoch: 1,
+        nodes: [{ id: "stale-node", type: "file", label: "stale.ts", metadata: "{}" }],
+        edges: [],
+      }),
+    ).toBe(false);
+
+    expect(await repo.findGraphNode("file", "new.ts")).not.toBeNull();
+    expect(await repo.findGraphNode("file", "stale.ts")).toBeNull();
+  });
+
   it("keeps same-named symbols from different chunks separate", async () => {
     const repo = createWorkspaceRepository(tempRoot);
     const first = await repo.upsertGraphNode({ type: "symbol", label: "main", refId: "chunk-1" });

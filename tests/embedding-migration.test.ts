@@ -37,13 +37,16 @@ describe("migrateEmbeddingToBlob", () => {
     db.prepare(
       "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding) VALUES (?, ?, ?, ?, ?, ?)",
     ).run("emb-1", "chunk-1", "ollama", "bge-m3", 3, "[0.1, 0.2, 0.3]");
+    db.prepare(
+      "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run("emb-2", "chunk-1", "ollama", "bge-m3", 3, "[0.4, 0.5, 0.6]");
 
     // Opening the DB must NOT drop the table — legacy data is preserved.
     expect(() => initializeWorkspaceSchema(db)).not.toThrow();
 
     // Data is still there
     const count = db.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number };
-    expect(count.c).toBe(1);
+    expect(count.c).toBe(2);
 
     // Column is still TEXT (not auto-migrated)
     const info = db.prepare("PRAGMA table_info(embeddings)").all() as Array<{
@@ -93,6 +96,7 @@ describe("migrateEmbeddingToBlob", () => {
     db.close();
 
     // reindex path: resetIndexArtifacts recreates the table as BLOB
+    repo.setMeta("graph_build_epoch", "42");
     repo.resetIndexArtifacts();
 
     // Re-open to verify
@@ -109,6 +113,10 @@ describe("migrateEmbeddingToBlob", () => {
       .prepare("SELECT value FROM index_meta WHERE key = 'embedding_format'")
       .get() as { value: string } | null;
     expect(meta).toBeNull();
+    const graphEpoch = db2
+      .prepare("SELECT value FROM index_meta WHERE key = 'graph_build_epoch'")
+      .get() as { value: string } | null;
+    expect(graphEpoch).toBeNull();
 
     // Old data is gone (table was recreated)
     const count = db2.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number };

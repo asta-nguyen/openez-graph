@@ -42,6 +42,7 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     graphStatus: row.graphStatus as RegistryWorkspace["graphStatus"],
     indexGeneration: row.indexGeneration,
     graphGeneration: row.graphGeneration,
+    graphLeaseExpiresAt: row.graphLeaseExpiresAt ?? undefined,
     lastIndexedAt: row.lastIndexedAt ?? undefined,
     lastGraphBuiltAt: row.lastGraphBuiltAt ?? undefined,
     documentCount: row.documentCount,
@@ -250,7 +251,7 @@ export function createRegistryRepository(): RegistryRepository {
         .prepare(
           `UPDATE workspaces
            SET index_generation = index_generation + 1,
-               graph_status = 'pending',
+               graph_status = CASE WHEN graph_status = 'running' THEN 'running' ELSE 'pending' END,
                updated_at = ?
            WHERE id = ?
            RETURNING index_generation`,
@@ -264,7 +265,11 @@ export function createRegistryRepository(): RegistryRepository {
       return Number(row.index_generation);
     },
 
-    async tryClaimGraphBuild(id: string, leaseExpiresAt: string): Promise<boolean> {
+    async tryClaimGraphBuild(
+      id: string,
+      ownerToken: string,
+      leaseExpiresAt: string,
+    ): Promise<number | null> {
       // Atomic compare-and-set: transition to 'running' only if:
       // 1. status is not 'running', OR
       // 2. status is 'running' but the lease has expired (takeover from dead process)
@@ -273,16 +278,23 @@ export function createRegistryRepository(): RegistryRepository {
         .prepare(
           `UPDATE workspaces
            SET graph_status = 'running',
+               graph_build_owner = ?,
+               graph_build_epoch = graph_build_epoch + 1,
                graph_lease_expires_at = ?,
                updated_at = ?
            WHERE id = ?
-             AND (graph_status != 'running' OR graph_lease_expires_at IS NULL OR graph_lease_expires_at < ?)`,
+             AND (graph_status != 'running' OR graph_lease_expires_at IS NULL OR graph_lease_expires_at < ?)
+           RETURNING graph_build_epoch`,
         )
-        .run(leaseExpiresAt, now, id, now) as { changes: number };
-      return result.changes > 0;
+        .get(ownerToken, leaseExpiresAt, now, id, now) as { graph_build_epoch: number } | undefined;
+      return result ? Number(result.graph_build_epoch) : null;
     },
 
-    async refreshGraphBuildLease(id: string, leaseExpiresAt: string): Promise<boolean> {
+    async refreshGraphBuildLease(
+      id: string,
+      ownerToken: string,
+      leaseExpiresAt: string,
+    ): Promise<boolean> {
       // Refresh the lease only if we still own it (status is still 'running'
       // and lease hasn't been taken over). Returns false if another process
       // took over or the graph was completed/failed.
@@ -291,10 +303,45 @@ export function createRegistryRepository(): RegistryRepository {
         .prepare(
           `UPDATE workspaces
            SET graph_lease_expires_at = ?, updated_at = ?
-           WHERE id = ? AND graph_status = 'running'`,
+           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
         )
-        .run(leaseExpiresAt, now, id) as { changes: number };
+        .run(leaseExpiresAt, now, id, ownerToken) as { changes: number };
       return result.changes > 0;
+    },
+
+    async completeGraphBuild(id, ownerToken, generation, result): Promise<boolean> {
+      const update = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_status = 'completed', graph_generation = ?, node_count = ?, edge_count = ?,
+               last_graph_built_at = ?, last_error = '', graph_build_owner = NULL,
+               graph_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?
+             AND index_generation = ?`,
+        )
+        .run(
+          generation,
+          result.nodeCount,
+          result.edgeCount,
+          result.completedAt,
+          new Date().toISOString(),
+          id,
+          ownerToken,
+          generation,
+        ) as { changes: number };
+      return update.changes > 0;
+    },
+
+    async failGraphBuild(id, ownerToken, error): Promise<boolean> {
+      const update = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_status = 'failed', last_error = ?, graph_build_owner = NULL,
+               graph_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
+        )
+        .run(error, new Date().toISOString(), id, ownerToken) as { changes: number };
+      return update.changes > 0;
     },
 
     async deleteWorkspace(id: string): Promise<void> {

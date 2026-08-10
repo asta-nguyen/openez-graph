@@ -1209,16 +1209,14 @@ export async function buildGraphGeneration(
   _workspaceId: string,
   rootPath: string,
   _generation: number,
-): Promise<{ nodeCount: number; edgeCount: number }> {
+  buildEpoch = 0,
+): Promise<{ nodeCount: number; edgeCount: number; published: boolean }> {
   const _graphStart = Date.now();
 
   const repo = createWorkspaceRepository(rootPath);
   const settings = await getBrainSettings();
   const targetTokens = settings.chunking.targetTokens;
   const overlapTokens = settings.chunking.overlapTokens;
-
-  // Clear stale graph artifacts before rebuilding.
-  repo.clearGraphArtifacts();
 
   // Get all documents from DB
   const documents = await repo.listDocuments();
@@ -1228,7 +1226,8 @@ export async function buildGraphGeneration(
 
   if (graphDocs.length === 0) {
     process.stderr.write(`[t] graph-build: 0 docs (${Date.now() - _graphStart}ms)\n`);
-    return { nodeCount: await repo.getNodeCount(), edgeCount: await repo.getEdgeCount() };
+    const published = repo.replaceGraphArtifacts({ buildEpoch, nodes: [], edges: [] });
+    return { nodeCount: 0, edgeCount: 0, published };
   }
 
   // Read file contents
@@ -1446,7 +1445,8 @@ export async function buildGraphGeneration(
 
   if (parsedFiles.size === 0) {
     process.stderr.write(`[t] graph-build: 0 parsed (${Date.now() - _graphStart}ms)\n`);
-    return { nodeCount: await repo.getNodeCount(), edgeCount: await repo.getEdgeCount() };
+    const published = repo.replaceGraphArtifacts({ buildEpoch, nodes: [], edges: [] });
+    return { nodeCount: 0, edgeCount: 0, published };
   }
 
   // ── Build known files set for import resolution ──
@@ -1532,8 +1532,9 @@ export async function buildGraphGeneration(
     _symMeta.push({ filePath, fileNodeIdx, symNodeStart, symCount: symbols.length });
   }
 
-  // Batch insert all nodes
-  const nodeIds = await repo.insertGraphNodesBatch(allNodeInputs);
+  // Generate IDs in memory so nodes and edges can be atomically swapped into
+  // the live graph only after the complete snapshot has been assembled.
+  const nodeIds = allNodeInputs.map(() => crypto.randomUUID());
 
   // ── Build edges ──
   // Maps for node lookup
@@ -1572,7 +1573,11 @@ export async function buildGraphGeneration(
   }
 
   // Call edges
-  const globalSymbolNodes = await repo.loadAllSymbolNodes();
+  const globalSymbolNodes = new Map<string, string>();
+  for (const [key, nodeId] of symbolNodeIdsByFileAndName) {
+    const label = key.slice(key.indexOf("\0") + 1);
+    if (!globalSymbolNodes.has(label)) globalSymbolNodes.set(label, nodeId);
+  }
   const _callMeta = `{"heuristic":true,"confidence":"low"}`;
   for (const call of pendingCallEdges) {
     const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
@@ -1582,11 +1587,21 @@ export async function buildGraphGeneration(
     //    that shadow top-level symbols (e.g. `two.helper` called from `two`)
     // 2. Try same-file unqualified name
     // 3. Try global symbol map (cross-file resolution)
-    const qualifiedName = `${call.callerName}.${call.calleeName}`;
+    const lexicalNames: string[] = [];
+    if (!call.calleeName.includes(".")) {
+      let scope = call.callerName;
+      for (;;) {
+        lexicalNames.push(`${scope}.${call.calleeName}`);
+        const separator = scope.lastIndexOf(".");
+        if (separator < 0) break;
+        scope = scope.slice(0, separator);
+      }
+    }
+    lexicalNames.push(call.calleeName);
     const calleeNodeId =
-      symbolNodeIdsByFileAndName.get(`${call.filePath}\0${qualifiedName}`) ??
-      symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.calleeName}`) ??
-      globalSymbolNodes.get(call.calleeName);
+      lexicalNames
+        .map((name) => symbolNodeIdsByFileAndName.get(`${call.filePath}\0${name}`))
+        .find((id): id is string => Boolean(id)) ?? globalSymbolNodes.get(call.calleeName);
     if (!calleeNodeId || callerNodeId === calleeNodeId) continue;
     allEdges.push({
       fromNodeId: callerNodeId,
@@ -1596,16 +1611,20 @@ export async function buildGraphGeneration(
     });
   }
 
-  // Batch insert all edges in one transaction
-  await repo.transaction(async () => {
-    await repo.insertEdges(allEdges);
+  const uniqueEdges = [
+    ...new Map(
+      allEdges.map((edge) => [`${edge.fromNodeId}\0${edge.toNodeId}\0${edge.type}`, edge]),
+    ).values(),
+  ];
+  const published = repo.replaceGraphArtifacts({
+    buildEpoch,
+    nodes: allNodeInputs.map((node, index) => ({ ...node, id: nodeIds[index] })),
+    edges: uniqueEdges.map((edge) => ({ ...edge, id: crypto.randomUUID() })),
   });
 
   process.stderr.write(
-    `[t] graph-build: ${Date.now() - _graphStart}ms (${parsedFiles.size} files, ${allNodeInputs.length} nodes, ${allEdges.length} edges)\n`,
+    `[t] graph-build: ${Date.now() - _graphStart}ms (${parsedFiles.size} files, ${allNodeInputs.length} nodes, ${uniqueEdges.length} edges)\n`,
   );
 
-  const nodeCount = await repo.getNodeCount();
-  const edgeCount = await repo.getEdgeCount();
-  return { nodeCount, edgeCount };
+  return { nodeCount: allNodeInputs.length, edgeCount: uniqueEdges.length, published };
 }

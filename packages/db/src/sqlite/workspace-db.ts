@@ -247,8 +247,8 @@ export function initializeWorkspaceSchema(
 
     migrateQueryLogColumns(sqlite);
     migrateEmbeddingColumns(sqlite);
-    migrateEmbeddingDedup(sqlite);
     migrateEmbeddingToBlob(sqlite);
+    migrateEmbeddingDedup(sqlite);
 
     const hasParsedDocs =
       (
@@ -294,8 +294,8 @@ export function initializeWorkspaceSchema(
   sqlite.exec(getFullWorkspaceDdl());
   migrateQueryLogColumns(sqlite);
   migrateEmbeddingColumns(sqlite);
-  migrateEmbeddingDedup(sqlite);
   migrateEmbeddingToBlob(sqlite);
+  migrateEmbeddingDedup(sqlite);
 
   // Create FTS triggers — getFullWorkspaceDdl creates the chunks_fts table but
   // not the triggers that auto-populate it on INSERT/DELETE/UPDATE.
@@ -336,6 +336,11 @@ function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>
 }
 
 function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const embeddingColumn = (
+    sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string; type: string }>
+  ).find((column) => column.name === "embedding");
+  if (embeddingColumn?.type.toUpperCase() === "TEXT") return;
+
   // Ensure the provider/model/hash lookup index exists for fast duplicate detection.
   sqlite.exec(
     "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",

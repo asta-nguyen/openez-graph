@@ -212,6 +212,49 @@ describe("createRegistryRepository", () => {
     expect(updated?.documentCount).toBe(42);
   });
 
+  it("fences stale graph builders by owner token and monotonically increasing epoch", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+
+    const firstEpoch = await repo.tryClaimGraphBuild("ws1", "owner-a", "2026-08-10T00:00:00.000Z");
+    const secondEpoch = await repo.tryClaimGraphBuild("ws1", "owner-b", "2099-08-10T00:00:00.000Z");
+
+    expect(firstEpoch).toBe(1);
+    expect(secondEpoch).toBe(2);
+    expect(await repo.refreshGraphBuildLease("ws1", "owner-a", "2099-08-10T00:00:00.000Z")).toBe(
+      false,
+    );
+    expect(
+      await repo.completeGraphBuild("ws1", "owner-a", 0, {
+        nodeCount: 99,
+        edgeCount: 99,
+        completedAt: "2026-08-10T00:00:00.000Z",
+      }),
+    ).toBe(false);
+    expect(
+      await repo.completeGraphBuild("ws1", "owner-b", 0, {
+        nodeCount: 2,
+        edgeCount: 1,
+        completedAt: "2026-08-10T00:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps an active graph owner while indexing invalidates its generation", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+    await repo.tryClaimGraphBuild("ws1", "owner-a", "2099-08-10T00:00:00.000Z");
+
+    await repo.invalidateWorkspaceGraph("ws1");
+
+    const workspace = await repo.getWorkspace("ws1");
+    expect(workspace?.graphStatus).toBe("running");
+    expect(workspace?.indexGeneration).toBe(1);
+    expect(await repo.refreshGraphBuildLease("ws1", "owner-a", "2099-08-10T00:00:00.000Z")).toBe(
+      true,
+    );
+  });
+
   it("deleteWorkspace removes the workspace", async () => {
     const repo = createRegistryRepository();
     await repo.createWorkspace({

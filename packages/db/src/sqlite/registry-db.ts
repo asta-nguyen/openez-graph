@@ -23,6 +23,9 @@ export function getRegistryDdl(): string {
       graph_status TEXT NOT NULL DEFAULT 'pending',
       index_generation INTEGER NOT NULL DEFAULT 0,
       graph_generation INTEGER NOT NULL DEFAULT 0,
+      graph_build_owner TEXT,
+      graph_build_epoch INTEGER NOT NULL DEFAULT 0,
+      graph_lease_expires_at TEXT,
       last_indexed_at TEXT,
       last_graph_built_at TEXT,
       document_count INTEGER NOT NULL DEFAULT 0,
@@ -153,6 +156,8 @@ function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>)
   addColumnIfMissing("pin_order", "pin_order INTEGER");
   addColumnIfMissing("index_generation", "index_generation INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing("graph_generation", "graph_generation INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing("graph_build_owner", "graph_build_owner TEXT");
+  addColumnIfMissing("graph_build_epoch", "graph_build_epoch INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing("graph_lease_expires_at", "graph_lease_expires_at TEXT");
 
   // One-shot graph invalidation for workspaces that existed before generation
