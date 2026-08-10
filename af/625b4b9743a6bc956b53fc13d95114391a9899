@@ -1,0 +1,81 @@
+tests/graph-lifecycle.test.ts
+  s_fb4f32c665b8c6::t_91d766fb52dc5d 151,162,167
+tests/embedding-migration.test.ts
+  s_fb4f32c665b8c6::t_e644da4ce8fa0c 110-111
+  s_fb4f32c665b8c6::t_71ba757dad5c7f 68-78,93,98-100,108,114,116-117
+  s_fb4f32c665b8c6::t_d4f3298269c250 23,41,44-48,54-67,79-92,94-97,107,109,113
+  s_fb4f32c665b8c6::t_3528803f7c66a0 101-104,112
+docs/superpowers/plans/2026-08-09-rag-flow-correctness-remediation.md
+  s_d405640fc9c957::t_1d247544300f78 26-50,95-97,107-116,447,518,632-635
+  s_d405640fc9c957::t_0f630f86cfca07 1-25,51-75,91-94,98-106,117-300,302-324,343-429,449-512,514,527-610,612-614,627-631,636-676,682-785
+  s_d405640fc9c957::t_deade469d59eaa 76-90,301,325-342,430-446,448,513,515-517,519-526,611,615-626,677-681
+packages/indexer/src/graph-service.ts
+  s_fb4f32c665b8c6::t_b6905bed432918 16-25,32,36-37,49,51-59,63-65,67,72-74,76-77,80-90,135-137
+packages/indexer/src/index-workspace.ts
+  s_fb4f32c665b8c6::t_c3edcd9a87b76d 1580-1585,1587
+packages/db/src/sqlite/fts-repository.ts
+  s_fb4f32c665b8c6::t_b9d6a999e132d6 289-311
+  s_fb4f32c665b8c6::t_ee46b976d513ca 255-258
+packages/db/src/sqlite/workspace-db.ts
+  s_fb4f32c665b8c6::t_0e018f175144fe 383-399
+  s_fb4f32c665b8c6::t_2ecff0084283ae 400-401
+packages/core/src/retrieval.ts
+  s_fb4f32c665b8c6::t_f2477f3373834a 89-95
+  s_fb4f32c665b8c6::t_769450af204f73 299-303
+  s_fb4f32c665b8c6::t_99b8417ea2b6c5 305
+  s_fb4f32c665b8c6::t_495faf650fb411 255,259
+  s_fb4f32c665b8c6::t_44259c6b66a040 256-258
+tests/e2e-search.test.ts
+  s_fb4f32c665b8c6::t_83e4c6d102a764 208
+  s_fb4f32c665b8c6::t_841e734b215340 191
+sol-review.md
+  s_d405640fc9c957::t_0f630f86cfca07 321-326
+  s_d405640fc9c957::t_1d247544300f78 393-404
+  s_6ce5be3eed0fbe::t_e497d2b37929f4 1-320,327-392,405-426
+tests/index-workspace.test.ts
+  s_fb4f32c665b8c6::t_f2acd154b20195 583-618
+packages/db/src/sqlite/registry-repository.ts
+  s_fb4f32c665b8c6::t_7f7508173e7cb8 267-289,293-294,296
+tests/oxc-parser.test.ts
+  s_fb4f32c665b8c6::t_3348eb95df0875 169,174-179
+  s_fb4f32c665b8c6::t_fe33bb388c172c 180
+packages/db/src/sqlite/registry-db.ts
+  s_fb4f32c665b8c6::t_8a6827629e085c 158-179,181-184,190
+  s_fb4f32c665b8c6::t_22d03083b15a26 156
+  s_fb4f32c665b8c6::t_99a4ccfb2bf272 157
+packages/db/src/sqlite/types.ts
+  s_fb4f32c665b8c6::t_5d543704b8eb81 505-510
+  s_fb4f32c665b8c6::t_d1f82d60c8fde8 81-85,87-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "af625b4b9743a6bc956b53fc13d95114391a9899",
+  "prompts": {},
+  "sessions": {
+    "s_6ce5be3eed0fbe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd81d-f4b3-7bc3-8de2-006b924cf03a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_d405640fc9c957": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd9f3-09db-7420-972b-855e6a3ba333",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": null
+    },
+    "s_fb4f32c665b8c6": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fragrant-bugle",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
