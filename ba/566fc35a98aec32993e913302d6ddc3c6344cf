@@ -1,0 +1,188 @@
+packages/core/src/retrieval.ts
+  s_345d52b8a6bfe3::t_4d32a835f505b1 262
+  s_345d52b8a6bfe3::t_36ca6696b837a7 145
+apps/cli/src/setup-claude.ts
+  s_345d52b8a6bfe3::t_784b2970cfecd9 6,59,65
+apps/web/src/server/index.ts
+  s_345d52b8a6bfe3::t_39da82c57466c6 571,589,591,605
+tests/oxc-parser.test.ts
+  s_345d52b8a6bfe3::t_26b3301783c16c 188-254
+apps/web/src/lib/api.ts
+  s_345d52b8a6bfe3::t_8fb35d8fdf1178 178
+  s_345d52b8a6bfe3::t_39da82c57466c6 271
+packages/indexer/src/embed-workspace.ts
+  s_345d52b8a6bfe3::t_23059562d8ba72 5,201
+  s_345d52b8a6bfe3::t_adfecf527f06f7 1-4,7,9-16,18-27,158-200,202-217,219-228
+  s_345d52b8a6bfe3::t_b22cc90655c369 28-96,107-127,132-157
+  s_345d52b8a6bfe3::t_f3905bf71c8373 97-106,128-131
+  s_345d52b8a6bfe3::t_c67778a041b7ea 218
+  s_345d52b8a6bfe3::t_aa3a373aa6c8db 6,8,17
+packages/db/src/sqlite/workspace-repository.ts
+  s_adc086c2e1d15b::t_c982db003e2e2c 80-87
+  s_adc086c2e1d15b::t_6dcf2d2ae98a11 79,88
+  s_adc086c2e1d15b::t_f73945b9636cf4 29-41
+CHANGELOG.md
+  s_aea4f934248459::t_a7da8181c09e37 8-39,269
+tests/hybrid-retrieval.test.ts
+  s_345d52b8a6bfe3::t_00607ef1185d3b 37,54-70
+tests/mcp-tools.test.ts
+  s_345d52b8a6bfe3::t_a2454f2f2396d7 85-100
+packages/core/src/local-embedding.ts
+  s_345d52b8a6bfe3::t_88156ea07ab45a 206
+  s_345d52b8a6bfe3::t_73dfe4c25b29dd 4,127,129-132,134-137,180,193
+  s_345d52b8a6bfe3::t_008e17880a1b81 1-3,5-6,8-14,16-120,124-126,128,133,138-144,146-179,181-191,194-205,207
+  s_345d52b8a6bfe3::t_23206fa4795e66 121-123,192
+  s_345d52b8a6bfe3::t_d67fd90c2f0e33 7,145
+  s_345d52b8a6bfe3::t_85900e9d9f14c3 15
+tests/embed-workspace.test.ts
+  s_345d52b8a6bfe3::t_bcbf5e0b8f10ce 1-4,6-10,12,15-16,27-31,34-54,96,112,117
+  s_345d52b8a6bfe3::t_53d1244219e1ce 102,106
+  s_345d52b8a6bfe3::t_1b813ac98f3161 5,11,13-14,17-26,32-33,55-95,97-100,103-105,107-111,113-116
+  s_345d52b8a6bfe3::t_4ad2d171cc2518 101
+packages/core/src/embeddings.ts
+  s_345d52b8a6bfe3::t_1117ce64372abd 198
+  s_345d52b8a6bfe3::t_95ab740f77b078 7,62,171,224-225
+  s_345d52b8a6bfe3::t_23206fa4795e66 199-201
+  s_345d52b8a6bfe3::t_4f325ffc72f87d 226-227
+packages/indexer/src/parsers/oxc-parser.ts
+  s_345d52b8a6bfe3::t_1e64904561d87d 237,242,247-249,255-257,271,275-277,299-301,306-311,319
+tests/setup-instructions.test.ts
+  s_345d52b8a6bfe3::t_4b269aba4f403c 30-31,38-39,46-47,54-55,62-63,69-71,73,75-77,79,81-82,86,103-104,117
+  s_345d52b8a6bfe3::t_5386abaad2420b 34
+  s_345d52b8a6bfe3::t_fbe66ec7b7da02 74
+  s_345d52b8a6bfe3::t_5e2b08f7d1de81 72,78,80
+  s_345d52b8a6bfe3::t_2fe8d4a4539242 88
+  s_345d52b8a6bfe3::t_544b1c62efc285 1-29,32-33,35-37,40-45,48-53,56-61,64-68,83-85,87,89-102,105-116,118-125
+tests/fixtures/retrieval-eval.json
+  s_345d52b8a6bfe3::t_94893e9981909c 34
+  s_345d52b8a6bfe3::t_6b22d07f7dbd56 47
+tests/index-workspace.test.ts
+  s_345d52b8a6bfe3::t_b113bcf6534757 326-358
+  s_345d52b8a6bfe3::t_c4d963df61e36b 41-54
+  s_345d52b8a6bfe3::t_26b3301783c16c 726-757
+  s_345d52b8a6bfe3::t_ed5f2e841846f2 359-371,758
+packages/core/src/index.ts
+  s_345d52b8a6bfe3::t_d5cd1f8e320ca6 2
+apps/cli/src/setup-opencode.ts
+  s_345d52b8a6bfe3::t_784b2970cfecd9 6,59,65
+docs/research/distill-publish-jina-code-static-256.md
+  s_345d52b8a6bfe3::t_3d16a583e85703 37-40,54
+  s_345d52b8a6bfe3::t_3798b0470c76f1 19-26
+  s_345d52b8a6bfe3::t_42ab863def0c5e 1-18,27-36,41-53,55-339
+apps/cli/README.md
+  s_345d52b8a6bfe3::t_85c3010b0ba4fe 121,123-125,129,136
+  s_345d52b8a6bfe3::t_bffc050749d5d1 64,82,135,137-141
+  s_345d52b8a6bfe3::t_d30868fe9d848a 126
+  s_345d52b8a6bfe3::t_8c1b44602a58b4 120,127
+  s_345d52b8a6bfe3::t_c45f8ce9bbe301 21
+tests/embed-benchmark.test.ts
+  s_aea4f934248459::t_b8ef72c7fe1fb7 70-73
+  s_345d52b8a6bfe3::t_669065ee11ba8c 89-92,97
+  s_345d52b8a6bfe3::t_23206fa4795e66 93-96
+  s_345d52b8a6bfe3::t_94893e9981909c 5,7-14,16-28,32-38,40,43,46-52,54,57-60,63,65,68-69,75,78,81-88,99,102,114-118,121-122,125-126,129-130,132-135,138-140,142-156,158
+  s_aea4f934248459::t_e2c8ffb2589c7b 111
+  s_345d52b8a6bfe3::t_6529db1220ffa0 15,103-108
+  s_345d52b8a6bfe3::t_2fe8d4a4539242 29-31,66-67
+apps/cli/src/cli.ts
+  s_345d52b8a6bfe3::t_e00cfa30106775 17,123-136,140-158,447,469,492,516-517
+  s_345d52b8a6bfe3::t_23206fa4795e66 137-139
+.gitignore
+  s_345d52b8a6bfe3::t_82beca694b87ed 25,30
+  s_174c9f0a5ee962::t_fc8f4ce4e8d919 26-29
+apps/mcp/src/mcp-core.ts
+  s_345d52b8a6bfe3::t_f54582806f1c40 473-474,491
+apps/cli/package.json
+  s_aea4f934248459::t_67c3a8531c5810 3
+apps/web/src/routes/settings.tsx
+  s_345d52b8a6bfe3::t_39da82c57466c6 115,125,152-154,182,259-276,282
+tests/retrieval-eval.test.ts
+  s_345d52b8a6bfe3::t_2fe8d4a4539242 53-54
+  s_345d52b8a6bfe3::t_6b22d07f7dbd56 1-4,7-14,38-52,55-123
+packages/indexer/src/index-workspace.ts
+  s_345d52b8a6bfe3::t_f7b6d254861c3c 604
+  s_345d52b8a6bfe3::t_fe4748328acd0a 913
+  s_345d52b8a6bfe3::t_6f5d638edd61bf 804,872,933-934
+  s_345d52b8a6bfe3::t_994e12750c8d12 7
+  s_345d52b8a6bfe3::t_4d32a835f505b1 492,502-504,599,639,863,974
+apps/cli/src/setup-windsurf.ts
+  s_345d52b8a6bfe3::t_784b2970cfecd9 6,58,64
+README.md
+  s_345d52b8a6bfe3::t_d30868fe9d848a 105
+  s_345d52b8a6bfe3::t_8c1b44602a58b4 106,108
+  s_345d52b8a6bfe3::t_bffc050749d5d1 63,120-124,138,148
+  s_345d52b8a6bfe3::t_23206fa4795e66 136-137,139-144
+  s_345d52b8a6bfe3::t_85c3010b0ba4fe 93,100,102-104,109
+package.json
+  s_345d52b8a6bfe3::t_06b9d78fe15365 22
+  s_345d52b8a6bfe3::t_94893e9981909c 21
+tests/local-embedding.test.ts
+  s_345d52b8a6bfe3::t_23206fa4795e66 31-34
+  s_345d52b8a6bfe3::t_d1607e65b68bf2 1-30,35-46
+apps/cli/src/setup-devin.ts
+  s_345d52b8a6bfe3::t_784b2970cfecd9 6,58,64
+packages/indexer/src/index.ts
+  s_345d52b8a6bfe3::t_d9c5e046597459 2
+docs/superpowers/plans/2026-08-10-local-embedding-cli.md
+  s_345d52b8a6bfe3::t_23206fa4795e66 62,65,97,100,128,132,142,145,181,184,214,217
+  s_345d52b8a6bfe3::t_24a8b58b5b5299 1-61,63-64,66-96,98-99,101-127,129-131,133-141,143-144,146-180,182-183,185-213,215-216
+packages/core/package.json
+  s_345d52b8a6bfe3::t_752a752fe8072c 11
+tests/e2e-search.test.ts
+  s_345d52b8a6bfe3::t_e7e0cc12ec8b92 217-229
+  s_345d52b8a6bfe3::t_b113bcf6534757 215-216,230-251
+docs/research/hugging-face-model-hosting-limits.md
+  s_345d52b8a6bfe3::t_9578080e569ba4 1-34
+apps/cli/src/setup-codex.ts
+  s_345d52b8a6bfe3::t_784b2970cfecd9 6,64,70
+apps/cli/src/setup-instructions.ts
+  s_345d52b8a6bfe3::t_784b2970cfecd9 1-28,33-36
+  s_345d52b8a6bfe3::t_2fe8d4a4539242 29-32
+BENCHMARK.md
+  s_345d52b8a6bfe3::t_85c3010b0ba4fe 1,3-4,10-12,14,17,20-21,23,25-27,29-30,33,35-37,39,49-50
+  s_345d52b8a6bfe3::t_d3b170bbb47e12 41,43-46
+  s_345d52b8a6bfe3::t_8c1b44602a58b4 9,31
+  s_345d52b8a6bfe3::t_d30868fe9d848a 28
+  s_345d52b8a6bfe3::t_5a382f001d05fa 47
+pnpm-lock.yaml
+  s_345d52b8a6bfe3::t_c615a02dea5399 320-322,952-954,5236-5237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ba566fc35a98aec32993e913302d6ddc3c6344cf",
+  "prompts": {},
+  "sessions": {
+    "s_174c9f0a5ee962": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "c84226bc-fa80-4ec0-a37a-31ea10cff89c",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_345d52b8a6bfe3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe992-ad1f-7791-bbdd-c412d8baf651",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_adc086c2e1d15b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "indecisive-digestion",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_aea4f934248459": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "a6dd7e9f-c45f-4ed0-ad06-92e1974b41e0",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
