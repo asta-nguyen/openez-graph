@@ -1,0 +1,61 @@
+apps/cli/src/setup-instructions.ts
+  s_345d52b8a6bfe3::t_4b0c2ca908c720 51-55
+packages/indexer/src/parsers/oxc-parser.ts
+  s_345d52b8a6bfe3::t_4b0c2ca908c720 183,185-186,212-213,299-301,316-326
+apps/web/src/server/index.ts
+  s_345d52b8a6bfe3::t_bee671665d57d8 621
+  s_345d52b8a6bfe3::t_4b0c2ca908c720 48,610-616
+  s_73ea12894aa36f::t_fd665747b397a4 617-620
+apps/web/src/routes/settings.tsx
+  s_345d52b8a6bfe3::t_4b0c2ca908c720 116-118,128-132
+apps/web/src/routes/workspaces/$workspaceId/index.tsx
+  s_345d52b8a6bfe3::t_d65505642d32af 28,65-74,126,198,200-203,220-235
+  s_345d52b8a6bfe3::t_e1ee5e1d7397e6 199
+  s_345d52b8a6bfe3::t_6e0b01755598a5 14,32-33
+  s_345d52b8a6bfe3::t_2d742ca4276ce0 236
+tests/setup-instructions.test.ts
+  s_345d52b8a6bfe3::t_8fe5302d2e4fd0 135-142
+packages/core/src/local-embedding.ts
+  s_345d52b8a6bfe3::t_daf83e3bd88031 30-35,45,105-106,230
+docs/superpowers/plans/2026-08-09-rag-flow-correctness-remediation.md
+  s_345d52b8a6bfe3::t_4b0c2ca908c720 424
+tests/oxc-parser.test.ts
+  s_345d52b8a6bfe3::t_8fe5302d2e4fd0 232,240,242-244,246-247,261,263-265,268,272-275
+tests/graph-lifecycle.test.ts
+  s_345d52b8a6bfe3::t_a2fd28ab158aef 305,310,325
+  s_345d52b8a6bfe3::t_8fe5302d2e4fd0 301,320
+tests/local-embedding.test.ts
+  s_345d52b8a6bfe3::t_daf83e3bd88031 164
+  s_345d52b8a6bfe3::t_0cfbdcaf02e239 4,6,141,147-148,150-151
+  s_345d52b8a6bfe3::t_8fe5302d2e4fd0 16,161-163,165-166
+packages/indexer/src/graph-service.ts
+  s_345d52b8a6bfe3::t_4b0c2ca908c720 124
+tests/web-index-endpoint.test.ts
+  s_345d52b8a6bfe3::t_386cad7d8c4fe0 121-132
+  s_345d52b8a6bfe3::t_2af97b45f1cd6a 73-83
+  s_345d52b8a6bfe3::t_278d91bcce54a2 107-120,133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "9330f6837af0041b661e80f0dc5a595de6f6f651",
+  "prompts": {},
+  "sessions": {
+    "s_345d52b8a6bfe3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe992-ad1f-7791-bbdd-c412d8baf651",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_73ea12894aa36f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019feef1-265d-7c70-a908-af44c6888aef",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
