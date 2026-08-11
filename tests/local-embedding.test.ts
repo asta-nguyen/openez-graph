@@ -199,7 +199,7 @@ describe("ensureLocalEmbeddingCache", () => {
       return Promise.resolve(
         new Response(new Uint8Array([0xde, 0xad, 0xbe, 0xef]), { status: 200 }),
       );
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await expect(ensureLocalEmbeddingCache(LOCAL_EMBEDDING_MODEL, cacheRoot)).rejects.toThrow(
       /checksum mismatch|Model download failed/,
@@ -214,7 +214,7 @@ describe("ensureLocalEmbeddingCache", () => {
     globalThis.fetch = (() => {
       calls += 1;
       return Promise.resolve(new Response(null, { status: 503 }));
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await expect(ensureLocalEmbeddingCache(LOCAL_EMBEDDING_MODEL, cacheRoot)).rejects.toThrow(
       /503/,
@@ -227,7 +227,7 @@ describe("ensureLocalEmbeddingCache", () => {
     globalThis.fetch = (() => {
       calls += 1;
       return Promise.resolve(new Response(null, { status: 404 }));
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await expect(ensureLocalEmbeddingCache(LOCAL_EMBEDDING_MODEL, cacheRoot)).rejects.toThrow(
       /404/,
