@@ -1,0 +1,27 @@
+packages/db/src/sqlite/registry-repository.ts
+  s_5bc8e9e818017b::t_935c436ec5ed39 335-337
+  s_5bc8e9e818017b::t_f761c375c11779 522
+  s_5bc8e9e818017b::t_8f00ff165f698d 80
+docs/superpowers/plans/2026-08-11-enhance-merge-readiness.md
+  s_5bc8e9e818017b::t_9c443b095058aa 374-375
+packages/indexer/src/index-workspace.ts
+  s_5bc8e9e818017b::t_a8eebc3719efab 938,945-949
+tests/mcp-tools.test.ts
+  s_5bc8e9e818017b::t_4d8aab9078ca5c 238-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ed7e653f836681ff8322c71178826507f6c63e99",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
