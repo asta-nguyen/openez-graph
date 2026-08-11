@@ -1,0 +1,33 @@
+apps/mcp/src/mcp-core.ts
+  s_5bc8e9e818017b::t_9ec28c1c65450e 285-299
+packages/core/src/retrieval.ts
+  s_5bc8e9e818017b::t_fa0b3354900b3c 145-156
+packages/db/src/sqlite/registry-db.ts
+  s_5bc8e9e818017b::t_45ec317c809699 13-22,24-117
+  s_5bc8e9e818017b::t_390b1fbf3409b0 23
+  s_5bc8e9e818017b::t_27f97d8f11c674 186,239
+packages/db/src/sqlite/index.ts
+  s_5bc8e9e818017b::t_90efbe4d46a730 6,8
+apps/web/src/server/sqlite.ts
+  s_5bc8e9e818017b::t_51c82ef5b0bf3b 161-164,166
+  s_5bc8e9e818017b::t_8d786ada47ca82 6
+packages/core/src/local-embedding.ts
+  s_5bc8e9e818017b::t_132aae64f06377 219-220
+  s_5bc8e9e818017b::t_ce3ac107e5a63a 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d2ffd2b572e44d63c7e8d9e1659c42657e47e6fa",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
