@@ -1,0 +1,25 @@
+apps/web/src/server/sqlite.ts
+  s_5bc8e9e818017b::t_9ba127101c5d3c 257-260
+  s_5bc8e9e818017b::t_39af1b5a876cde 6-7
+  s_5bc8e9e818017b::t_b4ff8221cb74bb 191-195
+  s_5bc8e9e818017b::t_35cfab057ff8e6 161-163
+packages/db/src/sqlite/index.ts
+  s_5bc8e9e818017b::t_dddcf18ac0653d 1-2
+  s_5bc8e9e818017b::t_864e3eb8751cd1 3-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9a8309960c2127731304f61133ec4365a89ffbbe",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
