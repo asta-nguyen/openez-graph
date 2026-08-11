@@ -1,0 +1,34 @@
+tests/oxc-parser.test.ts
+  s_345d52b8a6bfe3::t_87aee8df818b2a 335-361
+  s_345d52b8a6bfe3::t_51344687848d00 362-391
+README.md
+  s_36d874c2da60f9::t_e5187cc478b473 7
+packages/indexer/src/parsers/oxc-parser.ts
+  s_345d52b8a6bfe3::t_94f0d0cdf3668b 421-422,455-457,496
+  s_345d52b8a6bfe3::t_6974a46c3ff6f9 42,361,376-380,480,482-485,491-495,523
+  s_345d52b8a6bfe3::t_8315e6a9229687 481,486-490
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9798d54ad6baf2db01e9096e2fb10bc5569c0995",
+  "prompts": {},
+  "sessions": {
+    "s_345d52b8a6bfe3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe992-ad1f-7791-bbdd-c412d8baf651",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_36d874c2da60f9": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fa10b615-65be-4843-b107-ed7e3cf7da1d",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
