@@ -1,0 +1,21 @@
+tests/hybrid-retrieval.test.ts
+  s_6989a0f8b1a17d::t_f73a3eac555cc2 54,56-57,68
+packages/core/src/retrieval.ts
+  s_6989a0f8b1a17d::t_bf88cec577fdad 143-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ec81f9c7ac8e00fd65267f575bf718b1a8dd231c",
+  "prompts": {},
+  "sessions": {
+    "s_6989a0f8b1a17d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff124-e325-7a73-8707-394943f19b65",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
