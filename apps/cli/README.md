@@ -23,7 +23,7 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 - **Multi-workspace** — register and query across multiple codebases
 - **Code graph** — symbols, files, chunks, and edges (calls, imports, contains)
 - **Web dashboard** — built-in graph explorer and workspace management UI
-- **Auto-sync** — file watcher re-indexes on changes (250ms debounce)
+- **Auto-sync** — file watcher re-indexes on changes (2s debounce)
 
 ## Install
 
@@ -101,7 +101,7 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 2. When Claude Code starts, it launches the MCP server via `openez serve --mcp`
 3. The MCP server auto-registers the current project as a workspace
 4. It auto-indexes if the workspace has no documents yet
-5. It watches for file changes and re-indexes automatically (250ms debounce)
+5. It watches for file changes and re-indexes automatically (2s debounce)
 6. All data is stored in `<project>/.openez/index.sqlite` — local, portable, gitignored
 
 ## Supported languages
