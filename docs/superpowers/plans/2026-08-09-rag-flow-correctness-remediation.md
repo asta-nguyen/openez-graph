@@ -744,6 +744,8 @@ pnpm typecheck
 pnpm format:check
 pnpm build:web
 pnpm build:cli
+bun apps/cli/dist/cli.cjs --version
+bun apps/cli/dist/cli.cjs --help
 ```
 
 Expected: every command exits 0.
@@ -753,8 +755,8 @@ Expected: every command exits 0.
 In a temporary workspace containing two related TypeScript files:
 
 ```bash
-node apps/cli/dist/cli.cjs init <temp-path>
-node apps/cli/dist/cli.cjs status <temp-path>
+bun apps/cli/dist/cli.cjs init <temp-path>
+bun apps/cli/dist/cli.cjs status <temp-path>
 ```
 
 Start the freshly built MCP server, call only `code_query` for a symbol near the end of a long chunk, and assert the result is returned and graph node count becomes non-zero. Restart MCP, rename the symbol, run incremental index, call `code_query` again, and assert the old symbol is absent and the new symbol is present.

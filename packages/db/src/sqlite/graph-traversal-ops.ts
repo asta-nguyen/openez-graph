@@ -93,12 +93,18 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
       }>;
     }): boolean {
       let replaced = false;
+      if (!Number.isFinite(input.buildEpoch)) {
+        throw new Error("Invalid graph build epoch");
+      }
       native.exec("BEGIN IMMEDIATE");
       try {
         const epochRow = native
           .prepare("SELECT value FROM index_meta WHERE key = 'graph_build_epoch'")
           .get() as { value: string } | undefined;
         const currentEpoch = epochRow ? Number(epochRow.value) : -1;
+        if (epochRow && !Number.isFinite(currentEpoch)) {
+          throw new Error("Invalid stored graph build epoch");
+        }
         if (Number.isFinite(currentEpoch) && currentEpoch > input.buildEpoch) {
           native.exec("COMMIT");
           return false;

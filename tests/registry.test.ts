@@ -97,14 +97,18 @@ describe("createRegistryRepository", () => {
     const columnsAfterFirstOpen = firstInspection
       .prepare("PRAGMA table_info(workspaces)")
       .all() as Array<{ name: string }>;
-    firstInspection.close();
     expect(columnsAfterFirstOpen.map((column) => column.name)).toEqual(
       expect.arrayContaining(["index_generation", "graph_generation"]),
     );
+    firstInspection
+      .prepare("UPDATE workspaces SET graph_generation = 0 WHERE id = ?")
+      .run("legacy-ws");
+    firstInspection.close();
     closeRegistryDb();
 
     const reopened = await createRegistryRepository().getWorkspace("legacy-ws");
-    expect(reopened).toMatchObject(expectedWorkspace);
+    expect(reopened).toMatchObject({ ...expectedWorkspace, graphGeneration: 0 });
+    expect(reopened?.graphGeneration).toBe(0);
     const secondInspection = createNativeDatabase(dbPath);
     const columnsAfterReopen = secondInspection
       .prepare("PRAGMA table_info(workspaces)")

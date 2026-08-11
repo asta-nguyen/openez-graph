@@ -138,8 +138,8 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
     process.env.EMBEDDING_PROVIDER = "none";
     closeRegistryDb();
     closeAllWorkspaceDbs();
-    // Force the native parser to resolve as unavailable so native-language
-    // docs are served from the fallback-v1 cache instead of native-v1.
+    // Clear the memoized native-parser capability so the test observes the
+    // current environment.
     resetNativeParserCache();
   });
 
@@ -154,8 +154,7 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
   });
 
   test("second graph build reuses fallback-v1 cache and performs zero fallback parses", async () => {
-    // On platforms without the native extension, resolveNativeParser() is null
-    // and native-language docs are expected to be cached as fallback-v1.
+    // Only assert fallback-v1 behavior when the native extension is unavailable.
     resetNativeParserCache();
     if (resolveNativeParser()) return;
 
@@ -188,18 +187,21 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
     const cachedBefore = repo.getParsedDocument(doc!.id);
     expect(cachedBefore?.parserVersion).toBe("fallback-v1");
     const parsedAtFirst = cachedBefore!.parsedAt;
+    const symbolsBefore = cachedBefore!.symbols;
 
     // First graph build: cache hit (fallback-v1 matches expected version) —
     // no re-parse, so parsed_at must not advance.
-    await buildGraphGeneration(workspace.id, workspaceRoot, 1);
+    await buildGraphGeneration(workspace.id, workspaceRoot, 1, 1);
     const cachedAfterFirst = repo.getParsedDocument(doc!.id);
     expect(cachedAfterFirst?.parserVersion).toBe("fallback-v1");
     expect(cachedAfterFirst!.parsedAt).toBe(parsedAtFirst);
+    expect(cachedAfterFirst!.symbols).toBe(symbolsBefore);
 
     // Second graph build: still a cache hit — zero fallback parses.
-    await buildGraphGeneration(workspace.id, workspaceRoot, 2);
+    await buildGraphGeneration(workspace.id, workspaceRoot, 2, 2);
     const cachedAfterSecond = repo.getParsedDocument(doc!.id);
     expect(cachedAfterSecond?.parserVersion).toBe("fallback-v1");
     expect(cachedAfterSecond!.parsedAt).toBe(parsedAtFirst);
+    expect(cachedAfterSecond!.symbols).toBe(symbolsBefore);
   });
 });

@@ -361,6 +361,16 @@ async function catchUpReadWorkspaces(workspaces: WorkspaceLike[]): Promise<void>
   await Promise.all(workspaces.map((workspace) => catchUpWorkspaceIndex(workspace.id)));
 }
 
+async function ensureGraphReadySafely(workspaceId: string): Promise<void> {
+  try {
+    await ensureGraphReady(workspaceId);
+  } catch (error) {
+    console.error(
+      `OpenEZ MCP graph build failed for workspace '${workspaceId}': ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 export function createMcpServer(options?: McpServerOptions) {
   const resolver = createWorkspaceResolver(options);
 
@@ -562,7 +572,7 @@ export function createMcpServer(options?: McpServerOptions) {
               limit: input.limit,
               maxTokens: workspaceBudget,
               recordMetrics: false,
-              ensureGraph: ensureGraphReady,
+              ensureGraph: ensureGraphReadySafely,
             }),
           })),
         );
@@ -656,8 +666,15 @@ export function createMcpServer(options?: McpServerOptions) {
         const input = codeContextSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
-        await Promise.all(workspaces.map((w) => ensureGraphReady(w.id)));
-        const results = await Promise.all(
+        const readiness = await Promise.allSettled(workspaces.map((w) => ensureGraphReady(w.id)));
+        readiness.forEach((result, index) => {
+          if (result.status === "rejected") {
+            console.error(
+              `OpenEZ MCP graph build failed for workspace '${workspaces[index]!.id}': ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+            );
+          }
+        });
+        const settledResults = await Promise.allSettled(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
             workspaceName: workspace.name,
@@ -671,14 +688,28 @@ export function createMcpServer(options?: McpServerOptions) {
             }),
           })),
         );
+        const results = settledResults.flatMap((result, index) => {
+          if (result.status === "fulfilled") return [result.value];
+          console.error(
+            `OpenEZ MCP code_context failed for workspace '${workspaces[index]!.id}': ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+          );
+          return [];
+        });
         return jsonResponse({ results }, input.maxTokens ?? 4000);
       }
       case "graph_neighbors": {
         const input = graphNeighborsSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
-        await Promise.all(workspaces.map((w) => ensureGraphReady(w.id)));
-        const results = await Promise.all(
+        const readiness = await Promise.allSettled(workspaces.map((w) => ensureGraphReady(w.id)));
+        readiness.forEach((result, index) => {
+          if (result.status === "rejected") {
+            console.error(
+              `OpenEZ MCP graph build failed for workspace '${workspaces[index]!.id}': ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+            );
+          }
+        });
+        const settledResults = await Promise.allSettled(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
             workspaceName: workspace.name,
@@ -693,6 +724,13 @@ export function createMcpServer(options?: McpServerOptions) {
             }),
           })),
         );
+        const results = settledResults.flatMap((result, index) => {
+          if (result.status === "fulfilled") return [result.value];
+          console.error(
+            `OpenEZ MCP graph_neighbors failed for workspace '${workspaces[index]!.id}': ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+          );
+          return [];
+        });
         return jsonResponse({ results }, input.maxTokens ?? 4000);
       }
       case "memory_write": {

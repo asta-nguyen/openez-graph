@@ -117,6 +117,7 @@ export function createGraphService(deps: GraphServiceDeps): {
             leaseExpiry(),
           );
           if (leaseLost || !stillOwner) {
+            await deps.registry.releaseGraphBuild(workspaceId, ownerToken);
             continue buildAttempt;
           }
           if (counts.published === false) {
@@ -140,6 +141,7 @@ export function createGraphService(deps: GraphServiceDeps): {
             },
           );
           if (completed) return;
+          await deps.registry.releaseGraphBuild(workspaceId, ownerToken);
           continue buildAttempt;
         }
       } catch (error) {
@@ -148,7 +150,10 @@ export function createGraphService(deps: GraphServiceDeps): {
           ownerToken,
           error instanceof Error ? error.message : String(error),
         );
-        if (!failed) continue;
+        if (!failed) {
+          await deps.registry.releaseGraphBuild(workspaceId, ownerToken);
+          continue;
+        }
         throw error;
       } finally {
         clearInterval(heartbeat);

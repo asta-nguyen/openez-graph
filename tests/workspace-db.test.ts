@@ -128,6 +128,21 @@ describe("createWorkspaceRepository", () => {
     expect(await repo.findGraphNode("file", "stale.ts")).toBeNull();
   });
 
+  it("rejects graph snapshots when the stored fencing epoch is invalid", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    await repo.queryRaw(
+      "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('graph_build_epoch', 'not-a-number')",
+    );
+
+    expect(() =>
+      repo.replaceGraphArtifacts({
+        buildEpoch: 1,
+        nodes: [],
+        edges: [],
+      }),
+    ).toThrow("Invalid stored graph build epoch");
+  });
+
   it("keeps same-named symbols from different chunks separate", async () => {
     const repo = createWorkspaceRepository(tempRoot);
     const first = await repo.upsertGraphNode({ type: "symbol", label: "main", refId: "chunk-1" });

@@ -22,11 +22,7 @@ export function composeFtsSearchTextSql(metadata: string, content: string): stri
     END
     ELSE ''
   END`;
-  return `CASE
-    WHEN (${normalizedSearchText}) <> ''
-      THEN (${normalizedSearchText}) || char(10) || ${content}
-    ELSE ${content}
-  END`;
+  return `coalesce(nullif(${normalizedSearchText}, '') || char(10), '') || ${content}`;
 }
 
 /**

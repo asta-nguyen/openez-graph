@@ -28,6 +28,9 @@ describe("token counter isolation", () => {
     const value = "function foo() { return 1; } ".repeat(50);
     const chunks = exactTokenCounter.split(value, 20, 5);
     expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(exactTokenCounter.count(chunk)).toBeLessThanOrEqual(20);
+    }
   });
 
   it("repeated mixed counter calls keep the fast approximation stable", () => {

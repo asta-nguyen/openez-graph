@@ -8,7 +8,10 @@ import {
   createWorkspaceRepository,
   type WorkspaceRepository,
 } from "../packages/db/src/sqlite/index";
-import { composeFtsSearchText } from "../packages/db/src/sqlite/fts-repository";
+import {
+  composeFtsSearchText,
+  composeFtsSearchTextSql,
+} from "../packages/db/src/sqlite/fts-repository";
 
 let tempRoot: string;
 
@@ -72,6 +75,11 @@ async function expectStoredSearchText(
 }
 
 describe("FTS retrieval", () => {
+  it("computes normalized metadata text once in SQL", () => {
+    const sql = composeFtsSearchTextSql("metadata", "content");
+    expect(sql.match(/json_extract/g)).toHaveLength(1);
+  });
+
   it("finds terms at the beginning, middle, and end of a long chunk", async () => {
     const repo = createWorkspaceRepository(tempRoot);
     const documentId = await insertTestDocument(repo, "src/long.ts");

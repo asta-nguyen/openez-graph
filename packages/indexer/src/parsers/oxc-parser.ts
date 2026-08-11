@@ -168,6 +168,7 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
  */
 function extractClassMethods(classNode: OxcNode, className: string, source: string): SymbolAst[] {
   const methods: SymbolAst[] = [];
+  const addedNames = new Set<string>();
   const classBody = classNode.body as OxcNode | undefined;
   if (!classBody || !Array.isArray(classBody.body)) return methods;
 
@@ -184,6 +185,8 @@ function extractClassMethods(classNode: OxcNode, className: string, source: stri
       const qualifiedName = memberKind
         ? `${className}.${member.static === true ? "static." : ""}${memberKind}.${methodName}`
         : `${staticPrefix}${methodName}`;
+      if (addedNames.has(qualifiedName)) continue;
+      addedNames.add(qualifiedName);
       const startLine = source.slice(0, value.start).split("\n").length;
       const endLine = source.slice(0, value.end).split("\n").length;
       methods.push({
@@ -211,6 +214,8 @@ function extractClassMethods(classNode: OxcNode, className: string, source: stri
       const propName = key.name;
       const qualifiedName =
         member.static === true ? `${className}.static.${propName}` : `${className}.${propName}`;
+      if (addedNames.has(qualifiedName)) continue;
+      addedNames.add(qualifiedName);
       const startLine = source.slice(0, init.start).split("\n").length;
       const endLine = source.slice(0, init.end).split("\n").length;
       methods.push({
@@ -420,9 +425,11 @@ function extractCalls(symbolAsts: SymbolAst[]): {
 function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolAst[] {
   type NestedCandidate = { name: string; node: OxcNode; capturesClassThis?: boolean };
   const candidates: NestedCandidate[] = [];
+  const registeredBodyNodes = new Set<OxcNode>();
 
   function registerCandidate(name: string, bodyNode: OxcNode): void {
-    if (candidates.some((candidate) => candidate.node === bodyNode)) return;
+    if (registeredBodyNodes.has(bodyNode)) return;
+    registeredBodyNodes.add(bodyNode);
     candidates.push({ name, node: bodyNode });
   }
 
@@ -458,10 +465,11 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
   const containers = [
     ...topLevel,
     ...candidates.map((item) => ({ symbol: { name: item.name }, node: item.node })),
-  ];
-  const parents = new Map<OxcNode, SymbolAst | { symbol: { name: string }; node: OxcNode }>();
-  for (const candidate of candidates) {
-    let closest: SymbolAst | { symbol: { name: string }; node: OxcNode } | undefined;
+  ].sort((left, right) => left.node.start - right.node.start || right.node.end - left.node.end);
+  const containingSymbol = (
+    candidate: NestedCandidate,
+  ): (typeof containers)[number] | undefined => {
+    let closest: (typeof containers)[number] | undefined;
     for (const container of containers) {
       if (
         container.node === candidate.node ||
@@ -474,6 +482,11 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
       }
       closest = container;
     }
+    return closest;
+  };
+  const parents = new Map<OxcNode, SymbolAst | { symbol: { name: string }; node: OxcNode }>();
+  for (const candidate of candidates) {
+    const closest = containingSymbol(candidate);
     if (closest) parents.set(candidate.node, closest);
   }
 
