@@ -21,6 +21,7 @@ tsconfig.tsbuildinfo
 repomix-output.xml
 .omo
 scratch/
+.worktrees/
 
 # Local Model2Vec distillation environment and generated artifact
 jina-code-static-build/
@@ -33,4 +34,3 @@ packages/native/target/
 
 # Review files
 reviews/
-
