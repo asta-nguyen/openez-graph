@@ -1,0 +1,19 @@
+apps/mcp/src/mcp-core.ts
+  s_5bc8e9e818017b::t_619918442d1263 285-286
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9b612e62fe9bd578e4e6eefa3cedfbcdf90f0796",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
