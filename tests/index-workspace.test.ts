@@ -597,7 +597,7 @@ describe("indexWorkspace", () => {
     await expect(waitForFts(workspace.id)).resolves.toBeUndefined();
   });
 
-  it("restores exact token counting after indexing (fast token reset)", async () => {
+  it("preserves exact token counting after indexing", async () => {
     // Record an exact BPE count for text whose count differs from the
     // Math.ceil(length / 4) approximation.
     const sample = "The tokenizer must leave fast mode after indexing.";

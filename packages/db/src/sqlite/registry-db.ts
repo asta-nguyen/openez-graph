@@ -185,17 +185,25 @@ function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>)
 
   const GRAPH_INVALIDATION_MARKER = "graph_invalidation_v1";
   if (getColumns().has("graph_generation")) {
-    sqlite.transaction(() => {
-      if (getMeta(GRAPH_INVALIDATION_MARKER) !== null) return;
-      // Only run once: invalidate old completed graphs (generation 0/0) by
-      // setting graph_generation to -1, forcing a rebuild on next access.
-      sqlite
-        .prepare(
-          "UPDATE workspaces SET graph_generation = -1 WHERE graph_status = 'completed' AND graph_generation = 0 AND index_generation = 0",
-        )
-        .run();
-      setMeta(GRAPH_INVALIDATION_MARKER, "done");
-    })();
+    sqlite.exec("BEGIN IMMEDIATE");
+    try {
+      if (getMeta(GRAPH_INVALIDATION_MARKER) === null) {
+        // Only run once: invalidate old completed graphs (generation 0/0) by
+        // setting graph_generation to -1, forcing a rebuild on next access.
+        sqlite
+          .prepare(
+            "UPDATE workspaces SET graph_generation = -1 WHERE graph_status = 'completed' AND graph_generation = 0 AND index_generation = 0",
+          )
+          .run();
+        setMeta(GRAPH_INVALIDATION_MARKER, "done");
+      }
+      sqlite.exec("COMMIT");
+    } catch (error) {
+      try {
+        sqlite.exec("ROLLBACK");
+      } catch {}
+      throw error;
+    }
   }
 
   // Backfill pin_order for pre-existing pinned workspaces that lack it.

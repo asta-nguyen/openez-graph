@@ -11,6 +11,7 @@ import {
 } from "../packages/db/src/sqlite/index";
 import { memoryRecall, memoryWrite } from "../packages/core/src/memory";
 import { codeQuery } from "../packages/core/src/retrieval";
+import { ensureGraphReady } from "../packages/indexer/src/graph-service";
 
 let tempRoot: string;
 let tempDir: string;
@@ -196,6 +197,20 @@ describe("end-to-end search pipeline", () => {
     // Sources should have path and score
     expect(result.sources[0]?.path).toBeTruthy();
     expect(result.sources[0]?.score).toBeGreaterThan(0);
+  });
+
+  it("codeQuery expands through the ensured graph path", async () => {
+    const workspace = await setupWorkspaceWithContent();
+
+    const result = await codeQuery({
+      workspaceId: workspace.id,
+      query: "authenticate user",
+      limit: 5,
+      ensureGraph: ensureGraphReady,
+    });
+
+    expect(result.sources.length).toBeGreaterThan(0);
+    expect(await createWorkspaceRepository(tempRoot).getNodeCount()).toBeGreaterThan(0);
   });
 
   it("codeQuery returns empty for no matches", async () => {

@@ -982,7 +982,7 @@ export async function buildGraphGeneration(
   _workspaceId: string,
   rootPath: string,
   _generation: number,
-  buildEpoch = 0,
+  buildEpoch: number,
 ): Promise<{ nodeCount: number; edgeCount: number; published: boolean }> {
   const _graphStart = Date.now();
 
@@ -1040,7 +1040,8 @@ export async function buildGraphGeneration(
     if (
       cached &&
       cached.contentHash === doc.contentHash &&
-      cached.parserVersion === PARSER_VERSION_OXC
+      (cached.parserVersion === PARSER_VERSION_OXC ||
+        cached.parserVersion === PARSER_VERSION_FALLBACK)
     ) {
       parsedFiles.set(doc.path, {
         filePath: doc.path,

@@ -146,6 +146,30 @@ describe("OxcParser", () => {
     });
   });
 
+  it("does not duplicate overloaded or accessor class method names", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "accessors.ts",
+        absolutePath: "/tmp/accessors.ts",
+        content: `class Box {
+  get value() { return 1; }
+  set value(next: number) {}
+  value(next: number): void;
+  value(next: number) {}
+}`,
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    const names = result.definedSymbols.map((symbol) => symbol.name);
+    expect(names.filter((name) => name === "Box.value")).toHaveLength(1);
+    expect(names).toEqual(expect.arrayContaining(["Box.get.value", "Box.set.value"]));
+    expect(new Set(names).size).toBe(names.length);
+  });
+
   it("qualifies duplicate nested names to avoid graph collisions", () => {
     const content = `
     function outer() {
