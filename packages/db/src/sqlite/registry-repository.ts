@@ -77,7 +77,7 @@ export function createRegistryRepository(): RegistryRepository {
   const db = getRegistryDb();
   const native = getRegistryNativeDb();
 
-  return {
+  const repo: RegistryRepository = {
     async listWorkspaces(): Promise<RegistryWorkspace[]> {
       const rows = db.select().from(schema.workspaces).all();
       return rows.map(mapWorkspaceRow).sort(compareWorkspaces);
@@ -332,16 +332,9 @@ export function createRegistryRepository(): RegistryRepository {
     },
 
     async failIndexing(id: string, ownerToken: string, error: string): Promise<boolean> {
-      const update = native
-        .prepare(
-          `UPDATE workspaces
-           SET status = 'error', indexing_status = 'failed',
-               last_error = ?, index_build_owner = NULL,
-               index_lease_expires_at = NULL, updated_at = ?
-           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
-        )
-        .run(error, new Date().toISOString(), id, ownerToken) as { changes: number };
-      return update.changes > 0;
+      // failIndexing and releaseIndexing share the same fenced failure
+      // semantics — delegate to avoid duplicating the SQL.
+      return repo.releaseIndexing(id, ownerToken, error);
     },
 
     async invalidateWorkspaceGraph(id: string): Promise<number> {
@@ -526,4 +519,5 @@ export function createRegistryRepository(): RegistryRepository {
       return result;
     },
   };
+  return repo;
 }
