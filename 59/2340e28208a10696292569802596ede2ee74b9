@@ -1,0 +1,21 @@
+tests/hybrid-retrieval.test.ts
+  s_5bc8e9e818017b::t_c34700fc6cd90a 54,56-57,68
+packages/core/src/retrieval.ts
+  s_5bc8e9e818017b::t_1935aae94b548b 144-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "592340e28208a10696292569802596ede2ee74b9",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
