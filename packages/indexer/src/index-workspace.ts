@@ -935,15 +935,12 @@ export async function indexWorkspace(input: {
       const nodeCount = await repo.getNodeCount();
       const edgeCount = await repo.getEdgeCount();
 
-      await activeRegistry.updateWorkspace(workspace.id, {
-        status: "indexed",
-        indexingStatus: "completed",
-        lastIndexedAt: new Date().toISOString(),
+      await activeRegistry.completeIndexing(workspace.id, indexingOwnerToken!, {
         documentCount: docCount,
         chunkCount: chunkCountResult,
         nodeCount,
         edgeCount,
-        lastError: "",
+        completedAt: new Date().toISOString(),
       });
 
       // Switch out of optimized write mode AFTER all writes are done.
@@ -972,11 +969,9 @@ export async function indexWorkspace(input: {
         errorMessage,
       });
 
-      await activeRegistry.updateWorkspace(workspace.id, {
-        status: "error",
-        indexingStatus: "failed",
-        lastError: errorMessage,
-      });
+      if (indexingOwnerToken) {
+        await activeRegistry.failIndexing(workspace.id, indexingOwnerToken, errorMessage);
+      }
       throw error;
     }
 
