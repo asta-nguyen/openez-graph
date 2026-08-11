@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 
-import { Tokenizer } from "@huggingface/tokenizers";
+import type { Tokenizer } from "@huggingface/tokenizers";
 import type { EmbeddingProvider } from "./embeddings";
 
 export const LOCAL_EMBEDDING_MODEL = "jina-code-static-256";
@@ -216,7 +216,8 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
         if (matrix.length % MODEL_DIMENSIONS !== 0) {
           throw new Error("Local embedding matrix has invalid dimensions");
         }
-        this.tokenizer = new Tokenizer(JSON.parse(tokenizerJson), {});
+        const { Tokenizer: TokenizerCtor } = await import("@huggingface/tokenizers");
+        this.tokenizer = new TokenizerCtor(JSON.parse(tokenizerJson), {});
         this.matrix = matrix;
       } finally {
         this.loadingPromise = undefined;

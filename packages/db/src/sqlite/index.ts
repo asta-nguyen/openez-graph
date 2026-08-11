@@ -3,7 +3,9 @@ export {
   closeRegistryDb,
   resolveRegistryDbPath,
   getRegistryDdl,
+  migrateRegistrySchema,
 } from "./registry-db";
+export type { SqliteLike } from "./registry-db";
 export { getWorkspaceDb, closeAllWorkspaceDbs, getFullWorkspaceDdl } from "./workspace-db";
 export { createRegistryRepository, createWorkspaceRepository } from "./repository";
 export { encryptValue, decryptValue, isEncrypted, isSensitiveKey } from "./secure-storage";
