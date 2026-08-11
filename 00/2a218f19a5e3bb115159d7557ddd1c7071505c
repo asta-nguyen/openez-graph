@@ -1,0 +1,21 @@
+tests/embed-workspace.test.ts
+  s_6989a0f8b1a17d::t_4b53a32f87f126 14,78-89
+  s_6989a0f8b1a17d::t_123246f55cd0cb 15,24
+  s_6989a0f8b1a17d::t_0cf9d1dd4b2dd8 90-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "002a218f19a5e3bb115159d7557ddd1c7071505c",
+  "prompts": {},
+  "sessions": {
+    "s_6989a0f8b1a17d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff124-e325-7a73-8707-394943f19b65",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
