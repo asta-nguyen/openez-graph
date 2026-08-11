@@ -34,6 +34,7 @@ let registryRoot: string;
 let workspaceRoot: string;
 
 beforeEach(() => {
+  testEmbeddingProvider.embed.mockClear();
   registryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-hybrid-registry-"));
   workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-hybrid-workspace-"));
   process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(registryRoot, "registry.sqlite");
@@ -50,6 +51,23 @@ afterEach(() => {
 });
 
 describe("codeQuery hybrid retrieval", () => {
+  it("embeds the raw query without substring expansion", async () => {
+    const workspace = await createRegistryRepository().createWorkspace({
+      id: "raw-query-test",
+      name: "raw-query-test",
+      rootPath: workspaceRoot,
+    });
+
+    await codeQuery({
+      workspaceId: workspace.id,
+      query: "maintain",
+      limit: 5,
+      skipGraphExpand: true,
+    });
+
+    expect(testEmbeddingProvider.embed).toHaveBeenCalledWith(["maintain"]);
+  });
+
   it("keeps both FTS and vector-only results", async () => {
     const workspace = await createRegistryRepository().createWorkspace({
       id: "hybrid-test",

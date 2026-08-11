@@ -12,7 +12,6 @@
     "expectedPaths": ["packages/indexer/src/index-workspace.ts"]
   },
   { "query": "how does codeQuery work?", "expectedPaths": ["packages/core/src/retrieval.ts"] },
-  { "query": "what starts the queue worker?", "expectedPaths": ["apps/worker/src/index.ts"] },
   {
     "query": "where is the embedding provider selected?",
     "expectedPaths": ["packages/core/src/embeddings.ts"]
@@ -32,7 +31,7 @@
   },
   {
     "query": "where are TypeScript symbols extracted?",
-    "expectedPaths": ["packages/indexer/src/code.ts"]
+    "expectedPaths": ["packages/indexer/src/parsers/oxc-parser.ts"]
   },
   {
     "query": "how are YAML JSON and TOML configs chunked?",
@@ -45,7 +44,7 @@
   { "query": "how does Codex MCP setup work?", "expectedPaths": ["apps/cli/src/setup-codex.ts"] },
   {
     "query": "where are graph neighbors traversed?",
-    "expectedPaths": ["packages/db/src/sqlite/repository.ts", "packages/core/src/graph.ts"]
+    "expectedPaths": ["packages/core/src/graph.ts"]
   },
   {
     "query": "how is the FTS5 chunk index synchronized?",

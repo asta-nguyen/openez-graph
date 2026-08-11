@@ -226,29 +226,6 @@ function extractClassMethods(classNode: OxcNode, className: string, source: stri
 }
 
 /**
- * Child keys we recurse into when walking an AST subtree. Covers the common
- * structural fields produced by oxc for statements, expressions, and TS nodes.
- */
-const WALK_KEYS = new Set([
-  "body",
-  "declarations",
-  "init",
-  "expression",
-  "callee",
-  "object",
-  "property",
-  "argument",
-  "arguments",
-  "declaration",
-  "consequent",
-  "alternate",
-  "left",
-  "right",
-  "test",
-  "update",
-]);
-
-/**
  * Recursively walk an AST value (node or array), invoking the visitor for each
  * node detected by `typeof value.type === 'string'`. A `WeakSet` guards against
  * circular references. Primitives and null are ignored.
@@ -257,40 +234,29 @@ function walkNodes(
   value: unknown,
   visitor: (node: OxcNode) => void,
   visited: WeakSet<object>,
-  skipTypes?: ReadonlySet<string>,
+  skippedScopes?: WeakSet<object>,
   isRoot = false,
 ): void {
   if (value === null || typeof value !== "object") return;
   if (Array.isArray(value)) {
-    for (const item of value) walkNodes(item, visitor, visited, skipTypes, false);
+    for (const item of value) walkNodes(item, visitor, visited, skippedScopes, false);
     return;
   }
   if (visited.has(value as object)) return;
   visited.add(value as object);
+
+  if (!isRoot && skippedScopes?.has(value as object)) return;
+
   const node = value as Record<string, unknown>;
   const nodeType = node.type;
   if (typeof nodeType === "string") {
     visitor(node as unknown as OxcNode);
-    // If this node introduces a nested callable scope, do not descend into it —
-    // its calls belong to the inner symbol, not the outer one being walked.
-    // The root node is never skipped (it is the symbol's own scope).
-    if (!isRoot && skipTypes?.has(nodeType)) return;
   }
-  for (const key of Object.keys(node)) {
-    if (!WALK_KEYS.has(key)) continue;
-    walkNodes(node[key], visitor, visited, skipTypes, false);
+  for (const [key, child] of Object.entries(node)) {
+    if (key === "parent") continue;
+    walkNodes(child, visitor, visited, skippedScopes, false);
   }
 }
-
-/**
- * Node types that introduce a new callable scope. Calls inside one of these
- * belong to the inner callable, not the outer symbol being walked.
- */
-const NESTED_CALLABLE = new Set([
-  "FunctionDeclaration",
-  "ArrowFunctionExpression",
-  "FunctionExpression",
-]);
 
 /**
  * Resolve a callee node to a human-readable name.
@@ -302,11 +268,13 @@ function calleeName(callee: OxcNode): string | null {
   if (callee.type === "Identifier" && typeof callee.name === "string") {
     return callee.name;
   }
+  if (callee.type === "ThisExpression") return "this";
   if (callee.type === "MemberExpression") {
     const object = callee.object as OxcNode | undefined;
     const property = callee.property as OxcNode | undefined;
-    if (object?.type === "Identifier" && property?.type === "Identifier") {
-      return `${object.name}.${property.name}`;
+    const objectName = object ? calleeName(object) : null;
+    if (objectName && property?.type === "Identifier" && typeof property.name === "string") {
+      return `${objectName}.${property.name}`;
     }
   }
   return null;
@@ -328,11 +296,19 @@ function extractCalls(symbolAsts: SymbolAst[]): {
     // Only function-like symbols can contain calls.
     if (symbol.symbolType !== "function" && symbol.symbolType !== "method") continue;
     const visited = new WeakSet<object>();
+    const skippedScopes = new WeakSet<object>(
+      symbolAsts.filter((entry) => entry.node !== node).map((entry) => entry.node),
+    );
     walkNodes(
       node,
       (current: OxcNode) => {
         if (current.type === "CallExpression") {
-          const name = calleeName(current.callee as OxcNode);
+          const rawName = calleeName(current.callee as OxcNode);
+          const className = symbol.name.includes(".") ? symbol.name.split(".")[0] : null;
+          const name =
+            rawName?.startsWith("this.") && className
+              ? `${className}.${rawName.slice("this.".length)}`
+              : rawName;
           if (name) {
             callExpressions.push({ callerName: symbol.name, calleeName: name });
             calledIdentifiers.add(name);
@@ -340,8 +316,7 @@ function extractCalls(symbolAsts: SymbolAst[]): {
         }
       },
       visited,
-      // Skip nested callable declarations: their bodies belong to inner symbols.
-      NESTED_CALLABLE,
+      skippedScopes,
       // The symbol's own node is the root — never skip it.
       true,
     );

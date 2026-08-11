@@ -4,14 +4,7 @@ import fsSync from "node:fs";
 import path from "node:path";
 
 import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
-import {
-  embeddingStorageModel,
-  fastTokenCounter,
-  formatEmbeddingInput,
-  getEmbeddingProvider,
-  type TokenCounter,
-} from "@openez-graph/core";
-import type { EmbeddingProvider } from "@openez-graph/core";
+import { fastTokenCounter, type TokenCounter } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -330,178 +323,6 @@ export async function chunkDocument(input: {
   };
 }
 
-async function writeEmbeddingsToRepo(
-  repo: WorkspaceRepository,
-  chunkRows: Array<{ id: string; content: string; path: string; heading?: string | null }>,
-  provider: EmbeddingProvider | null,
-) {
-  if (!provider || chunkRows.length === 0) {
-    return { written: 0, failedBatches: 0 };
-  }
-
-  const existingIds = new Set<string>();
-  const LOOKUP_BATCH_SIZE = 500;
-  for (let i = 0; i < chunkRows.length; i += LOOKUP_BATCH_SIZE) {
-    const batch = chunkRows.slice(i, i + LOOKUP_BATCH_SIZE);
-    const existing = await repo.queryRaw(
-      `SELECT chunk_id FROM embeddings
-       WHERE provider = ? AND model = ? AND chunk_id IN (${batch.map(() => "?").join(",")})`,
-      [provider.provider, embeddingStorageModel(provider), ...batch.map((chunk) => chunk.id)],
-    );
-    for (const row of existing) {
-      existingIds.add(String(row.chunk_id));
-    }
-  }
-  const missingRows = chunkRows.filter((chunk) => !existingIds.has(chunk.id));
-  if (missingRows.length === 0) return { written: 0, failedBatches: 0 };
-
-  const rowsToEmbed = missingRows.map((chunk) => ({
-    chunk,
-    hash: hashContent(formatEmbeddingInput(provider, chunk, "document")),
-  }));
-
-  // Deduplicate by input_hash: skip chunks whose formatted input already has an embedding
-  const existingHashes = new Set<string>();
-  for (let i = 0; i < rowsToEmbed.length; i += LOOKUP_BATCH_SIZE) {
-    const batch = rowsToEmbed.slice(i, i + LOOKUP_BATCH_SIZE);
-    const hashPlaceholders = batch.map(() => "?").join(",");
-    const existing = await repo.queryRaw(
-      `SELECT DISTINCT input_hash FROM embeddings
-       WHERE provider = ? AND model = ? AND input_hash IN (${hashPlaceholders})`,
-      [provider.provider, embeddingStorageModel(provider), ...batch.map((entry) => entry.hash)],
-    );
-    for (const row of existing) {
-      if (row.input_hash) existingHashes.add(String(row.input_hash));
-    }
-  }
-  const toEmbed = rowsToEmbed.filter((entry) => !existingHashes.has(entry.hash));
-  const skipped = rowsToEmbed.filter((entry) => existingHashes.has(entry.hash));
-
-  // Reuse existing embeddings for skipped chunks: copy the vector so each chunk
-  // has its own embedding row and appears in vector search results.
-  let reusedWritten = 0;
-  if (skipped.length > 0) {
-    const hashToVector = new Map<string, { embedding: Uint8Array; dimensions: number }>();
-    const uniqueHashes = [...new Set(skipped.map((entry) => entry.hash))];
-    for (let i = 0; i < uniqueHashes.length; i += LOOKUP_BATCH_SIZE) {
-      const batch = uniqueHashes.slice(i, i + LOOKUP_BATCH_SIZE);
-      const placeholders = batch.map(() => "?").join(",");
-      const rows = await repo.queryRaw(
-        `SELECT input_hash, embedding, dimensions FROM embeddings
-         WHERE provider = ? AND model = ? AND input_hash IN (${placeholders})
-         GROUP BY input_hash`,
-        [provider.provider, embeddingStorageModel(provider), ...batch],
-      );
-      for (const row of rows) {
-        if (row.input_hash) {
-          const emb =
-            row.embedding instanceof Uint8Array
-              ? row.embedding
-              : new Uint8Array(new Float32Array(JSON.parse(String(row.embedding))).buffer);
-          hashToVector.set(String(row.input_hash), {
-            embedding: emb,
-            dimensions: Number(row.dimensions),
-          });
-        }
-      }
-    }
-    const reuseInputs: Array<{
-      chunkId: string;
-      provider: string;
-      model: string;
-      dimensions: number;
-      embedding: Uint8Array;
-      inputHash: string;
-    }> = [];
-    for (const entry of skipped) {
-      const existing = hashToVector.get(entry.hash);
-      if (existing) {
-        reuseInputs.push({
-          chunkId: entry.chunk.id,
-          provider: provider.provider,
-          model: embeddingStorageModel(provider),
-          dimensions: existing.dimensions,
-          embedding: existing.embedding,
-          inputHash: entry.hash,
-        });
-      }
-    }
-    if (reuseInputs.length > 0) {
-      await repo.insertEmbeddings(reuseInputs);
-      reusedWritten = reuseInputs.length;
-    }
-  }
-
-  if (toEmbed.length === 0) return { written: reusedWritten, failedBatches: 0 };
-
-  const BATCH_SIZE = 50;
-  let totalWritten = 0;
-  let failedBatches = 0;
-  const totalBatches = Math.ceil(toEmbed.length / BATCH_SIZE);
-
-  for (let i = 0; i < toEmbed.length; i += BATCH_SIZE) {
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    if (batchNum % 10 === 0 || batchNum === totalBatches) {
-      process.stdout.write(
-        `\r[embedding] batch ${batchNum}/${totalBatches} (${totalWritten} written)`,
-      );
-    }
-    const batch = toEmbed.slice(i, i + BATCH_SIZE);
-
-    try {
-      const vectors = await provider.embed(
-        batch.map((entry) => formatEmbeddingInput(provider, entry.chunk, "document")),
-      );
-      if (vectors.length !== batch.length) {
-        failedBatches += 1;
-        console.error(
-          `Embedding provider returned ${vectors.length} vectors for ${batch.length} chunks`,
-        );
-        continue;
-      }
-      const invalidEmbeddingIndex = vectors.findIndex((embedding) => embedding.length === 0);
-
-      if (invalidEmbeddingIndex !== -1) {
-        failedBatches += 1;
-        console.error(
-          `Embedding provider returned empty vector for chunk ${batch[invalidEmbeddingIndex].chunk.id}`,
-        );
-        continue;
-      }
-
-      const dimensions = vectors[0]?.length ?? 0;
-      if (vectors.some((embedding) => embedding.length !== dimensions)) {
-        failedBatches += 1;
-        console.error("Embedding provider returned mixed dimensions");
-        continue;
-      }
-
-      await repo.insertEmbeddings(
-        vectors.map((embedding, index) => ({
-          chunkId: batch[index].chunk.id,
-          provider: provider.provider,
-          model: embeddingStorageModel(provider),
-          dimensions,
-          embedding: new Uint8Array(new Float32Array(embedding).buffer),
-          inputHash: batch[index].hash,
-        })),
-      );
-
-      totalWritten += vectors.length;
-    } catch (error) {
-      failedBatches += 1;
-      console.error(
-        `Embedding batch failed (skipping): ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  if (totalBatches > 0) {
-    process.stdout.write("\n");
-  }
-  return { written: totalWritten + reusedWritten, failedBatches };
-}
-
 interface ParseTask {
   id: string;
   content: string;
@@ -668,7 +489,7 @@ export async function indexWorkspace(input: {
     await writeLocalWorkspaceConfig(workspace);
 
     const repo = createWorkspaceRepository(workspace.rootPath);
-    const settings = await getBrainSettings();
+    const settings = await getBrainSettings(workspace.rootPath);
     const config = await loadBrainConfig(workspace.rootPath);
     const configuredWorkspace = config.workspaces?.find(
       (candidate) =>
@@ -677,8 +498,10 @@ export async function indexWorkspace(input: {
     );
     const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
     const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
-    const embeddingProvider = await getEmbeddingProvider();
     const runMode = input.mode ?? "incremental";
+    const chunkingFingerprint = hashContent(JSON.stringify(settings.chunking));
+    const forceRechunk =
+      runMode === "incremental" && repo.getMeta("chunking_fingerprint") !== chunkingFingerprint;
     let graphInvalidated = false;
 
     const invalidateGraph = async () => {
@@ -686,14 +509,6 @@ export async function indexWorkspace(input: {
       await registry.invalidateWorkspaceGraph(workspace.id);
       graphInvalidated = true;
     };
-
-    if (embeddingProvider) {
-      process.stdout.write(
-        `[embedding] provider=${embeddingProvider.provider} model=${embeddingProvider.model}\n`,
-      );
-    } else {
-      process.stdout.write(`[embedding] disabled (no provider configured)\n`);
-    }
 
     const reportProgress = async (message: string, progress: number) => {
       await input.onProgress?.({ message, progress });
@@ -744,8 +559,6 @@ export async function indexWorkspace(input: {
 
     let filesUpdated = 0;
     let chunksWritten = 0;
-    let embeddingsWritten = 0;
-    let embeddingFailures = 0;
     let bulkWriteMode = false;
     let needsWriteModeRestore = false;
     // FTS inputs collected during transaction, inserted after finalize (no DB contention)
@@ -776,9 +589,6 @@ export async function indexWorkspace(input: {
 
       // ── Phase 1: Check which files changed (fast DB lookups, no file reads) ──
       const parseTasks: ParseTask[] = [];
-      const unchangedFiles: Array<{
-        existingDocument: NonNullable<Awaited<ReturnType<typeof repo.getDocumentByPath>>>;
-      }> = [];
       const filesToRead: typeof files = [];
 
       for (const file of files) {
@@ -786,13 +596,12 @@ export async function indexWorkspace(input: {
         // Fast path: skip file read if mtime and size match (incremental only)
         const statUnchanged =
           runMode === "incremental" &&
+          !forceRechunk &&
           existingDocument &&
           existingDocument.mtimeMs === file.mtimeMs &&
           existingDocument.sizeBytes === file.sizeBytes;
 
-        if (statUnchanged) {
-          unchangedFiles.push({ existingDocument: existingDocument! });
-        } else {
+        if (!statUnchanged) {
           filesToRead.push(file);
         }
       }
@@ -827,6 +636,7 @@ export async function indexWorkspace(input: {
         const existingDocument = existingDocumentsByPath.get(file.relativePath);
         const unchanged =
           runMode === "incremental" &&
+          !forceRechunk &&
           existingDocument &&
           existingDocument.contentHash === contentHash;
 
@@ -836,7 +646,6 @@ export async function indexWorkspace(input: {
             sizeBytes: file.sizeBytes,
             mtimeMs: file.mtimeMs,
           });
-          unchangedFiles.push({ existingDocument });
         } else {
           parseTasks.push({
             id: file.relativePath,
@@ -867,25 +676,6 @@ export async function indexWorkspace(input: {
         );
       });
 
-      // Backfill unchanged embeddings only when embeddings are enabled.
-      if (embeddingProvider) {
-        for (const { existingDocument } of unchangedFiles) {
-          const existingChunks = await repo.getChunksByDocument(existingDocument.id);
-          const embeddingResult = await writeEmbeddingsToRepo(
-            repo,
-            existingChunks.map((chunk) => ({
-              id: chunk.id,
-              content: chunk.content,
-              path: existingDocument.path,
-              heading: chunk.heading,
-            })),
-            embeddingProvider,
-          );
-          embeddingsWritten += embeddingResult.written;
-          embeddingFailures += embeddingResult.failedBatches;
-        }
-      }
-
       // A true no-op never changes SQLite write pragmas or FTS triggers.
       process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
       const _T4 = Date.now();
@@ -896,13 +686,6 @@ export async function indexWorkspace(input: {
         repo.dropFtsTriggers();
         bulkWriteMode = true;
       }
-
-      const allChunkRowsForEmbeddings: Array<{
-        id: string;
-        content: string;
-        path: string;
-        heading?: string | null;
-      }> = [];
 
       // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
       const _dbSub: Record<string, number> = {};
@@ -1018,20 +801,12 @@ export async function indexWorkspace(input: {
         }
         _dbSub["collect-fts"] = Date.now() - _dbT1;
 
-        // Step 3: Collect chunk rows for embeddings — skip graph building (lazy, on-demand)
+        // Step 3: Cache parse results — graph building remains lazy/on-demand.
         for (let fi = 0; fi < parseTasks.length; fi++) {
           const file = parseTasks[fi];
           const indexed = parseResults.get(file.id)!;
           const chunkOffset = chunkOffsets[fi];
 
-          for (let ci = 0; ci < indexed.chunks.length; ci++) {
-            allChunkRowsForEmbeddings.push({
-              id: allChunkIds[chunkOffset + ci],
-              content: indexed.chunks[ci].content,
-              path: file.relativePath,
-              heading: indexed.chunks[ci].heading,
-            });
-          }
           chunksWritten += indexed.chunks.length;
           filesUpdated += 1;
         }
@@ -1061,21 +836,6 @@ export async function indexWorkspace(input: {
       });
       process.stderr.write(`[t]   db sub: ${JSON.stringify(_dbSub)}\n`);
 
-      // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
-      if (allChunkRowsForEmbeddings.length > 0 && embeddingProvider) {
-        await reportProgress(
-          `Embedding ${allChunkRowsForEmbeddings.length} chunks via ${embeddingProvider.provider}/${embeddingProvider.model}...`,
-          90,
-        );
-        const embeddingResult = await writeEmbeddingsToRepo(
-          repo,
-          allChunkRowsForEmbeddings,
-          embeddingProvider,
-        );
-        embeddingsWritten += embeddingResult.written;
-        embeddingFailures += embeddingResult.failedBatches;
-      }
-
       // ── Phase 5: FTS insert (triggers still down — no double-write) + restore ──
       process.stderr.write(`[t] phase4 db-write: ${Date.now() - _T4}ms\n`);
       const _T5 = Date.now();
@@ -1100,6 +860,7 @@ export async function indexWorkspace(input: {
         needsWriteModeRestore = true;
         bulkWriteMode = false;
       }
+      repo.setMeta("chunking_fingerprint", chunkingFingerprint);
       process.stderr.write(`[t] phase5 fts-restore: ${Date.now() - _T5}ms\n`);
       const _T7 = Date.now();
       await reportProgress("Finalizing index run...", 98);
@@ -1108,11 +869,7 @@ export async function indexWorkspace(input: {
         filesScanned: files.length,
         filesUpdated,
         chunksWritten,
-        embeddingsWritten,
-        errorMessage:
-          embeddingFailures > 0
-            ? `${embeddingFailures} embedding batch(es) failed; retry indexing to complete embeddings`
-            : undefined,
+        embeddingsWritten: 0,
       });
 
       const docCount = await repo.getDocumentCount();
@@ -1153,7 +910,7 @@ export async function indexWorkspace(input: {
         filesScanned: files.length,
         filesUpdated,
         chunksWritten,
-        embeddingsWritten,
+        embeddingsWritten: 0,
         errorMessage,
       });
 
@@ -1173,8 +930,8 @@ export async function indexWorkspace(input: {
       filesScanned: files.length,
       filesUpdated,
       chunksWritten,
-      embeddingsWritten,
-      embeddingFailures,
+      embeddingsWritten: 0,
+      embeddingFailures: 0,
     };
   } finally {
     // No global tokenizer state to reset — token counting is scoped.
@@ -1214,7 +971,7 @@ export async function buildGraphGeneration(
   const _graphStart = Date.now();
 
   const repo = createWorkspaceRepository(rootPath);
-  const settings = await getBrainSettings();
+  const settings = await getBrainSettings(rootPath);
   const targetTokens = settings.chunking.targetTokens;
   const overlapTokens = settings.chunking.overlapTokens;
 
