@@ -1,0 +1,20 @@
+apps/cli/README.md
+  s_5bc8e9e818017b::t_dbb744860d54a2 104
+  s_5bc8e9e818017b::t_74f2213e1c91dc 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "abc2f8cb0aacd9b8beae96d0480c1a9a561e9a3f",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
