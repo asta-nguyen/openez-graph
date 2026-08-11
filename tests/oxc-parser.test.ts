@@ -332,6 +332,63 @@ describe("OxcParser", () => {
     });
   });
 
+  it("rewrites this calls inside arrow functions nested in class methods", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "arrow-this.ts",
+        absolutePath: "/tmp/arrow-this.ts",
+        content: [
+          "class Service {",
+          "  save() {}",
+          "  run() {",
+          "    const callback = () => this.save();",
+          "    callback();",
+          "  }",
+          "}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Service.run.callback",
+      calleeName: "Service.save",
+    });
+  });
+
+  it("does not rewrite arrows that capture a nested regular function this", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "nested-arrow-this.ts",
+        absolutePath: "/tmp/nested-arrow-this.ts",
+        content: [
+          "class Service {",
+          "  save() {}",
+          "  run() {",
+          "    function inner() { const callback = () => this.save(); callback(); }",
+          "  }",
+          "}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Service.run.inner.callback",
+      calleeName: "this.save",
+    });
+    expect(result.callExpressions).not.toContainEqual({
+      callerName: "Service.run.inner.callback",
+      calleeName: "Service.save",
+    });
+  });
+
   it("finds calls inside object property values", () => {
     const result = new OxcParser().parse(
       {
