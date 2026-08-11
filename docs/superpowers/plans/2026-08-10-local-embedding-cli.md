@@ -115,7 +115,7 @@ git commit -m "feat(indexer): expose explicit workspace embedding"
 - indexWorkspace() continues returning embeddingsWritten: 0 and embeddingFailures: 0 for backward-compatible summaries, but never calls getEmbeddingProvider() or writes embeddings rows.
 - CLI command is openez embed [path] with --force; it prints the service result as JSON and exits non-zero on unregistered paths or provider errors.
 
-- [ ] Step 1: Add the regression test first. Configure a fake/local provider, run indexWorkspace, assert the embeddings row count is zero, then run embedWorkspace and assert it becomes non-zero. Repeat with a full reindex to prove it does not delete or recreate vectors.
+- [ ] Step 1: Add the regression test first. Configure a fake/local provider, run indexWorkspace, assert the embeddings row count is zero, then run embedWorkspace and assert it becomes non-zero. Repeat with a full reindex to prove it replaces chunks and removes their vectors (full reindex never creates embeddings; users run `openez embed [path]` afterward).
 
 - [ ] Step 2: Remove index embedding branches. Delete provider construction/logging, unchanged-file backfill, allChunkRowsForEmbeddings, embedding progress, and post-transaction embedding calls from index-workspace.ts. Complete index runs with zero embedding fields and no embedding error message; retain summary fields for API compatibility.
 
