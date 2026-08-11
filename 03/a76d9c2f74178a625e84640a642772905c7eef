@@ -1,0 +1,49 @@
+apps/web/src/server/sqlite.ts
+  s_b3aa2a7c685e82::t_5bc81ead4673cc 168-169,210-211
+packages/indexer/src/index-workspace.ts
+  s_b3aa2a7c685e82::t_3625b6e45bf225 46-51,482-484,502-503,505,510-540,571,585,736,748,924,995,998-1002
+  s_b3aa2a7c685e82::t_35b208dd477171 504
+tests/web-index-endpoint.test.ts
+  s_b3aa2a7c685e82::t_9ca378ca6d029b 89-95,105
+  s_b3aa2a7c685e82::t_f8f3326ed6c4a5 108-125
+  s_b3aa2a7c685e82::t_e5b45131e52d30 71-73
+  s_cfbed6f1d5945e::t_f5d0fd068ae8e5 106-107
+apps/web/src/server/index.ts
+  s_b3aa2a7c685e82::t_3625b6e45bf225 379
+packages/db/src/sqlite/registry-repository.ts
+  s_b3aa2a7c685e82::t_90a2261157a45a 205-207
+  s_b3aa2a7c685e82::t_ba06bc8a3937bd 42-43,254-277,281-282,284,288,292-295,297
+packages/db/src/sqlite/schema.ts
+  s_b3aa2a7c685e82::t_d756dafdff44d3 16-17
+packages/db/src/sqlite/registry-db.ts
+  s_b3aa2a7c685e82::t_d756dafdff44d3 23-24,159-160
+packages/db/src/sqlite/types.ts
+  s_b3aa2a7c685e82::t_35bfff5fcef95d 9-10,81-84,86
+tests/registry.test.ts
+  s_b3aa2a7c685e82::t_9ca378ca6d029b 223-234,236-243
+  s_b3aa2a7c685e82::t_f44515b8d7bfcc 235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "03a76d9c2f74178a625e84640a642772905c7eef",
+  "prompts": {},
+  "sessions": {
+    "s_b3aa2a7c685e82": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff108-017d-7930-8094-ceb30568d8cb",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_cfbed6f1d5945e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff102-7e5d-7d91-a5f6-8c3a9bb082af",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
