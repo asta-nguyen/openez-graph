@@ -458,7 +458,7 @@ export function createMcpServer(options?: McpServerOptions) {
             hops: { type: "number" },
             limit: {
               type: "number",
-              description: "Maximum total records returned (default 50, max 200)",
+              description: "Maximum records per workspace (default 50, max 200)",
             },
             maxTokens: {
               type: "number",

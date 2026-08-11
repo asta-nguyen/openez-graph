@@ -83,21 +83,21 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 
 ## MCP Tools
 
-| Tool              | Description                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------- |
-| `list_workspaces` | List all registered workspaces                                                                    |
-| `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                             |
-| `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: default 50, max 200) |
-| `graph_neighbors` | Traverse graph edges from a node or label                                                         |
-| `memory_recall`   | Recall active memory entries and technical decisions                                              |
-| `memory_write`    | Write a memory entry (notes, decisions, patterns)                                                 |
-| `index_workspace` | Trigger indexing for a workspace                                                                  |
+| Tool              | Description                                                                                         |
+| ----------------- | --------------------------------------------------------------------------------------------------- |
+| `list_workspaces` | List all registered workspaces                                                                      |
+| `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
+| `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
+| `graph_neighbors` | Traverse graph edges from a node or label                                                           |
+| `memory_recall`   | Recall active memory entries and technical decisions                                                |
+| `memory_write`    | Write a memory entry (notes, decisions, patterns)                                                   |
+| `index_workspace` | Trigger indexing for a workspace                                                                    |
 
 `memory_query` is accepted as a deprecated compatibility alias for `code_query`, but is not advertised to new clients.
 
 ## How it works
 
-1. **`openez setup <agent>`** writes MCP server config to the agent's config file (e.g. `~/.claude/settings.json`, `~/.codeium/windsurf/mcp_config.json`, `~/.config/devin/config.json`)
+1. **`openez setup <agent>`** writes MCP server config to the agent's config file (e.g. `~/.claude/settings.json`, `~/.codeium/windsurf/mcp_config.json`, `~/.config/devin/config.json`) and installs agent instructions (`AGENTS.md` or `CLAUDE.md`) in the project root. These instruction files tell the agent to prefer OpenEZ MCP tools over grep/ripgrep. They are safe to commit or gitignore — `openez setup` will update them idempotently if already present.
 2. When Claude Code starts, it launches the MCP server via `openez serve --mcp`
 3. The MCP server auto-registers the current project as a workspace
 4. It auto-indexes if the workspace has no documents yet

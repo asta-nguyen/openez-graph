@@ -44,15 +44,15 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 
 ## MCP tools
 
-| Tool              | Purpose                                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------------- |
-| `code_query`      | Retrieve ranked code and documentation context                                                |
-| `code_context`    | Get graph-adjacent context for a symbol or file (default 50 records, max 200, token-budgeted) |
-| `graph_neighbors` | Inspect nearby graph nodes and edges                                                          |
-| `list_workspaces` | List registered workspaces and index status                                                   |
-| `memory_recall`   | Recall stored technical decisions and notes                                                   |
-| `memory_write`    | Store a decision or learned constraint                                                        |
-| `index_workspace` | Run an incremental or full index                                                              |
+| Tool              | Purpose                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| `code_query`      | Retrieve ranked code and documentation context                                                 |
+| `code_context`    | Get graph-adjacent context for a symbol or file (limit: 50/workspace, max 200, token-budgeted) |
+| `graph_neighbors` | Inspect nearby graph nodes and edges                                                           |
+| `list_workspaces` | List registered workspaces and index status                                                    |
+| `memory_recall`   | Recall stored technical decisions and notes                                                    |
+| `memory_write`    | Store a decision or learned constraint                                                         |
+| `index_workspace` | Run an incremental or full index                                                               |
 
 Read tools support one or many workspaces. Write and index operations remain scoped to one workspace.
 
@@ -75,6 +75,10 @@ openez config list          # list all DB-stored config overrides
 ```
 
 Run `openez --help` or `openez <command> --help` for all options.
+
+### Indexing ownership and lease fencing
+
+Indexing and graph builds use lease-based ownership to prevent concurrent processes from clobbering each other. When a process starts indexing, it claims a 60-second lease with a heartbeat every 15 seconds. If the lease expires (e.g. the process crashes), another process can take over. Completion and failure writes are fenced by owner token — a stale owner cannot overwrite the status set by the new owner.
 
 ## Storage
 
