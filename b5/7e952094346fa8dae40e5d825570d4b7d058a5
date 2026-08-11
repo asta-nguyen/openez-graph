@@ -1,0 +1,39 @@
+apps/web/src/routes/settings.tsx
+  s_345d52b8a6bfe3::t_da99a1e8208a70 294-296
+apps/cli/src/setup-instructions.ts
+  s_345d52b8a6bfe3::t_852df4b16606cc 20,34-38
+  s_345d52b8a6bfe3::t_593f78d4189c71 17-19,21-33,39-65,83,112
+packages/core/src/local-embedding.ts
+  s_345d52b8a6bfe3::t_f75b17e84118cc 37,42-50,54-57,63-66,91,101,117,272-277
+  s_345d52b8a6bfe3::t_3dc16178f36b61 51-53,58-62
+docs/superpowers/plans/2026-08-10-local-embedding-cli.md
+  s_345d52b8a6bfe3::t_8651b0ae743e33 83
+packages/indexer/src/parsers/oxc-parser.ts
+  s_345d52b8a6bfe3::t_05dca99ccd0e4a 376
+tests/local-embedding.test.ts
+  s_345d52b8a6bfe3::t_b2f1dde9a68ec6 161-164
+tests/embed-benchmark.test.ts
+  s_345d52b8a6bfe3::t_87c6d111ba2496 60,65,116
+tests/embed-workspace.test.ts
+  s_345d52b8a6bfe3::t_84396118784622 81-92,98-100,105
+  s_345d52b8a6bfe3::t_852df4b16606cc 95-97
+tests/oxc-parser.test.ts
+  s_345d52b8a6bfe3::t_7a3f484b1e6c58 311-320
+  s_345d52b8a6bfe3::t_05dca99ccd0e4a 310,321-334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b57e952094346fa8dae40e5d825570d4b7d058a5",
+  "prompts": {},
+  "sessions": {
+    "s_345d52b8a6bfe3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe992-ad1f-7791-bbdd-c412d8baf651",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
