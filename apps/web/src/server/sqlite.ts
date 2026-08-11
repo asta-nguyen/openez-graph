@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-import { getFullWorkspaceDdl, getRegistryDdl } from "@openez-graph/db";
+import { getFullWorkspaceDdl, getRegistryDdl, migrateRegistrySchema } from "@openez-graph/db";
 
 function getRequireUrl(): string {
   try {
@@ -158,59 +158,12 @@ export function resolveRegistryDbPath(): string {
 }
 
 function initializeRegistrySchema(db: SqliteDb) {
-  // Use the authoritative DDL from @openez-graph/db so the web server
-  // never creates a schema that diverges from the CLI/MCP/indexer path.
+  // Use the authoritative DDL and migration from @openez-graph/db so the
+  // web server never creates a schema that diverges from the CLI/MCP/indexer
+  // path. This includes column migrations, registry_meta, and the one-shot
+  // graph invalidation backfill.
   db.exec(getRegistryDdl());
-  migrateRegistryColumns(db);
-}
-
-function migrateRegistryColumns(db: SqliteDb) {
-  const getColumns = () =>
-    new Set(
-      (db.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
-        (row) => row.name,
-      ),
-    );
-
-  const addColumnIfMissing = (name: string, definition: string) => {
-    if (getColumns().has(name)) return;
-    try {
-      db.exec(`ALTER TABLE workspaces ADD COLUMN ${definition}`);
-    } catch (err) {
-      // Another process may have added the column concurrently; re-check.
-      if (!getColumns().has(name)) {
-        throw err;
-      }
-    }
-  };
-
-  addColumnIfMissing("pinned_at", "pinned_at TEXT");
-  addColumnIfMissing("pin_order", "pin_order INTEGER");
-  addColumnIfMissing("index_build_owner", "index_build_owner TEXT");
-  addColumnIfMissing("index_lease_expires_at", "index_lease_expires_at TEXT");
-  addColumnIfMissing("index_generation", "index_generation INTEGER NOT NULL DEFAULT 0");
-  addColumnIfMissing("graph_generation", "graph_generation INTEGER NOT NULL DEFAULT 0");
-  addColumnIfMissing("graph_build_owner", "graph_build_owner TEXT");
-  addColumnIfMissing("graph_build_epoch", "graph_build_epoch INTEGER NOT NULL DEFAULT 0");
-  addColumnIfMissing("graph_lease_expires_at", "graph_lease_expires_at TEXT");
-
-  // Backfill pin_order for pre-existing pinned workspaces that lack it.
-  const unbackfilled = db
-    .prepare(
-      "SELECT id FROM workspaces WHERE pinned_at IS NOT NULL AND pin_order IS NULL ORDER BY pinned_at DESC",
-    )
-    .all() as Array<{ id: string }>;
-  if (unbackfilled.length > 0) {
-    const maxRow = db
-      .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
-      .get() as { max_order: number | null } | undefined;
-    let next = (maxRow?.max_order ?? 0) + 1;
-    const stmt = db.prepare("UPDATE workspaces SET pin_order = ? WHERE id = ?");
-    for (const row of unbackfilled) {
-      stmt.run(next, row.id);
-      next += 1;
-    }
-  }
+  migrateRegistrySchema(db);
 }
 
 export function getRegistryDb(): SqliteDb {

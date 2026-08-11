@@ -282,7 +282,21 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
     const strings: Array<{ owner: Record<string, unknown>; key: string; value: string }> = [];
     const visit = (current: unknown, parentKey?: string) => {
       if (Array.isArray(current)) {
-        const minimum = parentKey === "nodes" || parentKey === "results" ? 1 : 0;
+        // results and nodes can be trimmed to 1 entry but not emptied.
+        // Source arrays (callers, callees, relatedChunks, sources, files)
+        // within a result entry also get minimum 1 so context and
+        // structured sources stay paired — truncation drops whole result
+        // entries rather than emptying their inner arrays.
+        const minimum =
+          parentKey === "nodes" ||
+          parentKey === "results" ||
+          parentKey === "callers" ||
+          parentKey === "callees" ||
+          parentKey === "relatedChunks" ||
+          parentKey === "sources" ||
+          parentKey === "files"
+            ? 1
+            : 0;
         if (current.length > minimum) arrays.push({ items: current, minimum });
         current.forEach((item) => visit(item));
         return;
