@@ -158,6 +158,10 @@ describe("local embedding provider", () => {
 });
 
 describe("getLocalEmbeddingModel", () => {
+  it("reuses the provider instance across factory calls", async () => {
+    expect(await getLocalEmbeddingModel()).toBe(await getLocalEmbeddingModel());
+  });
+
   it("rejects inherited names that are not catalog entries", () => {
     expect(isLocalEmbeddingModel(LOCAL_EMBEDDING_MODEL)).toBe(true);
     expect(isLocalEmbeddingModel("toString")).toBe(false);

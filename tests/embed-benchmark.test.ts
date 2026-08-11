@@ -57,10 +57,12 @@ async function runEvaluation() {
 describe("retrieval benchmark", () => {
   let registryDir: string | null = null;
   let savedRegistryPath: string | undefined;
+  let benchmarkStarted = false;
   let realEmbeddingSettings: Record<string, string> = {};
 
   beforeAll(async () => {
     if (!RUN_BENCHMARK) return;
+    benchmarkStarted = true;
 
     const expectedPaths = [...new Set(cases.flatMap((item) => item.expectedPaths ?? []))];
     const missing = expectedPaths.filter(
@@ -111,6 +113,7 @@ describe("retrieval benchmark", () => {
   }, 120_000);
 
   afterAll(() => {
+    if (!benchmarkStarted) return;
     closeAllWorkspaceDbs();
     closeRegistryDb();
     if (savedRegistryPath === undefined) delete process.env.AI_MEMORY_REGISTRY_DB_PATH;

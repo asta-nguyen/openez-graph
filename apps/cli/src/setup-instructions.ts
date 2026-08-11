@@ -14,6 +14,55 @@ const MANAGED_BLOCK = `${START_MARKER}
 - Use explicit workspace scope for cross-workspace work.
 ${END_MARKER}`;
 
+function readInstructionFile(instructionsPath: string): string {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(instructionsPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    return fs.readFileSync(fd, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+function writeInstructionFileAtomic(instructionsPath: string, content: string): void {
+  const tempPath = `${instructionsPath}.openez-${process.pid}-${Date.now()}.tmp`;
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(
+      tempPath,
+      fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
+      0o644,
+    );
+    fs.writeFileSync(fd, content, "utf-8");
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+
+    // Reject a symlink observed after the read too. If an attacker swaps it
+    // immediately after this check, rename replaces the link itself rather
+    // than following it, so no outside target is written.
+    try {
+      if (fs.lstatSync(instructionsPath).isSymbolicLink()) {
+        throw new Error("Refusing to manage symlinked instruction file: " + instructionsPath);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    fs.renameSync(tempPath, instructionsPath);
+  } catch (error) {
+    if (fd !== undefined) fs.closeSync(fd);
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // Best-effort cleanup of our uniquely named temporary file.
+    }
+    throw error;
+  }
+}
+
 export function installAgentInstructions(
   rootPath: string,
   fileName: "AGENTS.md" | "CLAUDE.md",
@@ -31,9 +80,7 @@ export function installAgentInstructions(
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
 
-  const existing = fs.existsSync(instructionsPath)
-    ? fs.readFileSync(instructionsPath, "utf-8")
-    : "";
+  const existing = readInstructionFile(instructionsPath);
 
   const start = existing.indexOf(START_MARKER);
   const end = existing.indexOf(END_MARKER);
@@ -62,6 +109,6 @@ export function installAgentInstructions(
         MANAGED_BLOCK +
         "\n";
 
-  if (next !== existing) fs.writeFileSync(instructionsPath, next, "utf-8");
+  if (next !== existing) writeInstructionFileAtomic(instructionsPath, next);
   return instructionsPath;
 }

@@ -34,9 +34,35 @@ function getLocalEmbeddingSpec(model: string) {
 }
 
 const cacheLoads = new Map<string, Promise<string>>();
+const providerCache = new Map<string, LocalEmbeddingProvider>();
 
 // Marker used as `Error.cause` to signal a non-retryable download failure.
 const PERMANENT = Symbol("permanent");
+
+function headerDelayMs(response: Response): number | undefined {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) return Math.max(0, date - Date.now());
+  }
+
+  const epochReset = response.headers.get("x-ratelimit-reset");
+  if (epochReset) {
+    const value = Number(epochReset);
+    if (Number.isFinite(value) && value >= 0) {
+      const timestamp = value < 1_000_000_000_000 ? value * 1000 : value;
+      return Math.max(0, timestamp - Date.now());
+    }
+  }
+  const secondsReset = response.headers.get("ratelimit-reset");
+  if (secondsReset) {
+    const value = Number(secondsReset);
+    if (Number.isFinite(value) && value >= 0) return value * 1000;
+  }
+  return undefined;
+}
 
 export function getLocalEmbeddingCacheDir(
   model = LOCAL_EMBEDDING_MODEL,
@@ -62,6 +88,7 @@ async function downloadFile(url: string, target: string, expectedHash: string): 
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
+    let retryDelayMs = attempt * 250;
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
       if (!response.ok) {
@@ -71,6 +98,7 @@ async function downloadFile(url: string, target: string, expectedHash: string): 
             cause: PERMANENT,
           });
         }
+        if (response.status === 429) retryDelayMs = headerDelayMs(response) ?? retryDelayMs;
         throw new Error("Model download retryable status " + response.status + " for " + url);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
@@ -86,7 +114,7 @@ async function downloadFile(url: string, target: string, expectedHash: string): 
     } catch (error) {
       lastError = error;
       if ((error as { cause?: symbol })?.cause === PERMANENT) break;
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
@@ -241,5 +269,10 @@ export async function getLocalEmbeddingModel(
         Object.keys(LOCAL_EMBEDDING_MODELS).join(", "),
     );
   }
-  return new LocalEmbeddingProvider(getLocalEmbeddingCacheDir(model));
+  const cacheDir = getLocalEmbeddingCacheDir(model);
+  const cached = providerCache.get(cacheDir);
+  if (cached) return cached;
+  const provider = new LocalEmbeddingProvider(cacheDir);
+  providerCache.set(cacheDir, provider);
+  return provider;
 }
