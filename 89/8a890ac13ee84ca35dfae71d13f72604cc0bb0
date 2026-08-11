@@ -1,0 +1,37 @@
+apps/web/src/server/sqlite.ts
+  s_6989a0f8b1a17d::t_06cf901ac43375 289-296
+packages/db/src/sqlite/workspace-db.ts
+  s_6989a0f8b1a17d::t_06cf901ac43375 144
+  s_6989a0f8b1a17d::t_192b5ff6f6c7d2 145
+tests/web-index-endpoint.test.ts
+  s_6989a0f8b1a17d::t_c9aa421d328074 56
+  s_6989a0f8b1a17d::t_0513c21601a805 8-11,47-55,57-65
+  s_5bc8e9e818017b::t_bd020dbbc9d514 66
+tests/workspace-db.test.ts
+  s_6989a0f8b1a17d::t_0513c21601a805 7,22-54
+  s_6989a0f8b1a17d::t_4f1cfac0bb737b 55-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "898a890ac13ee84ca35dfae71d13f72604cc0bb0",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_6989a0f8b1a17d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff124-e325-7a73-8707-394943f19b65",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
