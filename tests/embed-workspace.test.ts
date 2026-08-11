@@ -78,15 +78,31 @@ describe("embedWorkspace", () => {
     configuredProvider = provider;
     await indexWorkspace({ workspaceId: workspace.id });
     const first = await embedWorkspace({ workspaceId: workspace.id });
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const [chunk] = await repo.queryRaw("SELECT id FROM chunks LIMIT 1");
+    await repo.insertEmbeddings([
+      {
+        chunkId: String(chunk?.id),
+        provider: "openai",
+        model: "other-model",
+        dimensions: 2,
+        embedding: new Uint8Array(new Float32Array([0, 1]).buffer),
+        inputHash: "other-input",
+      },
+    ]);
 
     const forced = await embedWorkspace({ workspaceId: workspace.id, force: true });
-    const rows = await createWorkspaceRepository(workspaceRoot).queryRaw(
-      "SELECT count(*) AS c FROM embeddings WHERE provider = ?",
-      [provider.provider],
+    const rows = await repo.queryRaw("SELECT count(*) AS c FROM embeddings WHERE provider = ?", [
+      provider.provider,
+    ]);
+    const otherRows = await repo.queryRaw(
+      "SELECT count(*) AS c FROM embeddings WHERE provider = ? AND model = ?",
+      ["openai", "other-model"],
     );
 
     expect(forced.embeddingsWritten).toBe(first.chunksConsidered);
     expect(Number(rows[0]?.c ?? 0)).toBe(first.chunksConsidered);
+    expect(Number(otherRows[0]?.c ?? 0)).toBe(1);
   });
 
   it("makes indexed chunks available to vector retrieval after embedding", async () => {

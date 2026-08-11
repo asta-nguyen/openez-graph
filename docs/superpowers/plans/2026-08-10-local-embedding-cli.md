@@ -80,7 +80,7 @@ git commit -m "feat(core): add pinned local embedding provider"
 
 - [ ] Step 1: Extract the existing materializer. Move writeEmbeddingsToRepo and its imports from index-workspace.ts into embed-workspace.ts as an exported helper, preserving the current batch size, hash reuse, and error behavior.
 
-- [ ] Step 2: Write failing service tests. Create a temporary registered workspace with embedding.provider=local, index it, call embedWorkspace, assert the returned count equals the chunk count and the embeddings table contains the active provider/model rows. Call it again and assert embeddingsWritten is zero; call with force: true and assert rows are rebuilt.
+- [ ] Step 2: Write failing service tests. After Task 3 Step 2 removes embedding materialization from indexWorkspace, create a temporary registered workspace with embedding.provider=local, index it, call embedWorkspace, assert the returned count equals the chunk count and the embeddings table contains the active provider/model rows. Call it again and assert embeddingsWritten is zero; call with force: true and assert rows are rebuilt. Until that removal is applied, the empty-before-embed assertion is expected to fail.
 
 - [ ] Step 3: Implement workspace resolution and chunk collection. Resolve workspaceId or rootPath exactly as indexWorkspace() does, write .openez/workspace.json, load the configured provider, list documents, fetch each document's chunks, and map { id, content, path, heading }. If no provider is configured, throw No embedding provider configured; set embedding.provider first.
 

@@ -307,6 +307,31 @@ describe("OxcParser", () => {
     });
   });
 
+  it("does not rewrite this calls inside nested plain functions", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "nested-this.ts",
+        absolutePath: "/tmp/nested-this.ts",
+        content: "function outer() { function inner() { this.save(); } }",
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    const inner = result.definedSymbols.find((symbol) => symbol.name === "outer.inner");
+    expect(inner).toBeDefined();
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer.inner",
+      calleeName: "this.save",
+    });
+    expect(result.callExpressions).not.toContainEqual({
+      callerName: "outer.inner",
+      calleeName: "outer.save",
+    });
+  });
+
   it("finds calls inside object property values", () => {
     const result = new OxcParser().parse(
       {

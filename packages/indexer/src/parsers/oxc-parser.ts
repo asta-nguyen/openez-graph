@@ -373,7 +373,7 @@ function extractCalls(symbolAsts: SymbolAst[]): {
           const rawName = calleeName(current.callee as OxcNode);
           const className = symbol.name.includes(".") ? symbol.name.split(".")[0] : null;
           let name = rawName;
-          if (rawName?.startsWith("this.") && className) {
+          if (rawName?.startsWith("this.") && symbol.symbolType === "method" && className) {
             const memberName = rawName.slice("this.".length);
             name = symbol.name.includes(".static.")
               ? `${className}.static.${memberName}`

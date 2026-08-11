@@ -291,7 +291,9 @@ function EmbeddingConfigForm() {
           {saveMutation.isPending ? "Saving..." : "Save"}
         </Button>
         {saveMutation.isSuccess && (
-          <span className="text-sm text-green-600">Saved! Run embed to create vectors.</span>
+          <span className="text-sm text-green-600">
+            Saved!{provider === "local" ? " Run embed to create vectors." : ""}
+          </span>
         )}
         {saveMutation.isError && (
           <span className="text-sm text-red-600">
