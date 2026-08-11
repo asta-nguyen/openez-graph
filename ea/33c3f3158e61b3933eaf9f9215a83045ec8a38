@@ -1,0 +1,26 @@
+apps/mcp/src/mcp-core.ts
+  s_5bc8e9e818017b::t_f3b5c48b3b59ed 581-584,594
+  s_5bc8e9e818017b::t_932222521016ef 624
+  s_5bc8e9e818017b::t_275bea2bc1cdf1 377,381-383
+apps/cli/README.md
+  s_5bc8e9e818017b::t_847f922f7a9cab 18
+  s_5bc8e9e818017b::t_a583712b82c765 67
+  s_5bc8e9e818017b::t_86d60303b5f821 56
+  s_5bc8e9e818017b::t_90507786883210 104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ea33c3f3158e61b3933eaf9f9215a83045ec8a38",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
