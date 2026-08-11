@@ -1,0 +1,19 @@
+.gitignore
+  s_6989a0f8b1a17d::t_439ef275aea55b 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b4f93d5bb3ff5d246d96997465da72c965117662",
+  "prompts": {},
+  "sessions": {
+    "s_6989a0f8b1a17d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff124-e325-7a73-8707-394943f19b65",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
