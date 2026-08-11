@@ -371,6 +371,8 @@ git commit -m "fix(types): restore strict query inference"
 
 - Produces: `EmbedWorkspaceSummary.cacheStatus: "ready" | "not-applicable"`.
 
+> **Deferred:** The `cacheStatus` field was not implemented in the merge-readiness remediation. The updated 7-item remediation plan (see commit history on `feat/enhance`) superseded this task. The reindex lifecycle documentation (Step 4) was completed; `cacheStatus` remains a future enhancement.
+
 - [ ] **Step 1: Add the summary regression assertion**
 
 In the remote-provider resume test, add:

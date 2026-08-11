@@ -935,13 +935,18 @@ export async function indexWorkspace(input: {
       const nodeCount = await repo.getNodeCount();
       const edgeCount = await repo.getEdgeCount();
 
-      await activeRegistry.completeIndexing(workspace.id, indexingOwnerToken!, {
+      const completed = await activeRegistry.completeIndexing(workspace.id, indexingOwnerToken!, {
         documentCount: docCount,
         chunkCount: chunkCountResult,
         nodeCount,
         edgeCount,
         completedAt: new Date().toISOString(),
       });
+      if (!completed) {
+        process.stderr.write(
+          `[openez] Index lease was lost before completion; another owner may have taken over.\n`,
+        );
+      }
 
       // Switch out of optimized write mode AFTER all writes are done.
       // Doing it earlier causes fsync to flush ~70MB of dirty pages mid-finalize.

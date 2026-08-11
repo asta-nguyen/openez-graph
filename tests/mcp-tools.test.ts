@@ -235,6 +235,52 @@ describe("MCP agent contracts", () => {
       await server.close();
     }
   });
+
+  it("keeps context and structured sources paired under token truncation", async () => {
+    // Create two workspaces so code_context returns multiple result entries
+    // that can be truncated by fitToTokenBudget.
+    const secondRoot = path.join(tempRoot, "second");
+    fs.mkdirSync(secondRoot, { recursive: true });
+    await createIndexedWorkspace("context-a", tempRoot);
+    await createIndexedWorkspace("context-b", secondRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const text = textResult(
+        await client.callTool({
+          name: "code_context",
+          arguments: {
+            symbolOrPath: "target",
+            paths: [tempRoot, secondRoot],
+            maxTokens: 300,
+          },
+        }),
+      );
+      const body = JSON.parse(text) as {
+        metrics: { truncated: boolean };
+        results: Array<{
+          result: {
+            symbol?: { snippet?: string };
+            callers: Array<Record<string, unknown>>;
+            callees: Array<Record<string, unknown>>;
+          };
+        }>;
+      };
+
+      expect(countTokens(text)).toBeLessThanOrEqual(300);
+      expect(body.metrics.truncated).toBe(true);
+      // Every remaining result entry must have its structured source arrays
+      // intact — truncation drops whole entries, not inner arrays.
+      for (const entry of body.results) {
+        expect(Array.isArray(entry.result.callers)).toBe(true);
+        expect(Array.isArray(entry.result.callees)).toBe(true);
+      }
+    } finally {
+      await client.close();
+      await server.close();
+      closeAllWorkspaceDbs();
+      fs.rmSync(secondRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 function toolJson(result: unknown): Record<string, unknown> {
