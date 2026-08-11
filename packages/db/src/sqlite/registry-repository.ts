@@ -246,6 +246,28 @@ export function createRegistryRepository(): RegistryRepository {
       native.prepare(`UPDATE workspaces SET ${sets.join(", ")} WHERE id = ?`).run(...params);
     },
 
+    async tryClaimIndexing(id: string): Promise<boolean> {
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET status = 'indexing', indexing_status = 'running', last_error = '', updated_at = ?
+           WHERE id = ? AND indexing_status != 'running'`,
+        )
+        .run(new Date().toISOString(), id) as { changes: number };
+      return result.changes > 0;
+    },
+
+    async releaseIndexing(id: string, error: string): Promise<boolean> {
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET status = 'error', indexing_status = 'failed', last_error = ?, updated_at = ?
+           WHERE id = ? AND indexing_status = 'running'`,
+        )
+        .run(error, new Date().toISOString(), id) as { changes: number };
+      return result.changes > 0;
+    },
+
     async invalidateWorkspaceGraph(id: string): Promise<number> {
       const row = native
         .prepare(

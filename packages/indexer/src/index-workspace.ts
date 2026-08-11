@@ -470,21 +470,31 @@ export async function indexWorkspace(input: {
   // Token counting is now scoped via the TokenCounter interface — no global
   // fast-mode toggle to reset. The try/finally is retained for structural
   // stability but no longer toggles global tokenizer state.
+  let registry: ReturnType<typeof createRegistryRepository> | undefined;
+  let indexingClaimed = false;
+  let claimedWorkspaceId: string | undefined;
   try {
-    const registry = createRegistryRepository();
+    const activeRegistry = createRegistryRepository();
+    registry = activeRegistry;
     let workspace: RegistryWorkspace;
 
     if (input.workspaceId) {
-      const w = await registry.getWorkspace(input.workspaceId);
+      const w = await activeRegistry.getWorkspace(input.workspaceId);
       if (!w) throw new Error(`Workspace '${input.workspaceId}' not found`);
       workspace = w;
     } else if (input.rootPath) {
-      workspace = await registry.ensureWorkspace({
+      workspace = await activeRegistry.ensureWorkspace({
         rootPath: path.resolve(input.rootPath),
       });
     } else {
       throw new Error("Either workspaceId or rootPath is required");
     }
+
+    if (!(await activeRegistry.tryClaimIndexing(workspace.id))) {
+      throw new Error(`Workspace '${workspace.id}' is already being indexed`);
+    }
+    indexingClaimed = true;
+    claimedWorkspaceId = workspace.id;
 
     await writeLocalWorkspaceConfig(workspace);
 
@@ -506,7 +516,7 @@ export async function indexWorkspace(input: {
 
     const invalidateGraph = async () => {
       if (graphInvalidated) return;
-      await registry.invalidateWorkspaceGraph(workspace.id);
+      await activeRegistry.invalidateWorkspaceGraph(workspace.id);
       graphInvalidated = true;
     };
 
@@ -877,7 +887,7 @@ export async function indexWorkspace(input: {
       const nodeCount = await repo.getNodeCount();
       const edgeCount = await repo.getEdgeCount();
 
-      await registry.updateWorkspace(workspace.id, {
+      await activeRegistry.updateWorkspace(workspace.id, {
         status: "indexed",
         indexingStatus: "completed",
         lastIndexedAt: new Date().toISOString(),
@@ -914,7 +924,7 @@ export async function indexWorkspace(input: {
         errorMessage,
       });
 
-      await registry.updateWorkspace(workspace.id, {
+      await activeRegistry.updateWorkspace(workspace.id, {
         status: "error",
         indexingStatus: "failed",
         lastError: errorMessage,
@@ -934,7 +944,13 @@ export async function indexWorkspace(input: {
       embeddingFailures: 0,
     };
   } finally {
-    // No global tokenizer state to reset — token counting is scoped.
+    if (registry && indexingClaimed && claimedWorkspaceId) {
+      try {
+        await registry.releaseIndexing(claimedWorkspaceId, "Indexing aborted before completion");
+      } catch {
+        // Preserve the original indexing error if registry cleanup fails.
+      }
+    }
   }
 }
 

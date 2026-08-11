@@ -86,6 +86,8 @@ const DEFAULT_EXCLUDE_GLOBS = [
   "**/.turbo/**",
 ];
 
+const activeIndexRuns = new Set<string>();
+
 function mapWorkspace(ws: {
   id: string;
   name: string;
@@ -374,10 +376,19 @@ app.post("/api/workspaces/:id/index", async (c) => {
     return c.json({ status: "failed", error: "Mode must be 'incremental' or 'full'" }, 400);
   }
 
+  const currentWorkspace = getRegistryWorkspace(id);
+  if (activeIndexRuns.has(id) || currentWorkspace?.indexingStatus === "running") {
+    return c.json({ status: "running", error: `Workspace '${id}' is already being indexed` }, 409);
+  }
+
+  activeIndexRuns.add(id);
   try {
     const summary = await indexWorkspace({ workspaceId: id, mode });
     return c.json({ ...summary, status: "completed" });
   } catch (error) {
+    if (error instanceof Error && error.message.includes("already being indexed")) {
+      return c.json({ status: "running", error: error.message }, 409);
+    }
     return c.json(
       {
         status: "failed",
@@ -385,6 +396,8 @@ app.post("/api/workspaces/:id/index", async (c) => {
       },
       500,
     );
+  } finally {
+    activeIndexRuns.delete(id);
   }
 });
 

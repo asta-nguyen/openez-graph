@@ -212,6 +212,16 @@ describe("createRegistryRepository", () => {
     expect(updated?.documentCount).toBe(42);
   });
 
+  it("atomically serializes workspace index claims", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+
+    expect(await repo.tryClaimIndexing("ws1")).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1")).toBe(false);
+    await repo.releaseIndexing("ws1", "aborted");
+    expect(await repo.tryClaimIndexing("ws1")).toBe(true);
+  });
+
   it("fences stale graph builders by owner token and monotonically increasing epoch", async () => {
     const repo = createRegistryRepository();
     await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });

@@ -81,6 +81,21 @@ describe("POST /api/workspaces/:id/index", () => {
     expect(await response.json()).toMatchObject({ workspaceId, status: "completed" });
   });
 
+  it("rejects an index request while another process owns the workspace claim", async () => {
+    const registry = createRegistryRepository();
+    expect(await registry.tryClaimIndexing(workspaceId)).toBe(true);
+
+    const response = await app.request(`/api/workspaces/${workspaceId}/index`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "full" }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ status: "running" });
+    await registry.releaseIndexing(workspaceId, "test cleanup");
+  });
+
   it("returns 404 for an unknown workspace", async () => {
     const response = await app.request("/api/workspaces/missing/index", {
       method: "POST",

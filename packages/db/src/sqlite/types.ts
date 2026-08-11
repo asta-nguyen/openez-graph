@@ -76,6 +76,10 @@ export interface RegistryRepository {
       >
     >,
   ): Promise<void>;
+  /** Atomically claim a workspace for indexing; returns false if already running. */
+  tryClaimIndexing(id: string): Promise<boolean>;
+  /** Release an indexing claim that failed before normal completion. */
+  releaseIndexing(id: string, error: string): Promise<boolean>;
   invalidateWorkspaceGraph(id: string): Promise<number>;
   /**
    * Atomically claim the graph build for a workspace. Transitions

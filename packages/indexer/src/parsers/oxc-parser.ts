@@ -285,6 +285,59 @@ function calleeName(callee: OxcNode): string | null {
   return null;
 }
 
+function collectPatternBindings(pattern: OxcNode | undefined, bindings: Set<string>): void {
+  if (!pattern) return;
+  if (pattern.type === "Identifier" && typeof pattern.name === "string") {
+    bindings.add(pattern.name);
+    return;
+  }
+  if (pattern.type === "RestElement") {
+    collectPatternBindings(pattern.argument as OxcNode | undefined, bindings);
+    return;
+  }
+  if (pattern.type === "AssignmentPattern") {
+    collectPatternBindings(pattern.left as OxcNode | undefined, bindings);
+    return;
+  }
+  if (pattern.type === "ArrayPattern") {
+    for (const element of pattern.elements ?? []) {
+      collectPatternBindings(element as OxcNode | undefined, bindings);
+    }
+    return;
+  }
+  if (pattern.type === "ObjectPattern") {
+    for (const property of pattern.properties ?? []) {
+      if (property.type === "Property") {
+        collectPatternBindings(property.value as OxcNode | undefined, bindings);
+      } else {
+        collectPatternBindings(property as OxcNode, bindings);
+      }
+    }
+  }
+}
+
+function collectLocalBindings(node: OxcNode, skippedScopes: WeakSet<object>): Set<string> {
+  const bindings = new Set<string>();
+  collectPatternBindings(node.id as OxcNode | undefined, bindings);
+  for (const parameter of node.params ?? []) {
+    collectPatternBindings(parameter as OxcNode, bindings);
+  }
+  walkNodes(
+    node,
+    (current: OxcNode) => {
+      if (current.type === "VariableDeclarator") {
+        collectPatternBindings(current.id as OxcNode | undefined, bindings);
+      } else if (current.type === "CatchClause") {
+        collectPatternBindings(current.param as OxcNode | undefined, bindings);
+      }
+    },
+    new WeakSet<object>(),
+    skippedScopes,
+    true,
+  );
+  return bindings;
+}
+
 /**
  * Walk each symbol's AST subtree and collect call expressions, attributing
  * calls to the owning symbol. Calls nested inside a nested callable
@@ -299,6 +352,11 @@ function extractCalls(symbolAsts: SymbolAst[]): {
   const staticSymbolNames = new Set(
     symbolAsts.map(({ symbol }) => symbol.name).filter((name) => name.includes(".static.")),
   );
+  const classNames = new Set(
+    symbolAsts
+      .filter(({ symbol }) => symbol.symbolType === "class")
+      .map(({ symbol }) => symbol.name),
+  );
 
   for (const { symbol, node } of symbolAsts) {
     // Only function-like symbols can contain calls.
@@ -307,6 +365,7 @@ function extractCalls(symbolAsts: SymbolAst[]): {
     const skippedScopes = new WeakSet<object>(
       symbolAsts.filter((entry) => entry.node !== node).map((entry) => entry.node),
     );
+    const localBindings = collectLocalBindings(node, skippedScopes);
     walkNodes(
       node,
       (current: OxcNode) => {
@@ -322,7 +381,13 @@ function extractCalls(symbolAsts: SymbolAst[]): {
           } else if (rawName && rawName.includes(".")) {
             const [receiver, ...memberParts] = rawName.split(".");
             const staticName = `${receiver}.static.${memberParts.join(".")}`;
-            if (staticSymbolNames.has(staticName)) name = staticName;
+            if (
+              classNames.has(receiver) &&
+              !localBindings.has(receiver) &&
+              staticSymbolNames.has(staticName)
+            ) {
+              name = staticName;
+            }
           }
           if (name) {
             callExpressions.push({ callerName: symbol.name, calleeName: name });
