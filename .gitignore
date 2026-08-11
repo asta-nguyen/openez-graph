@@ -22,5 +22,15 @@ repomix-output.xml
 .omo
 scratch/
 
+# Local Model2Vec distillation environment and generated artifact
+jina-code-static-build/
+
+# Ephemeral review and plan docs
+docs/CODE_RAG_REVIEW.md
+
 # Rust build artifacts
 packages/native/target/
+
+# Review files
+reviews/
+

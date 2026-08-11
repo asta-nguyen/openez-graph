@@ -185,4 +185,71 @@ describe("OxcParser", () => {
       calleeName: "helper",
     });
   });
+
+  it("attributes calls inside anonymous callbacks to the nearest named owner", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "callback.ts",
+        absolutePath: "/tmp/callback.ts",
+        content: [
+          "function outer(items: number[]) {",
+          "  items.map(() => helper());",
+          "}",
+          "function helper() {}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer",
+      calleeName: "helper",
+    });
+  });
+
+  it("normalizes this-method calls to the owning class", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "service.ts",
+        absolutePath: "/tmp/service.ts",
+        content: "class Service { run() { this.save(); } save() {} }",
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Service.run",
+      calleeName: "Service.save",
+    });
+  });
+
+  it("finds calls inside object property values", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "object.ts",
+        absolutePath: "/tmp/object.ts",
+        content: [
+          "function configure() {",
+          "  return { save: () => helper() };",
+          "}",
+          "function helper() {}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "configure",
+      calleeName: "helper",
+    });
+  });
 });

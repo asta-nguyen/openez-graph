@@ -132,24 +132,6 @@ export async function rankStoredEmbeddings(
     .slice(0, limit);
 }
 
-const QUERY_EXPANSIONS: Array<[RegExp, string]> = [
-  [/encrypt|secret|key|password/i, "encrypt decrypt AES cipher key security"],
-  [/similar|distance|vector|number/i, "embedding cosine similarity vector dot product"],
-  [/config|setting|option/i, "config setting registry database store"],
-  [/chunk|split|piece|part/i, "chunk index parse split token"],
-  [/model|inference|AI|LLM/i, "embedding provider model inference"],
-  [/store|save|write|persist/i, "insert store database repository"],
-  [/search|find|query|lookup/i, "search query retrieval FTS vector"],
-  [/index|build|process/i, "index workspace scan parse"],
-];
-
-function expandQuery(query: string): string {
-  const expansions = QUERY_EXPANSIONS.filter(([pattern]) => pattern.test(query)).map(
-    ([, expansion]) => expansion,
-  );
-  return expansions.length > 0 ? `${query} ${expansions.join(" ")}` : query;
-}
-
 async function vectorSearch(rootPath: string, query: string, limit: number): Promise<ChunkHit[]> {
   try {
     const provider = await getEmbeddingProvider();
@@ -159,9 +141,8 @@ async function vectorSearch(rootPath: string, query: string, limit: number): Pro
     }
 
     console.error(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
-    const expandedQuery = expandQuery(query);
     const [queryEmbedding] = await provider.embed([
-      formatEmbeddingInput(provider, { content: expandedQuery }, "query"),
+      formatEmbeddingInput(provider, { content: query }, "query"),
     ]);
     const hits = await rankStoredEmbeddings(rootPath, provider, queryEmbedding ?? [], limit);
     console.error(`[retrieval] vector search: ${hits.length} hits`);
@@ -278,7 +259,7 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
     throw new Error(`Workspace '${input.workspaceId}' not found`);
   }
 
-  const settings = await getBrainSettings();
+  const settings = await getBrainSettings(workspace.rootPath);
   const retrieval = settings.retrieval;
   const finalLimit = input.limit ?? retrieval.finalLimit;
   const maxTokens = input.maxTokens ?? retrieval.maxContextTokens;

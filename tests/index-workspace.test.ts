@@ -38,6 +38,20 @@ afterEach(() => {
 });
 
 describe("indexWorkspace", () => {
+  it("keeps embedding materialization explicit", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "a.ts"), "export function a() { return 1; }\n");
+    const registry = createRegistryRepository();
+    const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
+    await registry.setSetting("embedding.provider", "local");
+
+    await indexWorkspace({ workspaceId: workspace.id });
+
+    const rows = await createWorkspaceRepository(workspaceRoot).queryRaw(
+      "SELECT count(*) AS c FROM embeddings",
+    );
+    expect(Number(rows[0]?.c ?? 0)).toBe(0);
+  });
+
   it("removes deleted files and bounds large code chunks", async () => {
     const sourcePath = path.join(workspaceRoot, "large.ts");
     fs.writeFileSync(
@@ -307,6 +321,52 @@ describe("indexWorkspace", () => {
     expect((await indexWorkspace({ workspaceId: workspace.id })).filesUpdated).toBe(0);
     expect(sourceWasRead()).toBe(false);
     readSpy.mockRestore();
+  });
+
+  it("rechunks unchanged source when workspace chunking settings change", async () => {
+    const configPath = path.join(workspaceRoot, "brain.config.js");
+    const sourcePath = path.join(workspaceRoot, "long.ts");
+    const writeConfig = (targetTokens: number) =>
+      fs.writeFileSync(
+        configPath,
+        `const config = { chunking: { targetTokens: ${targetTokens}, overlapTokens: 0 } };\nexport default config;\n`,
+      );
+
+    writeConfig(256);
+    fs.writeFileSync(
+      sourcePath,
+      `export function long() {\n${"  console.log('chunking');\n".repeat(240)}}\n`,
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const document = await repo.getDocumentByPath("long.ts");
+    const initialChunks = await repo.getChunksByDocument(document!.id);
+
+    writeConfig(64);
+    const changedConfigRun = await indexWorkspace({ workspaceId: workspace.id });
+    const rechunked = await repo.getChunksByDocument(document!.id);
+
+    expect(changedConfigRun.filesUpdated).toBeGreaterThanOrEqual(2);
+    expect(rechunked.length).toBeGreaterThan(initialChunks.length);
+    expect(Math.max(...rechunked.map((chunk) => chunk.tokenCount))).toBeLessThanOrEqual(64);
+
+    const unchangedRun = await indexWorkspace({ workspaceId: workspace.id });
+    expect(unchangedRun.filesUpdated).toBe(0);
+  });
+
+  it("never modifies agent instructions while indexing or reindexing", async () => {
+    const instructionsPath = path.join(workspaceRoot, "AGENTS.md");
+    const instructions = "# User-owned instructions\n\nKeep this unchanged.\n";
+    fs.writeFileSync(instructionsPath, instructions);
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await indexWorkspace({ workspaceId: workspace.id });
+    await indexWorkspace({ workspaceId: workspace.id, mode: "full" });
+
+    expect(fs.readFileSync(instructionsPath, "utf-8")).toBe(instructions);
   });
 
   it("preserves memories and run history across full reindex", async () => {
@@ -661,6 +721,39 @@ describe("indexWorkspace", () => {
     });
     expect(workerNeighbors.edges).toContainEqual(
       expect.objectContaining({ from: "outer.worker", to: "outer.helper", type: "calls" }),
+    );
+  });
+
+  it("persists anonymous callback and this-method call edges", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "callback-service.ts"),
+      [
+        "function outer(items: number[]) { items.map(() => helper()); }",
+        "function helper() {}",
+        "class Service { run() { this.save(); } save() {} }",
+      ].join("\n"),
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    const outerNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer",
+      depth: 1,
+    });
+    expect(outerNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer", to: "helper", type: "calls" }),
+    );
+
+    const serviceNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "Service.run",
+      depth: 1,
+    });
+    expect(serviceNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "Service.run", to: "Service.save", type: "calls" }),
     );
   });
 });

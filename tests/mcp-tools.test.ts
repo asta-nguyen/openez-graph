@@ -82,6 +82,22 @@ function textResult(result: Awaited<ReturnType<Client["callTool"]>>) {
 }
 
 describe("MCP agent contracts", () => {
+  it("advertises when agents should recall and write memory", async () => {
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const tools = (await client.listTools()).tools;
+      expect(tools.find((tool) => tool.name === "memory_recall")?.description).toContain(
+        "Before code work",
+      );
+      expect(tools.find((tool) => tool.name === "memory_write")?.description).toContain(
+        "architectural decision",
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("does not re-index an already indexed empty workspace on restart", async () => {
     await startSourceMcp(tempRoot);
     const workspace = await createRegistryRepository().getWorkspaceByPath(tempRoot);

@@ -18,7 +18,7 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 - **Zero-config** — auto-registers workspace, auto-indexes, auto-syncs on file changes
 - **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
 - **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
-- **Vector search** — optional OpenAI/Ollama embeddings with cosine similarity
+- **Vector search** — optional OpenAI/Ollama/local embeddings with cosine similarity
 - **MCP-first** — exposes `code_query`, `code_context`, `graph_neighbors`, `memory_recall`, `memory_write`, `index_workspace`, `list_workspaces` tools
 - **Multi-workspace** — register and query across multiple codebases
 - **Code graph** — symbols, files, chunks, and edges (calls, imports, contains)
@@ -61,6 +61,7 @@ openez setup devin        # Devin CLI
 ```bash
 openez init [path]              # register + index a workspace
 openez index [path]             # incremental index
+openez embed [path]             # create configured provider vectors
 openez reindex [path]           # full rebuild
 openez watch [path]             # watch + auto-reindex on changes
 openez serve --mcp              # start MCP server (auto-index + auto-sync)
@@ -78,7 +79,7 @@ openez config set <key> <value> # set embedding config value
 openez config list              # list all DB-stored config overrides
 ```
 
-Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.openai_base_url`, `embedding.openai_model`, `embedding.ollama_base_url`, `embedding.ollama_model`. API keys are encrypted at rest with AES-256-GCM.
+Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.openai_base_url`, `embedding.openai_model`, `embedding.ollama_base_url`, `embedding.ollama_model`, `embedding.local_model`. API keys are encrypted at rest with AES-256-GCM.
 
 ## MCP Tools
 
@@ -116,22 +117,28 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 
 ## Retrieval quality
 
-Benchmarked on 23 queries (17 keyword + 6 semantic) against the openez codebase (128 files, 810 chunks):
+Measured on 2026-08-10 against the openez codebase (180 files, 979 chunks, 17 fixture-backed
+queries):
 
-| Metric           | FTS only | FTS + Embedding (bge-m3) |
-| ---------------- | -------: | -----------------------: |
-| Recall@5         |   91.30% |                   95.65% |
-| Keyword queries  |  100.00% |                  100.00% |
-| Semantic queries |   66.67% |                   83.33% |
-| Avg latency      |     5 ms |                   249 ms |
+| Metric      | FTS only |
+| ----------- | -------: |
+| Recall@5    |   76.47% |
+| MRR         |   0.6564 |
+| Avg latency |  12.1 ms |
 
-**FTS-only is the default** — 100% recall on keyword queries, 50x faster. **Embedding adds semantic search with +16.67% semantic recall and no keyword regression** via full RRF fusion (FTS weight 2x, vector weight 1x).
+FTS-only remains the default. Embedding comparison is opt-in and is not claimed by this baseline.
 
 ```bash
 # Enable Ollama embeddings (bge-m3 recommended for code search)
 openez config set embedding.provider ollama
 openez config set embedding.ollama_model bge-m3
-openez reindex .
+openez embed .
+OPENEZ_BENCHMARK_EMBEDDINGS=1 pnpm benchmark:retrieval
+
+# Or use the public pinned local code model
+openez config set embedding.provider local
+openez config set embedding.local_model jina-code-static-256
+openez embed .
 ```
 
 See [BENCHMARK.md](https://github.com/asta-nguyen/openez-graph/blob/main/BENCHMARK.md) for full analysis.

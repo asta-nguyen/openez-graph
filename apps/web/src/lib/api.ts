@@ -175,6 +175,7 @@ export interface EmbeddingConfigResponse {
   openaiModel: string;
   ollamaBaseUrl: string;
   ollamaModel: string;
+  localModel: string;
   dbOverrides: string[];
 }
 
@@ -267,6 +268,7 @@ export const api = {
       "embedding.openai_model": string;
       "embedding.ollama_base_url": string;
       "embedding.ollama_model": string;
+      "embedding.local_model": string;
     }>,
   ) =>
     request<{ ok: boolean; updated: string[] }>("/settings/embedding", {

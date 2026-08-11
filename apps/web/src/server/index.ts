@@ -568,6 +568,7 @@ app.get("/api/settings/embedding", async (c) => {
       openaiModel: config.openaiModel,
       ollamaBaseUrl: config.ollamaBaseUrl,
       ollamaModel: config.ollamaModel,
+      localModel: config.localModel,
       dbOverrides: Object.keys(dbSettings).filter((k) => k.startsWith("embedding.")),
     });
   } catch (err) {
@@ -585,8 +586,9 @@ app.put("/api/settings/embedding", async (c) => {
       "embedding.openai_model": true,
       "embedding.ollama_base_url": true,
       "embedding.ollama_model": true,
+      "embedding.local_model": true,
     };
-    const VALID_PROVIDERS = new Set(["none", "openai", "ollama"]);
+    const VALID_PROVIDERS = new Set(["none", "openai", "ollama", "local"]);
     const registry = createRegistryRepository();
     const updated: string[] = [];
     for (const [key, value] of Object.entries(body)) {
@@ -600,7 +602,7 @@ app.put("/api/settings/embedding", async (c) => {
       if (key === "embedding.provider" && !VALID_PROVIDERS.has(value.trim())) {
         return c.json(
           {
-            error: `Invalid embedding provider '${value}'. Must be one of: none, openai, ollama.`,
+            error: `Invalid embedding provider '${value}'. Must be one of: none, openai, ollama, local.`,
           },
           400,
         );

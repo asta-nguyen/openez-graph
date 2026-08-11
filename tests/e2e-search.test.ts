@@ -212,6 +212,43 @@ describe("end-to-end search pipeline", () => {
     expect(result.answerContext).toBe("");
   });
 
+  it("loads retrieval limits from the selected workspace root", async () => {
+    await setupWorkspaceWithContent();
+    const repo = createWorkspaceRepository(tempRoot);
+    const authDocument = await repo.getDocumentByPath("src/auth.ts");
+    await repo.insertChunks([
+      {
+        documentId: authDocument!.id,
+        chunkIndex: 2,
+        heading: null,
+        content: "Authentication policy for privileged users.",
+        tokenCount: 7,
+        contentHash: "c4",
+        metadata: JSON.stringify({ kind: "code", startLine: 10, endLine: 10 }),
+      },
+    ]);
+    fs.writeFileSync(
+      path.join(tempRoot, "brain.config.js"),
+      [
+        "const config = {",
+        "  retrieval: {",
+        "    vectorLimit: 20, textLimit: 20, graphHops: 1,",
+        "    maxGraphNeighbors: 20, finalLimit: 1, maxContextTokens: 8000",
+        "  }",
+        "};",
+        "export default config;",
+      ].join("\n"),
+    );
+
+    const result = await codeQuery({
+      workspaceId: "test-e2e",
+      query: "authentication",
+      skipGraphExpand: true,
+    });
+
+    expect(result.sources).toHaveLength(1);
+  });
+
   it("recalls only the active version of a written memory", async () => {
     await setupWorkspaceWithContent();
 

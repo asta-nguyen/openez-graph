@@ -470,7 +470,8 @@ export function createMcpServer(options?: McpServerOptions) {
       },
       {
         name: "memory_write",
-        description: "Persist a technical decision or learned memory into the memory store.",
+        description:
+          "Persist a technical decision or learned memory. Call after an architectural decision or non-obvious constraint is confirmed.",
         inputSchema: {
           type: "object",
           properties: {
@@ -487,7 +488,7 @@ export function createMcpServer(options?: McpServerOptions) {
       {
         name: "memory_recall",
         description:
-          "Recall active technical decisions and learned memories. Supports one or many workspaces.",
+          "Recall active technical decisions and learned memories. Before code work in a new session, query with 1–3 task keywords. Supports one or many workspaces.",
         inputSchema: {
           type: "object",
           properties: {
