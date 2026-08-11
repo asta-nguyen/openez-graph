@@ -62,7 +62,7 @@ openez setup devin        # Devin CLI
 openez init [path]              # register + index a workspace
 openez index [path]             # incremental index
 openez embed [path]             # create configured provider vectors
-openez reindex [path]           # full rebuild
+openez reindex [path]           # full rebuild (removes vectors; run embed after)
 openez watch [path]             # watch + auto-reindex on changes
 openez serve --mcp              # start MCP server (auto-index + auto-sync)
 openez serve --web              # start web dashboard (default port 17881)
@@ -83,15 +83,15 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 
 ## MCP Tools
 
-| Tool              | Description                                                           |
-| ----------------- | --------------------------------------------------------------------- |
-| `list_workspaces` | List all registered workspaces                                        |
-| `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs |
-| `code_context`    | Get budgeted symbol context with callers, callees, and related files  |
-| `graph_neighbors` | Traverse graph edges from a node or label                             |
-| `memory_recall`   | Recall active memory entries and technical decisions                  |
-| `memory_write`    | Write a memory entry (notes, decisions, patterns)                     |
-| `index_workspace` | Trigger indexing for a workspace                                      |
+| Tool              | Description                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| `list_workspaces` | List all registered workspaces                                                                    |
+| `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                             |
+| `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: default 50, max 200) |
+| `graph_neighbors` | Traverse graph edges from a node or label                                                         |
+| `memory_recall`   | Recall active memory entries and technical decisions                                              |
+| `memory_write`    | Write a memory entry (notes, decisions, patterns)                                                 |
+| `index_workspace` | Trigger indexing for a workspace                                                                  |
 
 `memory_query` is accepted as a deprecated compatibility alias for `code_query`, but is not advertised to new clients.
 

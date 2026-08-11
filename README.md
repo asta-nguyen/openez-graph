@@ -44,15 +44,15 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 
 ## MCP tools
 
-| Tool              | Purpose                                         |
-| ----------------- | ----------------------------------------------- |
-| `code_query`      | Retrieve ranked code and documentation context  |
-| `code_context`    | Get graph-adjacent context for a symbol or file |
-| `graph_neighbors` | Inspect nearby graph nodes and edges            |
-| `list_workspaces` | List registered workspaces and index status     |
-| `memory_recall`   | Recall stored technical decisions and notes     |
-| `memory_write`    | Store a decision or learned constraint          |
-| `index_workspace` | Run an incremental or full index                |
+| Tool              | Purpose                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| `code_query`      | Retrieve ranked code and documentation context                                                |
+| `code_context`    | Get graph-adjacent context for a symbol or file (default 50 records, max 200, token-budgeted) |
+| `graph_neighbors` | Inspect nearby graph nodes and edges                                                          |
+| `list_workspaces` | List registered workspaces and index status                                                   |
+| `memory_recall`   | Recall stored technical decisions and notes                                                   |
+| `memory_write`    | Store a decision or learned constraint                                                        |
+| `index_workspace` | Run an incremental or full index                                                              |
 
 Read tools support one or many workspaces. Write and index operations remain scoped to one workspace.
 
@@ -62,7 +62,7 @@ Read tools support one or many workspaces. Write and index operations remain sco
 openez init [path]          # register and index a workspace
 openez index [path]         # update changed files
 openez embed [path]         # create configured provider vectors
-openez reindex [path]       # rebuild the index
+openez reindex [path]       # rebuild the index (removes vectors; run embed after)
 openez watch [path]         # keep an index synchronized
 openez status [path]        # show workspace and graph counts
 openez list                 # list registered workspaces
@@ -146,7 +146,7 @@ Valid config keys:
 
 API keys are encrypted at rest with AES-256-GCM. The master key is stored at `~/.openez/master.key` with file mode `0600`.
 
-Indexing never creates vectors. Run `openez embed [path]` after indexing; retrieval falls back to FTS + graph when the configured provider or active vectors are unavailable.
+Indexing never creates vectors. Full reindex replaces chunks and removes their vectors. Run `openez embed [path]` after indexing or reindexing; retrieval falls back to FTS + graph when the configured provider or active vectors are unavailable.
 
 ## Management UI
 

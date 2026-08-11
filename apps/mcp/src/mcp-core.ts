@@ -442,7 +442,10 @@ export function createMcpServer(options?: McpServerOptions) {
             path: { type: "string" },
             symbolOrPath: { type: "string" },
             hops: { type: "number" },
-            limit: { type: "number", description: "Maximum total records returned" },
+            limit: {
+              type: "number",
+              description: "Maximum total records returned (default 50, max 200)",
+            },
             maxTokens: {
               type: "number",
               minimum: MIN_RESPONSE_TOKENS,
