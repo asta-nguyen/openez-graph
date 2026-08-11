@@ -1,0 +1,41 @@
+packages/db/src/sqlite/registry-repository.ts
+  s_345d52b8a6bfe3::t_e72c19a1ce5a70 249-270
+apps/web/src/routes/workspaces/$workspaceId/index.tsx
+  s_345d52b8a6bfe3::t_8cad68cf0bd06c 67
+tests/registry.test.ts
+  s_345d52b8a6bfe3::t_f59a05f87adb35 215-224
+packages/indexer/src/parsers/oxc-parser.ts
+  s_345d52b8a6bfe3::t_e8f93112ba7e66 319,356-358
+  s_345d52b8a6bfe3::t_52c04c64321888 321
+  s_345d52b8a6bfe3::t_a85cbdfc81f751 288-318,320,322-340,355,359,368,384-390
+packages/db/src/sqlite/types.ts
+  s_345d52b8a6bfe3::t_e72c19a1ce5a70 79-82
+tests/oxc-parser.test.ts
+  s_345d52b8a6bfe3::t_9398b4ba202b04 278-309
+apps/web/src/server/index.ts
+  s_345d52b8a6bfe3::t_8cad68cf0bd06c 89-90,379-380,384,389-391,399-400
+  s_345d52b8a6bfe3::t_e8f93112ba7e66 381
+  s_345d52b8a6bfe3::t_3ae77fc8855dcf 382-383
+tests/web-index-endpoint.test.ts
+  s_345d52b8a6bfe3::t_8cad68cf0bd06c 84-98
+packages/indexer/src/index-workspace.ts
+  s_345d52b8a6bfe3::t_8b32ea5b4e2097 948-952
+  s_345d52b8a6bfe3::t_1b9a0ddf21ca7a 473-475,494-498,947,953
+  s_345d52b8a6bfe3::t_152e5e500c1acc 477-478,482,486,493,519,890,927
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1e7f7882cec94e722fc0e8770adf2643d85919bd",
+  "prompts": {},
+  "sessions": {
+    "s_345d52b8a6bfe3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe992-ad1f-7791-bbdd-c412d8baf651",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
