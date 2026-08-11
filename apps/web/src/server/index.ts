@@ -45,7 +45,7 @@ import {
   setRegistryWorkspacePinned,
 } from "./sqlite";
 
-import { codeQuery } from "@openez-graph/core";
+import { LOCAL_EMBEDDING_MODELS, codeQuery } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -607,7 +607,18 @@ app.put("/api/settings/embedding", async (c) => {
           400,
         );
       }
-      await registry.setSetting(key, value);
+      if (
+        key === "embedding.local_model" &&
+        !Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, value.trim())
+      ) {
+        return c.json(
+          {
+            error: `Unsupported local embedding model '${value}'. Must be one of: ${Object.keys(LOCAL_EMBEDDING_MODELS).join(", ")}.`,
+          },
+          400,
+        );
+      }
+      await registry.setSetting(key, key === "embedding.local_model" ? value.trim() : value);
       updated.push(key);
     }
     return c.json({ ok: true, updated });

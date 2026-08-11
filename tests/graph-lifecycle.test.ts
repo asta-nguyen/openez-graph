@@ -298,14 +298,16 @@ describe("graph lifecycle persistence", () => {
     expect(current?.edgeCount).toBe(1);
   });
 
-  it("retries immediately when a claimed build cannot publish", async () => {
+  it("backs off when a claimed build cannot publish", async () => {
     const registry = createRegistryRepository();
     const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
     let attempts = 0;
+    const attemptTimes: number[] = [];
     const service = createGraphService({
       registry,
       async buildGraphGeneration() {
         attempts += 1;
+        attemptTimes.push(Date.now());
         return attempts === 1
           ? { nodeCount: 0, edgeCount: 0, published: false }
           : { nodeCount: 2, edgeCount: 1 };
@@ -315,11 +317,12 @@ describe("graph lifecycle persistence", () => {
 
     const outcome = await Promise.race([
       service.ensureGraphReady(workspace.id).then(() => "ready"),
-      new Promise<"timed-out">((resolve) => setTimeout(() => resolve("timed-out"), 100)),
+      new Promise<"timed-out">((resolve) => setTimeout(() => resolve("timed-out"), 500)),
     ]);
 
     expect(outcome).toBe("ready");
     expect(attempts).toBe(2);
+    expect(attemptTimes[1]! - attemptTimes[0]!).toBeGreaterThanOrEqual(150);
   });
 
   it("fails clearly when another graph build remains leased past the wait budget", async () => {

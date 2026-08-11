@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import * as fsPromises from "node:fs/promises";
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 
 import {
   LOCAL_EMBEDDING_MODEL,
@@ -12,6 +13,7 @@ import {
   ensureLocalEmbeddingCache,
   getLocalEmbeddingCacheDir,
   getLocalEmbeddingModel,
+  isLocalEmbeddingModel,
 } from "../packages/core/src/local-embedding";
 
 // ── Helpers for building a minimal offline Model2Vec fixture ──────────────────
@@ -136,12 +138,17 @@ describe("local embedding provider", () => {
 
     it("shares a single load across concurrent embed calls (in-flight guard)", async () => {
       const provider = new LocalEmbeddingProvider(fixtureDir);
+      const readSpy = spyOn(fsPromises, "readFile");
       const results = await Promise.all([
         provider.embed(["hello"]),
         provider.embed(["world"]),
         provider.embed(["hello world"]),
       ]);
+      const loadedFiles = readSpy.mock.calls.map(([filePath]) => path.basename(String(filePath)));
+      readSpy.mockRestore();
       expect(results).toHaveLength(3);
+      expect(loadedFiles.filter((file) => file === "tokenizer.json")).toHaveLength(1);
+      expect(loadedFiles.filter((file) => file === "model.safetensors")).toHaveLength(1);
       for (const vec of results) {
         expect(vec[0]).toHaveLength(256);
         expect(Math.hypot(...vec[0])).toBeCloseTo(1, 5);
@@ -151,6 +158,12 @@ describe("local embedding provider", () => {
 });
 
 describe("getLocalEmbeddingModel", () => {
+  it("rejects inherited names that are not catalog entries", () => {
+    expect(isLocalEmbeddingModel(LOCAL_EMBEDDING_MODEL)).toBe(true);
+    expect(isLocalEmbeddingModel("toString")).toBe(false);
+    expect(() => getLocalEmbeddingCacheDir("toString")).toThrow(/Unknown local embedding model/);
+  });
+
   it("rejects an unknown model and lists supported models", async () => {
     expect(getLocalEmbeddingModel("unknown-model")).rejects.toThrow(
       /Unsupported local embedding model/,

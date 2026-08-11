@@ -113,7 +113,9 @@ function EmbeddingConfigForm() {
   const [openaiModel, setOpenaiModel] = useState("text-embedding-3-small");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
   const [ollamaModel, setOllamaModel] = useState("bge-m3");
-  const [localModel, setLocalModel] = useState("jina-code-static-256");
+  const localModelPresets = Object.keys(LOCAL_EMBEDDING_MODELS);
+  const defaultLocalModel = localModelPresets[0] ?? "jina-code-static-256";
+  const [localModel, setLocalModel] = useState(defaultLocalModel);
 
   useEffect(() => {
     if (!config) return;
@@ -123,7 +125,11 @@ function EmbeddingConfigForm() {
     setOpenaiModel(config.openaiModel);
     setOllamaBaseUrl(config.ollamaBaseUrl);
     setOllamaModel(config.ollamaModel);
-    setLocalModel(config.localModel);
+    setLocalModel(
+      Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, config.localModel)
+        ? config.localModel
+        : defaultLocalModel,
+    );
   }, [config]);
 
   const saveMutation = useMutation({

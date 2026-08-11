@@ -132,6 +132,14 @@ describe("agent setup instructions", () => {
     expect(instructions.match(new RegExp(END_MARKER, "g"))).toHaveLength(1);
   });
 
+  it("rejects managed markers that appear out of order", () => {
+    const instructionsPath = path.join(projectPath, "AGENTS.md");
+    fs.writeFileSync(instructionsPath, `${END_MARKER}\nuser header\n${START_MARKER}\n`);
+
+    expect(() => installAgentInstructions(projectPath, "AGENTS.md")).toThrow(/marker order/i);
+    expect(fs.readFileSync(instructionsPath, "utf-8")).toContain("user header");
+  });
+
   it("replaces an existing managed block in place", async () => {
     const instructionsPath = path.join(projectPath, "AGENTS.md");
     const existing = `before\n${START_MARKER}\nold policy\n${END_MARKER}\nafter\n`;

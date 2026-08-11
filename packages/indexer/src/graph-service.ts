@@ -121,6 +121,7 @@ export function createGraphService(deps: GraphServiceDeps): {
           }
           if (counts.published === false) {
             await deps.registry.releaseGraphBuild(workspaceId, ownerToken);
+            await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
             continue buildAttempt;
           }
           if (current.indexGeneration !== targetGeneration) {

@@ -180,11 +180,10 @@ function extractClassMethods(classNode: OxcNode, className: string, source: stri
       if (!value) continue;
       const methodName = key.name;
       const memberKind = member.kind === "get" || member.kind === "set" ? member.kind : null;
+      const staticPrefix = member.static === true ? `${className}.static.` : `${className}.`;
       const qualifiedName = memberKind
-        ? `${className}.${memberKind}.${methodName}`
-        : member.static === true
-          ? `${className}.static.${methodName}`
-          : `${className}.${methodName}`;
+        ? `${className}.${member.static === true ? "static." : ""}${memberKind}.${methodName}`
+        : `${staticPrefix}${methodName}`;
       const startLine = source.slice(0, value.start).split("\n").length;
       const endLine = source.slice(0, value.end).split("\n").length;
       methods.push({
@@ -210,7 +209,8 @@ function extractClassMethods(classNode: OxcNode, className: string, source: stri
       const isFunc = init.type === "FunctionExpression";
       if (!isArrow && !isFunc) continue;
       const propName = key.name;
-      const qualifiedName = `${className}.${propName}`;
+      const qualifiedName =
+        member.static === true ? `${className}.static.${propName}` : `${className}.${propName}`;
       const startLine = source.slice(0, init.start).split("\n").length;
       const endLine = source.slice(0, init.end).split("\n").length;
       methods.push({
@@ -296,6 +296,9 @@ function extractCalls(symbolAsts: SymbolAst[]): {
 } {
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
   const calledIdentifiers = new Set<string>();
+  const staticSymbolNames = new Set(
+    symbolAsts.map(({ symbol }) => symbol.name).filter((name) => name.includes(".static.")),
+  );
 
   for (const { symbol, node } of symbolAsts) {
     // Only function-like symbols can contain calls.
@@ -310,10 +313,17 @@ function extractCalls(symbolAsts: SymbolAst[]): {
         if (current.type === "CallExpression") {
           const rawName = calleeName(current.callee as OxcNode);
           const className = symbol.name.includes(".") ? symbol.name.split(".")[0] : null;
-          const name =
-            rawName?.startsWith("this.") && className
-              ? `${className}.${rawName.slice("this.".length)}`
-              : rawName;
+          let name = rawName;
+          if (rawName?.startsWith("this.") && className) {
+            const memberName = rawName.slice("this.".length);
+            name = symbol.name.includes(".static.")
+              ? `${className}.static.${memberName}`
+              : `${className}.${memberName}`;
+          } else if (rawName && rawName.includes(".")) {
+            const [receiver, ...memberParts] = rawName.split(".");
+            const staticName = `${receiver}.static.${memberParts.join(".")}`;
+            if (staticSymbolNames.has(staticName)) name = staticName;
+          }
           if (name) {
             callExpressions.push({ callerName: symbol.name, calleeName: name });
             calledIdentifiers.add(name);
