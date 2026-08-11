@@ -141,6 +141,21 @@ async function vectorSearch(rootPath: string, query: string, limit: number): Pro
     }
 
     console.error(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
+
+    // Preflight: skip the embedding API call when the workspace has no
+    // vectors stored for the active provider/model. This avoids unnecessary
+    // provider calls (and costs) for workspaces that haven't been embedded
+    // yet or have legacy embeddings under a different model key.
+    const repo = createWorkspaceRepository(rootPath);
+    const stored = await repo.queryRaw(
+      "SELECT 1 FROM embeddings WHERE provider = ? AND model = ? LIMIT 1",
+      [provider.provider, embeddingStorageModel(provider)],
+    );
+    if (stored.length === 0) {
+      console.error("[retrieval] vector search: disabled (no active-model vectors)");
+      return [];
+    }
+
     const [queryEmbedding] = await provider.embed([
       formatEmbeddingInput(provider, { content: query }, "query"),
     ]);

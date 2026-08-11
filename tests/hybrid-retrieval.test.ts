@@ -51,10 +51,10 @@ afterEach(() => {
 });
 
 describe("codeQuery hybrid retrieval", () => {
-  it("embeds the raw query without substring expansion", async () => {
+  it("does not embed a query when the workspace has no active-model vectors", async () => {
     const workspace = await createRegistryRepository().createWorkspace({
-      id: "raw-query-test",
-      name: "raw-query-test",
+      id: "empty-vector-test",
+      name: "empty-vector-test",
       rootPath: workspaceRoot,
     });
 
@@ -65,7 +65,7 @@ describe("codeQuery hybrid retrieval", () => {
       skipGraphExpand: true,
     });
 
-    expect(testEmbeddingProvider.embed).toHaveBeenCalledWith(["maintain"]);
+    expect(testEmbeddingProvider.embed).not.toHaveBeenCalled();
   });
 
   it("keeps both FTS and vector-only results", async () => {
