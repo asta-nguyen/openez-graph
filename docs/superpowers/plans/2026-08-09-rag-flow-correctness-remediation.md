@@ -421,7 +421,7 @@ git commit -m "fix(graph): centralize lazy build lifecycle"
 
 - Removes: `hasVecExtension()` and `embeddings_vec`
 - Preserves: `rankStoredEmbeddings(rootPath, provider, queryEmbedding, limit)` using provider/model/dimensions-filtered BLOB rows and cosine similarity
-- Database open returns an actionable error for legacy TEXT embeddings; it never deletes them.
+- Database open preserves legacy TEXT embeddings, marks the workspace FTS-only, and emits an actionable reindex warning; it never deletes them.
 
 - [ ] **Step 1: Replace the destructive migration test with a failing preservation test**
 

@@ -27,6 +27,12 @@ export const LOCAL_EMBEDDING_MODELS = {
   },
 } as const;
 
+function getLocalEmbeddingSpec(model: string) {
+  return Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, model)
+    ? LOCAL_EMBEDDING_MODELS[model as keyof typeof LOCAL_EMBEDDING_MODELS]
+    : undefined;
+}
+
 const cacheLoads = new Map<string, Promise<string>>();
 
 // Marker used as `Error.cause` to signal a non-retryable download failure.
@@ -36,7 +42,7 @@ export function getLocalEmbeddingCacheDir(
   model = LOCAL_EMBEDDING_MODEL,
   cacheRoot = path.join(os.homedir(), ".openez", "models"),
 ): string {
-  const spec = LOCAL_EMBEDDING_MODELS[model as keyof typeof LOCAL_EMBEDDING_MODELS];
+  const spec = getLocalEmbeddingSpec(model);
   if (!spec) throw new Error("Unknown local embedding model '" + model + "'");
   return path.join(cacheRoot, "astanguyen", model, spec.revision);
 }
@@ -96,7 +102,8 @@ export async function ensureLocalEmbeddingCache(
   if (existing) return existing;
 
   const load = (async () => {
-    const spec = LOCAL_EMBEDDING_MODELS[model as keyof typeof LOCAL_EMBEDDING_MODELS];
+    const spec = getLocalEmbeddingSpec(model);
+    if (!spec) throw new Error("Unknown local embedding model '" + model + "'");
     await mkdir(cacheDir, { recursive: true });
     for (const [file, checksum] of Object.entries(spec.files)) {
       await downloadFile(
@@ -220,7 +227,7 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 }
 
 export function isLocalEmbeddingModel(model: string): boolean {
-  return model in LOCAL_EMBEDDING_MODELS;
+  return getLocalEmbeddingSpec(model) !== undefined;
 }
 
 export async function getLocalEmbeddingModel(

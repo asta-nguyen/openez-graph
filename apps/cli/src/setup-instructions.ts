@@ -48,6 +48,11 @@ export function installAgentInstructions(
         ". Fix the file manually or remove both markers.",
     );
   }
+  if (hasStart && end < start) {
+    throw new Error(
+      `Invalid OpenEZ managed-block marker order in ${fileName}: END appears before START.`,
+    );
+  }
 
   const next =
     hasStart && hasEnd

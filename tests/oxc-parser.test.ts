@@ -229,7 +229,7 @@ describe("OxcParser", () => {
     });
   });
 
-  it("gives accessors and static methods distinct graph symbol names", () => {
+  it("gives accessors, static members, and static calls distinct graph names", () => {
     const result = new OxcParser().parse(
       {
         relativePath: "members.ts",
@@ -237,9 +237,14 @@ describe("OxcParser", () => {
         content: [
           "class Settings {",
           "  get value() { return 1; }",
+          "  static get value() { return 2; }",
           "  set value(next: number) {}",
+          "  static set value(next: number) {}",
+          "  handler = () => {};",
+          "  static handler = () => {};",
           "  run() {}",
-          "  static run() {}",
+          "  static run() { return Settings.helper(); }",
+          "  static helper() {}",
           "}",
         ].join("\n"),
         targetTokens: 500,
@@ -253,12 +258,21 @@ describe("OxcParser", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "Settings.get.value",
+        "Settings.static.get.value",
         "Settings.set.value",
+        "Settings.static.set.value",
+        "Settings.handler",
+        "Settings.static.handler",
         "Settings.run",
         "Settings.static.run",
+        "Settings.static.helper",
       ]),
     );
     expect(new Set(names).size).toBe(names.length);
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Settings.static.run",
+      calleeName: "Settings.static.helper",
+    });
   });
 
   it("finds calls inside object property values", () => {
