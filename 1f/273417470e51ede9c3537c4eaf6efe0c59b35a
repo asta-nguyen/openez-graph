@@ -1,0 +1,31 @@
+docs/superpowers/plans/2026-08-10-local-embedding-cli.md
+  s_5bc8e9e818017b::t_aa2de66ee98f11 118
+apps/cli/README.md
+  s_5bc8e9e818017b::t_65124a30c70bd4 65
+  s_5bc8e9e818017b::t_d13775e036fa11 90
+  s_5bc8e9e818017b::t_bd8b780be53d14 86-89,91-94
+README.md
+  s_5bc8e9e818017b::t_ae60d0d574d276 149
+  s_5bc8e9e818017b::t_4530b558671acb 65
+  s_5bc8e9e818017b::t_37fa1f3bfa2e41 50
+  s_5bc8e9e818017b::t_71676f2a0ef459 47-49,51-55
+apps/mcp/src/mcp-core.ts
+  s_5bc8e9e818017b::t_b2ba7271bae370 445
+  s_5bc8e9e818017b::t_560ef8f4ec9907 446-448
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1f273417470e51ede9c3537c4eaf6efe0c59b35a",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
