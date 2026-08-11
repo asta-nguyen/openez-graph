@@ -43,6 +43,12 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
 const PARSER_VERSION_OXC = "oxc-v2";
 const PARSER_VERSION_NATIVE = "native-v1";
 const PARSER_VERSION_FALLBACK = "fallback-v1";
+const INDEX_LEASE_DURATION_MS = 60_000;
+const INDEX_HEARTBEAT_INTERVAL_MS = 15_000;
+
+function indexLeaseExpiry(): string {
+  return new Date(Date.now() + INDEX_LEASE_DURATION_MS).toISOString();
+}
 
 /**
  * Native tree-sitter parser surface used by the indexer. The native extension
@@ -473,6 +479,9 @@ export async function indexWorkspace(input: {
   let registry: ReturnType<typeof createRegistryRepository> | undefined;
   let indexingClaimed = false;
   let claimedWorkspaceId: string | undefined;
+  let indexingOwnerToken: string | undefined;
+  let indexingHeartbeat: ReturnType<typeof setInterval> | undefined;
+  let indexingLeaseLost = false;
   try {
     const activeRegistry = createRegistryRepository();
     registry = activeRegistry;
@@ -490,11 +499,45 @@ export async function indexWorkspace(input: {
       throw new Error("Either workspaceId or rootPath is required");
     }
 
-    if (!(await activeRegistry.tryClaimIndexing(workspace.id))) {
+    indexingOwnerToken = crypto.randomUUID();
+    if (
+      !(await activeRegistry.tryClaimIndexing(workspace.id, indexingOwnerToken, indexLeaseExpiry()))
+    ) {
       throw new Error(`Workspace '${workspace.id}' is already being indexed`);
     }
     indexingClaimed = true;
     claimedWorkspaceId = workspace.id;
+    let heartbeatBusy = false;
+    indexingHeartbeat = setInterval(() => {
+      if (heartbeatBusy || indexingLeaseLost || !indexingOwnerToken) return;
+      heartbeatBusy = true;
+      void activeRegistry
+        .refreshIndexingLease(workspace.id, indexingOwnerToken, indexLeaseExpiry())
+        .then((refreshed) => {
+          if (!refreshed) indexingLeaseLost = true;
+        })
+        .catch(() => {
+          indexingLeaseLost = true;
+        })
+        .finally(() => {
+          heartbeatBusy = false;
+        });
+    }, INDEX_HEARTBEAT_INTERVAL_MS);
+
+    const assertIndexingLease = async () => {
+      if (indexingLeaseLost || !indexingOwnerToken) {
+        throw new Error(`Indexing lease lost for workspace '${workspace.id}'`);
+      }
+      const refreshed = await activeRegistry.refreshIndexingLease(
+        workspace.id,
+        indexingOwnerToken,
+        indexLeaseExpiry(),
+      );
+      if (!refreshed) {
+        indexingLeaseLost = true;
+        throw new Error(`Indexing lease lost for workspace '${workspace.id}'`);
+      }
+    };
 
     await writeLocalWorkspaceConfig(workspace);
 
@@ -525,6 +568,7 @@ export async function indexWorkspace(input: {
     };
 
     if (runMode === "full") {
+      await assertIndexingLease();
       repo.resetIndexArtifacts();
       await invalidateGraph();
     }
@@ -538,6 +582,7 @@ export async function indexWorkspace(input: {
       include: includeGlobs,
       exclude: excludeGlobs,
     });
+    await assertIndexingLease();
 
     const existingDocuments = await repo.listDocuments();
     const existingDocumentsByPath = new Map(
@@ -688,6 +733,7 @@ export async function indexWorkspace(input: {
 
       // A true no-op never changes SQLite write pragmas or FTS triggers.
       process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
+      await assertIndexingLease();
       const _T4 = Date.now();
       if (parseTasks.length > 0) {
         await invalidateGraph();
@@ -699,6 +745,7 @@ export async function indexWorkspace(input: {
 
       // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
       const _dbSub: Record<string, number> = {};
+      await assertIndexingLease();
       await repo.transaction(async () => {
         const _dbT0 = Date.now();
         // Step 1: Handle existing documents (reset artifacts + update) in bulk
@@ -874,6 +921,7 @@ export async function indexWorkspace(input: {
       process.stderr.write(`[t] phase5 fts-restore: ${Date.now() - _T5}ms\n`);
       const _T7 = Date.now();
       await reportProgress("Finalizing index run...", 98);
+      await assertIndexingLease();
       await repo.completeIndexRun(runId, {
         status: "completed",
         filesScanned: files.length,
@@ -944,9 +992,14 @@ export async function indexWorkspace(input: {
       embeddingFailures: 0,
     };
   } finally {
+    if (indexingHeartbeat) clearInterval(indexingHeartbeat);
     if (registry && indexingClaimed && claimedWorkspaceId) {
       try {
-        await registry.releaseIndexing(claimedWorkspaceId, "Indexing aborted before completion");
+        await registry.releaseIndexing(
+          claimedWorkspaceId,
+          indexingOwnerToken!,
+          "Indexing aborted before completion",
+        );
       } catch {
         // Preserve the original indexing error if registry cleanup fails.
       }

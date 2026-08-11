@@ -220,10 +220,27 @@ describe("createRegistryRepository", () => {
     const repo = createRegistryRepository();
     await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
 
-    expect(await repo.tryClaimIndexing("ws1")).toBe(true);
-    expect(await repo.tryClaimIndexing("ws1")).toBe(false);
-    await repo.releaseIndexing("ws1", "aborted");
-    expect(await repo.tryClaimIndexing("ws1")).toBe(true);
+    const firstExpiry = new Date(Date.now() + 60_000).toISOString();
+    expect(await repo.tryClaimIndexing("ws1", "owner-a", firstExpiry)).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1", "owner-b", firstExpiry)).toBe(false);
+    expect(await repo.refreshIndexingLease("ws1", "owner-b", firstExpiry)).toBe(false);
+    expect(await repo.releaseIndexing("ws1", "owner-b", "aborted")).toBe(false);
+    expect(await repo.releaseIndexing("ws1", "owner-a", "aborted")).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1", "owner-b", firstExpiry)).toBe(true);
+  });
+
+  it("allows a new owner to take over an expired indexing lease", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+    const firstExpiry = new Date(Date.now() + 60_000).toISOString();
+
+    expect(
+      await repo.tryClaimIndexing("ws1", "owner-a", new Date(Date.now() - 1_000).toISOString()),
+    ).toBe(true);
+    expect(
+      await repo.tryClaimIndexing("ws1", "owner-b", new Date(Date.now() + 60_000).toISOString()),
+    ).toBe(true);
+    expect(await repo.refreshIndexingLease("ws1", "owner-a", firstExpiry)).toBe(false);
   });
 
   it("fences stale graph builders by owner token and monotonically increasing epoch", async () => {

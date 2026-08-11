@@ -20,6 +20,8 @@ export function getRegistryDdl(): string {
       exclude_globs TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'pending',
       indexing_status TEXT NOT NULL DEFAULT 'pending',
+      index_build_owner TEXT,
+      index_lease_expires_at TEXT,
       graph_status TEXT NOT NULL DEFAULT 'pending',
       index_generation INTEGER NOT NULL DEFAULT 0,
       graph_generation INTEGER NOT NULL DEFAULT 0,
@@ -154,6 +156,8 @@ function migrateRegistryColumns(sqlite: ReturnType<typeof createNativeDatabase>)
 
   addColumnIfMissing("pinned_at", "pinned_at TEXT");
   addColumnIfMissing("pin_order", "pin_order INTEGER");
+  addColumnIfMissing("index_build_owner", "index_build_owner TEXT");
+  addColumnIfMissing("index_lease_expires_at", "index_lease_expires_at TEXT");
   addColumnIfMissing("index_generation", "index_generation INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing("graph_generation", "graph_generation INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing("graph_build_owner", "graph_build_owner TEXT");
