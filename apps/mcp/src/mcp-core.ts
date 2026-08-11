@@ -674,6 +674,9 @@ export function createMcpServer(options?: McpServerOptions) {
             );
           }
         });
+        if (!input.nodeId && !input.label) {
+          throw new Error("Either nodeId or label is required");
+        }
         const settledResults = await Promise.allSettled(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
