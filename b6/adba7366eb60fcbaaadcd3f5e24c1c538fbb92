@@ -1,0 +1,23 @@
+apps/web/src/lib/queries.ts
+  s_5bc8e9e818017b::t_3b8f9d1a0c3d24 2-11,14-21,26,32,38,44,49,59,66,72,78
+apps/web/src/routes/memories.tsx
+  s_5bc8e9e818017b::t_f56d54bfb19c97 52-53
+tests/local-embedding.test.ts
+  s_5bc8e9e818017b::t_267cc7db39beeb 202,217,230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b6adba7366eb60fcbaaadcd3f5e24c1c538fbb92",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
