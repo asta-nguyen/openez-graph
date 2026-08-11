@@ -282,9 +282,8 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
     const strings: Array<{ owner: Record<string, unknown>; key: string; value: string }> = [];
     const visit = (current: unknown, parentKey?: string) => {
       if (Array.isArray(current)) {
-        const minimum = parentKey === "nodes" ? 1 : 0;
-        if (current.length > minimum && parentKey !== "results")
-          arrays.push({ items: current, minimum });
+        const minimum = parentKey === "nodes" || parentKey === "results" ? 1 : 0;
+        if (current.length > minimum) arrays.push({ items: current, minimum });
         current.forEach((item) => visit(item));
         return;
       }
@@ -674,9 +673,6 @@ export function createMcpServer(options?: McpServerOptions) {
             );
           }
         });
-        if (!input.nodeId && !input.label) {
-          throw new Error("Either nodeId or label is required");
-        }
         const settledResults = await Promise.allSettled(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
