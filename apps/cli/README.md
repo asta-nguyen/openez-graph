@@ -133,7 +133,7 @@ FTS-only remains the default. Embedding comparison is opt-in and is not claimed 
 openez config set embedding.provider ollama
 openez config set embedding.ollama_model bge-m3
 openez embed .
-OPENEZ_BENCHMARK_EMBEDDINGS=1 pnpm benchmark:retrieval
+pnpm benchmark:retrieval:embeddings
 
 # Or use the public pinned local code model
 openez config set embedding.provider local

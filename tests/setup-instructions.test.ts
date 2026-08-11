@@ -4,6 +4,8 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import { installAgentInstructions } from "../apps/cli/src/setup-instructions";
+
 const START_MARKER = "<!-- openez:start -->";
 const END_MARKER = "<!-- openez:end -->";
 
@@ -32,6 +34,7 @@ describe("agent setup instructions", () => {
       instructions: "AGENTS.md",
       config: path.join(".codex", "config.toml"),
       parse: Bun.TOML.parse,
+      serverKey: "mcp_servers",
     },
     {
       name: "claude",
@@ -40,6 +43,7 @@ describe("agent setup instructions", () => {
       instructions: "CLAUDE.md",
       config: path.join(".claude", "settings.json"),
       parse: JSON.parse,
+      serverKey: "mcpServers",
     },
     {
       name: "opencode",
@@ -48,6 +52,7 @@ describe("agent setup instructions", () => {
       instructions: "AGENTS.md",
       config: path.join(".config", "opencode", "opencode.json"),
       parse: JSON.parse,
+      serverKey: "mcp",
     },
     {
       name: "windsurf",
@@ -56,6 +61,7 @@ describe("agent setup instructions", () => {
       instructions: "AGENTS.md",
       config: path.join(".codeium", "windsurf", "mcp_config.json"),
       parse: JSON.parse,
+      serverKey: "mcpServers",
     },
     {
       name: "devin",
@@ -64,6 +70,7 @@ describe("agent setup instructions", () => {
       instructions: "AGENTS.md",
       config: path.join(".config", "devin", "config.json"),
       parse: JSON.parse,
+      serverKey: "mcpServers",
     },
   ] as const;
 
@@ -81,6 +88,18 @@ describe("agent setup instructions", () => {
     }
   }
 
+  // Extract the args array that launches the openez MCP server from a parsed
+  // config. opencode stores `[command, ...args]` in a single `command` array;
+  // every other agent stores a separate `args` field.
+  function getOpenEZArgs(parsed: Record<string, unknown>, serverKey: string): string[] {
+    const servers = parsed[serverKey] as Record<string, Record<string, unknown>>;
+    const entry = servers?.openez;
+    if (!entry) throw new Error("openez server entry missing from " + serverKey);
+    if (Array.isArray(entry.command)) return entry.command as string[];
+    if (Array.isArray(entry.args)) return entry.args as string[];
+    throw new Error("openez entry has no command/args array");
+  }
+
   for (const setupCase of cases) {
     it(`installs ${setupCase.name} project instructions and keeps MCP config valid`, async () => {
       await runSetup(setupCase);
@@ -91,7 +110,11 @@ describe("agent setup instructions", () => {
       expect(instructions).toContain(END_MARKER);
 
       const config = fs.readFileSync(path.join(homePath, setupCase.config), "utf-8");
-      expect(() => setupCase.parse(config)).not.toThrow();
+      const parsed = setupCase.parse(config) as Record<string, unknown>;
+      // The openez MCP server entry must exist and launch `serve --mcp`.
+      const args = getOpenEZArgs(parsed, setupCase.serverKey);
+      expect(args.length).toBeGreaterThanOrEqual(2);
+      expect(args.slice(-2)).toEqual(["serve", "--mcp"]);
     });
   }
 
@@ -121,5 +144,47 @@ describe("agent setup instructions", () => {
     expect(instructions.endsWith("\nafter\n")).toBe(true);
     expect(instructions).not.toContain("old policy");
     expect(instructions).toContain("call `memory_recall`");
+  });
+
+  it("rejects a symlinked AGENTS.md pointing outside the project root", () => {
+    const outsideTarget = path.join(testRoot, "outside-target.md");
+    const outsideContent = "outside content\n";
+    fs.writeFileSync(outsideTarget, outsideContent);
+    const symlinkPath = path.join(projectPath, "AGENTS.md");
+    fs.symlinkSync(outsideTarget, symlinkPath);
+
+    expect(() => installAgentInstructions(projectPath, "AGENTS.md")).toThrow(/symlink/);
+    // The symlink target must be unchanged.
+    expect(fs.readFileSync(outsideTarget, "utf-8")).toBe(outsideContent);
+  });
+
+  it("rejects a symlinked CLAUDE.md pointing outside the project root", () => {
+    const outsideTarget = path.join(testRoot, "outside-claude.md");
+    const outsideContent = "claude outside\n";
+    fs.writeFileSync(outsideTarget, outsideContent);
+    const symlinkPath = path.join(projectPath, "CLAUDE.md");
+    fs.symlinkSync(outsideTarget, symlinkPath);
+
+    expect(() => installAgentInstructions(projectPath, "CLAUDE.md")).toThrow(/symlink/);
+    expect(fs.readFileSync(outsideTarget, "utf-8")).toBe(outsideContent);
+  });
+
+  it("errors without modifying the file when only START_MARKER is present", () => {
+    const instructionsPath = path.join(projectPath, "AGENTS.md");
+    const content = `header\n${START_MARKER}\norphan\n`;
+    fs.writeFileSync(instructionsPath, content);
+
+    expect(() => installAgentInstructions(projectPath, "AGENTS.md")).toThrow(/Unmatched/);
+    // File must be unchanged.
+    expect(fs.readFileSync(instructionsPath, "utf-8")).toBe(content);
+  });
+
+  it("errors without modifying the file when only END_MARKER is present", () => {
+    const instructionsPath = path.join(projectPath, "AGENTS.md");
+    const content = `header\n${END_MARKER}\norphan\n`;
+    fs.writeFileSync(instructionsPath, content);
+
+    expect(() => installAgentInstructions(projectPath, "AGENTS.md")).toThrow(/Unmatched/);
+    expect(fs.readFileSync(instructionsPath, "utf-8")).toBe(content);
   });
 });

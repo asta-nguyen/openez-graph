@@ -31,11 +31,12 @@ user-facing preset to its engine, Hugging Face repository, immutable revision,
 checksum metadata, and dimensions.
 
 The local static provider has two isolated responsibilities: a global artifact
-cache/downloader and a Model2Vec runtime. The cache uses a per-model lock,
-temporary downloads, checksum validation, and atomic rename. The runtime loads
-the artifact's ByteLevel BPE tokenizer and F16 embedding matrix, mean-pools
-token vectors, and normalizes the result to the same `number[][]` interface as
-OpenAI and Ollama. No Python process is required at runtime.
+cache/downloader and a Model2Vec runtime. The cache uses in-process
+de-duplication plus atomic publish (temporary downloads, checksum validation,
+and atomic rename). The runtime loads the artifact's ByteLevel BPE tokenizer
+and F16 embedding matrix, mean-pools token vectors, and normalizes the result
+to the same `number[][]` interface as OpenAI and Ollama. No Python process is
+required at runtime.
 
 ## Data flow
 
@@ -81,8 +82,9 @@ cache status, chunks considered, vectors written, and failed batches.
 - Pin the full model commit and verify the catalog checksum before activation.
 - Download to a temporary path and atomically publish only after validation.
 - Retry bounded 429/5xx/network failures; keep the last valid cache on failure.
-- Serialize downloads per model so concurrent CLI/MCP processes do not corrupt
-  the cache or duplicate work.
+- De-duplicate in-flight downloads per model within a process so concurrent
+  calls share the same load; cross-process serialization is not guaranteed
+  unless a filesystem lock is added.
 - Preserve partial workspace progress; rerunning `embed` resumes missing rows.
 - Validate vector count, dimensions, finite values, and consistent model key
   before inserting a batch.

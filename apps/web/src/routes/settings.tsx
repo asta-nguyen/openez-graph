@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { embeddingConfigQueryOptions, settingsEnvQueryOptions } from "../lib/queries";
 import { api } from "../lib/api";
+import { LOCAL_EMBEDDING_MODELS } from "@openez-graph/core";
 import {
   Badge,
   Button,
@@ -259,15 +260,20 @@ function EmbeddingConfigForm() {
       {provider === "local" && (
         <div className="space-y-2 border-l-2 border-border pl-4">
           <Label htmlFor="local-model">Model preset</Label>
-          <Input
+          <Select
             id="local-model"
-            placeholder="jina-code-static-256"
             value={localModel}
             onChange={(e) => {
               markDirty();
               setLocalModel(e.target.value);
             }}
-          />
+          >
+            {Object.keys(LOCAL_EMBEDDING_MODELS).map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </Select>
           <p className="text-xs text-muted-foreground">
             Run <code>openez embed [path]</code> after saving to download once and create vectors.
           </p>
