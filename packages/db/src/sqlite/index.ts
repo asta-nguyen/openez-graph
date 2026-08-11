@@ -1,5 +1,10 @@
-export { getRegistryDb, closeRegistryDb, resolveRegistryDbPath } from "./registry-db";
-export { getWorkspaceDb, closeAllWorkspaceDbs } from "./workspace-db";
+export {
+  getRegistryDb,
+  closeRegistryDb,
+  resolveRegistryDbPath,
+  getRegistryDdl,
+} from "./registry-db";
+export { getWorkspaceDb, closeAllWorkspaceDbs, getFullWorkspaceDdl } from "./workspace-db";
 export { createRegistryRepository, createWorkspaceRepository } from "./repository";
 export { encryptValue, decryptValue, isEncrypted, isSensitiveKey } from "./secure-storage";
 export {
