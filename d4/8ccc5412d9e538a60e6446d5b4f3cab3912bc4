@@ -1,0 +1,27 @@
+packages/indexer/src/index-workspace.ts
+  s_5bc8e9e818017b::t_232f6f883ecf59 972-974
+  s_5bc8e9e818017b::t_17243e4e0ec697 938,943
+tests/registry.test.ts
+  s_5bc8e9e818017b::t_ccb29416da2991 240,242,256-274,276-281
+  s_5bc8e9e818017b::t_58604b437ad612 241,243-254
+packages/db/src/sqlite/types.ts
+  s_5bc8e9e818017b::t_4ad4a16977db5c 87-100
+packages/db/src/sqlite/registry-repository.ts
+  s_5bc8e9e818017b::t_c9e160660d0c9d 301-346
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d48ccc5412d9e538a60e6446d5b4f3cab3912bc4",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
