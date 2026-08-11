@@ -1,0 +1,22 @@
+docs/superpowers/plans/2026-08-11-enhance-merge-readiness.md
+  s_6989a0f8b1a17d::t_f194791f59c958 348
+  s_6989a0f8b1a17d::t_148ea52df59b84 275,282-288,313-314,316-324
+  s_6989a0f8b1a17d::t_f699e28f2c07b9 1-274,276-281,289-312,315,325-347,349-479
+  s_6989a0f8b1a17d::t_5e2e607f23265d 480-481
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6dce6eb92368ca4e5c2d85b2f0f0dc0eb702d659",
+  "prompts": {},
+  "sessions": {
+    "s_6989a0f8b1a17d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff124-e325-7a73-8707-394943f19b65",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
