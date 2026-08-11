@@ -1,0 +1,59 @@
+tests/fts-retrieval.test.ts
+  s_b3aa2a7c685e82::t_8b43c8c1157c7a 11-14,78-82
+docs/superpowers/plans/2026-08-09-rag-flow-correctness-remediation.md
+  s_b3aa2a7c685e82::t_311fa6a1ad6a71 747-748,758-759
+packages/db/src/sqlite/graph-traversal-ops.ts
+  s_b3aa2a7c685e82::t_5f4075b2496e33 96-98
+  s_b3aa2a7c685e82::t_9abc208258ee62 105-107
+tests/oxc-parser.test.ts
+  s_b3aa2a7c685e82::t_d5b7675a36cb1b 149-172
+tests/index-workspace.test.ts
+  s_b3aa2a7c685e82::t_5f4075b2496e33 600
+tests/e2e-search.test.ts
+  s_b3aa2a7c685e82::t_5f4075b2496e33 14,202-213
+  s_b3aa2a7c685e82::t_7796203407c11b 214-215
+tests/parsed-documents-cache.test.ts
+  s_b3aa2a7c685e82::t_2950ca5a2b4c1f 194,201
+  s_b3aa2a7c685e82::t_311fa6a1ad6a71 141-142,157,190,198,205
+packages/indexer/src/parsers/oxc-parser.ts
+  s_b3aa2a7c685e82::t_9abc208258ee62 171,188-189,217-218,428,431-432,468-472,485-489
+packages/indexer/src/index-workspace.ts
+  s_b3aa2a7c685e82::t_9abc208258ee62 985,1043-1044
+tests/registry.test.ts
+  s_b3aa2a7c685e82::t_311fa6a1ad6a71 103-106,110-111
+tests/workspace-db.test.ts
+  s_b3aa2a7c685e82::t_d5b7675a36cb1b 131-145
+packages/db/src/sqlite/registry-db.ts
+  s_b3aa2a7c685e82::t_7ec43b0dc77952 190-199
+  s_b3aa2a7c685e82::t_5a700592b3f24f 188-189,200-206
+apps/mcp/src/mcp-core.ts
+  s_b3aa2a7c685e82::t_a352cdef097468 364-373,575,669-677,691-697,704-712,727-733
+tests/tokenizer-concurrency.test.ts
+  s_b3aa2a7c685e82::t_311fa6a1ad6a71 31-33
+tests/vector-search.test.ts
+  s_b3aa2a7c685e82::t_311fa6a1ad6a71 257,261,267,271,276-291,295,302,304-311,313-320,324,330-346,348,350-351,354
+packages/indexer/src/graph-service.ts
+  s_b3aa2a7c685e82::t_9abc208258ee62 120,144,153-156
+packages/db/src/sqlite/fts-repository.ts
+  s_b3aa2a7c685e82::t_5a700592b3f24f 25
+apps/web/src/server/index.ts
+  s_b3aa2a7c685e82::t_9abc208258ee62 410-411,457,468-477
+  s_b3aa2a7c685e82::t_f626a76c15df1a 413-428,430-441,444-455,458-467
+  s_b3aa2a7c685e82::t_69ed0505d335ce 412,456
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "64ac478c576e8ac60ec33d5e91a67ff9b77f50ad",
+  "prompts": {},
+  "sessions": {
+    "s_b3aa2a7c685e82": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff108-017d-7930-8094-ceb30568d8cb",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
