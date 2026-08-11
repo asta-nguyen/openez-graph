@@ -1,0 +1,19 @@
+apps/cli/src/setup-instructions.ts
+  s_36d874c2da60f9::t_98c77f5ef5dd2d 32-37,43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "385ef1c86d532c3ad19307b0835cfa0fdbfca14a",
+  "prompts": {},
+  "sessions": {
+    "s_36d874c2da60f9": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "fa10b615-65be-4843-b107-ed7e3cf7da1d",
+        "model": "Claude Sonnet 5 Low"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
