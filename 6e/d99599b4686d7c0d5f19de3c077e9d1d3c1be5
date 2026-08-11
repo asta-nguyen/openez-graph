@@ -1,0 +1,26 @@
+apps/web/src/server/index.ts
+  s_5bc8e9e818017b::t_40434e6b2941b5 582,594
+tests/web-index-endpoint.test.ts
+  s_5bc8e9e818017b::t_6bde597f4786d6 176
+apps/web/src/routes/settings.tsx
+  s_5bc8e9e818017b::t_f866a42d9e009c 115,128,130
+  s_5bc8e9e818017b::t_27969365d786df 274
+apps/web/src/lib/api.ts
+  s_5bc8e9e818017b::t_4a3003789acd0e 179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6ed99599b4686d7c0d5f19de3c077e9d1d3c1be5",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
