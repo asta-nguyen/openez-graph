@@ -39,7 +39,7 @@ function getNodeId(node: OxcNode): string | null {
  * enough for subtree selection during call extraction. The node retains the
  * raw `start`/`end` offsets and the full subtree we need to walk.
  */
-type SymbolAst = { symbol: ExtractedSymbol; node: OxcNode };
+type SymbolAst = { symbol: ExtractedSymbol; node: OxcNode; capturesClassThis?: boolean };
 
 /**
  * Extract top-level (and exported) symbols from the program body.
@@ -358,7 +358,7 @@ function extractCalls(symbolAsts: SymbolAst[]): {
       .map(({ symbol }) => symbol.name),
   );
 
-  for (const { symbol, node } of symbolAsts) {
+  for (const { symbol, node, capturesClassThis } of symbolAsts) {
     // Only function-like symbols can contain calls.
     if (symbol.symbolType !== "function" && symbol.symbolType !== "method") continue;
     const visited = new WeakSet<object>();
@@ -373,7 +373,11 @@ function extractCalls(symbolAsts: SymbolAst[]): {
           const rawName = calleeName(current.callee as OxcNode);
           const className = symbol.name.includes(".") ? symbol.name.split(".")[0] : null;
           let name = rawName;
-          if (rawName?.startsWith("this.") && symbol.symbolType === "method" && className) {
+          if (
+            rawName?.startsWith("this.") &&
+            (symbol.symbolType === "method" || capturesClassThis === true) &&
+            className
+          ) {
             const memberName = rawName.slice("this.".length);
             name = symbol.name.includes(".static.")
               ? `${className}.static.${memberName}`
@@ -414,7 +418,8 @@ function extractCalls(symbolAsts: SymbolAst[]): {
  * they appear as first-class graph symbols.
  */
 function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolAst[] {
-  const candidates: Array<{ name: string; node: OxcNode }> = [];
+  type NestedCandidate = { name: string; node: OxcNode; capturesClassThis?: boolean };
+  const candidates: NestedCandidate[] = [];
 
   function registerCandidate(name: string, bodyNode: OxcNode): void {
     if (candidates.some((candidate) => candidate.node === bodyNode)) return;
@@ -447,7 +452,9 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
   }
 
   const qualifiedNames = new Map<OxcNode, string>();
-  const candidateByNode = new Map(candidates.map((candidate) => [candidate.node, candidate]));
+  const candidateByNode = new Map<OxcNode, NestedCandidate>(
+    candidates.map((candidate) => [candidate.node, candidate]),
+  );
   const containers = [
     ...topLevel,
     ...candidates.map((item) => ({ symbol: { name: item.name }, node: item.node })),
@@ -470,7 +477,23 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
     if (closest) parents.set(candidate.node, closest);
   }
 
-  const qualify = (candidate: { name: string; node: OxcNode }): string => {
+  const capturesClassThis = (candidate: (typeof candidates)[number]): boolean => {
+    if (candidate.capturesClassThis !== undefined) return candidate.capturesClassThis;
+    if (candidate.node.type !== "ArrowFunctionExpression") return false;
+    const parent = parents.get(candidate.node);
+    if (!parent) return false;
+    const parentCandidate = candidateByNode.get(parent.node);
+    const inherited = parentCandidate
+      ? capturesClassThis(parentCandidate)
+      : "symbolType" in parent.symbol && parent.symbol.symbolType === "method";
+    candidate.capturesClassThis = inherited;
+    return inherited;
+  };
+  for (const candidate of candidates) {
+    candidate.capturesClassThis = capturesClassThis(candidate);
+  }
+
+  const qualify = (candidate: NestedCandidate): string => {
     const cached = qualifiedNames.get(candidate.node);
     if (cached) return cached;
     const parent = parents.get(candidate.node);
@@ -497,6 +520,7 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
         endLine,
       },
       node: bodyNode,
+      capturesClassThis: candidate.capturesClassThis,
     };
   });
 }

@@ -4,6 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/@openez-graph/cli?label=downloads&logo=npm)](https://www.npmjs.com/package/@openez-graph/cli)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/website-openez.astalife.co-black)](https://openez.astalife.co)
+[![Unikorn](https://unikorn.vn/api/widgets/badge/openez-graph/rank?theme=light&type=daily)](https://unikorn.vn/p/openez-graph?ref=embed-openez-graph)
 
 Local-first code intelligence for coding agents. OpenEZ indexes code and documentation into SQLite, then exposes focused retrieval, graph context, and durable project memory through MCP.
 
