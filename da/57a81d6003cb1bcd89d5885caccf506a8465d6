@@ -1,0 +1,47 @@
+tests/local-embedding.test.ts
+  s_ae974e66f4df24::t_6639ed37b46e12 57,78,81-82
+  s_ae974e66f4df24::t_0b0981ef751180 135-136,144
+  s_ae974e66f4df24::t_d24730ad9843c9 2,5,12,14,17-56,58-77,79-80,83-88,101-104,107-119,121-122,124-126,129-134,137-143,145-219
+CHANGELOG.md
+  s_ae974e66f4df24::t_24e204fa3ed652 15
+  s_ae974e66f4df24::t_62e60c5295602f 22
+tests/setup-instructions.test.ts
+  s_ae974e66f4df24::t_6f6ed2bc128658 7-8,37,46,55,64,73,91-102,113-117,148-189
+apps/cli/src/setup-instructions.ts
+  s_ae974e66f4df24::t_6febfd300999f4 11-12,22-33,37,40-51,53
+  s_ae974e66f4df24::t_84cee46ec2f5a3 39
+packages/indexer/src/embed-workspace.ts
+  s_ae974e66f4df24::t_9b9d34eba0eeed 133-143
+apps/cli/README.md
+  s_ae974e66f4df24::t_16ef915c9fa89f 136
+packages/core/src/local-embedding.ts
+  s_ae974e66f4df24::t_42a2eca3d2ee9c 60,63-66,72-74,82
+  s_ae974e66f4df24::t_791145cd1ca40a 161,169-190
+  s_ae974e66f4df24::t_2ce793f702c861 222-225,229-235
+  s_ae974e66f4df24::t_34c5d547818b8b 32-34
+apps/web/src/routes/settings.tsx
+  s_ae974e66f4df24::t_1d0366fe61323c 263,270-276
+  s_ae974e66f4df24::t_711656995fc26d 6
+apps/cli/src/cli.ts
+  s_ae974e66f4df24::t_fda8bd1ce0f8f0 521-525
+  s_ae974e66f4df24::t_2d32bae25abeff 18
+docs/superpowers/specs/2026-08-10-local-embedding-cli-design.md
+  s_ae974e66f4df24::t_07d8bc2b6306bd 34-39
+  s_ae974e66f4df24::t_f0e21a11358758 85-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "da57a81d6003cb1bcd89d5885caccf506a8465d6",
+  "prompts": {},
+  "sessions": {
+    "s_ae974e66f4df24": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "cosmic-monday",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
