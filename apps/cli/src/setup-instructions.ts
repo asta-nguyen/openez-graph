@@ -29,12 +29,18 @@ function readInstructionFile(instructionsPath: string): string {
 
 function writeInstructionFileAtomic(instructionsPath: string, content: string): void {
   const tempPath = `${instructionsPath}.openez-${process.pid}-${Date.now()}.tmp`;
+  let mode = 0o644;
+  try {
+    mode = fs.statSync(instructionsPath).mode & 0o777;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   let fd: number | undefined;
   try {
     fd = fs.openSync(
       tempPath,
       fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
-      0o644,
+      mode,
     );
     fs.writeFileSync(fd, content, "utf-8");
     fs.fsyncSync(fd);
