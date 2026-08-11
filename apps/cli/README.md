@@ -15,7 +15,7 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 
 - **Bun-powered** — native `bun:sqlite` driver, no native compilation, near-instant startup
 - **Rust-native parsing** — [oxc-parser](https://oxc.rs) for TS/JS (~13x faster than Babel), tree-sitter for Python/Go/Rust in rayon-parallel batches
-- **Zero-config** — auto-registers workspace, auto-indexes, auto-syncs on file changes
+- **Zero-config** — auto-registers workspace, auto-indexes; opt-in auto-sync via `OPENEZ_MCP_WATCH=1`
 - **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
 - **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
 - **Vector search** — optional OpenAI/Ollama/local embeddings with cosine similarity
@@ -53,7 +53,7 @@ openez setup opencode     # OpenCode
 openez setup windsurf     # Windsurf / Devin Desktop
 openez setup devin        # Devin CLI
 
-# 3. Restart your agent — it will auto-index and auto-sync
+# 3. Restart your agent — it will auto-index (auto-sync opt-in via OPENEZ_MCP_WATCH=1)
 ```
 
 ## Commands
@@ -64,7 +64,7 @@ openez index [path]             # incremental index
 openez embed [path]             # create configured provider vectors
 openez reindex [path]           # full rebuild (removes vectors; run embed after)
 openez watch [path]             # watch + auto-reindex on changes
-openez serve --mcp              # start MCP server (auto-index + auto-sync)
+openez serve --mcp              # start MCP server (auto-index; auto-sync opt-in via OPENEZ_MCP_WATCH=1)
 openez serve --web              # start web dashboard (default port 17881)
 openez serve --web --port 8080  # start web dashboard on custom port
 openez status [path]            # show workspace status
@@ -101,7 +101,7 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 2. When Claude Code starts, it launches the MCP server via `openez serve --mcp`
 3. The MCP server auto-registers the current project as a workspace
 4. It auto-indexes if the workspace has no documents yet
-5. It watches for file changes and re-indexes automatically (2s debounce)
+5. Live file watching is opt-in via `OPENEZ_MCP_WATCH=1` (2s debounce); without it, read tools run throttled incremental catch-up before querying
 6. All data is stored in `<project>/.openez/index.sqlite` — local, portable, gitignored
 
 ## Supported languages

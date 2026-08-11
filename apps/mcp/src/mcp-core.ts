@@ -374,13 +374,13 @@ async function catchUpReadWorkspaces(workspaces: WorkspaceLike[]): Promise<void>
   await Promise.all(workspaces.map((workspace) => catchUpWorkspaceIndex(workspace.id)));
 }
 
-async function ensureGraphReadySafely(workspaceId: string): Promise<void> {
+async function ensureGraphReadySafely(workspaceId: string, warnings?: string[]): Promise<void> {
   try {
     await ensureGraphReady(workspaceId);
   } catch (error) {
-    console.error(
-      `OpenEZ MCP graph build failed for workspace '${workspaceId}': ${error instanceof Error ? error.message : String(error)}`,
-    );
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`OpenEZ MCP graph build failed for workspace '${workspaceId}': ${msg}`);
+    warnings?.push(`Graph expansion unavailable for workspace '${workspaceId}': ${msg}`);
   }
 }
 
@@ -578,7 +578,10 @@ export function createMcpServer(options?: McpServerOptions) {
         await catchUpReadWorkspaces(workspaces);
         // Wait for background FTS build if still in progress
         await Promise.all(workspaces.map((w) => waitForFts(w.id)));
-        // Graph is built lazily inside codeQuery via ensureGraph callback
+        // Graph is built lazily inside codeQuery via ensureGraph callback.
+        // Collect warnings so graph build failures surface to the caller
+        // instead of silently returning FTS-only results.
+        const graphWarnings: string[] = [];
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspace,
@@ -588,7 +591,7 @@ export function createMcpServer(options?: McpServerOptions) {
               limit: input.limit,
               maxTokens: workspaceBudget,
               recordMetrics: false,
-              ensureGraph: ensureGraphReadySafely,
+              ensureGraph: (id: string) => ensureGraphReadySafely(id, graphWarnings),
             }),
           })),
         );
@@ -618,6 +621,7 @@ export function createMcpServer(options?: McpServerOptions) {
           {
             answerContext,
             sources: mergedSources,
+            warnings: graphWarnings.length > 0 ? graphWarnings : undefined,
             workspaces: results.map(({ workspace }) => ({
               workspaceId: workspace.id,
               workspaceName: workspace.name,
