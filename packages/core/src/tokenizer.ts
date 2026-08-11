@@ -74,7 +74,14 @@ export function truncateToTokenLimit(value: string, maxTokens: number): string {
  * `overlapTokens` tokens. Falls back to a chars/4 split when BPE is unavailable.
  */
 export function splitToTokenLimit(value: string, maxTokens: number, overlapTokens = 0): string[] {
-  if (!value || maxTokens <= 0) return [];
+  if (
+    !value ||
+    !Number.isInteger(maxTokens) ||
+    !Number.isInteger(overlapTokens) ||
+    maxTokens <= 0
+  ) {
+    return [];
+  }
 
   const overlap = Math.min(Math.max(0, overlapTokens), maxTokens - 1);
 
@@ -102,7 +109,14 @@ export function splitToTokenLimit(value: string, maxTokens: number, overlapToken
  * consistent with `fastTokenCounter.count`.
  */
 export function splitApproximately(value: string, maxTokens: number, overlapTokens = 0): string[] {
-  if (!value || maxTokens <= 0) return [];
+  if (
+    !value ||
+    !Number.isInteger(maxTokens) ||
+    !Number.isInteger(overlapTokens) ||
+    maxTokens <= 0
+  ) {
+    return [];
+  }
 
   const overlap = Math.min(Math.max(0, overlapTokens), maxTokens - 1);
   const maxChars = maxTokens * 4;

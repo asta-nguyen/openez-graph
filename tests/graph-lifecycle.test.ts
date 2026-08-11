@@ -216,7 +216,7 @@ describe("graph lifecycle persistence", () => {
     });
 
     const ready = service.ensureGraphReady(workspace.id);
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await registry.invalidateWorkspaceGraph(workspace.id);
     releaseFirst();
     await ready;
@@ -246,7 +246,7 @@ describe("graph lifecycle persistence", () => {
     });
 
     const ready = service.ensureGraphReady(workspace.id);
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await registry.invalidateWorkspaceGraph(workspace.id);
     release();
 
@@ -296,6 +296,54 @@ describe("graph lifecycle persistence", () => {
     expect(current?.graphStatus).toBe("completed");
     expect(current?.nodeCount).toBe(2);
     expect(current?.edgeCount).toBe(1);
+  });
+
+  it("retries immediately when a claimed build cannot publish", async () => {
+    const registry = createRegistryRepository();
+    const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
+    let attempts = 0;
+    const service = createGraphService({
+      registry,
+      async buildGraphGeneration() {
+        attempts += 1;
+        return attempts === 1
+          ? { nodeCount: 0, edgeCount: 0, published: false }
+          : { nodeCount: 2, edgeCount: 1 };
+      },
+      now: () => "2026-08-10T00:00:00.000Z",
+    });
+
+    const outcome = await Promise.race([
+      service.ensureGraphReady(workspace.id).then(() => "ready"),
+      new Promise<"timed-out">((resolve) => setTimeout(() => resolve("timed-out"), 100)),
+    ]);
+
+    expect(outcome).toBe("ready");
+    expect(attempts).toBe(2);
+  });
+
+  it("fails clearly when another graph build remains leased past the wait budget", async () => {
+    const registry = createRegistryRepository();
+    const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
+    await registry.tryClaimGraphBuild(workspace.id, "other-owner", "2099-01-01T00:00:00.000Z");
+    const service = createGraphService({
+      registry,
+      async buildGraphGeneration() {
+        throw new Error("must not build while another owner holds the lease");
+      },
+      now: () => "2026-08-10T00:00:00.000Z",
+      maxWaitMs: 0,
+    });
+
+    const outcome = await Promise.race([
+      service.ensureGraphReady(workspace.id).then(
+        () => "resolved",
+        (error) => error.message,
+      ),
+      new Promise<"pending">((resolve) => setTimeout(() => resolve("pending"), 50)),
+    ]);
+
+    expect(outcome).toBe("Timed out waiting for graph build for workspace '" + workspace.id + "'");
   });
 
   it("keeps graph builds scoped to canonical workspace IDs with matching basenames", async () => {

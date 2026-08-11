@@ -157,7 +157,7 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
     // On platforms without the native extension, resolveNativeParser() is null
     // and native-language docs are expected to be cached as fallback-v1.
     resetNativeParserCache();
-    expect(resolveNativeParser()).toBeNull();
+    if (resolveNativeParser()) return;
 
     fs.mkdirSync(path.join(workspaceRoot, "src"), { recursive: true });
     const pyPath = path.join(workspaceRoot, "src", "app.py");

@@ -31,7 +31,7 @@ describe("resolveRegistryDbPath", () => {
 });
 
 describe("createRegistryRepository", () => {
-  it("migrates legacy registries without changing completed workspaces", async () => {
+  it("migrates legacy registries and invalidates pre-existing completed graphs", async () => {
     const dbPath = resolveRegistryDbPath();
     const legacy = createNativeDatabase(dbPath);
     legacy.exec(`
@@ -216,14 +216,14 @@ describe("createRegistryRepository", () => {
     const repo = createRegistryRepository();
     await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
 
-    const firstEpoch = await repo.tryClaimGraphBuild("ws1", "owner-a", "2026-08-10T00:00:00.000Z");
-    const secondEpoch = await repo.tryClaimGraphBuild("ws1", "owner-b", "2099-08-10T00:00:00.000Z");
+    const expiredLease = new Date(Date.now() - 1_000).toISOString();
+    const futureLease = new Date(Date.now() + 60_000).toISOString();
+    const firstEpoch = await repo.tryClaimGraphBuild("ws1", "owner-a", expiredLease);
+    const secondEpoch = await repo.tryClaimGraphBuild("ws1", "owner-b", futureLease);
 
     expect(firstEpoch).toBe(1);
     expect(secondEpoch).toBe(2);
-    expect(await repo.refreshGraphBuildLease("ws1", "owner-a", "2099-08-10T00:00:00.000Z")).toBe(
-      false,
-    );
+    expect(await repo.refreshGraphBuildLease("ws1", "owner-a", futureLease)).toBe(false);
     expect(
       await repo.completeGraphBuild("ws1", "owner-a", 0, {
         nodeCount: 99,

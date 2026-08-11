@@ -309,6 +309,18 @@ export function createRegistryRepository(): RegistryRepository {
       return result.changes > 0;
     },
 
+    async releaseGraphBuild(id, ownerToken): Promise<boolean> {
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_status = 'pending', graph_build_owner = NULL,
+               graph_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
+        )
+        .run(new Date().toISOString(), id, ownerToken) as { changes: number };
+      return result.changes > 0;
+    },
+
     async completeGraphBuild(id, ownerToken, generation, result): Promise<boolean> {
       const update = native
         .prepare(

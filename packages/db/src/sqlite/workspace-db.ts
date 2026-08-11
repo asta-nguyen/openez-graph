@@ -132,10 +132,7 @@ export function getFullWorkspaceDdl(): string {
   );
 }
 
-export function initializeWorkspaceSchema(
-  sqlite: ReturnType<typeof createNativeDatabase>,
-  dimensions: number = 768,
-) {
+export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
   const tableExists =
     (
       sqlite

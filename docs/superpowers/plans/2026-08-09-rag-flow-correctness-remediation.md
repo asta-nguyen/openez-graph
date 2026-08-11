@@ -444,7 +444,10 @@ it("does not delete legacy TEXT embeddings when opening a workspace", () => {
     "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding) VALUES (?, ?, ?, ?, ?, ?)",
   ).run("emb-1", "chunk-1", "ollama", "bge-m3", 3, "[0.1, 0.2, 0.3]");
 
-  expect(() => initializeWorkspaceSchema(db)).toThrow(/legacy TEXT embeddings.*openez reindex/i);
+  expect(() => initializeWorkspaceSchema(db)).not.toThrow();
+  expect(db.prepare("SELECT value FROM index_meta WHERE key = 'embedding_format'").get()).toEqual({
+    value: "text",
+  });
   expect(db.prepare("SELECT count(*) AS count FROM embeddings").get()).toEqual({ count: 1 });
   db.close();
 });
@@ -454,15 +457,17 @@ it("does not delete legacy TEXT embeddings when opening a workspace", () => {
 
 Run: `bun test tests/embedding-migration.test.ts tests/vector-search.test.ts`
 
-Expected: FAIL because database open currently deletes legacy rows and rebuilds the table.
+Expected: FAIL because database open should preserve legacy rows, mark the workspace
+for FTS-only retrieval, and emit an actionable reindex warning.
 
-- [ ] **Step 3: Replace destructive open-time migration with an explicit error**
+- [ ] **Step 3: Replace destructive open-time migration with FTS-only fallback**
 
-Detect a TEXT `embedding` column before preparing repository statements and throw:
+Detect a TEXT `embedding` column before preparing repository statements, preserve it,
+and record the legacy format so retrieval disables vector ranking:
 
 ```ts
-throw new Error(
-  "Workspace uses legacy TEXT embeddings. Run `openez reindex <path>` to rebuild BLOB embeddings.",
+console.error(
+  "Workspace has legacy TEXT embeddings. Vector search is disabled until `openez reindex <path>` rebuilds them as BLOB.",
 );
 ```
 

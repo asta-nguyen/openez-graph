@@ -1,4 +1,4 @@
-import { exactTokenCounter } from "@openez-graph/core";
+import { fastTokenCounter } from "@openez-graph/core";
 
 import { hashContent } from "../hash";
 import type { IndexedChunk } from "../types";
@@ -16,7 +16,7 @@ export class FallbackParser implements CodeParser {
   }
 
   parse(input: ParseInput, language: string | null, kind: string): ParsedDocument {
-    const counter = input.counter ?? exactTokenCounter;
+    const counter = input.counter ?? fastTokenCounter;
     const lines = input.content.split("\n");
     const chunk: IndexedChunk = {
       content: input.content,

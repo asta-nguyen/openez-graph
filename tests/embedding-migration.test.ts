@@ -5,7 +5,10 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { createNativeDatabase } from "../packages/db/src/sqlite/database-loader";
-import { initializeWorkspaceSchema } from "../packages/db/src/sqlite/workspace-db";
+import {
+  closeWorkspaceDb,
+  initializeWorkspaceSchema,
+} from "../packages/db/src/sqlite/workspace-db";
 
 describe("migrateEmbeddingToBlob", () => {
   let tmpDir: string;
@@ -122,6 +125,7 @@ describe("migrateEmbeddingToBlob", () => {
     const count = db2.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number };
     expect(count.c).toBe(0);
     db2.close();
+    closeWorkspaceDb(wsRoot);
     fs.rmSync(wsRoot, { recursive: true, force: true });
   });
 

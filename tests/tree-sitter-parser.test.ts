@@ -6,6 +6,7 @@ import {
   pythonConfig,
   rustConfig,
 } from "../packages/indexer/src/tree-sitter";
+import { fastTokenCounter } from "../packages/core/src/tokenizer";
 
 // ── Python ──
 
@@ -138,6 +139,17 @@ describe("tree-sitter python parser", () => {
     expect(result!.chunks.length).toBe(2);
     expect(result!.chunks[0].symbolName).toBe("foo");
     expect(result!.chunks[1].symbolName).toBe("bar");
+  });
+
+  it("uses the supplied fast counter for successful WASM parses", async () => {
+    const source = [
+      "def deliberately_long_function_name_with_many_words(argument_one, argument_two):",
+      "    return argument_one + argument_two",
+    ].join("\n");
+    const result = await parseWithTreeSitter(pythonConfig, source, fastTokenCounter);
+
+    expect(result).not.toBeNull();
+    expect(result!.chunks[0]?.tokenCount).toBe(fastTokenCounter.count(result!.chunks[0]!.content));
   });
 });
 
