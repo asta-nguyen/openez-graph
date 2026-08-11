@@ -84,6 +84,20 @@ export interface RegistryRepository {
   refreshIndexingLease(id: string, ownerToken: string, leaseExpiresAt: string): Promise<boolean>;
   /** Release an indexing claim that failed before normal completion. */
   releaseIndexing(id: string, ownerToken: string, error: string): Promise<boolean>;
+  /** Fence index completion by lease owner; returns false if the lease was taken over. */
+  completeIndexing(
+    id: string,
+    ownerToken: string,
+    result: {
+      documentCount: number;
+      chunkCount: number;
+      nodeCount: number;
+      edgeCount: number;
+      completedAt: string;
+    },
+  ): Promise<boolean>;
+  /** Fence index failure by lease owner; returns false if the lease was taken over. */
+  failIndexing(id: string, ownerToken: string, error: string): Promise<boolean>;
   invalidateWorkspaceGraph(id: string): Promise<number>;
   /**
    * Atomically claim the graph build for a workspace. Transitions

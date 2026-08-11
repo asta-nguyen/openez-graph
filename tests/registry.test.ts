@@ -237,10 +237,48 @@ describe("createRegistryRepository", () => {
     expect(
       await repo.tryClaimIndexing("ws1", "owner-a", new Date(Date.now() - 1_000).toISOString()),
     ).toBe(true);
-    expect(
-      await repo.tryClaimIndexing("ws1", "owner-b", new Date(Date.now() + 60_000).toISOString()),
-    ).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1", "owner-b", firstExpiry)).toBe(true);
     expect(await repo.refreshIndexingLease("ws1", "owner-a", firstExpiry)).toBe(false);
+  });
+
+  it("fences stale index completions and failures by owner token", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+
+    const expiredLease = new Date(Date.now() - 1_000).toISOString();
+    const futureLease = new Date(Date.now() + 60_000).toISOString();
+
+    expect(await repo.tryClaimIndexing("ws1", "owner-a", expiredLease)).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1", "owner-b", futureLease)).toBe(true);
+
+    // Stale owner cannot complete or fail
+    expect(
+      await repo.completeIndexing("ws1", "owner-a", {
+        documentCount: 99,
+        chunkCount: 99,
+        nodeCount: 99,
+        edgeCount: 99,
+        completedAt: "2026-08-11T00:00:00.000Z",
+      }),
+    ).toBe(false);
+    expect(await repo.failIndexing("ws1", "owner-a", "stale error")).toBe(false);
+
+    // Current owner can complete
+    expect(
+      await repo.completeIndexing("ws1", "owner-b", {
+        documentCount: 2,
+        chunkCount: 5,
+        nodeCount: 3,
+        edgeCount: 1,
+        completedAt: "2026-08-11T00:00:00.000Z",
+      }),
+    ).toBe(true);
+
+    const ws = await repo.getWorkspace("ws1");
+    expect(ws?.status).toBe("indexed");
+    expect(ws?.indexingStatus).toBe("completed");
+    expect(ws?.documentCount).toBe(2);
+    expect(ws?.indexBuildOwner).toBeUndefined();
   });
 
   it("fences stale graph builders by owner token and monotonically increasing epoch", async () => {

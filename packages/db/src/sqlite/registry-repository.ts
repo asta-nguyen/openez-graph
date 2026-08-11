@@ -298,6 +298,52 @@ export function createRegistryRepository(): RegistryRepository {
       return result.changes > 0;
     },
 
+    async completeIndexing(
+      id: string,
+      ownerToken: string,
+      result: {
+        documentCount: number;
+        chunkCount: number;
+        nodeCount: number;
+        edgeCount: number;
+        completedAt: string;
+      },
+    ): Promise<boolean> {
+      const update = native
+        .prepare(
+          `UPDATE workspaces
+           SET status = 'indexed', indexing_status = 'completed',
+               last_indexed_at = ?, document_count = ?, chunk_count = ?,
+               node_count = ?, edge_count = ?, last_error = '',
+               index_build_owner = NULL, index_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+        )
+        .run(
+          result.completedAt,
+          result.documentCount,
+          result.chunkCount,
+          result.nodeCount,
+          result.edgeCount,
+          new Date().toISOString(),
+          id,
+          ownerToken,
+        ) as { changes: number };
+      return update.changes > 0;
+    },
+
+    async failIndexing(id: string, ownerToken: string, error: string): Promise<boolean> {
+      const update = native
+        .prepare(
+          `UPDATE workspaces
+           SET status = 'error', indexing_status = 'failed',
+               last_error = ?, index_build_owner = NULL,
+               index_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+        )
+        .run(error, new Date().toISOString(), id, ownerToken) as { changes: number };
+      return update.changes > 0;
+    },
+
     async invalidateWorkspaceGraph(id: string): Promise<number> {
       const row = native
         .prepare(
