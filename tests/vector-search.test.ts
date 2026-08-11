@@ -336,7 +336,7 @@ describe("vector search", () => {
       {
         chunkId,
         provider: "ollama",
-        model: "bge-m3",
+        model: embeddingStorageModel({ model: "bge-m3" }),
         dimensions: 3,
         embedding: new Uint8Array([42]),
       },

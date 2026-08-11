@@ -95,6 +95,8 @@ export interface RegistryRepository {
    * taken over by another process (caller should abort the build).
    */
   refreshGraphBuildLease(id: string, ownerToken: string, leaseExpiresAt: string): Promise<boolean>;
+  /** Release an unpublished graph build so the next attempt can claim immediately. */
+  releaseGraphBuild(id: string, ownerToken: string): Promise<boolean>;
   completeGraphBuild(
     id: string,
     ownerToken: string,

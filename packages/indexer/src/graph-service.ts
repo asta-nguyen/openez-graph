@@ -11,6 +11,7 @@ export interface GraphServiceDeps {
     | "getWorkspace"
     | "tryClaimGraphBuild"
     | "refreshGraphBuildLease"
+    | "releaseGraphBuild"
     | "completeGraphBuild"
     | "failGraphBuild"
   >;
@@ -21,12 +22,14 @@ export interface GraphServiceDeps {
     buildEpoch: number,
   ): Promise<{ nodeCount: number; edgeCount: number; published?: boolean }>;
   now(): string;
+  maxWaitMs?: number;
 }
 
 /** Lease duration: a builder must refresh within this window or lose ownership. */
 const LEASE_DURATION_MS = 30_000;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const POLL_INTERVAL_MS = 200;
+const GRAPH_READY_TIMEOUT_MS = 5 * 60_000;
 
 function leaseExpiry(): string {
   return new Date(Date.now() + LEASE_DURATION_MS).toISOString();
@@ -42,7 +45,11 @@ export function createGraphService(deps: GraphServiceDeps): {
   const graphBuilds = new Map<string, Promise<void>>();
 
   async function ensureGraphReadyInternal(workspaceId: string): Promise<void> {
+    const deadline = Date.now() + (deps.maxWaitMs ?? GRAPH_READY_TIMEOUT_MS);
     buildAttempt: for (;;) {
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out waiting for graph build for workspace '${workspaceId}'`);
+      }
       const workspace = await deps.registry.getWorkspace(workspaceId);
       if (!workspace) throw new Error(`Workspace '${workspaceId}' not found`);
       if (
@@ -109,7 +116,11 @@ export function createGraphService(deps: GraphServiceDeps): {
             ownerToken,
             leaseExpiry(),
           );
-          if (leaseLost || !stillOwner || counts.published === false) {
+          if (leaseLost || !stillOwner) {
+            continue buildAttempt;
+          }
+          if (counts.published === false) {
+            await deps.registry.releaseGraphBuild(workspaceId, ownerToken);
             continue buildAttempt;
           }
           if (current.indexGeneration !== targetGeneration) {
@@ -167,6 +178,7 @@ const defaultGraphService = createGraphService({
       createRegistryRepository().tryClaimGraphBuild(id, owner, lease),
     refreshGraphBuildLease: (id, owner, lease) =>
       createRegistryRepository().refreshGraphBuildLease(id, owner, lease),
+    releaseGraphBuild: (id, owner) => createRegistryRepository().releaseGraphBuild(id, owner),
     completeGraphBuild: (id, owner, generation, result) =>
       createRegistryRepository().completeGraphBuild(id, owner, generation, result),
     failGraphBuild: (id, owner, error) =>

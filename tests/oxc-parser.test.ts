@@ -229,6 +229,38 @@ describe("OxcParser", () => {
     });
   });
 
+  it("gives accessors and static methods distinct graph symbol names", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "members.ts",
+        absolutePath: "/tmp/members.ts",
+        content: [
+          "class Settings {",
+          "  get value() { return 1; }",
+          "  set value(next: number) {}",
+          "  run() {}",
+          "  static run() {}",
+          "}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    const names = result.definedSymbols.map((symbol) => symbol.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "Settings.get.value",
+        "Settings.set.value",
+        "Settings.run",
+        "Settings.static.run",
+      ]),
+    );
+    expect(new Set(names).size).toBe(names.length);
+  });
+
   it("finds calls inside object property values", () => {
     const result = new OxcParser().parse(
       {

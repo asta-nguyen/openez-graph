@@ -614,7 +614,7 @@ describe("indexWorkspace", () => {
     expect(countTokens(sample)).toBe(exact);
   });
 
-  it("resets fast token flag even when indexing fails early (missing workspace ID)", async () => {
+  it("keeps token counting exact when indexing fails early (missing workspace ID)", async () => {
     const sample = "The tokenizer must leave fast mode after indexing.";
     const exact = countTokens(sample);
     expect(exact).not.toBe(Math.ceil(sample.length / 4));

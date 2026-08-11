@@ -121,8 +121,8 @@ required.
 - **BLOB cosine linear scan** is the supported and only vector search path.
 - `sqlite-vec` dependency and all `embeddings_vec` sync code have been removed.
 - `hasVecExtension()` / `tryLoadVecExtension()` have been removed.
-- Opening a workspace with legacy TEXT embeddings throws an actionable error
-  (`Run 'openez reindex <path>'`) instead of silently deleting data.
+- Opening a workspace with legacy TEXT embeddings preserves the data, warns the
+  operator to run `openez reindex <path>`, and uses FTS-only retrieval until then.
 
 ---
 
@@ -178,7 +178,7 @@ CREATE TABLE parsed_documents (
 | 3     | sqlite-vec ANN      | ~~Medium~~ Deferred — BLOB cosine is the supported path | ~~Yes~~ N/A                  |
 | 4     | Cache parse results | Low — additive                                          | No (populated on next index) |
 
-Phases 2 and 3 both require reindex, so they're ordered consecutively. Phase 1 (split) must come first since Phases 2-4 modify files created by the split.
+Phase 2 requires reindex. Phase 1 (split) must come first since Phases 2-4 modify files created by the split.
 
 ## Verification
 

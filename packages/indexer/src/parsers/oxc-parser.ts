@@ -179,7 +179,12 @@ function extractClassMethods(classNode: OxcNode, className: string, source: stri
       const value = member.value as OxcNode | undefined;
       if (!value) continue;
       const methodName = key.name;
-      const qualifiedName = `${className}.${methodName}`;
+      const memberKind = member.kind === "get" || member.kind === "set" ? member.kind : null;
+      const qualifiedName = memberKind
+        ? `${className}.${memberKind}.${methodName}`
+        : member.static === true
+          ? `${className}.static.${methodName}`
+          : `${className}.${methodName}`;
       const startLine = source.slice(0, value.start).split("\n").length;
       const endLine = source.slice(0, value.end).split("\n").length;
       methods.push({
@@ -367,29 +372,35 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
   }
 
   const qualifiedNames = new Map<OxcNode, string>();
-  const containingSymbol = (
-    candidate: OxcNode,
-  ): SymbolAst | { symbol: { name: string }; node: OxcNode } => {
-    const containers = [
-      ...topLevel,
-      ...candidates.map((item) => ({ symbol: { name: item.name }, node: item.node })),
-    ].filter(
-      (item) =>
-        item.node !== candidate &&
-        item.node.start <= candidate.start &&
-        item.node.end >= candidate.end,
-    );
-    containers.sort(
-      (left, right) => left.node.end - left.node.start - (right.node.end - right.node.start),
-    );
-    return containers[0]!;
-  };
+  const candidateByNode = new Map(candidates.map((candidate) => [candidate.node, candidate]));
+  const containers = [
+    ...topLevel,
+    ...candidates.map((item) => ({ symbol: { name: item.name }, node: item.node })),
+  ];
+  const parents = new Map<OxcNode, SymbolAst | { symbol: { name: string }; node: OxcNode }>();
+  for (const candidate of candidates) {
+    let closest: SymbolAst | { symbol: { name: string }; node: OxcNode } | undefined;
+    for (const container of containers) {
+      if (
+        container.node === candidate.node ||
+        container.node.start > candidate.node.start ||
+        container.node.end < candidate.node.end ||
+        (closest &&
+          container.node.end - container.node.start >= closest.node.end - closest.node.start)
+      ) {
+        continue;
+      }
+      closest = container;
+    }
+    if (closest) parents.set(candidate.node, closest);
+  }
 
   const qualify = (candidate: { name: string; node: OxcNode }): string => {
     const cached = qualifiedNames.get(candidate.node);
     if (cached) return cached;
-    const parent = containingSymbol(candidate.node);
-    const parentCandidate = candidates.find((item) => item.node === parent.node);
+    const parent = parents.get(candidate.node);
+    if (!parent) return candidate.name;
+    const parentCandidate = candidateByNode.get(parent.node);
     const parentName = parentCandidate ? qualify(parentCandidate) : parent.symbol.name;
     const qualified = `${parentName}.${candidate.name}`;
     qualifiedNames.set(candidate.node, qualified);

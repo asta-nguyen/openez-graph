@@ -44,7 +44,7 @@ export class TreeSitterParser implements CodeParser {
     }
 
     const config = LANGUAGE_CONFIGS[language];
-    const tsResult = await parseWithTreeSitter(config, input.content);
+    const tsResult = await parseWithTreeSitter(config, input.content, counter);
     const result = tsResult ?? REGEX_FALLBACKS[language](input.content, counter);
 
     return {
