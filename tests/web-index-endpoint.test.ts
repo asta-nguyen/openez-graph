@@ -173,5 +173,6 @@ describe("PUT /api/settings/embedding", () => {
     expect(response.status).toBe(200);
     const config = await (await app.request("/api/settings/embedding")).json();
     expect(config.localModel).toBe("jina-code-static-256");
+    expect(config.localModels).toEqual(["jina-code-static-256"]);
   });
 });

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { embeddingConfigQueryOptions, settingsEnvQueryOptions } from "../lib/queries";
 import { api } from "../lib/api";
-import { LOCAL_EMBEDDING_MODELS } from "@openez-graph/core";
 import {
   Badge,
   Button,
@@ -113,7 +112,7 @@ function EmbeddingConfigForm() {
   const [openaiModel, setOpenaiModel] = useState("text-embedding-3-small");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
   const [ollamaModel, setOllamaModel] = useState("bge-m3");
-  const localModelPresets = Object.keys(LOCAL_EMBEDDING_MODELS);
+  const localModelPresets = config?.localModels ?? [];
   const defaultLocalModel = localModelPresets[0] ?? "jina-code-static-256";
   const [localModel, setLocalModel] = useState(defaultLocalModel);
 
@@ -126,11 +125,9 @@ function EmbeddingConfigForm() {
     setOllamaBaseUrl(config.ollamaBaseUrl);
     setOllamaModel(config.ollamaModel);
     setLocalModel(
-      Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, config.localModel)
-        ? config.localModel
-        : defaultLocalModel,
+      config.localModels.includes(config.localModel) ? config.localModel : defaultLocalModel,
     );
-  }, [config]);
+  }, [config, defaultLocalModel]);
 
   const saveMutation = useMutation({
     mutationFn: (input: Record<string, string>) => api.updateEmbeddingConfig(input),
@@ -274,7 +271,7 @@ function EmbeddingConfigForm() {
               setLocalModel(e.target.value);
             }}
           >
-            {Object.keys(LOCAL_EMBEDDING_MODELS).map((model) => (
+            {localModelPresets.map((model) => (
               <option key={model} value={model}>
                 {model}
               </option>
