@@ -579,7 +579,7 @@ app.post("/api/query", async (c) => {
 
 app.get("/api/settings/embedding", async (c) => {
   try {
-    const { getEmbeddingConfig } = await import("@openez-graph/core");
+    const { getEmbeddingConfig, LOCAL_EMBEDDING_MODELS } = await import("@openez-graph/core");
     const config = await getEmbeddingConfig();
     const registry = createRegistryRepository();
     const dbSettings = await registry.getAllSettings();
@@ -591,6 +591,7 @@ app.get("/api/settings/embedding", async (c) => {
       ollamaBaseUrl: config.ollamaBaseUrl,
       ollamaModel: config.ollamaModel,
       localModel: config.localModel,
+      localModels: Object.keys(LOCAL_EMBEDDING_MODELS),
       dbOverrides: Object.keys(dbSettings).filter((k) => k.startsWith("embedding.")),
     });
   } catch (err) {

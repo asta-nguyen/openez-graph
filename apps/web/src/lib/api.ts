@@ -176,6 +176,7 @@ export interface EmbeddingConfigResponse {
   ollamaBaseUrl: string;
   ollamaModel: string;
   localModel: string;
+  localModels: string[];
   dbOverrides: string[];
 }
 
