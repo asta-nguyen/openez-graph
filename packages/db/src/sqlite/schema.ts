@@ -13,6 +13,8 @@ export const workspaces = sqliteTable(
     excludeGlobs: text("exclude_globs").notNull().default(""),
     status: text("status").notNull().default("pending"),
     indexingStatus: text("indexing_status").notNull().default("pending"),
+    indexBuildOwner: text("index_build_owner"),
+    indexLeaseExpiresAt: text("index_lease_expires_at"),
     graphStatus: text("graph_status").notNull().default("pending"),
     indexGeneration: integer("index_generation").notNull().default(0),
     graphGeneration: integer("graph_generation").notNull().default(0),

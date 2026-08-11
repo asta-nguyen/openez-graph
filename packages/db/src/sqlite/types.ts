@@ -6,6 +6,8 @@ export interface RegistryWorkspace {
   excludeGlobs: string;
   status: "pending" | "indexing" | "indexed" | "error";
   indexingStatus: "pending" | "running" | "completed" | "failed";
+  indexBuildOwner: string | undefined;
+  indexLeaseExpiresAt: string | undefined;
   graphStatus: "pending" | "running" | "completed" | "failed";
   indexGeneration: number;
   graphGeneration: number;
@@ -76,10 +78,12 @@ export interface RegistryRepository {
       >
     >,
   ): Promise<void>;
-  /** Atomically claim a workspace for indexing; returns false if already running. */
-  tryClaimIndexing(id: string): Promise<boolean>;
+  /** Atomically claim a workspace for indexing, taking over expired leases. */
+  tryClaimIndexing(id: string, ownerToken: string, leaseExpiresAt: string): Promise<boolean>;
+  /** Refresh an indexing lease while the owner is still running. */
+  refreshIndexingLease(id: string, ownerToken: string, leaseExpiresAt: string): Promise<boolean>;
   /** Release an indexing claim that failed before normal completion. */
-  releaseIndexing(id: string, error: string): Promise<boolean>;
+  releaseIndexing(id: string, ownerToken: string, error: string): Promise<boolean>;
   invalidateWorkspaceGraph(id: string): Promise<number>;
   /**
    * Atomically claim the graph build for a workspace. Transitions

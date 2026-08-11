@@ -39,6 +39,8 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     excludeGlobs: row.excludeGlobs || "",
     status: row.status as RegistryWorkspace["status"],
     indexingStatus: row.indexingStatus as RegistryWorkspace["indexingStatus"],
+    indexBuildOwner: row.indexBuildOwner ?? undefined,
+    indexLeaseExpiresAt: row.indexLeaseExpiresAt ?? undefined,
     graphStatus: row.graphStatus as RegistryWorkspace["graphStatus"],
     indexGeneration: row.indexGeneration,
     graphGeneration: row.graphGeneration,
@@ -200,6 +202,9 @@ export function createRegistryRepository(): RegistryRepository {
       if (updates.indexingStatus !== undefined) {
         sets.push("indexing_status = ?");
         params.push(updates.indexingStatus);
+        if (updates.indexingStatus !== "running") {
+          sets.push("index_build_owner = NULL", "index_lease_expires_at = NULL");
+        }
       }
       if (updates.graphStatus !== undefined) {
         sets.push("graph_status = ?");
@@ -246,25 +251,50 @@ export function createRegistryRepository(): RegistryRepository {
       native.prepare(`UPDATE workspaces SET ${sets.join(", ")} WHERE id = ?`).run(...params);
     },
 
-    async tryClaimIndexing(id: string): Promise<boolean> {
+    async tryClaimIndexing(
+      id: string,
+      ownerToken: string,
+      leaseExpiresAt: string,
+    ): Promise<boolean> {
+      const now = new Date().toISOString();
       const result = native
         .prepare(
           `UPDATE workspaces
-           SET status = 'indexing', indexing_status = 'running', last_error = '', updated_at = ?
-           WHERE id = ? AND indexing_status != 'running'`,
+           SET status = 'indexing', indexing_status = 'running',
+               index_build_owner = ?, index_lease_expires_at = ?,
+               last_error = '', updated_at = ?
+           WHERE id = ?
+             AND (indexing_status != 'running' OR index_lease_expires_at IS NULL OR index_lease_expires_at < ?)`,
         )
-        .run(new Date().toISOString(), id) as { changes: number };
+        .run(ownerToken, leaseExpiresAt, now, id, now) as { changes: number };
       return result.changes > 0;
     },
 
-    async releaseIndexing(id: string, error: string): Promise<boolean> {
+    async refreshIndexingLease(
+      id: string,
+      ownerToken: string,
+      leaseExpiresAt: string,
+    ): Promise<boolean> {
       const result = native
         .prepare(
           `UPDATE workspaces
-           SET status = 'error', indexing_status = 'failed', last_error = ?, updated_at = ?
-           WHERE id = ? AND indexing_status = 'running'`,
+           SET index_lease_expires_at = ?, updated_at = ?
+           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
         )
-        .run(error, new Date().toISOString(), id) as { changes: number };
+        .run(leaseExpiresAt, new Date().toISOString(), id, ownerToken) as { changes: number };
+      return result.changes > 0;
+    },
+
+    async releaseIndexing(id: string, ownerToken: string, error: string): Promise<boolean> {
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET status = 'error', indexing_status = 'failed',
+               index_build_owner = NULL, index_lease_expires_at = NULL,
+               last_error = ?, updated_at = ?
+           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+        )
+        .run(error, new Date().toISOString(), id, ownerToken) as { changes: number };
       return result.changes > 0;
     },
 

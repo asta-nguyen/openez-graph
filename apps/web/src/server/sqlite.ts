@@ -165,6 +165,8 @@ function initializeRegistrySchema(db: SqliteDb) {
       exclude_globs TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'pending',
       indexing_status TEXT NOT NULL DEFAULT 'pending',
+      index_build_owner TEXT,
+      index_lease_expires_at TEXT,
       graph_status TEXT NOT NULL DEFAULT 'pending',
       last_indexed_at TEXT,
       last_graph_built_at TEXT,
@@ -205,6 +207,8 @@ function migrateRegistryColumns(db: SqliteDb) {
 
   addColumnIfMissing("pinned_at", "pinned_at TEXT");
   addColumnIfMissing("pin_order", "pin_order INTEGER");
+  addColumnIfMissing("index_build_owner", "index_build_owner TEXT");
+  addColumnIfMissing("index_lease_expires_at", "index_lease_expires_at TEXT");
 
   // Backfill pin_order for pre-existing pinned workspaces that lack it.
   const unbackfilled = db

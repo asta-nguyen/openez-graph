@@ -68,6 +68,9 @@ describe("POST /api/workspaces/:id/index", () => {
     expect((await createRegistryRepository().getWorkspace(workspaceId))?.indexingStatus).toBe(
       "completed",
     );
+    const completed = await createRegistryRepository().getWorkspace(workspaceId);
+    expect(completed?.indexBuildOwner).toBeUndefined();
+    expect(completed?.indexLeaseExpiresAt).toBeUndefined();
   });
 
   it("supports the full reindex mode used by the workspace control", async () => {
@@ -83,7 +86,13 @@ describe("POST /api/workspaces/:id/index", () => {
 
   it("rejects an index request while another process owns the workspace claim", async () => {
     const registry = createRegistryRepository();
-    expect(await registry.tryClaimIndexing(workspaceId)).toBe(true);
+    expect(
+      await registry.tryClaimIndexing(
+        workspaceId,
+        "test-owner",
+        new Date(Date.now() + 60_000).toISOString(),
+      ),
+    ).toBe(true);
 
     const response = await app.request(`/api/workspaces/${workspaceId}/index`, {
       method: "POST",
@@ -93,7 +102,27 @@ describe("POST /api/workspaces/:id/index", () => {
 
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ status: "running" });
-    await registry.releaseIndexing(workspaceId, "test cleanup");
+    await registry.releaseIndexing(workspaceId, "test-owner", "test cleanup");
+  });
+
+  it("recovers a stale indexing claim after its lease expires", async () => {
+    const registry = createRegistryRepository();
+    expect(
+      await registry.tryClaimIndexing(
+        workspaceId,
+        "dead-owner",
+        new Date(Date.now() - 1_000).toISOString(),
+      ),
+    ).toBe(true);
+
+    const response = await app.request(`/api/workspaces/${workspaceId}/index`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "incremental" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ workspaceId, status: "completed" });
   });
 
   it("returns 404 for an unknown workspace", async () => {

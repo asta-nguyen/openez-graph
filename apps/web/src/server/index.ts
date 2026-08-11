@@ -376,8 +376,7 @@ app.post("/api/workspaces/:id/index", async (c) => {
     return c.json({ status: "failed", error: "Mode must be 'incremental' or 'full'" }, 400);
   }
 
-  const currentWorkspace = getRegistryWorkspace(id);
-  if (activeIndexRuns.has(id) || currentWorkspace?.indexingStatus === "running") {
+  if (activeIndexRuns.has(id)) {
     return c.json({ status: "running", error: `Workspace '${id}' is already being indexed` }, 409);
   }
 
