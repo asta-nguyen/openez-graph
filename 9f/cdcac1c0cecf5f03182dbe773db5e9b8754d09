@@ -1,0 +1,19 @@
+BENCHMARK.md
+  s_6989a0f8b1a17d::t_bfa86fb908e3b5 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9fcdcac1c0cecf5f03182dbe773db5e9b8754d09",
+  "prompts": {},
+  "sessions": {
+    "s_6989a0f8b1a17d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff124-e325-7a73-8707-394943f19b65",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
