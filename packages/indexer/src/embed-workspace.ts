@@ -130,6 +130,17 @@ export async function writeEmbeddingsToRepo(
             vector.length !== dimensions || vector.some((value) => !Number.isFinite(value)),
         )
       ) {
+        const reason =
+          vectors.length !== batch.length
+            ? "vector count mismatch (got " + vectors.length + ", expected " + batch.length + ")"
+            : dimensions === 0
+              ? "zero dimensions"
+              : vectors.some((vector) => vector.length !== dimensions)
+                ? "inconsistent vector lengths"
+                : "non-finite values";
+        console.error(
+          "Embedding batch rejected (skipping): " + reason + " for provider " + provider.provider,
+        );
         failedBatches += 1;
         continue;
       }

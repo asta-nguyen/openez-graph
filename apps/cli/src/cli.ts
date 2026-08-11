@@ -15,6 +15,7 @@ import {
   readLocalWorkspaceConfig,
 } from "@openez-graph/db";
 import { embedWorkspace, indexWorkspace } from "@openez-graph/indexer";
+import { isLocalEmbeddingModel, LOCAL_EMBEDDING_MODELS } from "@openez-graph/core";
 
 let cliDir: string;
 try {
@@ -515,6 +516,11 @@ configCmd
     const registry = createRegistryRepository();
     if (key === "embedding.provider" && !["none", "openai", "ollama", "local"].includes(value)) {
       console.error("Error: embedding.provider must be one of: none, openai, ollama, local");
+      process.exit(1);
+    }
+    if (key === "embedding.local_model" && !isLocalEmbeddingModel(value)) {
+      console.error("Error: embedding.local_model '" + value + "' is not supported.");
+      console.error("Supported models: " + Object.keys(LOCAL_EMBEDDING_MODELS).join(", "));
       process.exit(1);
     }
     await registry.setSetting(key, value);

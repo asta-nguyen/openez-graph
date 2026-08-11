@@ -29,6 +29,9 @@ export const LOCAL_EMBEDDING_MODELS = {
 
 const cacheLoads = new Map<string, Promise<string>>();
 
+// Marker used as `Error.cause` to signal a non-retryable download failure.
+const PERMANENT = Symbol("permanent");
+
 export function getLocalEmbeddingCacheDir(
   model = LOCAL_EMBEDDING_MODEL,
   cacheRoot = path.join(os.homedir(), ".openez", "models"),
@@ -54,16 +57,21 @@ async function downloadFile(url: string, target: string, expectedHash: string): 
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
       if (!response.ok) {
         if (![429, 500, 502, 503, 504].includes(response.status)) {
-          throw new Error("Model download failed (" + response.status + ") for " + url);
+          // Non-retryable HTTP failure: exit immediately, do not consume another attempt.
+          throw new Error("Model download failed (" + response.status + ") for " + url, {
+            cause: PERMANENT,
+          });
         }
         throw new Error("Model download retryable status " + response.status + " for " + url);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (hashBytes(bytes) !== expectedHash) {
-        throw new Error("Model checksum mismatch for " + path.basename(target));
+        throw new Error("Model checksum mismatch for " + path.basename(target), {
+          cause: PERMANENT,
+        });
       }
       const temp = target + ".part-" + process.pid;
       await writeFile(temp, bytes);
@@ -71,6 +79,7 @@ async function downloadFile(url: string, target: string, expectedHash: string): 
       return;
     } catch (error) {
       lastError = error;
+      if ((error as { cause?: symbol })?.cause === PERMANENT) break;
       if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 250));
     }
   }
@@ -149,6 +158,7 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   private tokenizer?: Tokenizer;
   private matrix?: Float32Array;
   private readonly cacheDir?: string;
+  private loadingPromise?: Promise<void>;
 
   constructor(cacheDir?: string) {
     this.cacheDir = cacheDir;
@@ -156,16 +166,28 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
   private async ensureLoaded(): Promise<void> {
     if (this.tokenizer && this.matrix) return;
-    const dir = this.cacheDir ?? (await ensureLocalEmbeddingCache());
-    const [tokenizerJson, matrix] = await Promise.all([
-      readFile(path.join(dir, "tokenizer.json"), "utf8"),
-      loadEmbeddingMatrix(path.join(dir, "model.safetensors")),
-    ]);
-    this.tokenizer = new Tokenizer(JSON.parse(tokenizerJson), {});
-    this.matrix = matrix;
-    if (matrix.length % MODEL_DIMENSIONS !== 0) {
-      throw new Error("Local embedding matrix has invalid dimensions");
-    }
+    // In-flight guard: concurrent calls share the same load + conversion promise
+    // instead of repeating file reads and matrix processing.
+    if (this.loadingPromise) return this.loadingPromise;
+    this.loadingPromise = (async () => {
+      try {
+        const dir = this.cacheDir ?? (await ensureLocalEmbeddingCache());
+        const [tokenizerJson, matrix] = await Promise.all([
+          readFile(path.join(dir, "tokenizer.json"), "utf8"),
+          loadEmbeddingMatrix(path.join(dir, "model.safetensors")),
+        ]);
+        // Validate dimensions before assigning so a failed load leaves the
+        // instance unchanged and a retry can start clean.
+        if (matrix.length % MODEL_DIMENSIONS !== 0) {
+          throw new Error("Local embedding matrix has invalid dimensions");
+        }
+        this.tokenizer = new Tokenizer(JSON.parse(tokenizerJson), {});
+        this.matrix = matrix;
+      } finally {
+        this.loadingPromise = undefined;
+      }
+    })();
+    return this.loadingPromise;
   }
 
   async embed(texts: string[]): Promise<number[][]> {
@@ -197,11 +219,20 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   }
 }
 
+export function isLocalEmbeddingModel(model: string): boolean {
+  return model in LOCAL_EMBEDDING_MODELS;
+}
+
 export async function getLocalEmbeddingModel(
   model = LOCAL_EMBEDDING_MODEL,
 ): Promise<LocalEmbeddingProvider> {
-  if (model !== LOCAL_EMBEDDING_MODEL) {
-    throw new Error("Unsupported local embedding model '" + model + "'");
+  if (!isLocalEmbeddingModel(model)) {
+    throw new Error(
+      "Unsupported local embedding model '" +
+        model +
+        "'. Supported models: " +
+        Object.keys(LOCAL_EMBEDDING_MODELS).join(", "),
+    );
   }
   return new LocalEmbeddingProvider(getLocalEmbeddingCacheDir(model));
 }

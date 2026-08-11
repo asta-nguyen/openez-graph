@@ -12,14 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`openez embed` command** — standalone embedding step separated from indexing. Run `openez embed [path]` after `openez index` to create vectors. Supports `--force` to rebuild vectors for the active provider/model.
 - **Local embedding provider (`local`)** — zero-config in-process embedding using `jina-code-static-256` (256d static token embeddings). Downloads model files from HuggingFace on first use with SHA256 checksum verification and atomic writes. No Ollama or OpenAI required.
 - **`embedding.local_model` config key** — configurable local model preset via `openez config set embedding.local_model jina-code-static-256`.
-- **Lazy graph build lifecycle** — graph construction deferred to first query or explicit `openez build-graph`, with invalidation tracking on reindex.
+- **Lazy graph build lifecycle** — graph construction deferred to the first query or another approved CLI command, with invalidation tracking on reindex.
 - **Nested TypeScript symbol discovery** — `oxc-parser` now registers named nested functions and arrow functions assigned to variables as first-class graph symbols.
 - **Graph invalidation generations** — persisted invalidation markers ensure stale graph edges are rebuilt after incremental reindex.
 
 ### Changed
 
 - **Indexing no longer creates embeddings** — `openez index` writes chunks, FTS, and graph only. Use `openez embed` for vectors. Retrieval falls back to FTS + graph when embeddings are absent.
-- **BLOB cosine search is the supported vector path** — legacy TEXT embeddings detected and skipped; `openez reindex` rebuilds as BLOB.
+- **BLOB cosine search is the supported vector path** — legacy TEXT embeddings detected and skipped; run `openez reindex` then `openez embed --force` to rebuild as BLOB vectors (reindex alone does not write vectors).
 - **FTS metadata normalization** — Unicode-aware text composition for FTS indexing preserves complete chunk content.
 - **Token strategy scoped** — `fastTokenCounter` (chars/4) for indexing, `exactTokenCounter` (GPT BPE) for retrieval budgeting, with concurrency-safe lazy loading.
 - **Parser cache** — parsed document results cached per-file to avoid redundant AST walks during incremental reindex.
