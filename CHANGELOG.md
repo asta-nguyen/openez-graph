@@ -5,6 +5,20 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **MCP `code_context` validation** — removed misplaced `nodeId`/`label` guard that threw on every `code_context` call (schema requires `symbolOrPath`).
+- **MCP truncation pairing** — `fitToTokenBudget` now drops whole result entries instead of emptying inner source arrays (`callers`, `callees`, `relatedChunks`, `sources`, `files`), keeping context and structured sources paired under token truncation.
+- **Retrieval preflight** — `vectorSearch` checks `hasLegacyEmbeddings()` and active-model vector existence before calling `provider.embed`, avoiding wasted API calls for workspaces with legacy TEXT or no embeddings.
+- **Optional tokenizer dependency** — `@huggingface/tokenizers` is now a dynamic import in `local-embedding.ts`, making embeddings truly optional. The static import forced the dependency on all core package consumers.
+- **Lease-fenced index completion/failure** — `completeIndexing` and `failIndexing` check `index_build_owner` in the WHERE clause, mirroring graph build fencing. A stale lease holder can no longer overwrite the status set by a newer owner.
+- **Authoritative schema initialization** — web server delegates registry and workspace schema creation to `@openez-graph/db` (`getRegistryDdl`, `getFullWorkspaceDdl`, `migrateRegistrySchema`), eliminating duplicated DDL and missing migrations (registry_meta, graph invalidation backfill).
+- **Browser tokenizer boundary** — local embedding model catalog exposed via settings API (`localModels: string[]`) instead of direct `@openez-graph/core` import, preventing `@huggingface/tokenizers` from entering the Vite client bundle.
+- **Strict TypeScript gates** — explicit type parameters on all `queryOptions` calls; test fetch mocks use `as unknown as typeof fetch` double cast.
+- **Docs reconciliation** — corrected stale reindex docs (full reindex replaces chunks and removes vectors), documented `code_context` limit contract (50/workspace, max 200, token-budgeted).
+
 ## [1.1.0] - 2026-08-10
 
 ### Added
