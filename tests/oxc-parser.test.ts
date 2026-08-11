@@ -275,6 +275,38 @@ describe("OxcParser", () => {
     });
   });
 
+  it("does not rewrite a shadowing local binding as a class static call", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "shadow.ts",
+        absolutePath: "/tmp/shadow.ts",
+        content: [
+          "class Settings {",
+          "  static save() {}",
+          "  run() {",
+          "    const Settings = getSettings();",
+          "    Settings.save();",
+          "  }",
+          "}",
+          "function getSettings() { return { save() {} }; }",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Settings.run",
+      calleeName: "Settings.save",
+    });
+    expect(result.callExpressions).not.toContainEqual({
+      callerName: "Settings.run",
+      calleeName: "Settings.static.save",
+    });
+  });
+
   it("finds calls inside object property values", () => {
     const result = new OxcParser().parse(
       {

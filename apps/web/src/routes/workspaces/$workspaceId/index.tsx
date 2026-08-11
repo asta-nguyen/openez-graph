@@ -64,7 +64,7 @@ function WorkspaceDetailPage() {
   const { data: metrics } = useQuery(metricsQueryOptions(workspaceId));
   const reindexMutation = useMutation({
     mutationFn: () => api.startIndexRun(workspaceId, "full"),
-    onSuccess: async () => {
+    onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
         queryClient.invalidateQueries({ queryKey: ["workspace-graph", workspaceId] }),
