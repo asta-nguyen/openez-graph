@@ -1,0 +1,29 @@
+video/src/data/openez-launch-en.json
+  s_f8e69c86e4e0dc::t_cc863aa7be1e9c 1-99
+video/src/lib/audio.ts
+  s_f8e69c86e4e0dc::t_03f0e1ae934a72 1-5
+video/package.json
+  s_f8e69c86e4e0dc::t_6d8645087323e0 19
+video/src/lib/theme.ts
+  s_f8e69c86e4e0dc::t_a8d33ba8ae969f 1-27
+video/src/lib/spec.ts
+  s_f8e69c86e4e0dc::t_63117cea0ebd27 1-53
+video/package-lock.json
+  s_f8e69c86e4e0dc::t_3fbfa69a76d085 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "39d8994283b7080165c2c60c0f132f90c37d59f7",
+  "prompts": {},
+  "sessions": {
+    "s_f8e69c86e4e0dc": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-waste",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
