@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import Script from "next/script";
 import { syne, sora, jetbrainsMono } from "@/lib/fonts";
 import { getBaseUrl } from "@/lib/url";
 import "./globals.css";
@@ -90,6 +91,14 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang="en" className={`dark ${syne.variable} ${sora.variable} ${jetbrainsMono.variable}`}>
+      <head>
+        <Script
+          defer
+          src="https://umami.n2q.site/script.js"
+          data-website-id="9c2e69ba-5f6f-49f0-8813-2753fccefd4b"
+          strategy="afterInteractive"
+        />
+      </head>
       <body className="antialiased">
         <script
           type="application/ld+json"
