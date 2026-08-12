@@ -68,6 +68,61 @@ describe("POST /api/workspaces/:id/index", () => {
     expect((await createRegistryRepository().getWorkspace(workspaceId))?.indexingStatus).toBe(
       "completed",
     );
+    const completed = await createRegistryRepository().getWorkspace(workspaceId);
+    expect(completed?.indexBuildOwner).toBeUndefined();
+    expect(completed?.indexLeaseExpiresAt).toBeUndefined();
+  });
+
+  it("supports the full reindex mode used by the workspace control", async () => {
+    const response = await app.request(`/api/workspaces/${workspaceId}/index`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "full" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ workspaceId, status: "completed" });
+  });
+
+  it("rejects an index request while another process owns the workspace claim", async () => {
+    const registry = createRegistryRepository();
+    expect(
+      await registry.tryClaimIndexing(
+        workspaceId,
+        "test-owner",
+        new Date(Date.now() + 60_000).toISOString(),
+      ),
+    ).toBe(true);
+
+    const response = await app.request(`/api/workspaces/${workspaceId}/index`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "full" }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ status: "running" });
+    await registry.releaseIndexing(workspaceId, "test-owner", "test cleanup");
+  });
+
+  it("recovers a stale indexing claim after its lease expires", async () => {
+    const registry = createRegistryRepository();
+    expect(
+      await registry.tryClaimIndexing(
+        workspaceId,
+        "dead-owner",
+        new Date(Date.now() - 1_000).toISOString(),
+      ),
+    ).toBe(true);
+
+    const response = await app.request(`/api/workspaces/${workspaceId}/index`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "incremental" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ workspaceId, status: "completed" });
   });
 
   it("returns 404 for an unknown workspace", async () => {
@@ -91,5 +146,33 @@ describe("GET /api/metrics", () => {
     expect(await response.json()).toMatchObject({
       metricMethod: "selected-full-files-minus-serialized-response",
     });
+  });
+});
+
+describe("PUT /api/settings/embedding", () => {
+  const app = createWebServer();
+
+  it("rejects local embedding models outside the catalog", async () => {
+    const response = await app.request("/api/settings/embedding", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ "embedding.local_model": "toString" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("Unsupported") });
+  });
+
+  it("normalizes whitespace around a catalog model", async () => {
+    const response = await app.request("/api/settings/embedding", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ "embedding.local_model": ` ${"jina-code-static-256"} ` }),
+    });
+
+    expect(response.status).toBe(200);
+    const config = await (await app.request("/api/settings/embedding")).json();
+    expect(config.localModel).toBe("jina-code-static-256");
+    expect(config.localModels).toEqual(["jina-code-static-256"]);
   });
 });

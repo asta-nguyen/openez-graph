@@ -1,3 +1,5 @@
+import type { TokenCounter } from "@openez-graph/core";
+
 import type { IndexedChunk } from "../types";
 
 /**
@@ -39,6 +41,13 @@ export interface ParseInput {
   content: string;
   targetTokens: number;
   overlapTokens: number;
+  /**
+   * Token-counting strategy used when chunking. Indexing passes
+   * `fastTokenCounter` (chars/4) to avoid BPE on the hot path; retrieval and
+   * tests default to `exactTokenCounter`. Parsers thread this through to all
+   * chunk-producing helpers.
+   */
+  counter?: TokenCounter;
 }
 
 /**

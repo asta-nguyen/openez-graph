@@ -5,6 +5,57 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-11
+
+### Added
+
+- **Lease-based indexing ownership** — indexing claims a 60-second lease with 15-second heartbeat. If the lease expires (e.g. process crash), another process can take over. Completion and failure writes are fenced by owner token — a stale owner cannot overwrite the status set by a newer owner.
+- **Graph build warnings in MCP** — `code_query` response includes a `warnings` array when graph expansion fails, so callers see FTS-only results instead of silently missing graph expansion.
+
+### Fixed
+
+- **MCP `code_context` validation** — removed misplaced `nodeId`/`label` guard that threw on every `code_context` call (schema requires `symbolOrPath`).
+- **MCP truncation pairing** — `fitToTokenBudget` now drops whole result entries instead of emptying inner source arrays (`callers`, `callees`, `relatedChunks`, `sources`, `files`), keeping context and structured sources paired under token truncation.
+- **Retrieval preflight** — `vectorSearch` checks `hasLegacyEmbeddings()` and active-model vector existence before calling `provider.embed`, avoiding wasted API calls for workspaces with legacy TEXT or no embeddings.
+- **Optional tokenizer dependency** — `@huggingface/tokenizers` is now a dynamic import in `local-embedding.ts`, making embeddings truly optional. The static import forced the dependency on all core package consumers.
+- **Lease-fenced index completion/failure** — `completeIndexing` and `failIndexing` check `index_build_owner` in the WHERE clause, mirroring graph build fencing. A stale lease holder can no longer overwrite the status set by a newer owner.
+- **Authoritative schema initialization** — web server delegates registry and workspace schema creation to `@openez-graph/db` (`getRegistryDdl`, `getFullWorkspaceDdl`, `migrateRegistrySchema`), eliminating duplicated DDL and missing migrations (registry_meta, graph invalidation backfill).
+- **Browser tokenizer boundary** — local embedding model catalog exposed via settings API (`localModels: string[]`) instead of direct `@openez-graph/core` import, preventing `@huggingface/tokenizers` from entering the Vite client bundle.
+- **Strict TypeScript gates** — explicit type parameters on all `queryOptions` calls; test fetch mocks use `as unknown as typeof fetch` double cast.
+- **Docs reconciliation** — corrected stale reindex docs (full reindex replaces chunks and removes vectors), documented `code_context` limit contract (50/workspace, max 200, token-budgeted), corrected watcher debounce from 250ms to 2s, documented MCP auto-sync as opt-in via `OPENEZ_MCP_WATCH=1`, documented `openez setup` AGENTS.md/CLAUDE.md instruction file mutation.
+
+## [1.1.0] - 2026-08-10
+
+### Added
+
+- **`openez embed` command** — standalone embedding step separated from indexing. Run `openez embed [path]` after `openez index` to create vectors. Supports `--force` to rebuild vectors for the active provider/model.
+- **Local embedding provider (`local`)** — zero-config in-process embedding using `jina-code-static-256` (256d static token embeddings). Downloads model files from HuggingFace on first use with SHA256 checksum verification and atomic writes. No Ollama or OpenAI required.
+- **`embedding.local_model` config key** — configurable local model preset via `openez config set embedding.local_model jina-code-static-256`.
+- **Lazy graph build lifecycle** — graph construction deferred to the first query or another approved CLI command, with invalidation tracking on reindex.
+- **Nested TypeScript symbol discovery** — `oxc-parser` now registers named nested functions and arrow functions assigned to variables as first-class graph symbols.
+- **Graph invalidation generations** — persisted invalidation markers ensure stale graph edges are rebuilt after incremental reindex.
+
+### Changed
+
+- **Indexing no longer creates embeddings** — `openez index` writes chunks, FTS, and graph only. Use `openez embed` for vectors. Retrieval falls back to FTS + graph when embeddings are absent.
+- **BLOB cosine search is the supported vector path** — legacy TEXT embeddings detected and skipped; run `openez reindex` then `openez embed --force` to rebuild as BLOB vectors (reindex alone does not write vectors).
+- **FTS metadata normalization** — Unicode-aware text composition for FTS indexing preserves complete chunk content.
+- **Token strategy scoped** — `fastTokenCounter` (chars/4) for indexing, `exactTokenCounter` (GPT BPE) for retrieval budgeting, with concurrency-safe lazy loading.
+- **Parser cache** — parsed document results cached per-file to avoid redundant AST walks during incremental reindex.
+
+### Fixed
+
+- **FTS Unicode normalization** — chunk content with multi-byte characters no longer truncated in FTS index.
+- **FTS metadata JSON parsing** — guarded against malformed metadata causing indexing failures.
+- **Stale FTS version rebuild ordering** — FTS triggers correctly restored after bulk write phase.
+- **Graph build produced 0 symbol nodes** — `oxc-parser` native binding resolution fixed in bundled CLI.
+- **Registry `graph_status` not updated** — registry now reflects actual node/edge counts after graph build.
+- **RAG flow correctness** — second-round review blockers resolved in retrieval pipeline.
+
+### Contributors
+
+- **Asta Nguyen** — [@asta-nguyen](https://github.com/asta-nguyen)
+
 ## [1.0.3] - 2026-08-08
 
 ### Fixed
@@ -234,6 +285,8 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[1.2.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.0...v1.0.1

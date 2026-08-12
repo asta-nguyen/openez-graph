@@ -2,9 +2,9 @@ import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 import { createGraphEdgeOps } from "./graph-edge-ops";
 import { createGraphNodeOps } from "./graph-node-ops";
 import { createGraphTraversalOps } from "./graph-traversal-ops";
-import type { GraphOpsDeps, GraphStmts } from "./graph-ops-shared";
+import type { GraphStmts } from "./graph-ops-shared";
 
-export type { GraphOpsDeps, GraphStmts } from "./graph-ops-shared";
+export type { GraphStmts } from "./graph-ops-shared";
 export { createGraphEdgeOps } from "./graph-edge-ops";
 export { createGraphNodeOps } from "./graph-node-ops";
 export { createGraphTraversalOps } from "./graph-traversal-ops";
@@ -22,19 +22,14 @@ export { createGraphTraversalOps } from "./graph-traversal-ops";
  * `refreshStreamTimestamp()` (defined in `document-repository.ts`) stays
  * visible to the graph/edge stream methods in the sub-modules.
  *
- * `ensureGraphBuilt` depends on `getMeta`/`setMeta` from the parent
- * repository (defined in the `workspace-repository.ts` facade); those are
- * passed in via `deps` to avoid a circular dependency on the
- * meta/lifecycle module.
  */
 export function createGraphOps(
   native: NativeDatabase,
   stmts: GraphStmts,
   streamNow: StreamTimestampHolder,
-  deps: GraphOpsDeps,
 ) {
   const nodeOps = createGraphNodeOps(native, stmts, streamNow);
   const edgeOps = createGraphEdgeOps(native, stmts, streamNow);
-  const traversalOps = createGraphTraversalOps(native, stmts, deps);
+  const traversalOps = createGraphTraversalOps(native, stmts);
   return { ...nodeOps, ...edgeOps, ...traversalOps };
 }

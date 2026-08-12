@@ -1,3 +1,5 @@
+import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
+
 import { parseGo, parsePython, parseRust, type IndexedCodeResult } from "../languages";
 import { goConfig, parseWithTreeSitter, pythonConfig, rustConfig } from "../tree-sitter";
 import type { CodeParser, ParseInput, ParsedDocument } from "./types";
@@ -8,7 +10,10 @@ const LANGUAGE_CONFIGS = {
   rust: rustConfig,
 } as const;
 
-const REGEX_FALLBACKS: Record<string, (content: string) => IndexedCodeResult> = {
+const REGEX_FALLBACKS: Record<
+  string,
+  (content: string, counter: TokenCounter) => IndexedCodeResult
+> = {
   python: parsePython,
   go: parseGo,
   rust: parseRust,
@@ -33,13 +38,14 @@ export class TreeSitterParser implements CodeParser {
   }
 
   async parse(input: ParseInput, language: string | null, _kind: string): Promise<ParsedDocument> {
+    const counter = input.counter ?? exactTokenCounter;
     if (!language || !isTreeSitterLanguage(language)) {
-      return this.regexFallback(input, language);
+      return this.regexFallback(input, language, counter);
     }
 
     const config = LANGUAGE_CONFIGS[language];
-    const tsResult = await parseWithTreeSitter(config, input.content);
-    const result = tsResult ?? REGEX_FALLBACKS[language](input.content);
+    const tsResult = await parseWithTreeSitter(config, input.content, counter);
+    const result = tsResult ?? REGEX_FALLBACKS[language](input.content, counter);
 
     return {
       parser: tsResult ? this.name : "regex",
@@ -54,10 +60,14 @@ export class TreeSitterParser implements CodeParser {
     };
   }
 
-  private regexFallback(input: ParseInput, language: string | null): ParsedDocument {
+  private regexFallback(
+    input: ParseInput,
+    language: string | null,
+    counter: TokenCounter,
+  ): ParsedDocument {
     const fallback =
       language && REGEX_FALLBACKS[language]
-        ? REGEX_FALLBACKS[language](input.content)
+        ? REGEX_FALLBACKS[language](input.content, counter)
         : {
             chunks: [],
             importPaths: [],

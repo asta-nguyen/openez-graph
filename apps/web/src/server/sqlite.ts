@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
+import { getFullWorkspaceDdl, getRegistryDdl, migrateRegistrySchema } from "@openez-graph/db";
+
 function getRequireUrl(): string {
   try {
     if (typeof import.meta !== "undefined" && import.meta.url) {
@@ -156,73 +158,12 @@ export function resolveRegistryDbPath(): string {
 }
 
 function initializeRegistrySchema(db: SqliteDb) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS workspaces (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      root_path TEXT NOT NULL UNIQUE,
-      include_globs TEXT NOT NULL DEFAULT '',
-      exclude_globs TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'pending',
-      indexing_status TEXT NOT NULL DEFAULT 'pending',
-      graph_status TEXT NOT NULL DEFAULT 'pending',
-      last_indexed_at TEXT,
-      last_graph_built_at TEXT,
-      document_count INTEGER NOT NULL DEFAULT 0,
-      chunk_count INTEGER NOT NULL DEFAULT 0,
-      node_count INTEGER NOT NULL DEFAULT 0,
-      edge_count INTEGER NOT NULL DEFAULT 0,
-      last_error TEXT,
-      pinned_at TEXT,
-      pin_order INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_root_path ON workspaces(root_path);
-  `);
-  migrateRegistryColumns(db);
-}
-
-function migrateRegistryColumns(db: SqliteDb) {
-  const getColumns = () =>
-    new Set(
-      (db.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
-        (row) => row.name,
-      ),
-    );
-
-  const addColumnIfMissing = (name: string, definition: string) => {
-    if (getColumns().has(name)) return;
-    try {
-      db.exec(`ALTER TABLE workspaces ADD COLUMN ${definition}`);
-    } catch (err) {
-      // Another process may have added the column concurrently; re-check.
-      if (!getColumns().has(name)) {
-        throw err;
-      }
-    }
-  };
-
-  addColumnIfMissing("pinned_at", "pinned_at TEXT");
-  addColumnIfMissing("pin_order", "pin_order INTEGER");
-
-  // Backfill pin_order for pre-existing pinned workspaces that lack it.
-  const unbackfilled = db
-    .prepare(
-      "SELECT id FROM workspaces WHERE pinned_at IS NOT NULL AND pin_order IS NULL ORDER BY pinned_at DESC",
-    )
-    .all() as Array<{ id: string }>;
-  if (unbackfilled.length > 0) {
-    const maxRow = db
-      .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
-      .get() as { max_order: number | null } | undefined;
-    let next = (maxRow?.max_order ?? 0) + 1;
-    const stmt = db.prepare("UPDATE workspaces SET pin_order = ? WHERE id = ?");
-    for (const row of unbackfilled) {
-      stmt.run(next, row.id);
-      next += 1;
-    }
-  }
+  // Use the authoritative DDL and migration from @openez-graph/db so the
+  // web server never creates a schema that diverges from the CLI/MCP/indexer
+  // path. This includes column migrations, registry_meta, and the one-shot
+  // graph invalidation backfill.
+  db.exec(getRegistryDdl());
+  migrateRegistrySchema(db);
 }
 
 export function getRegistryDb(): SqliteDb {
@@ -266,119 +207,11 @@ function resolveWorkspaceDbPath(rootPath: string): string {
 }
 
 function initializeWorkspaceSchema(db: SqliteDb) {
-  const tables = [
-    `CREATE TABLE IF NOT EXISTS documents (
-      id TEXT PRIMARY KEY,
-      path TEXT NOT NULL UNIQUE,
-      absolute_path TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      language TEXT,
-      content_hash TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
-      mtime_ms INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS chunks (
-      id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-      chunk_index INTEGER NOT NULL,
-      heading TEXT,
-      content TEXT NOT NULL,
-      token_count INTEGER NOT NULL,
-      content_hash TEXT NOT NULL,
-      metadata TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS embeddings (
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL,
-      model TEXT NOT NULL,
-      dimensions INTEGER NOT NULL,
-      embedding TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS graph_nodes (
-      id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
-      label TEXT NOT NULL,
-      ref_id TEXT,
-      metadata TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS graph_edges (
-      id TEXT PRIMARY KEY,
-      from_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-      to_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-      type TEXT NOT NULL,
-      weight INTEGER NOT NULL DEFAULT 1,
-      metadata TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS index_runs (
-      id TEXT PRIMARY KEY,
-      mode TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      files_scanned INTEGER NOT NULL DEFAULT 0,
-      files_updated INTEGER NOT NULL DEFAULT 0,
-      chunks_written INTEGER NOT NULL DEFAULT 0,
-      embeddings_written INTEGER NOT NULL DEFAULT 0,
-      error_message TEXT,
-      stats TEXT DEFAULT '{}',
-      started_at TEXT NOT NULL DEFAULT (datetime('now')),
-      finished_at TEXT
-    )`,
-    `CREATE TABLE IF NOT EXISTS graph_runs (
-      id TEXT PRIMARY KEY,
-      mode TEXT NOT NULL DEFAULT 'incremental',
-      status TEXT NOT NULL DEFAULT 'pending',
-      nodes_created INTEGER NOT NULL DEFAULT 0,
-      edges_created INTEGER NOT NULL DEFAULT 0,
-      error_message TEXT,
-      stats TEXT DEFAULT '{}',
-      started_at TEXT NOT NULL DEFAULT (datetime('now')),
-      finished_at TEXT
-    )`,
-    `CREATE TABLE IF NOT EXISTS query_logs (
-      id TEXT PRIMARY KEY,
-      query TEXT NOT NULL,
-      mode TEXT NOT NULL,
-      result_count INTEGER NOT NULL DEFAULT 0,
-      tokens_returned INTEGER NOT NULL DEFAULT 0,
-      tokens_saved INTEGER NOT NULL DEFAULT 0,
-      files_scanned INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      content TEXT NOT NULL,
-      tags TEXT NOT NULL DEFAULT '',
-      source TEXT NOT NULL,
-      supersedes_id TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-  ];
-  for (const ddl of tables) {
-    db.exec(ddl);
-  }
-
+  // Use the authoritative DDL from @openez-graph/db so the web server
+  // creates the same schema as the CLI/MCP/indexer path, including FTS,
+  // parsed_documents, index_meta, BLOB embeddings, and all indexes.
+  db.exec(getFullWorkspaceDdl());
   migrateQueryLogColumns(db);
-
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
-    CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
-    CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type);
-    CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
-    CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
-  `);
 }
 
 function migrateQueryLogColumns(db: SqliteDb) {

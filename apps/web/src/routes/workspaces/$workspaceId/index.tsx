@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@openez-graph/ui";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -25,23 +25,18 @@ import {
   Layers,
   Loader2,
   MessageSquare,
+  RefreshCw,
   TrendingDown,
 } from "lucide-react";
 import { StatusBadge } from "../../../components/status-badge";
-import {
-  metricsQueryOptions,
-  workspaceGraphQueryOptions,
-  workspaceQueryOptions,
-} from "../../../lib/queries";
+import { api } from "../../../lib/api";
+import { metricsQueryOptions, workspaceQueryOptions } from "../../../lib/queries";
 import { formatDate } from "../../../lib/utils";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/")({
   loader: async ({ context, params }) => {
     // Critical: Workspace detail (blocks render)
     await context.queryClient.ensureQueryData(workspaceQueryOptions(params.workspaceId));
-
-    // Secondary: Pre-warm Graph data in background
-    context.queryClient.prefetchQuery(workspaceGraphQueryOptions(params.workspaceId));
   },
   component: WorkspaceDetailPage,
 });
@@ -67,15 +62,21 @@ function WorkspaceDetailPage() {
   const queryClient = useQueryClient();
   const { data: result, isLoading } = useQuery(workspaceQueryOptions(workspaceId));
   const { data: metrics } = useQuery(metricsQueryOptions(workspaceId));
+  const reindexMutation = useMutation({
+    mutationFn: () => api.startIndexRun(workspaceId, "full"),
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["workspace-graph", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["workspaces"] }),
+      ]);
+    },
+  });
 
   const handlePrefetchQuery = () => {
     // Prefetching a POST request is not possible via standard GET prefetch,
     // but we can prefetch the workspace data to ensure the page transitions smoothly.
     queryClient.prefetchQuery(workspaceQueryOptions(workspaceId));
-  };
-
-  const handlePrefetchGraph = () => {
-    queryClient.prefetchQuery(workspaceGraphQueryOptions(workspaceId));
   };
 
   if (isLoading)
@@ -122,6 +123,7 @@ function WorkspaceDetailPage() {
   }
 
   const hasGraphData = workspace.nodeCount > 0 || workspace.edgeCount > 0;
+  const canOpenGraph = workspace.indexingStatus === "completed";
 
   return (
     <div className="page">
@@ -193,13 +195,12 @@ function WorkspaceDetailPage() {
             <MessageSquare className="h-4 w-4" /> Try Query
           </Button>
         </Link>
-        {hasGraphData && (
-          <Link
-            to="/workspaces/$workspaceId/graph"
-            params={{ workspaceId }}
-            onMouseEnter={handlePrefetchGraph}
-          >
-            <Button variant="secondary">Open Graph Explorer</Button>
+        {canOpenGraph && (
+          <Link to="/workspaces/$workspaceId/graph" params={{ workspaceId }}>
+            <Button variant="secondary">
+              <GitBranch className="h-4 w-4" />
+              {hasGraphData ? "Open Graph" : "Build & Open Graph"}
+            </Button>
           </Link>
         )}
       </div>
@@ -215,6 +216,23 @@ function WorkspaceDetailPage() {
           <div className="rounded-md border bg-muted/30 p-3 font-mono text-sm">
             <div>openez index {workspace.rootPath}</div>
             <div>openez status {workspace.rootPath}</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              disabled={reindexMutation.isPending}
+              onClick={() => reindexMutation.mutate()}
+            >
+              <RefreshCw className={`h-4 w-4 ${reindexMutation.isPending ? "animate-spin" : ""}`} />
+              {reindexMutation.isPending ? "Reindexing..." : "Reindex workspace"}
+            </Button>
+            {reindexMutation.isError && (
+              <span className="text-sm text-destructive">
+                {reindexMutation.error instanceof Error
+                  ? reindexMutation.error.message
+                  : "Reindex failed"}
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -1,9 +1,5 @@
 import { getBrainSettings } from "@openez-graph/config";
-import {
-  createRegistryRepository,
-  createWorkspaceRepository,
-  hasVecExtension,
-} from "@openez-graph/db";
+import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
 import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
 import type { EmbeddingProvider } from "./embeddings";
@@ -64,7 +60,7 @@ export function parseEmbedding(value: unknown): number[] {
   if (value instanceof ArrayBuffer) {
     return Array.from(new Float32Array(value));
   }
-  // Fallback for old JSON data
+  // Legacy JSON TEXT embeddings (pre-BLOB migration)
   try {
     const parsed = JSON.parse(String(value));
     return Array.isArray(parsed) && parsed.every((item) => typeof item === "number") ? parsed : [];
@@ -90,58 +86,15 @@ export async function rankStoredEmbeddings(
 
   const repo = createWorkspaceRepository(rootPath);
 
-  // Try sqlite-vec ANN search first. When the extension is unavailable
-  // (e.g. under bun:sqlite today), this branch is skipped and we fall
-  // through to the linear scan below.
-  if (hasVecExtension()) {
-    try {
-      const queryBlob = new Uint8Array(new Float32Array(queryEmbedding).buffer);
-      const vecResults = await repo.queryRaw(
-        `SELECT
-          chunks.id, chunks.content, chunks.heading, chunks.metadata,
-          documents.path, embeddings_vec.distance
-        FROM embeddings_vec
-        INNER JOIN chunks ON chunks.id = embeddings_vec.chunk_id
-        INNER JOIN documents ON documents.id = chunks.document_id
-        WHERE embeddings_vec.embedding MATCH ?
-          AND embeddings_vec.provider = ?
-          AND embeddings_vec.model = ?
-        ORDER BY embeddings_vec.distance
-        LIMIT ?`,
-        [queryBlob, provider.provider, embeddingStorageModel(provider), limit * 2],
-      );
-
-      if (vecResults.length > 0) {
-        const seenPaths = new Set<string>();
-        return vecResults
-          .map((row) => {
-            const path = String(row.path);
-            const distance = Number(row.distance ?? 1);
-            const score = 1 - distance;
-            return {
-              id: String(row.id),
-              path,
-              content: String(row.content),
-              score: isCodeFile(path) ? score + CODE_FILE_BOOST : score,
-              heading: row.heading ? String(row.heading) : null,
-              metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
-            };
-          })
-          .filter((hit) => hit.score >= MIN_COSINE_SIMILARITY)
-          .sort((left, right) => right.score - left.score)
-          .filter((hit) => {
-            if (seenPaths.has(hit.path)) return false;
-            seenPaths.add(hit.path);
-            return true;
-          })
-          .slice(0, limit);
-      }
-    } catch (error) {
-      console.error("[retrieval] vec search failed, falling back to linear scan:", error);
-    }
+  // Skip vector search when the workspace has legacy TEXT embeddings.
+  // They cannot be used with BLOB cosine search. Defer to FTS until the
+  // user runs `openez reindex` to rebuild embeddings as BLOB.
+  if (repo.hasLegacyEmbeddings()) {
+    return [];
   }
 
-  // Linear scan fallback (sufficient for local SQLite workspaces).
+  // BLOB cosine linear scan — the supported local vector search path.
+  // Sufficient for local SQLite workspaces; no native extension required.
   const results = await repo.queryRaw(
     `SELECT
       chunks.id, chunks.content, chunks.heading, chunks.metadata,
@@ -179,24 +132,6 @@ export async function rankStoredEmbeddings(
     .slice(0, limit);
 }
 
-const QUERY_EXPANSIONS: Array<[RegExp, string]> = [
-  [/encrypt|secret|key|password/i, "encrypt decrypt AES cipher key security"],
-  [/similar|distance|vector|number/i, "embedding cosine similarity vector dot product"],
-  [/config|setting|option/i, "config setting registry database store"],
-  [/chunk|split|piece|part/i, "chunk index parse split token"],
-  [/model|inference|AI|LLM/i, "embedding provider model inference"],
-  [/store|save|write|persist/i, "insert store database repository"],
-  [/search|find|query|lookup/i, "search query retrieval FTS vector"],
-  [/index|build|process/i, "index workspace scan parse"],
-];
-
-function expandQuery(query: string): string {
-  const expansions = QUERY_EXPANSIONS.filter(([pattern]) => pattern.test(query)).map(
-    ([, expansion]) => expansion,
-  );
-  return expansions.length > 0 ? `${query} ${expansions.join(" ")}` : query;
-}
-
 async function vectorSearch(rootPath: string, query: string, limit: number): Promise<ChunkHit[]> {
   try {
     const provider = await getEmbeddingProvider();
@@ -206,16 +141,41 @@ async function vectorSearch(rootPath: string, query: string, limit: number): Pro
     }
 
     console.error(`[retrieval] vector search: using ${provider.provider}/${provider.model}`);
-    const expandedQuery = expandQuery(query);
+
+    const repo = createWorkspaceRepository(rootPath);
+
+    // Skip vector search entirely when the workspace has legacy TEXT
+    // embeddings. They cannot be used with BLOB cosine search and calling
+    // provider.embed would waste an API call before rankStoredEmbeddings
+    // discards the results. Defer to FTS until `openez reindex` rebuilds
+    // embeddings as BLOB.
+    if (repo.hasLegacyEmbeddings()) {
+      console.error("[retrieval] vector search: disabled (legacy TEXT embeddings)");
+      return [];
+    }
+
+    // Preflight: skip the embedding API call when the workspace has no
+    // vectors stored for the active provider/model. This avoids unnecessary
+    // provider calls (and costs) for workspaces that haven't been embedded
+    // yet or have legacy embeddings under a different model key.
+    const stored = await repo.queryRaw(
+      "SELECT 1 FROM embeddings WHERE provider = ? AND model = ? LIMIT 1",
+      [provider.provider, embeddingStorageModel(provider)],
+    );
+    if (stored.length === 0) {
+      console.error("[retrieval] vector search: disabled (no active-model vectors)");
+      return [];
+    }
+
     const [queryEmbedding] = await provider.embed([
-      formatEmbeddingInput(provider, { content: expandedQuery }, "query"),
+      formatEmbeddingInput(provider, { content: query }, "query"),
     ]);
     const hits = await rankStoredEmbeddings(rootPath, provider, queryEmbedding ?? [], limit);
     console.error(`[retrieval] vector search: ${hits.length} hits`);
     return hits;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error(`Vector search failed (falling back to FTS): ${msg}`);
+    console.error(`Vector search failed (deferring to FTS): ${msg}`);
     return [];
   }
 }
@@ -291,21 +251,41 @@ async function graphExpand(
     .slice(0, limit);
 }
 
-export async function codeQuery(input: {
+interface CodeQueryBaseInput {
   workspaceId: string;
   query: string;
   limit?: number;
   maxTokens?: number;
-  skipGraphExpand?: boolean;
   recordMetrics?: boolean;
-}): Promise<CodeQueryResult> {
+}
+
+export type CodeQueryInput = CodeQueryBaseInput &
+  (
+    | {
+        skipGraphExpand: true;
+        ensureGraph?: never;
+      }
+    | {
+        skipGraphExpand?: false;
+        ensureGraph: (workspaceId: string) => Promise<void>;
+      }
+  );
+
+export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult> {
+  if (!input.skipGraphExpand && !input.ensureGraph) {
+    throw new Error(
+      "codeQuery: ensureGraph callback is required when skipGraphExpand is false. " +
+        "Pass ensureGraphReady from @openez-graph/indexer, or set skipGraphExpand: true.",
+    );
+  }
+
   const registry = createRegistryRepository();
   const workspace = await registry.getWorkspace(input.workspaceId);
   if (!workspace) {
     throw new Error(`Workspace '${input.workspaceId}' not found`);
   }
 
-  const settings = await getBrainSettings();
+  const settings = await getBrainSettings(workspace.rootPath);
   const retrieval = settings.retrieval;
   const finalLimit = input.limit ?? retrieval.finalLimit;
   const maxTokens = input.maxTokens ?? retrieval.maxContextTokens;
@@ -333,6 +313,9 @@ export async function codeQuery(input: {
   );
 
   if (!input.skipGraphExpand) {
+    // Ensure the graph is built before expansion. The callback is injected
+    // by the caller (MCP/web) to avoid a core→indexer package cycle.
+    await input.ensureGraph(input.workspaceId);
     const graphResults = await graphExpand(
       workspace.rootPath,
       fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),

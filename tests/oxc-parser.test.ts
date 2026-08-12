@@ -73,7 +73,7 @@ describe("OxcParser", () => {
 
     // `doThing` belongs to `inner`, not `outer`.
     expect(result.callExpressions).toContainEqual({
-      callerName: "inner",
+      callerName: "outer.inner",
       calleeName: "doThing",
     });
     expect(result.callExpressions).toContainEqual({
@@ -84,5 +84,356 @@ describe("OxcParser", () => {
     expect(
       result.callExpressions.filter((c) => c.callerName === "outer" && c.calleeName === "doThing"),
     ).toHaveLength(0);
+  });
+
+  it("emits nested functions and class methods as graphable symbols", () => {
+    const content = `
+    function outer() { function inner() { helper(); } inner(); }
+    class Service { run() { helper(); } }
+    function helper() {}
+  `;
+    const result = new OxcParser().parse(
+      {
+        relativePath: "symbols.ts",
+        absolutePath: "/tmp/symbols.ts",
+        content,
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.definedSymbols.map((symbol) => symbol.name)).toEqual(
+      expect.arrayContaining(["outer", "outer.inner", "Service", "Service.run", "helper"]),
+    );
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer.inner",
+      calleeName: "helper",
+    });
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Service.run",
+      calleeName: "helper",
+    });
+  });
+
+  it("emits nested arrow functions as graphable symbols", () => {
+    const content = `
+    function outer() {
+      const inner = () => { helper(); };
+      inner();
+    }
+    function helper() {}
+  `;
+    const result = new OxcParser().parse(
+      {
+        relativePath: "arrow.ts",
+        absolutePath: "/tmp/arrow.ts",
+        content,
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.definedSymbols.map((symbol) => symbol.name)).toEqual(
+      expect.arrayContaining(["outer", "outer.inner", "helper"]),
+    );
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer.inner",
+      calleeName: "helper",
+    });
+  });
+
+  it("does not duplicate overloaded or accessor class method names", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "accessors.ts",
+        absolutePath: "/tmp/accessors.ts",
+        content: `class Box {
+  get value() { return 1; }
+  set value(next: number) {}
+  value(next: number): void;
+  value(next: number) {}
+}`,
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    const names = result.definedSymbols.map((symbol) => symbol.name);
+    expect(names.filter((name) => name === "Box.value")).toHaveLength(1);
+    expect(names).toEqual(expect.arrayContaining(["Box.get.value", "Box.set.value"]));
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("qualifies duplicate nested names to avoid graph collisions", () => {
+    const content = `
+    function outer() {
+      function helper() { deep(); }
+      helper();
+    }
+    function helper() {}
+    function deep() {}
+  `;
+    const result = new OxcParser().parse(
+      {
+        relativePath: "dup.ts",
+        absolutePath: "/tmp/dup.ts",
+        content,
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    const names = result.definedSymbols.map((symbol) => symbol.name);
+    // Top-level `helper` stays as `helper`; nested `helper` is qualified as `outer.helper`
+    expect(names).toContain("helper");
+    expect(names).toContain("outer.helper");
+    expect(names).toContain("deep");
+    // The call inside outer.helper is attributed to the nested symbol
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer.helper",
+      calleeName: "deep",
+    });
+    // The call from outer() to helper() — at parser level this is still
+    // `helper`, but graph resolution will prefer `outer.helper` over the
+    // top-level `helper` because of lexical scope (verified in graph tests).
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer",
+      calleeName: "helper",
+    });
+  });
+
+  it("attributes calls inside anonymous callbacks to the nearest named owner", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "callback.ts",
+        absolutePath: "/tmp/callback.ts",
+        content: [
+          "function outer(items: number[]) {",
+          "  items.map(() => helper());",
+          "}",
+          "function helper() {}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer",
+      calleeName: "helper",
+    });
+  });
+
+  it("normalizes this-method calls to the owning class", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "service.ts",
+        absolutePath: "/tmp/service.ts",
+        content: "class Service { run() { this.save(); } save() {} }",
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Service.run",
+      calleeName: "Service.save",
+    });
+  });
+
+  it("gives accessors, static members, and static calls distinct graph names", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "members.ts",
+        absolutePath: "/tmp/members.ts",
+        content: [
+          "class Settings {",
+          "  get value() { return 1; }",
+          "  static get value() { return 2; }",
+          "  set value(next: number) {}",
+          "  static set value(next: number) {}",
+          "  handler = () => {};",
+          "  static handler = () => {};",
+          "  run() {}",
+          "  static run() { return Settings.helper(); }",
+          "  static helper() {}",
+          "}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    const names = result.definedSymbols.map((symbol) => symbol.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "Settings.get.value",
+        "Settings.static.get.value",
+        "Settings.set.value",
+        "Settings.static.set.value",
+        "Settings.handler",
+        "Settings.static.handler",
+        "Settings.run",
+        "Settings.static.run",
+        "Settings.static.helper",
+      ]),
+    );
+    expect(new Set(names).size).toBe(names.length);
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Settings.static.run",
+      calleeName: "Settings.static.helper",
+    });
+  });
+
+  it("does not rewrite a shadowing local binding as a class static call", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "shadow.ts",
+        absolutePath: "/tmp/shadow.ts",
+        content: [
+          "class Settings {",
+          "  static save() {}",
+          "  run() {",
+          "    const Settings = getSettings();",
+          "    Settings.save();",
+          "  }",
+          "}",
+          "function getSettings() { return { save() {} }; }",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Settings.run",
+      calleeName: "Settings.save",
+    });
+    expect(result.callExpressions).not.toContainEqual({
+      callerName: "Settings.run",
+      calleeName: "Settings.static.save",
+    });
+  });
+
+  it("does not rewrite this calls inside nested plain functions", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "nested-this.ts",
+        absolutePath: "/tmp/nested-this.ts",
+        content: "function outer() { function inner() { this.save(); } }",
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    const inner = result.definedSymbols.find((symbol) => symbol.name === "outer.inner");
+    expect(inner).toBeDefined();
+    expect(result.callExpressions).toContainEqual({
+      callerName: "outer.inner",
+      calleeName: "this.save",
+    });
+    expect(result.callExpressions).not.toContainEqual({
+      callerName: "outer.inner",
+      calleeName: "outer.save",
+    });
+  });
+
+  it("rewrites this calls inside arrow functions nested in class methods", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "arrow-this.ts",
+        absolutePath: "/tmp/arrow-this.ts",
+        content: [
+          "class Service {",
+          "  save() {}",
+          "  run() {",
+          "    const callback = () => this.save();",
+          "    callback();",
+          "  }",
+          "}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Service.run.callback",
+      calleeName: "Service.save",
+    });
+  });
+
+  it("does not rewrite arrows that capture a nested regular function this", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "nested-arrow-this.ts",
+        absolutePath: "/tmp/nested-arrow-this.ts",
+        content: [
+          "class Service {",
+          "  save() {}",
+          "  run() {",
+          "    function inner() { const callback = () => this.save(); callback(); }",
+          "  }",
+          "}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "Service.run.inner.callback",
+      calleeName: "this.save",
+    });
+    expect(result.callExpressions).not.toContainEqual({
+      callerName: "Service.run.inner.callback",
+      calleeName: "Service.save",
+    });
+  });
+
+  it("finds calls inside object property values", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "object.ts",
+        absolutePath: "/tmp/object.ts",
+        content: [
+          "function configure() {",
+          "  return { save: () => helper() };",
+          "}",
+          "function helper() {}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "configure",
+      calleeName: "helper",
+    });
   });
 });

@@ -14,7 +14,8 @@ import {
   writeLocalWorkspaceConfig,
   readLocalWorkspaceConfig,
 } from "@openez-graph/db";
-import { indexWorkspace } from "@openez-graph/indexer";
+import { embedWorkspace, indexWorkspace } from "@openez-graph/indexer";
+import { isLocalEmbeddingModel, LOCAL_EMBEDDING_MODELS } from "@openez-graph/core";
 
 let cliDir: string;
 try {
@@ -117,6 +118,42 @@ program
     }
 
     const summary = await indexWorkspace({ rootPath: resolvedPath });
+    console.log(JSON.stringify(summary, null, 2));
+  });
+
+// ── openez embed [path] ──
+
+program
+  .command("embed")
+  .description("Create embeddings for indexed workspace chunks")
+  .argument("[path]", "path to the workspace directory", process.cwd())
+  .option("--force", "delete and rebuild vectors for the active provider/model")
+  .action(async (targetPath, options) => {
+    const resolvedPath = path.resolve(targetPath);
+    let workspace = await readLocalWorkspaceConfig(resolvedPath);
+    if (!workspace) {
+      const registry = createRegistryRepository();
+      const registered = await registry.getWorkspaceByPath(resolvedPath);
+      if (!registered) {
+        console.error(
+          `Error: no workspace registered at ${resolvedPath}. Run 'openez init' first.`,
+        );
+        process.exit(1);
+      }
+      await writeLocalWorkspaceConfig(registered);
+      workspace = {
+        workspaceId: registered.id,
+        rootPath: registered.rootPath,
+        name: registered.name,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    const summary = await embedWorkspace({
+      workspaceId: workspace.workspaceId,
+      force: options.force,
+      onProgress: (progress) => console.log(`[${progress.progress}%] ${progress.message}`),
+    });
     console.log(JSON.stringify(summary, null, 2));
   });
 
@@ -408,6 +445,7 @@ const EMBEDDING_CONFIG_KEYS = [
   "embedding.openai_model",
   "embedding.ollama_base_url",
   "embedding.ollama_model",
+  "embedding.local_model",
 ] as const;
 
 const configCmd = program
@@ -429,6 +467,7 @@ configCmd
         "embedding.openai_model": config.openaiModel,
         "embedding.ollama_base_url": config.ollamaBaseUrl,
         "embedding.ollama_model": config.ollamaModel,
+        "embedding.local_model": config.localModel,
       };
       const value = configMap[key];
       if (value === undefined || value === "") {
@@ -451,6 +490,7 @@ configCmd
       console.log("  OpenAI model:          " + config.openaiModel);
       console.log("  Ollama base URL:       " + config.ollamaBaseUrl);
       console.log("  Ollama model:          " + config.ollamaModel);
+      console.log("  Local model:           " + config.localModel);
       if (Object.keys(all).length > 0) {
         console.log("");
         console.log("DB-stored overrides:");
@@ -474,8 +514,13 @@ configCmd
       process.exit(1);
     }
     const registry = createRegistryRepository();
-    if (key === "embedding.provider" && !["none", "openai", "ollama"].includes(value)) {
-      console.error("Error: embedding.provider must be one of: none, openai, ollama");
+    if (key === "embedding.provider" && !["none", "openai", "ollama", "local"].includes(value)) {
+      console.error("Error: embedding.provider must be one of: none, openai, ollama, local");
+      process.exit(1);
+    }
+    if (key === "embedding.local_model" && !isLocalEmbeddingModel(value)) {
+      console.error("Error: embedding.local_model '" + value + "' is not supported.");
+      console.error("Supported models: " + Object.keys(LOCAL_EMBEDDING_MODELS).join(", "));
       process.exit(1);
     }
     await registry.setSetting(key, value);

@@ -4,8 +4,12 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import * as schema from "./schema";
-import { createNativeDatabase, hasVecExtension } from "./database-loader";
-import { restoreFtsTriggerDefinitions } from "./fts-repository";
+import { createNativeDatabase } from "./database-loader";
+import {
+  composeFtsSearchTextSql,
+  FTS_SCHEMA_VERSION,
+  restoreFtsTriggerDefinitions,
+} from "./fts-repository";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
@@ -128,10 +132,7 @@ export function getFullWorkspaceDdl(): string {
   );
 }
 
-export function initializeWorkspaceSchema(
-  sqlite: ReturnType<typeof createNativeDatabase>,
-  dimensions: number = 768,
-) {
+export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
   const tableExists =
     (
       sqlite
@@ -170,7 +171,8 @@ export function initializeWorkspaceSchema(
       sqlite.exec(`
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
         SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''), substr(c.content, 1, 400)
+          coalesce(d.language, ''),
+          ${composeFtsSearchTextSql("c.metadata", "c.content")}
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id;
       `);
@@ -182,7 +184,8 @@ export function initializeWorkspaceSchema(
       sqlite.exec(`
         INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
         SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''), substr(c.content, 1, 400)
+          coalesce(d.language, ''),
+          ${composeFtsSearchTextSql("c.metadata", "c.content")}
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id
         LEFT JOIN chunks_fts f ON f.chunk_id = c.id
@@ -241,8 +244,8 @@ export function initializeWorkspaceSchema(
 
     migrateQueryLogColumns(sqlite);
     migrateEmbeddingColumns(sqlite);
-    migrateEmbeddingDedup(sqlite);
     migrateEmbeddingToBlob(sqlite);
+    migrateEmbeddingDedup(sqlite);
 
     const hasParsedDocs =
       (
@@ -282,27 +285,21 @@ export function initializeWorkspaceSchema(
     // Ensure FTS triggers exist (may be missing on DBs created before triggers
     // were added, or on fresh DBs that only ran getFullWorkspaceDdl).
     restoreFtsTriggerDefinitions(sqlite);
-
-    // Try creating the vec0 virtual table for ANN vector search when the
-    // sqlite-vec extension is loaded. No-op when the extension is unavailable.
-    tryCreateVecTable(sqlite, dimensions);
     return;
   }
 
   sqlite.exec(getFullWorkspaceDdl());
   migrateQueryLogColumns(sqlite);
   migrateEmbeddingColumns(sqlite);
-  migrateEmbeddingDedup(sqlite);
   migrateEmbeddingToBlob(sqlite);
+  migrateEmbeddingDedup(sqlite);
 
   // Create FTS triggers — getFullWorkspaceDdl creates the chunks_fts table but
   // not the triggers that auto-populate it on INSERT/DELETE/UPDATE.
   restoreFtsTriggerDefinitions(sqlite);
-
-  // Try creating the vec0 virtual table for ANN vector search when the
-  // sqlite-vec extension is loaded. When the extension is unavailable (e.g.
-  // under bun:sqlite), this is skipped and retrieval falls back to linear scan.
-  tryCreateVecTable(sqlite, dimensions);
+  sqlite
+    .prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES ('fts_schema_version', ?)")
+    .run(FTS_SCHEMA_VERSION);
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
@@ -336,6 +333,11 @@ function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>
 }
 
 function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const embeddingColumn = (
+    sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string; type: string }>
+  ).find((column) => column.name === "embedding");
+  if (embeddingColumn?.type.toUpperCase() === "TEXT") return;
+
   // Ensure the provider/model/hash lookup index exists for fast duplicate detection.
   sqlite.exec(
     "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
@@ -380,57 +382,25 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
   }>;
   const embeddingCol = info.find((c) => c.name === "embedding");
   if (embeddingCol && embeddingCol.type.toUpperCase() === "TEXT") {
-    console.error(
-      "[openez] Migrating embeddings from TEXT to BLOB — existing embeddings will be dropped, full reindex required.",
-    );
-    // Drop and recreate — full reindex required
-    sqlite.exec("DELETE FROM embeddings");
-    sqlite.exec("DROP TABLE embeddings");
-    sqlite.exec(`CREATE TABLE IF NOT EXISTS embeddings (
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL,
-      model TEXT NOT NULL,
-      dimensions INTEGER NOT NULL,
-      embedding BLOB NOT NULL,
-      input_hash TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`);
-    // Recreate indexes
-    sqlite.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
-    sqlite.exec(
-      "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
-    );
-    sqlite.exec(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
-    );
-  }
-}
-
-/**
- * Create the vec0 virtual table for ANN vector search when the sqlite-vec
- * extension is loaded. The dimension defaults to 768 (bge-m3 / Ollama
- * nomic-embed-text) but can be overridden via `dimensions` to match the
- * embedding model in use. When the extension is unavailable (e.g. under
- * bun:sqlite, which is compiled without dynamic extension loading), this
- * is a no-op and retrieval falls back to a linear scan over `embeddings`.
- *
- * The table includes provider and model metadata columns so that KNN
- * queries can filter by embedding model — preventing cross-model ranking
- * when a workspace has vectors from multiple providers.
- */
-function tryCreateVecTable(
-  sqlite: ReturnType<typeof createNativeDatabase>,
-  dimensions: number = 768,
-) {
-  if (!hasVecExtension()) return;
-  try {
-    sqlite.exec(
-      `CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vec USING vec0(chunk_id TEXT PRIMARY KEY, embedding float[${dimensions}], provider TEXT, model TEXT)`,
-    );
-  } catch {
-    // Table creation failed (e.g. dimension mismatch, extension quirks) —
-    // linear scan fallback remains available via the embeddings table.
+    // Legacy TEXT embeddings are preserved — do NOT drop or recreate the
+    // table on every DB open. Instead, record the legacy format in
+    // index_meta so the retrieval layer can skip vector search (defer to
+    // FTS) until an explicit `openez reindex` rebuilds embeddings as BLOB.
+    // The reindex path calls `resetIndexArtifacts()` which drops all rows
+    // and recreates the embeddings table with the current BLOB schema.
+    const existing = sqlite
+      .prepare("SELECT value FROM index_meta WHERE key = 'embedding_format'")
+      .get() as { value: string } | undefined;
+    if (!existing) {
+      sqlite
+        .prepare(
+          "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('embedding_format', 'text')",
+        )
+        .run();
+      console.error(
+        "[openez] Workspace has legacy TEXT embeddings. Vector search is disabled until 'openez reindex <path>' rebuilds them as BLOB.",
+      );
+    }
   }
 }
 

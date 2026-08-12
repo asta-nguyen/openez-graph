@@ -4,6 +4,7 @@ import { Ollama } from "ollama";
 import { loadEnv } from "@openez-graph/config";
 import { createRegistryRepository } from "@openez-graph/db";
 import { truncateToTokenLimit } from "./tokenizer";
+import { getLocalEmbeddingModel } from "./local-embedding";
 
 const OLLAMA_EMBED_MAX_TOKENS = 1800;
 
@@ -58,7 +59,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3, baseDelayMs =
 export interface EmbeddingProvider {
   embed(texts: string[]): Promise<number[][]>;
   model: string;
-  provider: "openai" | "ollama";
+  provider: "openai" | "ollama" | "local";
 }
 
 export function embeddingStorageModel(provider: Pick<EmbeddingProvider, "model">): string {
@@ -167,6 +168,7 @@ export interface EmbeddingConfig {
   openaiModel: string;
   ollamaBaseUrl: string;
   ollamaModel: string;
+  localModel: string;
 }
 
 export async function getEmbeddingConfig(): Promise<EmbeddingConfig> {
@@ -193,6 +195,10 @@ export async function getEmbeddingConfig(): Promise<EmbeddingConfig> {
     ollamaBaseUrl:
       db("embedding.ollama_base_url") ?? env.OLLAMA_BASE_URL ?? "http://localhost:11434",
     ollamaModel: db("embedding.ollama_model") ?? env.OLLAMA_EMBEDDING_MODEL ?? "bge-m3",
+    localModel:
+      db("embedding.local_model") ??
+      process.env.OPENEZ_LOCAL_EMBEDDING_MODEL ??
+      "jina-code-static-256",
   };
 }
 
@@ -213,6 +219,10 @@ export async function getEmbeddingProvider(): Promise<EmbeddingProvider | null> 
 
   if (config.provider === "ollama") {
     return new OllamaEmbeddingProvider(config.ollamaBaseUrl, config.ollamaModel);
+  }
+
+  if (config.provider === "local") {
+    return getLocalEmbeddingModel(config.localModel);
   }
 
   return null;
