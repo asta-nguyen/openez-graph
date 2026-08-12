@@ -1,0 +1,28 @@
+video/src/lib/theme.ts
+  s_f8e69c86e4e0dc::t_45ab1b0c2c42e5 17-19
+  s_f8e69c86e4e0dc::t_9e096e28570244 1-2
+video/src/lib/fonts.ts
+  s_f8e69c86e4e0dc::t_c4b4b9a0efd987 1-10
+video/src/compositions/OpenEZLaunch16x9.tsx
+  s_f8e69c86e4e0dc::t_d74cdc2b382639 3
+  s_f8e69c86e4e0dc::t_5363f4a715a7dd 27-35
+video/src/compositions/OpenEZLaunch9x16.tsx
+  s_f8e69c86e4e0dc::t_1ada49a523c13b 3
+  s_f8e69c86e4e0dc::t_03d30af5b62f61 27-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1a6d11a1c0569d094bf0212049e58d91316691e3",
+  "prompts": {},
+  "sessions": {
+    "s_f8e69c86e4e0dc": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-waste",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
