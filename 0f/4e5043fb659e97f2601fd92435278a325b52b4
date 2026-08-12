@@ -1,0 +1,19 @@
+video/src/data/openez-launch-en.json
+  s_f8e69c86e4e0dc::t_07e7d1635d53b5 7-9,26-27,32-33,38-39,44-45,50-51,56-57,62-63,68-69,74-75,80-81,86-87,92-93,98-99,104-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0f4e5043fb659e97f2601fd92435278a325b52b4",
+  "prompts": {},
+  "sessions": {
+    "s_f8e69c86e4e0dc": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-waste",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
