@@ -1,0 +1,25 @@
+video/src/compositions/OpenEZLaunch9x16.tsx
+  s_f8e69c86e4e0dc::t_4821a9d4f3ad78 1-33
+video/src/Root.tsx
+  s_f8e69c86e4e0dc::t_08268ad2c58364 2-3,10-11,18-19
+video/src/index.ts
+  s_f8e69c86e4e0dc::t_438a2a890e918f 1-4
+video/src/compositions/OpenEZLaunch16x9.tsx
+  s_f8e69c86e4e0dc::t_2031723adc6893 1-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "22a079b0dd98a48cb2e392a5f2fe8be12c405de6",
+  "prompts": {},
+  "sessions": {
+    "s_f8e69c86e4e0dc": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-waste",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
