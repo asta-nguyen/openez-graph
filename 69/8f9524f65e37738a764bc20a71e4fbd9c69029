@@ -1,0 +1,25 @@
+video/scripts/validate-spec.mjs
+  s_f8e69c86e4e0dc::t_1d1dcf9bedbceb 47-50
+  s_f8e69c86e4e0dc::t_60f49ce3d865f3 1-46,51-57
+video/scripts/voice.mjs
+  s_f8e69c86e4e0dc::t_102c5b411e93a0 1-234
+video/scripts/sync-audio.mjs
+  s_f8e69c86e4e0dc::t_85a3a6877bee8a 1-81,86-92
+  s_f8e69c86e4e0dc::t_0f7806f195871f 82-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "698f9524f65e37738a764bc20a71e4fbd9c69029",
+  "prompts": {},
+  "sessions": {
+    "s_f8e69c86e4e0dc": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-waste",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
