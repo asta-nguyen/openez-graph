@@ -1,0 +1,19 @@
+packages/indexer/src/index-workspace.ts
+  s_5bc8e9e818017b::t_9d77292f2358f5 476-478
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "32a9b86b88077d6481250dee82d19f22e21b95a5",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
