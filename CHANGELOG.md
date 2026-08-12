@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Lease-based indexing ownership** — indexing claims a 60-second lease with 15-second heartbeat. If the lease expires (e.g. process crash), another process can take over. Completion and failure writes are fenced by owner token — a stale owner cannot overwrite the status set by a newer owner.
 - **Graph build warnings in MCP** — `code_query` response includes a `warnings` array when graph expansion fails, so callers see FTS-only results instead of silently missing graph expansion.
+- **Web UI: Reindex button** — workspace detail page now has a "Reindex workspace" button with loading state and error display, triggering a full rebuild via `startIndexRun(workspaceId, "full")`.
+- **Web UI: Build & Open Graph** — workspace detail page shows "Build & Open Graph" button when graph data is empty, or "Open Graph" when graph exists. Graph is built lazily on first access via `ensureGraphReady`.
+- **Web UI: Local embedding model picker** — settings page now supports selecting local embedding model preset (`jina-code-static-256`) with server-side validation against `LOCAL_EMBEDDING_MODELS` catalog. Provider dropdown includes "OpenEZ local" option alongside OpenAI and Ollama.
 
 ### Fixed
 
