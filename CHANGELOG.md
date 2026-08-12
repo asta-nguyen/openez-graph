@@ -5,7 +5,12 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-08-11
+
+### Added
+
+- **Lease-based indexing ownership** — indexing claims a 60-second lease with 15-second heartbeat. If the lease expires (e.g. process crash), another process can take over. Completion and failure writes are fenced by owner token — a stale owner cannot overwrite the status set by a newer owner.
+- **Graph build warnings in MCP** — `code_query` response includes a `warnings` array when graph expansion fails, so callers see FTS-only results instead of silently missing graph expansion.
 
 ### Fixed
 
@@ -17,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Authoritative schema initialization** — web server delegates registry and workspace schema creation to `@openez-graph/db` (`getRegistryDdl`, `getFullWorkspaceDdl`, `migrateRegistrySchema`), eliminating duplicated DDL and missing migrations (registry_meta, graph invalidation backfill).
 - **Browser tokenizer boundary** — local embedding model catalog exposed via settings API (`localModels: string[]`) instead of direct `@openez-graph/core` import, preventing `@huggingface/tokenizers` from entering the Vite client bundle.
 - **Strict TypeScript gates** — explicit type parameters on all `queryOptions` calls; test fetch mocks use `as unknown as typeof fetch` double cast.
-- **Docs reconciliation** — corrected stale reindex docs (full reindex replaces chunks and removes vectors), documented `code_context` limit contract (50/workspace, max 200, token-budgeted).
+- **Docs reconciliation** — corrected stale reindex docs (full reindex replaces chunks and removes vectors), documented `code_context` limit contract (50/workspace, max 200, token-budgeted), corrected watcher debounce from 250ms to 2s, documented MCP auto-sync as opt-in via `OPENEZ_MCP_WATCH=1`, documented `openez setup` AGENTS.md/CLAUDE.md instruction file mutation.
 
 ## [1.1.0] - 2026-08-10
 
@@ -280,6 +285,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[1.2.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.1...v1.0.2
