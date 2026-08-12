@@ -13,6 +13,7 @@ export class MarkdownParser implements CodeParser {
       content: input.content,
       targetTokens: input.targetTokens,
       overlapTokens: input.overlapTokens,
+      counter: input.counter,
     });
 
     return {

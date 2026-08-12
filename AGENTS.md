@@ -116,7 +116,7 @@ MCP should be multi-workspace aware.
 
 ## Indexing Expectations
 
-- TS/JS: richest indexing path via `ts-morph`
+- TS/JS: richest indexing path via oxc-parser (Rust-based, 13x faster than Babel). Extracts top-level functions, nested functions, class declarations, and class methods as first-class graph symbols.
 - Python/Go/Rust: basic top-level symbol extraction
 - YAML/JSON/TOML: structure-aware chunking
 - Markdown: section-oriented chunking

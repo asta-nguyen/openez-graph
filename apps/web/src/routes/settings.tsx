@@ -112,6 +112,9 @@ function EmbeddingConfigForm() {
   const [openaiModel, setOpenaiModel] = useState("text-embedding-3-small");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
   const [ollamaModel, setOllamaModel] = useState("bge-m3");
+  const localModelPresets = config?.localModels ?? [];
+  const defaultLocalModel = localModelPresets[0] ?? "jina-code-static-256";
+  const [localModel, setLocalModel] = useState(defaultLocalModel);
 
   useEffect(() => {
     if (!config) return;
@@ -121,7 +124,10 @@ function EmbeddingConfigForm() {
     setOpenaiModel(config.openaiModel);
     setOllamaBaseUrl(config.ollamaBaseUrl);
     setOllamaModel(config.ollamaModel);
-  }, [config]);
+    setLocalModel(
+      config.localModels.includes(config.localModel) ? config.localModel : defaultLocalModel,
+    );
+  }, [config, defaultLocalModel]);
 
   const saveMutation = useMutation({
     mutationFn: (input: Record<string, string>) => api.updateEmbeddingConfig(input),
@@ -146,6 +152,9 @@ function EmbeddingConfigForm() {
       if (ollamaBaseUrl !== config?.ollamaBaseUrl)
         updates["embedding.ollama_base_url"] = ollamaBaseUrl;
       if (ollamaModel !== config?.ollamaModel) updates["embedding.ollama_model"] = ollamaModel;
+    }
+    if (provider === "local" && localModel !== config?.localModel) {
+      updates["embedding.local_model"] = localModel;
     }
     if (Object.keys(updates).length === 0) return;
     saveMutation.mutate(updates);
@@ -174,6 +183,7 @@ function EmbeddingConfigForm() {
           <option value="none">none (disabled — FTS only)</option>
           <option value="openai">OpenAI</option>
           <option value="ollama">Ollama (local)</option>
+          <option value="local">OpenEZ local (jina-code-static-256)</option>
         </Select>
       </div>
 
@@ -250,12 +260,37 @@ function EmbeddingConfigForm() {
         </div>
       )}
 
+      {provider === "local" && (
+        <div className="space-y-2 border-l-2 border-border pl-4">
+          <Label htmlFor="local-model">Model preset</Label>
+          <Select
+            id="local-model"
+            value={localModel}
+            onChange={(e) => {
+              markDirty();
+              setLocalModel(e.target.value);
+            }}
+          >
+            {localModelPresets.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Run <code>openez embed [path]</code> after saving to download once and create vectors.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <Button onClick={handleSave} disabled={saveMutation.isPending}>
           {saveMutation.isPending ? "Saving..." : "Save"}
         </Button>
         {saveMutation.isSuccess && (
-          <span className="text-sm text-green-600">Saved! Reindex to apply.</span>
+          <span className="text-sm text-green-600">
+            Saved!{provider === "local" ? " Run embed to create vectors." : ""}
+          </span>
         )}
         {saveMutation.isError && (
           <span className="text-sm text-red-600">

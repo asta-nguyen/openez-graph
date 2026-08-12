@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { resolveCliInvocation } from "./resolve-cli";
+import { installAgentInstructions } from "./setup-instructions";
 
 function getDevinConfigPath(): string {
   return path.join(os.homedir(), ".config", "devin", "config.json");
@@ -54,11 +55,13 @@ export async function setupDevin(rootPath: string): Promise<void> {
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
   fs.chmodSync(configPath, 0o644);
+  const instructionsPath = installAgentInstructions(resolvedPath, "AGENTS.md");
 
   console.log(`Devin CLI MCP server configured: '${label}'`);
   console.log("  Mode:    shared multi-workspace MCP");
   console.log(`  Repo:    ${repoRoot}`);
   console.log(`  Config:  ${configPath}`);
+  console.log(`  Rules:   ${instructionsPath}`);
   console.log("");
   console.log("Restart Devin CLI or open a new session for the changes to take effect.");
 }

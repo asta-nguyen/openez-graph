@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { closeAllWorkspaceDbs, createWorkspaceRepository } from "../packages/db/src/sqlite/index";
+import { composeFtsSearchText } from "../packages/db/src/sqlite/fts-repository";
 
 let tempRoot: string;
 
@@ -103,6 +104,43 @@ describe("createWorkspaceRepository", () => {
 
     await repo.upsertGraphNode({ type: "function", label: "myFunc" });
     expect((await repo.findGraphNode("function", "myFunc"))?.refId).toBe("chunk-2");
+  });
+
+  it("atomically rejects graph snapshots from an older fencing epoch", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+
+    expect(
+      repo.replaceGraphArtifacts({
+        buildEpoch: 2,
+        nodes: [{ id: "new-node", type: "file", label: "new.ts", metadata: "{}" }],
+        edges: [],
+      }),
+    ).toBe(true);
+    expect(
+      repo.replaceGraphArtifacts({
+        buildEpoch: 1,
+        nodes: [{ id: "stale-node", type: "file", label: "stale.ts", metadata: "{}" }],
+        edges: [],
+      }),
+    ).toBe(false);
+
+    expect(await repo.findGraphNode("file", "new.ts")).not.toBeNull();
+    expect(await repo.findGraphNode("file", "stale.ts")).toBeNull();
+  });
+
+  it("rejects graph snapshots when the stored fencing epoch is invalid", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    await repo.queryRaw(
+      "INSERT OR REPLACE INTO index_meta (key, value) VALUES ('graph_build_epoch', 'not-a-number')",
+    );
+
+    expect(() =>
+      repo.replaceGraphArtifacts({
+        buildEpoch: 1,
+        nodes: [],
+        edges: [],
+      }),
+    ).toThrow("Invalid stored graph build epoch");
   });
 
   it("keeps same-named symbols from different chunks separate", async () => {
@@ -240,6 +278,156 @@ describe("createWorkspaceRepository", () => {
     closeAllWorkspaceDbs();
     const reopened = createWorkspaceRepository(tempRoot);
     expect(await reopened.fullTextSearch("searchable", 5)).toHaveLength(1);
+  });
+
+  it("keeps stale rebuild and backfill FTS text identical to application writes", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const docId = await repo.insertDocument({
+      path: "stale-text.ts",
+      absolutePath: path.join(tempRoot, "stale-text.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "stale-text",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    const cases = [
+      { name: "empty", metadata: "{}" },
+      { name: "malformed", metadata: "not json" },
+      { name: "numeric", metadata: JSON.stringify({ searchText: 123 }) },
+      { name: "blank", metadata: JSON.stringify({ searchText: "   " }) },
+      { name: "ascii", metadata: JSON.stringify({ searchText: "  ascii needle  " }) },
+      { name: "unicode", metadata: JSON.stringify({ searchText: "\u00a0unicode needle\u00a0" }) },
+    ];
+    const inputs = cases.map((testCase, chunkIndex) => ({
+      documentId: docId,
+      chunkIndex,
+      content: `stale content ${testCase.name}`,
+      tokenCount: 4,
+      contentHash: `stale:${testCase.name}`,
+      metadata: testCase.metadata,
+    }));
+    const chunkIds = await repo.insertChunks(inputs);
+
+    await repo.executeRaw("DELETE FROM chunks_fts");
+    await repo.executeRaw(
+      "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES (?, ?, ?, ?, ?)",
+      [chunkIds[0], "stale-text.ts", "", "typescript", "v1"],
+    );
+    repo.setMeta("fts_schema_version", "1");
+
+    closeAllWorkspaceDbs();
+    const reopened = createWorkspaceRepository(tempRoot);
+    await reopened.fullTextSearch("stale", 10);
+    const rows = await reopened.queryRaw(
+      `SELECT chunk_id, search_text FROM chunks_fts WHERE chunk_id IN (${chunkIds.map(() => "?").join(", ")})`,
+      chunkIds,
+    );
+    expect(
+      Object.fromEntries(rows.map((row) => [String(row.chunk_id), String(row.search_text)])),
+    ).toEqual(
+      Object.fromEntries(
+        inputs.map((input, index) => [
+          chunkIds[index],
+          composeFtsSearchText(input.content, input.metadata),
+        ]),
+      ),
+    );
+    const unicodeIndex = cases.findIndex((testCase) => testCase.name === "unicode");
+    expect(rows.find((row) => String(row.chunk_id) === chunkIds[unicodeIndex])?.search_text).toBe(
+      `unicode needle\n${inputs[unicodeIndex].content}`,
+    );
+  });
+
+  it("rebuilds legacy FTS rows when the schema version is stale", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const docId = await repo.insertDocument({
+      path: "legacy-long.ts",
+      absolutePath: path.join(tempRoot, "legacy-long.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "legacy-long",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    const content = `${"padding ".repeat(100)} endNeedle`;
+    const [chunkId] = await repo.insertChunks([
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        content,
+        tokenCount: 200,
+        contentHash: "legacy-long-chunk",
+        metadata: "not json",
+      },
+    ]);
+
+    await repo.executeRaw("DELETE FROM chunks_fts");
+    await repo.executeRaw(
+      "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES (?, ?, ?, ?, ?)",
+      [chunkId, "legacy-long.ts", "", "typescript", content.slice(0, 400)],
+    );
+    repo.setMeta("fts_schema_version", "1");
+
+    closeAllWorkspaceDbs();
+    const reopened = createWorkspaceRepository(tempRoot);
+    expect(await reopened.getMeta("fts_schema_version")).toBe("1");
+    expect(await reopened.fullTextSearch("endNeedle", 5)).toHaveLength(1);
+    expect(await reopened.getMeta("fts_schema_version")).toBe("2");
+
+    const postRebuildDocumentId = await reopened.insertDocument({
+      path: "post-rebuild.ts",
+      absolutePath: path.join(tempRoot, "post-rebuild.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "post-rebuild",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    await reopened.insertChunks([
+      {
+        documentId: postRebuildDocumentId,
+        chunkIndex: 0,
+        content: "return true",
+        tokenCount: 2,
+        contentHash: "post-rebuild-chunk",
+        metadata: JSON.stringify({ searchText: "post rebuild metadata needle" }),
+      },
+    ]);
+    expect(await reopened.fullTextSearch("metadata", 5)).toHaveLength(1);
+  });
+
+  it("restores all FTS triggers before accepting new chunks", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    repo.dropFtsTriggers();
+    repo.restoreFtsTriggersOnly();
+
+    expect(
+      await repo.queryRaw(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*'",
+      ),
+    ).toHaveLength(3);
+
+    const docId = await repo.insertDocument({
+      path: "restored.ts",
+      absolutePath: path.join(tempRoot, "restored.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "restored",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    await repo.insertChunks([
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        content: "restored trigger content",
+        tokenCount: 3,
+        contentHash: "restored-chunk",
+        metadata: "{}",
+      },
+    ]);
+    expect(await repo.fullTextSearch("trigger", 5)).toHaveLength(1);
   });
 
   it("counts documents, chunks, nodes, edges", async () => {

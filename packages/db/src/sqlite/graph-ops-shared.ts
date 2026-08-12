@@ -20,18 +20,6 @@ export interface GraphStmts {
 }
 
 /**
- * Dependencies that `ensureGraphBuilt` needs from the parent repository.
- *
- * `ensureGraphBuilt` reads/writes the `index_meta` table via `getMeta`/`setMeta`
- * (which are defined in the `workspace-repository.ts` facade). Passing them in
- * keeps the graph module decoupled from the meta/lifecycle operations.
- */
-export interface GraphOpsDeps {
-  getMeta: (key: string) => string | null;
-  setMeta: (key: string, value: string) => void;
-}
-
-/**
  * Maps a raw graph node row into the normalized shape returned by the
  * repository. Shared by node and traversal operations.
  */

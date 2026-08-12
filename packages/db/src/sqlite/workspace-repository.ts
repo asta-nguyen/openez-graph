@@ -26,6 +26,19 @@ function getNativeWorkspaceDb(rootPath: string): {
 export function createWorkspaceRepository(rootPath: string): WorkspaceRepository {
   const { native } = getNativeWorkspaceDb(rootPath);
 
+  // Legacy TEXT-embedding DBs intentionally lack the
+  // idx_embeddings_chunk_provider_model unique index (migrateEmbeddingDedup
+  // skips it for TEXT columns), so ON CONFLICT(chunk_id, provider, model)
+  // would fail at prepare() time. Detect once and pick the right SQL.
+  const hasEmbeddingUniqueIdx =
+    (
+      native
+        .prepare(
+          "SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_embeddings_chunk_provider_model'",
+        )
+        .get() as { c: number }
+    ).c > 0;
+
   // ── Cached prepared statements (prepared once, reused thousands of times) ──
   const stmts: DocumentStmts & ChunkStmts & GraphStmts & FtsStmts & EmbeddingStmts = {
     docByPath: native.prepare("SELECT * FROM documents WHERE path = ?"),
@@ -63,13 +76,16 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
        ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
     ),
     insertEmbedding: native.prepare(
-      `INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(chunk_id, provider, model) DO UPDATE SET
-         dimensions = excluded.dimensions,
-         embedding = excluded.embedding,
-         input_hash = excluded.input_hash,
-         created_at = excluded.created_at`,
+      hasEmbeddingUniqueIdx
+        ? `INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(chunk_id, provider, model) DO UPDATE SET
+             dimensions = excluded.dimensions,
+             embedding = excluded.embedding,
+             input_hash = excluded.input_hash,
+             created_at = excluded.created_at`
+        : `INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ),
     insertFtsRow: native.prepare(
       "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES (?, ?, ?, ?, ?)",
@@ -80,7 +96,6 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
   const documentOps = createDocumentOps(native, stmts, streamNow);
 
-  // Meta helpers needed by ensureGraphBuilt (defined below, hoisted via closure).
   const getMeta = (key: string): string | null => {
     const row = native.prepare("SELECT value FROM index_meta WHERE key = ?").get(key) as
       | { value: string }
@@ -91,7 +106,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     native.prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)").run(key, value);
   };
 
-  const graphOps = createGraphOps(native, stmts, streamNow, { getMeta, setMeta });
+  const graphOps = createGraphOps(native, stmts, streamNow);
   const ftsOps = createFtsOps(native, stmts, { getMeta, setMeta });
   const embeddingOps = createEmbeddingOps(native, stmts);
   const memoryOps = createMemoryOps(native, stmts);

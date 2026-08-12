@@ -6,7 +6,12 @@ export interface RegistryWorkspace {
   excludeGlobs: string;
   status: "pending" | "indexing" | "indexed" | "error";
   indexingStatus: "pending" | "running" | "completed" | "failed";
+  indexBuildOwner: string | undefined;
+  indexLeaseExpiresAt: string | undefined;
   graphStatus: "pending" | "running" | "completed" | "failed";
+  indexGeneration: number;
+  graphGeneration: number;
+  graphLeaseExpiresAt: string | undefined;
   lastIndexedAt: string | undefined;
   lastGraphBuiltAt: string | undefined;
   documentCount: number;
@@ -61,6 +66,8 @@ export interface RegistryRepository {
         | "status"
         | "indexingStatus"
         | "graphStatus"
+        | "indexGeneration"
+        | "graphGeneration"
         | "lastIndexedAt"
         | "lastGraphBuiltAt"
         | "documentCount"
@@ -71,6 +78,54 @@ export interface RegistryRepository {
       >
     >,
   ): Promise<void>;
+  /** Atomically claim a workspace for indexing, taking over expired leases. */
+  tryClaimIndexing(id: string, ownerToken: string, leaseExpiresAt: string): Promise<boolean>;
+  /** Refresh an indexing lease while the owner is still running. */
+  refreshIndexingLease(id: string, ownerToken: string, leaseExpiresAt: string): Promise<boolean>;
+  /** Release an indexing claim that failed before normal completion. */
+  releaseIndexing(id: string, ownerToken: string, error: string): Promise<boolean>;
+  /** Fence index completion by lease owner; returns false if the lease was taken over. */
+  completeIndexing(
+    id: string,
+    ownerToken: string,
+    result: {
+      documentCount: number;
+      chunkCount: number;
+      nodeCount: number;
+      edgeCount: number;
+      completedAt: string;
+    },
+  ): Promise<boolean>;
+  /** Fence index failure by lease owner; returns false if the lease was taken over. */
+  failIndexing(id: string, ownerToken: string, error: string): Promise<boolean>;
+  invalidateWorkspaceGraph(id: string): Promise<number>;
+  /**
+   * Atomically claim the graph build for a workspace. Transitions
+   * `graph_status` to 'running' only if it is not already 'running' or
+   * if the existing lease has expired. Returns the monotonically increasing
+   * fencing epoch when acquired, or null if another process is building.
+   * `leaseExpiresAt` is an ISO timestamp; stale leases allow takeover
+   * when a builder process dies mid-build.
+   */
+  tryClaimGraphBuild(
+    id: string,
+    ownerToken: string,
+    leaseExpiresAt: string,
+  ): Promise<number | null>;
+  /**
+   * Refresh the graph build lease. Returns false if the lease was
+   * taken over by another process (caller should abort the build).
+   */
+  refreshGraphBuildLease(id: string, ownerToken: string, leaseExpiresAt: string): Promise<boolean>;
+  /** Release an unpublished graph build so the next attempt can claim immediately. */
+  releaseGraphBuild(id: string, ownerToken: string): Promise<boolean>;
+  completeGraphBuild(
+    id: string,
+    ownerToken: string,
+    generation: number,
+    result: { nodeCount: number; edgeCount: number; completedAt: string },
+  ): Promise<boolean>;
+  failGraphBuild(id: string, ownerToken: string, error: string): Promise<boolean>;
   deleteWorkspace(id: string): Promise<void>;
   setPinned(id: string, pinned: boolean): Promise<void>;
 
@@ -388,7 +443,6 @@ export interface WorkspaceRepository {
   dropFtsTriggers(): void;
   dropNonUniqueIndexes(): void;
   restoreNonUniqueIndexes(): void;
-  ensureGraphBuilt(): void;
   /** Bulk insert FTS rows without triggers (used during optimized write phase). */
   insertFtsBatch(
     rows: Array<{
@@ -396,8 +450,8 @@ export interface WorkspaceRepository {
       path: string;
       heading: string;
       language: string;
-      searchText: string;
       content: string;
+      metadata: string;
     }>,
   ): void;
   /** Recreate FTS triggers and backfill any missing FTS rows. */
@@ -477,13 +531,19 @@ export interface WorkspaceRepository {
     path: string;
     heading: string;
     language: string;
-    searchText: string;
     content: string;
+    metadata: string;
   }): void;
   refreshStreamTimestamp(): void;
   setMeta(key: string, value: string): void;
   getMeta(key: string): string | null;
   ensureFtsReady(): void;
+  /**
+   * Returns true when the workspace has legacy TEXT embeddings that cannot
+   * be used with BLOB cosine search. Vector search should be skipped (defer
+   * to FTS) until `openez reindex` rebuilds embeddings as BLOB.
+   */
+  hasLegacyEmbeddings(): boolean;
 
   /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
   loadAllSymbolNodes(): Promise<Map<string, string>>;
@@ -496,6 +556,26 @@ export interface WorkspaceRepository {
    *  memories, query logs, and index runs). Used by the lazy graph builder to
    *  invalidate stale graph state before rebuilding. */
   clearGraphArtifacts(): void;
+
+  /** Atomically replace the live graph unless a newer build epoch already published. */
+  replaceGraphArtifacts(input: {
+    buildEpoch: number;
+    nodes: Array<{
+      id: string;
+      type: string;
+      label: string;
+      refId?: string;
+      metadata?: string;
+    }>;
+    edges: Array<{
+      id: string;
+      fromNodeId: string;
+      toNodeId: string;
+      type: string;
+      weight?: number;
+      metadata?: string;
+    }>;
+  }): boolean;
 
   /** Cache parsed symbols/imports/calls for graph build. */
   insertParsedDocument(input: {

@@ -11,13 +11,10 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
 } from "../packages/db/src/sqlite";
-import {
-  indexWorkspace,
-  buildGraphForWorkspace,
-  waitForFts,
-} from "../packages/indexer/src/index-workspace";
-import { codeContext } from "../packages/core/src/graph";
-import { countTokens, setFastTokenCount } from "../packages/core/src/tokenizer";
+import { indexWorkspace, waitForFts } from "../packages/indexer/src/index-workspace";
+import { ensureGraphReady } from "../packages/indexer/src/graph-service";
+import { codeContext, graphNeighbors } from "../packages/core/src/graph";
+import { countTokens } from "../packages/core/src/tokenizer";
 
 let registryRoot: string;
 let workspaceRoot: string;
@@ -41,6 +38,20 @@ afterEach(() => {
 });
 
 describe("indexWorkspace", () => {
+  it("keeps embedding materialization explicit", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "a.ts"), "export function a() { return 1; }\n");
+    const registry = createRegistryRepository();
+    const workspace = await registry.ensureWorkspace({ rootPath: workspaceRoot });
+    await registry.setSetting("embedding.provider", "local");
+
+    await indexWorkspace({ workspaceId: workspace.id });
+
+    const rows = await createWorkspaceRepository(workspaceRoot).queryRaw(
+      "SELECT count(*) AS c FROM embeddings",
+    );
+    expect(Number(rows[0]?.c ?? 0)).toBe(0);
+  });
+
   it("removes deleted files and bounds large code chunks", async () => {
     const sourcePath = path.join(workspaceRoot, "large.ts");
     fs.writeFileSync(
@@ -50,7 +61,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
     const repo = createWorkspaceRepository(workspaceRoot);
     const document = await repo.getDocumentByPath("large.ts");
     const chunks = await repo.getChunksByDocument(document!.id);
@@ -111,7 +122,7 @@ describe("indexWorkspace", () => {
     await indexWorkspace({ workspaceId: workspace.id });
     fs.writeFileSync(callerPath, "export function caller() { return helper() + 1; }\n");
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     const context = await codeContext({
       workspaceId: workspace.id,
@@ -131,7 +142,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
     const contextBefore = await codeContext({
       workspaceId: workspace.id,
       symbolOrPath: "helper",
@@ -142,7 +153,7 @@ describe("indexWorkspace", () => {
     // Only change helper implementation, not its name/exports
     fs.writeFileSync(helperPath, "export function helper() { return 42; }\n");
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     const contextAfter = await codeContext({
       workspaceId: workspace.id,
@@ -162,7 +173,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
     const repo = createWorkspaceRepository(workspaceRoot);
 
     const importEdgesBefore = await repo.queryRaw(
@@ -175,7 +186,7 @@ describe("indexWorkspace", () => {
     // Change only the target file content
     fs.writeFileSync(targetPath, "export function target() { return 2; }\n");
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     const importEdgesAfter = await repo.queryRaw(
       `SELECT count(*) AS c FROM graph_edges e
@@ -195,7 +206,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
     const contextBefore = await codeContext({
       workspaceId: workspace.id,
       symbolOrPath: "helper",
@@ -206,7 +217,7 @@ describe("indexWorkspace", () => {
     // Remove the helper symbol entirely
     fs.writeFileSync(helperPath, "export function otherFunc() { return 1; }\n");
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     const contextAfter = await codeContext({
       workspaceId: workspace.id,
@@ -226,19 +237,39 @@ describe("indexWorkspace", () => {
     const repo = createWorkspaceRepository(workspaceRoot);
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
     const edgesAfter1 = await repo.getEdgeCount();
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
     const edgesAfter2 = await repo.getEdgeCount();
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
     const edgesAfter3 = await repo.getEdgeCount();
 
     expect(edgesAfter1).toBe(edgesAfter2);
     expect(edgesAfter2).toBe(edgesAfter3);
+  });
+
+  it("deduplicates repeated calls within the same function", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "repeated-call.ts"),
+      "function caller() { helper(); helper(); }\nfunction helper() {}\n",
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    const rows = await createWorkspaceRepository(workspaceRoot).queryRaw(
+      `SELECT count(*) AS c
+       FROM graph_edges edge
+       JOIN graph_nodes source ON source.id = edge.from_node_id
+       JOIN graph_nodes target ON target.id = edge.to_node_id
+       WHERE edge.type = 'calls' AND source.label = 'caller' AND target.label = 'helper'`,
+    );
+    expect(Number(rows[0]?.c ?? 0)).toBe(1);
   });
 
   it("deduplicates imports that resolve to the same file", async () => {
@@ -254,7 +285,7 @@ describe("indexWorkspace", () => {
     const repo = createWorkspaceRepository(workspaceRoot);
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     const imports = await repo.queryRaw(
       `SELECT count(*) AS count
@@ -290,6 +321,52 @@ describe("indexWorkspace", () => {
     expect((await indexWorkspace({ workspaceId: workspace.id })).filesUpdated).toBe(0);
     expect(sourceWasRead()).toBe(false);
     readSpy.mockRestore();
+  });
+
+  it("rechunks unchanged source when workspace chunking settings change", async () => {
+    const configPath = path.join(workspaceRoot, "brain.config.js");
+    const sourcePath = path.join(workspaceRoot, "long.ts");
+    const writeConfig = (targetTokens: number) =>
+      fs.writeFileSync(
+        configPath,
+        `const config = { chunking: { targetTokens: ${targetTokens}, overlapTokens: 0 } };\nexport default config;\n`,
+      );
+
+    writeConfig(256);
+    fs.writeFileSync(
+      sourcePath,
+      `export function long() {\n${"  console.log('chunking');\n".repeat(240)}}\n`,
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const document = await repo.getDocumentByPath("long.ts");
+    const initialChunks = await repo.getChunksByDocument(document!.id);
+
+    writeConfig(64);
+    const changedConfigRun = await indexWorkspace({ workspaceId: workspace.id });
+    const rechunked = await repo.getChunksByDocument(document!.id);
+
+    expect(changedConfigRun.filesUpdated).toBeGreaterThanOrEqual(2);
+    expect(rechunked.length).toBeGreaterThan(initialChunks.length);
+    expect(Math.max(...rechunked.map((chunk) => chunk.tokenCount))).toBeLessThanOrEqual(64);
+
+    const unchangedRun = await indexWorkspace({ workspaceId: workspace.id });
+    expect(unchangedRun.filesUpdated).toBe(0);
+  });
+
+  it("never modifies agent instructions while indexing or reindexing", async () => {
+    const instructionsPath = path.join(workspaceRoot, "AGENTS.md");
+    const instructions = "# User-owned instructions\n\nKeep this unchanged.\n";
+    fs.writeFileSync(instructionsPath, instructions);
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await indexWorkspace({ workspaceId: workspace.id });
+    await indexWorkspace({ workspaceId: workspace.id, mode: "full" });
+
+    expect(fs.readFileSync(instructionsPath, "utf-8")).toBe(instructions);
   });
 
   it("preserves memories and run history across full reindex", async () => {
@@ -331,7 +408,7 @@ describe("indexWorkspace", () => {
     const repo = createWorkspaceRepository(workspaceRoot);
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     // File nodes exist
     const fileNodes = await repo.queryRaw(
@@ -380,7 +457,7 @@ describe("indexWorkspace", () => {
     const repo = createWorkspaceRepository(workspaceRoot);
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     const importEdges = await repo.queryRaw(
       `SELECT count(*) AS count
@@ -410,8 +487,8 @@ describe("indexWorkspace", () => {
 
       await indexWorkspace({ workspaceId: wsA.id });
       await indexWorkspace({ workspaceId: wsB.id });
-      await buildGraphForWorkspace(wsA.id, wsA.rootPath);
-      await buildGraphForWorkspace(wsB.id, wsB.rootPath);
+      await ensureGraphReady(wsA.id);
+      await ensureGraphReady(wsB.id);
 
       const repoA = createWorkspaceRepository(rootA);
       const repoB = createWorkspaceRepository(rootB);
@@ -430,7 +507,7 @@ describe("indexWorkspace", () => {
     }
   });
 
-  it("handles concurrent buildGraphForWorkspace calls without duplicates", async () => {
+  it("handles concurrent graph readiness checks without duplicates", async () => {
     fs.writeFileSync(path.join(workspaceRoot, "a.ts"), "export function a() { return 1; }\n");
     fs.writeFileSync(path.join(workspaceRoot, "b.ts"), "export function b() { return a(); }\n");
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
@@ -439,10 +516,7 @@ describe("indexWorkspace", () => {
     await indexWorkspace({ workspaceId: workspace.id });
 
     // Two concurrent calls should share the same build promise
-    await Promise.all([
-      buildGraphForWorkspace(workspace.id, workspace.rootPath),
-      buildGraphForWorkspace(workspace.id, workspace.rootPath),
-    ]);
+    await Promise.all([ensureGraphReady(workspace.id), ensureGraphReady(workspace.id)]);
 
     // One file node per path (no duplicates)
     const fileNodes = await repo.queryRaw(
@@ -479,7 +553,7 @@ describe("indexWorkspace", () => {
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     const contextBefore = await codeContext({
       workspaceId: workspace.id,
@@ -495,7 +569,7 @@ describe("indexWorkspace", () => {
       "import { renamed } from './helper';\nexport function caller() { return renamed(); }\n",
     );
     await indexWorkspace({ workspaceId: workspace.id });
-    await buildGraphForWorkspace(workspace.id, workspace.rootPath);
+    await ensureGraphReady(workspace.id);
 
     // Old call edge (caller -> helper) should be gone
     const contextAfter = await codeContext({
@@ -523,10 +597,9 @@ describe("indexWorkspace", () => {
     await expect(waitForFts(workspace.id)).resolves.toBeUndefined();
   });
 
-  it("restores exact token counting after indexing (fast token reset)", async () => {
-    // Disable fast mode and record an exact BPE count for text whose count
-    // differs from the Math.ceil(length / 4) approximation.
-    setFastTokenCount(false);
+  it("preserves exact token counting after indexing", async () => {
+    // Record an exact BPE count for text whose count differs from the
+    // Math.ceil(length / 4) approximation.
     const sample = "The tokenizer must leave fast mode after indexing.";
     const exact = countTokens(sample);
     expect(exact).not.toBe(Math.ceil(sample.length / 4));
@@ -536,13 +609,12 @@ describe("indexWorkspace", () => {
 
     await indexWorkspace({ workspaceId: workspace.id });
 
-    // After indexing, exact BPE counting must be restored — not the fast
-    // length/4 approximation used during indexing.
+    // After indexing, exact BPE counting must be unchanged — indexing no
+    // longer mutates global token-counting state.
     expect(countTokens(sample)).toBe(exact);
   });
 
-  it("resets fast token flag even when indexing fails early (missing workspace ID)", async () => {
-    setFastTokenCount(false);
+  it("keeps token counting exact when indexing fails early (missing workspace ID)", async () => {
     const sample = "The tokenizer must leave fast mode after indexing.";
     const exact = countTokens(sample);
     expect(exact).not.toBe(Math.ceil(sample.length / 4));
@@ -550,7 +622,138 @@ describe("indexWorkspace", () => {
     // No workspaceId and no rootPath — throws before runId is created.
     await expect(indexWorkspace({})).rejects.toThrow();
 
-    // The finally block must have reset the flag despite the early error.
+    // Token counting must remain exact even after an early indexing error.
     expect(countTokens(sample)).toBe(exact);
+  });
+
+  it("graphs nested functions and class methods as first-class symbols", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "symbols.ts"),
+      [
+        "function outer() { function inner() { helper(); } inner(); }",
+        "class Service { run() { helper(); } }",
+        "function helper() {}",
+      ].join("\n"),
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    // `outer.inner` (nested function) should have a calls edge to `helper`.
+    const innerNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer.inner",
+      depth: 1,
+    });
+    expect(innerNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer.inner", to: "helper", type: "calls" }),
+    );
+
+    // `Service.run` (class method) should have a calls edge to `helper`.
+    const methodNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "Service.run",
+      depth: 1,
+    });
+    expect(methodNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "Service.run", to: "helper", type: "calls" }),
+    );
+  });
+
+  it("resolves duplicate nested function calls to the correct lexical scope", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "shadow.ts"),
+      [
+        "function outer() { function helper() { deep(); } helper(); }",
+        "function helper() {}",
+        "function deep() {}",
+      ].join("\n"),
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    // `outer` calls `helper` — graph should resolve to `outer.helper` (nested),
+    // not the top-level `helper`, because of lexical scope.
+    const outerNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer",
+      depth: 1,
+    });
+    expect(outerNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer", to: "outer.helper", type: "calls" }),
+    );
+
+    // `outer.helper` calls `deep`
+    const nestedNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer.helper",
+      depth: 1,
+    });
+    expect(nestedNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer.helper", to: "deep", type: "calls" }),
+    );
+  });
+
+  it("resolves calls from a nested sibling through its parent lexical scope", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "nested-siblings.ts"),
+      [
+        "function outer() {",
+        "  function helper() {}",
+        "  function worker() { helper(); }",
+        "  worker();",
+        "}",
+        "function helper() {}",
+      ].join("\n"),
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    const workerNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer.worker",
+      depth: 1,
+    });
+    expect(workerNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer.worker", to: "outer.helper", type: "calls" }),
+    );
+  });
+
+  it("persists anonymous callback and this-method call edges", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "callback-service.ts"),
+      [
+        "function outer(items: number[]) { items.map(() => helper()); }",
+        "function helper() {}",
+        "class Service { run() { this.save(); } save() {} }",
+      ].join("\n"),
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    const outerNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "outer",
+      depth: 1,
+    });
+    expect(outerNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "outer", to: "helper", type: "calls" }),
+    );
+
+    const serviceNeighbors = await graphNeighbors({
+      workspaceId: workspace.id,
+      label: "Service.run",
+      depth: 1,
+    });
+    expect(serviceNeighbors.edges).toContainEqual(
+      expect.objectContaining({ from: "Service.run", to: "Service.save", type: "calls" }),
+    );
   });
 });

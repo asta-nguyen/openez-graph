@@ -26,7 +26,7 @@ import {
   findLocalWorkspaceConfig,
   removeWorkspace,
 } from "@openez-graph/db";
-import { indexWorkspace, buildGraphForWorkspace, waitForFts } from "@openez-graph/indexer";
+import { ensureGraphReady, indexWorkspace, waitForFts } from "@openez-graph/indexer";
 
 const MIN_RESPONSE_TOKENS = 32;
 
@@ -282,9 +282,22 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
     const strings: Array<{ owner: Record<string, unknown>; key: string; value: string }> = [];
     const visit = (current: unknown, parentKey?: string) => {
       if (Array.isArray(current)) {
-        const minimum = parentKey === "nodes" ? 1 : 0;
-        if (current.length > minimum && parentKey !== "results")
-          arrays.push({ items: current, minimum });
+        // results and nodes can be trimmed to 1 entry but not emptied.
+        // Source arrays (callers, callees, relatedChunks, sources, files)
+        // within a result entry also get minimum 1 so context and
+        // structured sources stay paired — truncation drops whole result
+        // entries rather than emptying their inner arrays.
+        const minimum =
+          parentKey === "nodes" ||
+          parentKey === "results" ||
+          parentKey === "callers" ||
+          parentKey === "callees" ||
+          parentKey === "relatedChunks" ||
+          parentKey === "sources" ||
+          parentKey === "files"
+            ? 1
+            : 0;
+        if (current.length > minimum) arrays.push({ items: current, minimum });
         current.forEach((item) => visit(item));
         return;
       }
@@ -361,6 +374,16 @@ async function catchUpReadWorkspaces(workspaces: WorkspaceLike[]): Promise<void>
   await Promise.all(workspaces.map((workspace) => catchUpWorkspaceIndex(workspace.id)));
 }
 
+async function ensureGraphReadySafely(workspaceId: string, warnings?: string[]): Promise<void> {
+  try {
+    await ensureGraphReady(workspaceId);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`OpenEZ MCP graph build failed for workspace '${workspaceId}': ${msg}`);
+    warnings?.push(`Graph expansion unavailable for workspace '${workspaceId}': ${msg}`);
+  }
+}
+
 export function createMcpServer(options?: McpServerOptions) {
   const resolver = createWorkspaceResolver(options);
 
@@ -433,7 +456,10 @@ export function createMcpServer(options?: McpServerOptions) {
             path: { type: "string" },
             symbolOrPath: { type: "string" },
             hops: { type: "number" },
-            limit: { type: "number", description: "Maximum total records returned" },
+            limit: {
+              type: "number",
+              description: "Maximum records per workspace (default 50, max 200)",
+            },
             maxTokens: {
               type: "number",
               minimum: MIN_RESPONSE_TOKENS,
@@ -470,7 +496,8 @@ export function createMcpServer(options?: McpServerOptions) {
       },
       {
         name: "memory_write",
-        description: "Persist a technical decision or learned memory into the memory store.",
+        description:
+          "Persist a technical decision or learned memory. Call after an architectural decision or non-obvious constraint is confirmed.",
         inputSchema: {
           type: "object",
           properties: {
@@ -487,7 +514,7 @@ export function createMcpServer(options?: McpServerOptions) {
       {
         name: "memory_recall",
         description:
-          "Recall active technical decisions and learned memories. Supports one or many workspaces.",
+          "Recall active technical decisions and learned memories. Before code work in a new session, query with 1–3 task keywords. Supports one or many workspaces.",
         inputSchema: {
           type: "object",
           properties: {
@@ -551,6 +578,10 @@ export function createMcpServer(options?: McpServerOptions) {
         await catchUpReadWorkspaces(workspaces);
         // Wait for background FTS build if still in progress
         await Promise.all(workspaces.map((w) => waitForFts(w.id)));
+        // Graph is built lazily inside codeQuery via ensureGraph callback.
+        // Collect warnings so graph build failures surface to the caller
+        // instead of silently returning FTS-only results.
+        const graphWarnings: string[] = [];
         const results = await Promise.all(
           workspaces.map(async (workspace) => ({
             workspace,
@@ -560,6 +591,7 @@ export function createMcpServer(options?: McpServerOptions) {
               limit: input.limit,
               maxTokens: workspaceBudget,
               recordMetrics: false,
+              ensureGraph: (id: string) => ensureGraphReadySafely(id, graphWarnings),
             }),
           })),
         );
@@ -589,6 +621,7 @@ export function createMcpServer(options?: McpServerOptions) {
           {
             answerContext,
             sources: mergedSources,
+            warnings: graphWarnings.length > 0 ? graphWarnings : undefined,
             workspaces: results.map(({ workspace }) => ({
               workspaceId: workspace.id,
               workspaceName: workspace.name,
@@ -653,9 +686,15 @@ export function createMcpServer(options?: McpServerOptions) {
         const input = codeContextSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
-        // Lazy graph build — one-time cost on first graph query
-        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.id, w.rootPath)));
-        const results = await Promise.all(
+        const readiness = await Promise.allSettled(workspaces.map((w) => ensureGraphReady(w.id)));
+        readiness.forEach((result, index) => {
+          if (result.status === "rejected") {
+            console.error(
+              `OpenEZ MCP graph build failed for workspace '${workspaces[index]!.id}': ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+            );
+          }
+        });
+        const settledResults = await Promise.allSettled(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
             workspaceName: workspace.name,
@@ -669,15 +708,28 @@ export function createMcpServer(options?: McpServerOptions) {
             }),
           })),
         );
+        const results = settledResults.flatMap((result, index) => {
+          if (result.status === "fulfilled") return [result.value];
+          console.error(
+            `OpenEZ MCP code_context failed for workspace '${workspaces[index]!.id}': ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+          );
+          return [];
+        });
         return jsonResponse({ results }, input.maxTokens ?? 4000);
       }
       case "graph_neighbors": {
         const input = graphNeighborsSchema.parse(request.params.arguments ?? {});
         const workspaces = await resolver.resolveReadWorkspaces(input);
         await catchUpReadWorkspaces(workspaces);
-        // Lazy graph build — one-time cost on first graph query
-        await Promise.all(workspaces.map((w) => buildGraphForWorkspace(w.id, w.rootPath)));
-        const results = await Promise.all(
+        const readiness = await Promise.allSettled(workspaces.map((w) => ensureGraphReady(w.id)));
+        readiness.forEach((result, index) => {
+          if (result.status === "rejected") {
+            console.error(
+              `OpenEZ MCP graph build failed for workspace '${workspaces[index]!.id}': ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+            );
+          }
+        });
+        const settledResults = await Promise.allSettled(
           workspaces.map(async (workspace) => ({
             workspaceId: workspace.id,
             workspaceName: workspace.name,
@@ -692,6 +744,13 @@ export function createMcpServer(options?: McpServerOptions) {
             }),
           })),
         );
+        const results = settledResults.flatMap((result, index) => {
+          if (result.status === "fulfilled") return [result.value];
+          console.error(
+            `OpenEZ MCP graph_neighbors failed for workspace '${workspaces[index]!.id}': ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+          );
+          return [];
+        });
         return jsonResponse({ results }, input.maxTokens ?? 4000);
       }
       case "memory_write": {
@@ -834,21 +893,6 @@ export async function autoIndexAndSync(searchRoot: string): Promise<void> {
     } catch {
       // Indexing failure is non-fatal — MCP server still starts
     }
-  }
-
-  // Kick off lazy graph build in background — AI will likely query graph soon.
-  // Non-blocking: if it's not done by first query, ensureGraphBuilt() finishes it.
-  try {
-    const repo = createWorkspaceRepository(workspace.rootPath);
-    setImmediate(() => {
-      try {
-        repo.ensureGraphBuilt();
-      } catch {
-        /* non-fatal */
-      }
-    });
-  } catch {
-    /* non-fatal */
   }
 
   // The stdio MCP server must stay cheap to start and robust on large repos.

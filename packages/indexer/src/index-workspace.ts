@@ -4,15 +4,7 @@ import fsSync from "node:fs";
 import path from "node:path";
 
 import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
-import {
-  countTokens,
-  embeddingStorageModel,
-  formatEmbeddingInput,
-  getEmbeddingProvider,
-  setFastTokenCount,
-  splitToTokenLimit,
-} from "@openez-graph/core";
-import type { EmbeddingProvider } from "@openez-graph/core";
+import { fastTokenCounter, type TokenCounter } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -48,22 +40,86 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
 // Parser version tags stored alongside cached parse results in
 // `parsed_documents`. Bump these when parser logic changes so stale cache
 // entries are invalidated on the next index/graph build.
-const PARSER_VERSION_TS_MORPH = "ts-morph-v1";
+const PARSER_VERSION_OXC = "oxc-v2";
 const PARSER_VERSION_NATIVE = "native-v1";
 const PARSER_VERSION_FALLBACK = "fallback-v1";
+const INDEX_LEASE_DURATION_MS = 60_000;
+const INDEX_HEARTBEAT_INTERVAL_MS = 15_000;
+
+function indexLeaseExpiry(): string {
+  return new Date(Date.now() + INDEX_LEASE_DURATION_MS).toISOString();
+}
+
+/**
+ * Native tree-sitter parser surface used by the indexer. The native extension
+ * is optional (platform-specific .node binary); when unavailable the indexer
+ * falls back to the WASM/regex parsers and tags cache rows `fallback-v1`.
+ */
+export interface NativeParser {
+  readonly id: "native-v1";
+  parseCodeBatch(items: Array<{ language: string; content: string }>): Array<{
+    symbols: Array<{
+      name: string;
+      symbolType: string;
+      exported: boolean;
+      startLine: number;
+      endLine: number;
+      receiver?: string;
+    }>;
+    importPaths: string[];
+    calledIdentifiers: string[];
+    callExpressions: Array<{ callerName: string; calleeName: string }>;
+  } | null>;
+}
+
+let _nativeParser: NativeParser | null | undefined;
+
+/**
+ * Resolve the native tree-sitter parser once and cache the result. Returns
+ * `null` when the platform-specific native extension is unavailable — callers
+ * then fall back to the registry parsers and tag cached rows `fallback-v1`.
+ * The resolved capability also drives parsed_documents cache validation: a
+ * cache row is only reused when its `parser_version` matches the parser that
+ * the current capability would use (`native-v1` vs `fallback-v1`).
+ */
+export function resolveNativeParser(): NativeParser | null {
+  if (_nativeParser !== undefined) return _nativeParser;
+  try {
+    const nativePath = path.join(__dirname, "native", "index.linux-x64-gnu.node");
+    _nativeParser = require(nativePath) as NativeParser;
+  } catch {
+    try {
+      _nativeParser = require("@openez-graph/native") as NativeParser;
+    } catch {
+      _nativeParser = null;
+    }
+  }
+  return _nativeParser;
+}
+
+/**
+ * Reset the cached native parser resolution. Exposed for tests that need to
+ * simulate the native extension being unavailable.
+ */
+export function resetNativeParserCache(): void {
+  _nativeParser = undefined;
+}
 
 /**
  * Map a parser name (returned by `parseDocument`/`parseInline`) to the
  * version tag stored in `parsed_documents.parser_version`. Native
  * tree-sitter results use `native-v1`, the fallback parser uses
- * `fallback-v1`, and every other parser (oxc, tree-sitter, markdown,
- * config, regex) is grouped under `ts-morph-v1` since they share the same
- * chunking/call-extraction contract.
+ * `fallback-v1`, and every other parser (oxc, markdown, config, regex)
+ * is grouped under `oxc-v2` since they share the same chunking/call-
+ * extraction contract. Non-native tree-sitter/regex fallbacks for
+ * Python/Go/Rust use `fallback-v1` so cache validation matches the
+ * expected version when the native extension is unavailable.
  */
 function parserVersionFor(parserName: string): string {
   if (parserName === "tree-sitter-native") return PARSER_VERSION_NATIVE;
-  if (parserName === "fallback") return PARSER_VERSION_FALLBACK;
-  return PARSER_VERSION_TS_MORPH;
+  if (parserName === "fallback" || parserName === "tree-sitter" || parserName === "regex")
+    return PARSER_VERSION_FALLBACK;
+  return PARSER_VERSION_OXC;
 }
 
 function normalizeRelativePath(filePath: string): string {
@@ -235,15 +291,16 @@ export function boundChunks(
   chunks: IndexedChunk[],
   targetTokens: number,
   overlapTokens: number,
+  counter: TokenCounter = fastTokenCounter,
 ): IndexedChunk[] {
   return chunks.flatMap((chunk) => {
-    const parts = splitToTokenLimit(chunk.content, targetTokens, overlapTokens);
+    const parts = counter.split(chunk.content, targetTokens, overlapTokens);
     if (parts.length <= 1) return chunk;
 
     return parts.map((content, splitIndex) => ({
       ...chunk,
       content,
-      tokenCount: countTokens(content),
+      tokenCount: counter.count(content),
       contentHash: hashContent(content),
       metadata: { ...chunk.metadata, splitIndex, splitCount: parts.length },
     }));
@@ -256,6 +313,7 @@ export async function chunkDocument(input: {
   content: string;
   targetTokens: number;
   overlapTokens: number;
+  counter?: TokenCounter;
 }) {
   const parsed = await parseDocument(input);
   return {
@@ -271,178 +329,6 @@ export async function chunkDocument(input: {
   };
 }
 
-async function writeEmbeddingsToRepo(
-  repo: WorkspaceRepository,
-  chunkRows: Array<{ id: string; content: string; path: string; heading?: string | null }>,
-  provider: EmbeddingProvider | null,
-) {
-  if (!provider || chunkRows.length === 0) {
-    return { written: 0, failedBatches: 0 };
-  }
-
-  const existingIds = new Set<string>();
-  const LOOKUP_BATCH_SIZE = 500;
-  for (let i = 0; i < chunkRows.length; i += LOOKUP_BATCH_SIZE) {
-    const batch = chunkRows.slice(i, i + LOOKUP_BATCH_SIZE);
-    const existing = await repo.queryRaw(
-      `SELECT chunk_id FROM embeddings
-       WHERE provider = ? AND model = ? AND chunk_id IN (${batch.map(() => "?").join(",")})`,
-      [provider.provider, embeddingStorageModel(provider), ...batch.map((chunk) => chunk.id)],
-    );
-    for (const row of existing) {
-      existingIds.add(String(row.chunk_id));
-    }
-  }
-  const missingRows = chunkRows.filter((chunk) => !existingIds.has(chunk.id));
-  if (missingRows.length === 0) return { written: 0, failedBatches: 0 };
-
-  const rowsToEmbed = missingRows.map((chunk) => ({
-    chunk,
-    hash: hashContent(formatEmbeddingInput(provider, chunk, "document")),
-  }));
-
-  // Deduplicate by input_hash: skip chunks whose formatted input already has an embedding
-  const existingHashes = new Set<string>();
-  for (let i = 0; i < rowsToEmbed.length; i += LOOKUP_BATCH_SIZE) {
-    const batch = rowsToEmbed.slice(i, i + LOOKUP_BATCH_SIZE);
-    const hashPlaceholders = batch.map(() => "?").join(",");
-    const existing = await repo.queryRaw(
-      `SELECT DISTINCT input_hash FROM embeddings
-       WHERE provider = ? AND model = ? AND input_hash IN (${hashPlaceholders})`,
-      [provider.provider, embeddingStorageModel(provider), ...batch.map((entry) => entry.hash)],
-    );
-    for (const row of existing) {
-      if (row.input_hash) existingHashes.add(String(row.input_hash));
-    }
-  }
-  const toEmbed = rowsToEmbed.filter((entry) => !existingHashes.has(entry.hash));
-  const skipped = rowsToEmbed.filter((entry) => existingHashes.has(entry.hash));
-
-  // Reuse existing embeddings for skipped chunks: copy the vector so each chunk
-  // has its own embedding row and appears in vector search results.
-  let reusedWritten = 0;
-  if (skipped.length > 0) {
-    const hashToVector = new Map<string, { embedding: Uint8Array; dimensions: number }>();
-    const uniqueHashes = [...new Set(skipped.map((entry) => entry.hash))];
-    for (let i = 0; i < uniqueHashes.length; i += LOOKUP_BATCH_SIZE) {
-      const batch = uniqueHashes.slice(i, i + LOOKUP_BATCH_SIZE);
-      const placeholders = batch.map(() => "?").join(",");
-      const rows = await repo.queryRaw(
-        `SELECT input_hash, embedding, dimensions FROM embeddings
-         WHERE provider = ? AND model = ? AND input_hash IN (${placeholders})
-         GROUP BY input_hash`,
-        [provider.provider, embeddingStorageModel(provider), ...batch],
-      );
-      for (const row of rows) {
-        if (row.input_hash) {
-          const emb =
-            row.embedding instanceof Uint8Array
-              ? row.embedding
-              : new Uint8Array(new Float32Array(JSON.parse(String(row.embedding))).buffer);
-          hashToVector.set(String(row.input_hash), {
-            embedding: emb,
-            dimensions: Number(row.dimensions),
-          });
-        }
-      }
-    }
-    const reuseInputs: Array<{
-      chunkId: string;
-      provider: string;
-      model: string;
-      dimensions: number;
-      embedding: Uint8Array;
-      inputHash: string;
-    }> = [];
-    for (const entry of skipped) {
-      const existing = hashToVector.get(entry.hash);
-      if (existing) {
-        reuseInputs.push({
-          chunkId: entry.chunk.id,
-          provider: provider.provider,
-          model: embeddingStorageModel(provider),
-          dimensions: existing.dimensions,
-          embedding: existing.embedding,
-          inputHash: entry.hash,
-        });
-      }
-    }
-    if (reuseInputs.length > 0) {
-      await repo.insertEmbeddings(reuseInputs);
-      reusedWritten = reuseInputs.length;
-    }
-  }
-
-  if (toEmbed.length === 0) return { written: reusedWritten, failedBatches: 0 };
-
-  const BATCH_SIZE = 50;
-  let totalWritten = 0;
-  let failedBatches = 0;
-  const totalBatches = Math.ceil(toEmbed.length / BATCH_SIZE);
-
-  for (let i = 0; i < toEmbed.length; i += BATCH_SIZE) {
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    if (batchNum % 10 === 0 || batchNum === totalBatches) {
-      process.stdout.write(
-        `\r[embedding] batch ${batchNum}/${totalBatches} (${totalWritten} written)`,
-      );
-    }
-    const batch = toEmbed.slice(i, i + BATCH_SIZE);
-
-    try {
-      const vectors = await provider.embed(
-        batch.map((entry) => formatEmbeddingInput(provider, entry.chunk, "document")),
-      );
-      if (vectors.length !== batch.length) {
-        failedBatches += 1;
-        console.error(
-          `Embedding provider returned ${vectors.length} vectors for ${batch.length} chunks`,
-        );
-        continue;
-      }
-      const invalidEmbeddingIndex = vectors.findIndex((embedding) => embedding.length === 0);
-
-      if (invalidEmbeddingIndex !== -1) {
-        failedBatches += 1;
-        console.error(
-          `Embedding provider returned empty vector for chunk ${batch[invalidEmbeddingIndex].chunk.id}`,
-        );
-        continue;
-      }
-
-      const dimensions = vectors[0]?.length ?? 0;
-      if (vectors.some((embedding) => embedding.length !== dimensions)) {
-        failedBatches += 1;
-        console.error("Embedding provider returned mixed dimensions");
-        continue;
-      }
-
-      await repo.insertEmbeddings(
-        vectors.map((embedding, index) => ({
-          chunkId: batch[index].chunk.id,
-          provider: provider.provider,
-          model: embeddingStorageModel(provider),
-          dimensions,
-          embedding: new Uint8Array(new Float32Array(embedding).buffer),
-          inputHash: batch[index].hash,
-        })),
-      );
-
-      totalWritten += vectors.length;
-    } catch (error) {
-      failedBatches += 1;
-      console.error(
-        `Embedding batch failed (skipping): ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  if (totalBatches > 0) {
-    process.stdout.write("\n");
-  }
-  return { written: totalWritten + reusedWritten, failedBatches };
-}
-
 interface ParseTask {
   id: string;
   content: string;
@@ -452,6 +338,7 @@ interface ParseTask {
   mtimeMs: number;
   targetTokens: number;
   overlapTokens: number;
+  counter: TokenCounter;
 }
 
 type ParseResult = Awaited<ReturnType<typeof chunkDocument>>;
@@ -464,17 +351,7 @@ async function parseInline(
 
   // ── Batch native tree-sitter parse for Python/Go/Rust files ──
   const TS_LANGS = new Set(["python", "go", "rust"]);
-  let native: any = null;
-  try {
-    const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
-    native = require(nativePath);
-  } catch {
-    try {
-      native = require("@openez-graph/native");
-    } catch {
-      /* not installed */
-    }
-  }
+  const native = resolveNativeParser();
 
   const batchTasks: ParseTask[] = [];
   const otherTasks: ParseTask[] = [];
@@ -499,7 +376,7 @@ async function parseInline(
       content: t.content,
     }));
     // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust
-    const nativeResults = native.parseCodeBatch(batchItems);
+    const nativeResults = native!.parseCodeBatch(batchItems);
     process.stderr.write(
       `[t]   native-batch: ${Date.now() - _batchStart}ms (${batchTasks.length} files)\n`,
     );
@@ -512,7 +389,7 @@ async function parseInline(
         // Build symbol-aware chunks so code_context can match symbol names
         // to chunks via metadata.symbolName. Fall back to line-based chunks
         // only when no symbols were extracted.
-        const symbols: ExtractedSymbol[] = nr.symbols.map((s: any) => ({
+        const symbols: ExtractedSymbol[] = nr.symbols.map((s) => ({
           name: s.name,
           symbolType: s.symbolType,
           type: s.symbolType,
@@ -523,12 +400,12 @@ async function parseInline(
         }));
         let chunks: any[];
         if (symbols.length > 0) {
-          chunks = createSymbolChunks(symbols, lines, lang);
+          chunks = createSymbolChunks(symbols, lines, lang, task.counter);
         } else {
-          chunks = makeFallbackChunks(task.content, lines).chunks;
+          chunks = makeFallbackChunks(task.content, lines, task.counter).chunks;
         }
         // Bound chunks to configured token limits
-        chunks = boundChunks(chunks, task.targetTokens, task.overlapTokens);
+        chunks = boundChunks(chunks, task.targetTokens, task.overlapTokens, task.counter);
         results.set(task.id, {
           kind: "code",
           language: lang,
@@ -548,8 +425,14 @@ async function parseInline(
           content: task.content,
           targetTokens: task.targetTokens,
           overlapTokens: task.overlapTokens,
+          counter: task.counter,
         });
-        indexed.chunks = boundChunks(indexed.chunks, task.targetTokens, task.overlapTokens);
+        indexed.chunks = boundChunks(
+          indexed.chunks,
+          task.targetTokens,
+          task.overlapTokens,
+          task.counter,
+        );
         results.set(task.id, indexed);
       }
       onProgress?.(results.size, tasks.length);
@@ -564,12 +447,18 @@ async function parseInline(
       content: task.content,
       targetTokens: task.targetTokens,
       overlapTokens: task.overlapTokens,
+      counter: task.counter,
     });
     // Bound large symbol chunks (e.g. a 1000-line function) to the target
     // token limit. The OxcParser creates one chunk per symbol, which can
     // exceed the limit for very large functions.
     if (indexed.kind === "code") {
-      indexed.chunks = boundChunks(indexed.chunks, task.targetTokens, task.overlapTokens);
+      indexed.chunks = boundChunks(
+        indexed.chunks,
+        task.targetTokens,
+        task.overlapTokens,
+        task.counter,
+      );
     }
     results.set(task.id, indexed);
     onProgress?.(results.size, tasks.length);
@@ -584,30 +473,76 @@ export async function indexWorkspace(input: {
   mode?: "incremental" | "full";
   onProgress?: (progress: { message: string; progress: number }) => Promise<void> | void;
 }): Promise<IndexWorkspaceSummary> {
-  // Use fast token counting during indexing — BPE encoding is 100x slower.
-  // Wrap the entire body in try/finally so the flag is ALWAYS reset, even on
-  // early errors (e.g. missing workspace ID) or unexpected throws.
-  setFastTokenCount(true);
+  // Token counting is scoped via the TokenCounter interface — no global
+  // state to reset. The try/finally ensures cleanup of the indexing lease,
+  // heartbeat, and FTS write mode even when indexing fails.
+  let registry: ReturnType<typeof createRegistryRepository> | undefined;
+  let indexingClaimed = false;
+  let claimedWorkspaceId: string | undefined;
+  let indexingOwnerToken: string | undefined;
+  let indexingHeartbeat: ReturnType<typeof setInterval> | undefined;
+  let indexingLeaseLost = false;
   try {
-    const registry = createRegistryRepository();
+    const activeRegistry = createRegistryRepository();
+    registry = activeRegistry;
     let workspace: RegistryWorkspace;
 
     if (input.workspaceId) {
-      const w = await registry.getWorkspace(input.workspaceId);
+      const w = await activeRegistry.getWorkspace(input.workspaceId);
       if (!w) throw new Error(`Workspace '${input.workspaceId}' not found`);
       workspace = w;
     } else if (input.rootPath) {
-      workspace = await registry.ensureWorkspace({
+      workspace = await activeRegistry.ensureWorkspace({
         rootPath: path.resolve(input.rootPath),
       });
     } else {
       throw new Error("Either workspaceId or rootPath is required");
     }
 
+    indexingOwnerToken = crypto.randomUUID();
+    if (
+      !(await activeRegistry.tryClaimIndexing(workspace.id, indexingOwnerToken, indexLeaseExpiry()))
+    ) {
+      throw new Error(`Workspace '${workspace.id}' is already being indexed`);
+    }
+    indexingClaimed = true;
+    claimedWorkspaceId = workspace.id;
+    let heartbeatBusy = false;
+    indexingHeartbeat = setInterval(() => {
+      if (heartbeatBusy || indexingLeaseLost || !indexingOwnerToken) return;
+      heartbeatBusy = true;
+      void activeRegistry
+        .refreshIndexingLease(workspace.id, indexingOwnerToken, indexLeaseExpiry())
+        .then((refreshed) => {
+          if (!refreshed) indexingLeaseLost = true;
+        })
+        .catch(() => {
+          indexingLeaseLost = true;
+        })
+        .finally(() => {
+          heartbeatBusy = false;
+        });
+    }, INDEX_HEARTBEAT_INTERVAL_MS);
+
+    const assertIndexingLease = async () => {
+      if (indexingLeaseLost || !indexingOwnerToken) {
+        throw new Error(`Indexing lease lost for workspace '${workspace.id}'`);
+      }
+      const refreshed = await activeRegistry.refreshIndexingLease(
+        workspace.id,
+        indexingOwnerToken,
+        indexLeaseExpiry(),
+      );
+      if (!refreshed) {
+        indexingLeaseLost = true;
+        throw new Error(`Indexing lease lost for workspace '${workspace.id}'`);
+      }
+    };
+
     await writeLocalWorkspaceConfig(workspace);
 
     const repo = createWorkspaceRepository(workspace.rootPath);
-    const settings = await getBrainSettings();
+    const settings = await getBrainSettings(workspace.rootPath);
     const config = await loadBrainConfig(workspace.rootPath);
     const configuredWorkspace = config.workspaces?.find(
       (candidate) =>
@@ -616,24 +551,26 @@ export async function indexWorkspace(input: {
     );
     const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
     const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
-    const embeddingProvider = await getEmbeddingProvider();
     const runMode = input.mode ?? "incremental";
+    const chunkingFingerprint = hashContent(JSON.stringify(settings.chunking));
+    const forceRechunk =
+      runMode === "incremental" && repo.getMeta("chunking_fingerprint") !== chunkingFingerprint;
+    let graphInvalidated = false;
 
-    if (embeddingProvider) {
-      process.stdout.write(
-        `[embedding] provider=${embeddingProvider.provider} model=${embeddingProvider.model}\n`,
-      );
-    } else {
-      process.stdout.write(`[embedding] disabled (no provider configured)\n`);
-    }
+    const invalidateGraph = async () => {
+      if (graphInvalidated) return;
+      await activeRegistry.invalidateWorkspaceGraph(workspace.id);
+      graphInvalidated = true;
+    };
 
     const reportProgress = async (message: string, progress: number) => {
       await input.onProgress?.({ message, progress });
     };
 
     if (runMode === "full") {
+      await assertIndexingLease();
       repo.resetIndexArtifacts();
-      invalidateGraphForWorkspace(workspace.id);
+      await invalidateGraph();
     }
 
     const runId = await repo.createIndexRun({ mode: runMode });
@@ -645,6 +582,7 @@ export async function indexWorkspace(input: {
       include: includeGlobs,
       exclude: excludeGlobs,
     });
+    await assertIndexingLease();
 
     const existingDocuments = await repo.listDocuments();
     const existingDocumentsByPath = new Map(
@@ -662,7 +600,7 @@ export async function indexWorkspace(input: {
         }
       }
       if (deletedAny) {
-        invalidateGraphForWorkspace(workspace.id);
+        await invalidateGraph();
       }
     }
 
@@ -676,8 +614,6 @@ export async function indexWorkspace(input: {
 
     let filesUpdated = 0;
     let chunksWritten = 0;
-    let embeddingsWritten = 0;
-    let embeddingFailures = 0;
     let bulkWriteMode = false;
     let needsWriteModeRestore = false;
     // FTS inputs collected during transaction, inserted after finalize (no DB contention)
@@ -708,9 +644,6 @@ export async function indexWorkspace(input: {
 
       // ── Phase 1: Check which files changed (fast DB lookups, no file reads) ──
       const parseTasks: ParseTask[] = [];
-      const unchangedFiles: Array<{
-        existingDocument: NonNullable<Awaited<ReturnType<typeof repo.getDocumentByPath>>>;
-      }> = [];
       const filesToRead: typeof files = [];
 
       for (const file of files) {
@@ -718,13 +651,12 @@ export async function indexWorkspace(input: {
         // Fast path: skip file read if mtime and size match (incremental only)
         const statUnchanged =
           runMode === "incremental" &&
+          !forceRechunk &&
           existingDocument &&
           existingDocument.mtimeMs === file.mtimeMs &&
           existingDocument.sizeBytes === file.sizeBytes;
 
-        if (statUnchanged) {
-          unchangedFiles.push({ existingDocument: existingDocument! });
-        } else {
+        if (!statUnchanged) {
           filesToRead.push(file);
         }
       }
@@ -759,6 +691,7 @@ export async function indexWorkspace(input: {
         const existingDocument = existingDocumentsByPath.get(file.relativePath);
         const unchanged =
           runMode === "incremental" &&
+          !forceRechunk &&
           existingDocument &&
           existingDocument.contentHash === contentHash;
 
@@ -768,7 +701,6 @@ export async function indexWorkspace(input: {
             sizeBytes: file.sizeBytes,
             mtimeMs: file.mtimeMs,
           });
-          unchangedFiles.push({ existingDocument });
         } else {
           parseTasks.push({
             id: file.relativePath,
@@ -779,6 +711,10 @@ export async function indexWorkspace(input: {
             mtimeMs: file.mtimeMs,
             targetTokens: settings.chunking.targetTokens,
             overlapTokens: settings.chunking.overlapTokens,
+            // Indexing uses the fast chars/4 counter — BPE encoding is 100x
+            // slower and unnecessary for chunk-size budgeting. Retrieval
+            // budgeting continues to use exactTokenCounter (countTokens).
+            counter: fastTokenCounter,
           });
         }
       }
@@ -795,46 +731,21 @@ export async function indexWorkspace(input: {
         );
       });
 
-      // Backfill unchanged embeddings only when embeddings are enabled.
-      if (embeddingProvider) {
-        for (const { existingDocument } of unchangedFiles) {
-          const existingChunks = await repo.getChunksByDocument(existingDocument.id);
-          const embeddingResult = await writeEmbeddingsToRepo(
-            repo,
-            existingChunks.map((chunk) => ({
-              id: chunk.id,
-              content: chunk.content,
-              path: existingDocument.path,
-              heading: chunk.heading,
-            })),
-            embeddingProvider,
-          );
-          embeddingsWritten += embeddingResult.written;
-          embeddingFailures += embeddingResult.failedBatches;
-        }
-      }
-
       // A true no-op never changes SQLite write pragmas or FTS triggers.
       process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
+      await assertIndexingLease();
       const _T4 = Date.now();
       if (parseTasks.length > 0) {
+        await invalidateGraph();
         // ── Phase 4: Write all results to DB (main thread, transactioned) ──
         repo.setOptimizedWriteMode(true);
         repo.dropFtsTriggers();
         bulkWriteMode = true;
-        // At least one file changed — graph is stale.
-        invalidateGraphForWorkspace(workspace.id);
       }
-
-      const allChunkRowsForEmbeddings: Array<{
-        id: string;
-        content: string;
-        path: string;
-        heading?: string | null;
-      }> = [];
 
       // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
       const _dbSub: Record<string, number> = {};
+      await assertIndexingLease();
       await repo.transaction(async () => {
         const _dbT0 = Date.now();
         // Step 1: Handle existing documents (reset artifacts + update) in bulk
@@ -947,20 +858,12 @@ export async function indexWorkspace(input: {
         }
         _dbSub["collect-fts"] = Date.now() - _dbT1;
 
-        // Step 3: Collect chunk rows for embeddings — skip graph building (lazy, on-demand)
+        // Step 3: Cache parse results — graph building remains lazy/on-demand.
         for (let fi = 0; fi < parseTasks.length; fi++) {
           const file = parseTasks[fi];
           const indexed = parseResults.get(file.id)!;
           const chunkOffset = chunkOffsets[fi];
 
-          for (let ci = 0; ci < indexed.chunks.length; ci++) {
-            allChunkRowsForEmbeddings.push({
-              id: allChunkIds[chunkOffset + ci],
-              content: indexed.chunks[ci].content,
-              path: file.relativePath,
-              heading: indexed.chunks[ci].heading,
-            });
-          }
           chunksWritten += indexed.chunks.length;
           filesUpdated += 1;
         }
@@ -990,21 +893,6 @@ export async function indexWorkspace(input: {
       });
       process.stderr.write(`[t]   db sub: ${JSON.stringify(_dbSub)}\n`);
 
-      // Write embeddings outside the DB transaction so remote HTTP requests don't hold the WAL lock
-      if (allChunkRowsForEmbeddings.length > 0 && embeddingProvider) {
-        await reportProgress(
-          `Embedding ${allChunkRowsForEmbeddings.length} chunks via ${embeddingProvider.provider}/${embeddingProvider.model}...`,
-          90,
-        );
-        const embeddingResult = await writeEmbeddingsToRepo(
-          repo,
-          allChunkRowsForEmbeddings,
-          embeddingProvider,
-        );
-        embeddingsWritten += embeddingResult.written;
-        embeddingFailures += embeddingResult.failedBatches;
-      }
-
       // ── Phase 5: FTS insert (triggers still down — no double-write) + restore ──
       process.stderr.write(`[t] phase4 db-write: ${Date.now() - _T4}ms\n`);
       const _T5 = Date.now();
@@ -1029,19 +917,17 @@ export async function indexWorkspace(input: {
         needsWriteModeRestore = true;
         bulkWriteMode = false;
       }
+      repo.setMeta("chunking_fingerprint", chunkingFingerprint);
       process.stderr.write(`[t] phase5 fts-restore: ${Date.now() - _T5}ms\n`);
       const _T7 = Date.now();
       await reportProgress("Finalizing index run...", 98);
+      await assertIndexingLease();
       await repo.completeIndexRun(runId, {
         status: "completed",
         filesScanned: files.length,
         filesUpdated,
         chunksWritten,
-        embeddingsWritten,
-        errorMessage:
-          embeddingFailures > 0
-            ? `${embeddingFailures} embedding batch(es) failed; retry indexing to complete embeddings`
-            : undefined,
+        embeddingsWritten: 0,
       });
 
       const docCount = await repo.getDocumentCount();
@@ -1049,16 +935,18 @@ export async function indexWorkspace(input: {
       const nodeCount = await repo.getNodeCount();
       const edgeCount = await repo.getEdgeCount();
 
-      await registry.updateWorkspace(workspace.id, {
-        status: "indexed",
-        indexingStatus: "completed",
-        lastIndexedAt: new Date().toISOString(),
+      const completed = await activeRegistry.completeIndexing(workspace.id, indexingOwnerToken!, {
         documentCount: docCount,
         chunkCount: chunkCountResult,
         nodeCount,
         edgeCount,
-        lastError: "",
+        completedAt: new Date().toISOString(),
       });
+      if (!completed) {
+        process.stderr.write(
+          `[openez] Index lease was lost before completion; another owner may have taken over.\n`,
+        );
+      }
 
       // Switch out of optimized write mode AFTER all writes are done.
       // Doing it earlier causes fsync to flush ~70MB of dirty pages mid-finalize.
@@ -1082,15 +970,13 @@ export async function indexWorkspace(input: {
         filesScanned: files.length,
         filesUpdated,
         chunksWritten,
-        embeddingsWritten,
+        embeddingsWritten: 0,
         errorMessage,
       });
 
-      await registry.updateWorkspace(workspace.id, {
-        status: "error",
-        indexingStatus: "failed",
-        lastError: errorMessage,
-      });
+      if (indexingOwnerToken) {
+        await activeRegistry.failIndexing(workspace.id, indexingOwnerToken, errorMessage);
+      }
       throw error;
     }
 
@@ -1102,11 +988,22 @@ export async function indexWorkspace(input: {
       filesScanned: files.length,
       filesUpdated,
       chunksWritten,
-      embeddingsWritten,
-      embeddingFailures,
+      embeddingsWritten: 0,
+      embeddingFailures: 0,
     };
   } finally {
-    setFastTokenCount(false);
+    if (indexingHeartbeat) clearInterval(indexingHeartbeat);
+    if (registry && indexingClaimed && claimedWorkspaceId) {
+      try {
+        await registry.releaseIndexing(
+          claimedWorkspaceId,
+          indexingOwnerToken!,
+          "Indexing aborted before completion",
+        );
+      } catch {
+        // Preserve the original indexing error if registry cleanup fails.
+      }
+    }
   }
 }
 
@@ -1129,56 +1026,23 @@ export async function waitForFts(workspaceId: string): Promise<void> {
 // batch (Python/Go/Rust), inserts graph nodes + edges + call edges.
 // One-time cost (~5s for 2K files). Subsequent queries use cached graph.
 
-/** In-flight graph builds: workspaceId -> Promise. Concurrent callers share
- *  the same promise. A resolved promise remaining in the map means "built". */
-const graphBuilds = new Map<string, Promise<void>>();
-
-/** Workspaces whose graph is stale and must be rebuilt on next access. */
-const _graphDirtyWorkspaces = new Set<string>();
-
-/** Mark a workspace's graph as stale so the next buildGraphForWorkspace call
- *  rebuilds from current documents. Called by indexWorkspace after changes. */
-function invalidateGraphForWorkspace(workspaceId: string): void {
-  _graphDirtyWorkspaces.add(workspaceId);
-  // Remove any cached "built" promise so the next call rebuilds.
-  graphBuilds.delete(workspaceId);
-}
-
-export async function buildGraphForWorkspace(workspaceId: string, rootPath: string): Promise<void> {
-  // If already built and not dirty, return immediately.
-  const existing = graphBuilds.get(workspaceId);
-  if (existing && !_graphDirtyWorkspaces.has(workspaceId)) {
-    return existing;
-  }
-
-  // Start a new build (race-safe: concurrent callers share the same promise).
-  // On success, replace the in-flight promise with a resolved one so the
-  // workspace is marked "built". On failure, delete the entry so the next
-  // call can retry — otherwise the rejected promise would be cached forever.
-  const buildPromise = _buildGraphInternal(workspaceId, rootPath)
-    .then(() => {
-      graphBuilds.set(workspaceId, Promise.resolve());
-    })
-    .catch((err) => {
-      graphBuilds.delete(workspaceId);
-      throw err;
-    });
-
-  graphBuilds.set(workspaceId, buildPromise);
-  return buildPromise;
-}
-
-async function _buildGraphInternal(workspaceId: string, rootPath: string): Promise<void> {
-  _graphDirtyWorkspaces.delete(workspaceId);
+/**
+ * Build graph artifacts for one captured index generation. Graph lifecycle
+ * state is intentionally owned by graph-service.ts; this function only
+ * persists nodes and edges for the root resolved by that service.
+ */
+export async function buildGraphGeneration(
+  _workspaceId: string,
+  rootPath: string,
+  _generation: number,
+  buildEpoch: number,
+): Promise<{ nodeCount: number; edgeCount: number; published: boolean }> {
   const _graphStart = Date.now();
 
   const repo = createWorkspaceRepository(rootPath);
-  const settings = await getBrainSettings();
+  const settings = await getBrainSettings(rootPath);
   const targetTokens = settings.chunking.targetTokens;
   const overlapTokens = settings.chunking.overlapTokens;
-
-  // Clear stale graph artifacts before rebuilding.
-  repo.clearGraphArtifacts();
 
   // Get all documents from DB
   const documents = await repo.listDocuments();
@@ -1188,7 +1052,8 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
 
   if (graphDocs.length === 0) {
     process.stderr.write(`[t] graph-build: 0 docs (${Date.now() - _graphStart}ms)\n`);
-    return;
+    const published = repo.replaceGraphArtifacts({ buildEpoch, nodes: [], edges: [] });
+    return { nodeCount: 0, edgeCount: 0, published };
   }
 
   // Read file contents
@@ -1228,7 +1093,8 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
     if (
       cached &&
       cached.contentHash === doc.contentHash &&
-      cached.parserVersion === PARSER_VERSION_TS_MORPH
+      (cached.parserVersion === PARSER_VERSION_OXC ||
+        cached.parserVersion === PARSER_VERSION_FALLBACK)
     ) {
       parsedFiles.set(doc.path, {
         filePath: doc.path,
@@ -1279,18 +1145,24 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
 
   // ── Parse native docs (Python/Go/Rust) with native batch, fallback to parseDocument ──
   if (nativeDocs.length > 0) {
+    // Resolve the native parser capability once. The expected cache version
+    // for native-language docs depends on this: `native-v1` when the native
+    // extension is available, `fallback-v1` when it is not (the fallback
+    // parser would re-parse them). A cache row is only reused when both the
+    // content hash AND this expected version match.
+    const nativeCapability = resolveNativeParser();
+    const expectedNativeVersion = nativeCapability
+      ? PARSER_VERSION_NATIVE
+      : PARSER_VERSION_FALLBACK;
+
     // Serve cached native docs first; only batch-parse the misses.
     const nativeToParse: typeof nativeDocs = [];
     for (const doc of nativeDocs) {
       const cached = repo.getParsedDocument(doc.id);
-      // Cache hit requires matching content_hash AND a current parser
-      // version. Native docs may have been cached by the fallback parser
-      // (fallback-v1) — those are re-parsed by the native batch when the
-      // native extension is available, so only accept native-v1 here.
       if (
         cached &&
         cached.contentHash === doc.contentHash &&
-        cached.parserVersion === PARSER_VERSION_NATIVE
+        cached.parserVersion === expectedNativeVersion
       ) {
         parsedFiles.set(doc.path, {
           filePath: doc.path,
@@ -1307,21 +1179,7 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
       }
     }
 
-    let native: any = null;
-    if (nativeToParse.length > 0) {
-      try {
-        const nativePath = require("path").join(__dirname, "native", "index.linux-x64-gnu.node");
-        native = require(nativePath);
-      } catch {
-        try {
-          native = require("@openez-graph/native");
-        } catch {
-          /* not installed — will fall back to parseDocument */
-        }
-      }
-    }
-
-    if (native?.parseCodeBatch && nativeToParse.length > 0) {
+    if (nativeCapability?.parseCodeBatch && nativeToParse.length > 0) {
       const batchItems: Array<{ language: string; content: string }> = [];
       const batchDocPaths: string[] = [];
       for (const doc of nativeToParse) {
@@ -1336,14 +1194,14 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
       }
 
       if (batchItems.length > 0) {
-        const nativeResults = native.parseCodeBatch(batchItems);
+        const nativeResults = nativeCapability.parseCodeBatch(batchItems);
         for (let i = 0; i < nativeResults.length; i++) {
           const nr = nativeResults[i];
           if (!nr) continue;
           const filePath = batchDocPaths[i];
           const doc = nativeToParse.find((d) => d.path === filePath)!;
           const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
-          const definedSymbols = nr.symbols.map((s: any) => ({
+          const definedSymbols = nr.symbols.map((s) => ({
             name: s.name,
             symbolType: s.symbolType,
             type: s.symbolType,
@@ -1414,7 +1272,8 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
 
   if (parsedFiles.size === 0) {
     process.stderr.write(`[t] graph-build: 0 parsed (${Date.now() - _graphStart}ms)\n`);
-    return;
+    const published = repo.replaceGraphArtifacts({ buildEpoch, nodes: [], edges: [] });
+    return { nodeCount: 0, edgeCount: 0, published };
   }
 
   // ── Build known files set for import resolution ──
@@ -1500,8 +1359,9 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
     _symMeta.push({ filePath, fileNodeIdx, symNodeStart, symCount: symbols.length });
   }
 
-  // Batch insert all nodes
-  const nodeIds = await repo.insertGraphNodesBatch(allNodeInputs);
+  // Generate IDs in memory so nodes and edges can be atomically swapped into
+  // the live graph only after the complete snapshot has been assembled.
+  const nodeIds = allNodeInputs.map(() => crypto.randomUUID());
 
   // ── Build edges ──
   // Maps for node lookup
@@ -1540,15 +1400,35 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
   }
 
   // Call edges
-  const globalSymbolNodes = await repo.loadAllSymbolNodes();
+  const globalSymbolNodes = new Map<string, string>();
+  for (const [key, nodeId] of symbolNodeIdsByFileAndName) {
+    const label = key.slice(key.indexOf("\0") + 1);
+    if (!globalSymbolNodes.has(label)) globalSymbolNodes.set(label, nodeId);
+  }
   const _callMeta = `{"heuristic":true,"confidence":"low"}`;
   for (const call of pendingCallEdges) {
     const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
     if (!callerNodeId) continue;
-    // Resolve call targets first in the caller file, then through the global symbol map
+    // Resolve call targets with lexical scope awareness:
+    // 1. Try qualified name (callerName.calleeName) — handles nested functions
+    //    that shadow top-level symbols (e.g. `two.helper` called from `two`)
+    // 2. Try same-file unqualified name
+    // 3. Try global symbol map (cross-file resolution)
+    const lexicalNames: string[] = [];
+    if (!call.calleeName.includes(".")) {
+      let scope = call.callerName;
+      for (;;) {
+        lexicalNames.push(`${scope}.${call.calleeName}`);
+        const separator = scope.lastIndexOf(".");
+        if (separator < 0) break;
+        scope = scope.slice(0, separator);
+      }
+    }
+    lexicalNames.push(call.calleeName);
     const calleeNodeId =
-      symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.calleeName}`) ??
-      globalSymbolNodes.get(call.calleeName);
+      lexicalNames
+        .map((name) => symbolNodeIdsByFileAndName.get(`${call.filePath}\0${name}`))
+        .find((id): id is string => Boolean(id)) ?? globalSymbolNodes.get(call.calleeName);
     if (!calleeNodeId || callerNodeId === calleeNodeId) continue;
     allEdges.push({
       fromNodeId: callerNodeId,
@@ -1558,22 +1438,20 @@ async function _buildGraphInternal(workspaceId: string, rootPath: string): Promi
     });
   }
 
-  // Batch insert all edges in one transaction
-  await repo.transaction(async () => {
-    await repo.insertEdges(allEdges);
+  const uniqueEdges = [
+    ...new Map(
+      allEdges.map((edge) => [`${edge.fromNodeId}\0${edge.toNodeId}\0${edge.type}`, edge]),
+    ).values(),
+  ];
+  const published = repo.replaceGraphArtifacts({
+    buildEpoch,
+    nodes: allNodeInputs.map((node, index) => ({ ...node, id: nodeIds[index] })),
+    edges: uniqueEdges.map((edge) => ({ ...edge, id: crypto.randomUUID() })),
   });
 
   process.stderr.write(
-    `[t] graph-build: ${Date.now() - _graphStart}ms (${parsedFiles.size} files, ${allNodeInputs.length} nodes, ${allEdges.length} edges)\n`,
+    `[t] graph-build: ${Date.now() - _graphStart}ms (${parsedFiles.size} files, ${allNodeInputs.length} nodes, ${uniqueEdges.length} edges)\n`,
   );
 
-  // Update registry so the UI reflects the built graph
-  const nodeCount = await repo.getNodeCount();
-  const edgeCount = await repo.getEdgeCount();
-  const registry = createRegistryRepository();
-  await registry.updateWorkspace(workspaceId, {
-    graphStatus: "completed",
-    nodeCount,
-    edgeCount,
-  });
+  return { nodeCount: allNodeInputs.length, edgeCount: uniqueEdges.length, published };
 }

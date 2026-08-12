@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 
-import { hasVecExtension } from "./database-loader";
 import type { NativeDatabase } from "./shared-types";
 
 /**
@@ -50,43 +49,12 @@ export function createEmbeddingOps(native: NativeDatabase, stmts: EmbeddingStmts
           now,
         );
       }
-
-      // Sync to sqlite-vec virtual table for ANN search when the extension is
-      // loaded. Failures (missing table, dimension mismatch) are swallowed so
-      // the linear-scan path remains authoritative.
-      // Include provider/model so KNN queries can filter by embedding model,
-      // preventing cross-model ranking when multiple providers exist.
-      if (hasVecExtension()) {
-        for (const input of inputs) {
-          try {
-            native
-              .prepare(
-                "INSERT OR REPLACE INTO embeddings_vec (chunk_id, embedding, provider, model) VALUES (?, ?, ?, ?)",
-              )
-              .run(input.chunkId, input.embedding, input.provider, input.model);
-          } catch {
-            // Vec table might not exist or dimension mismatch — skip
-          }
-        }
-      }
     },
 
     async deleteEmbeddingsByChunkIds(chunkIds: string[]) {
       if (chunkIds.length === 0) return;
       const placeholders = chunkIds.map(() => "?").join(",");
       native.prepare(`DELETE FROM embeddings WHERE chunk_id IN (${placeholders})`).run(...chunkIds);
-
-      // Keep the sqlite-vec virtual table in sync on delete.
-      if (hasVecExtension()) {
-        try {
-          const vecPlaceholders = chunkIds.map(() => "?").join(",");
-          native
-            .prepare(`DELETE FROM embeddings_vec WHERE chunk_id IN (${vecPlaceholders})`)
-            .run(...chunkIds);
-        } catch {
-          // Vec table might not exist — skip
-        }
-      }
     },
   };
 }

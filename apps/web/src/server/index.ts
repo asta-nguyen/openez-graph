@@ -45,13 +45,13 @@ import {
   setRegistryWorkspacePinned,
 } from "./sqlite";
 
-import { codeQuery } from "@openez-graph/core";
+import { LOCAL_EMBEDDING_MODELS, codeQuery } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
   removeWorkspace,
 } from "@openez-graph/db";
-import { buildGraphForWorkspace, indexWorkspace } from "@openez-graph/indexer";
+import { ensureGraphReady, indexWorkspace } from "@openez-graph/indexer";
 
 const app = new Hono();
 app.use(
@@ -85,6 +85,8 @@ const DEFAULT_EXCLUDE_GLOBS = [
   "coverage/**",
   "**/.turbo/**",
 ];
+
+const activeIndexRuns = new Set<string>();
 
 function mapWorkspace(ws: {
   id: string;
@@ -374,10 +376,18 @@ app.post("/api/workspaces/:id/index", async (c) => {
     return c.json({ status: "failed", error: "Mode must be 'incremental' or 'full'" }, 400);
   }
 
+  if (activeIndexRuns.has(id)) {
+    return c.json({ status: "running", error: `Workspace '${id}' is already being indexed` }, 409);
+  }
+
+  activeIndexRuns.add(id);
   try {
     const summary = await indexWorkspace({ workspaceId: id, mode });
     return c.json({ ...summary, status: "completed" });
   } catch (error) {
+    if (error instanceof Error && error.message.includes("already being indexed")) {
+      return c.json({ status: "running", error: error.message }, 409);
+    }
     return c.json(
       {
         status: "failed",
@@ -385,6 +395,8 @@ app.post("/api/workspaces/:id/index", async (c) => {
       },
       500,
     );
+  } finally {
+    activeIndexRuns.delete(id);
   }
 });
 
@@ -394,71 +406,74 @@ app.get("/api/workspaces/:id/graph", async (c) => {
   const workspace = getRegistryWorkspace(id);
   if (!workspace) return c.json(null);
 
-  // Lazy graph build: if graph hasn't been built yet (pending status or
-  // empty nodes), build it now before reading. This mirrors the MCP
-  // code_context/graph_neighbors flow which also builds lazily on demand.
-  const repo = createWorkspaceRepository(workspace.rootPath);
-  const nodeCount = await repo.getNodeCount();
-  if (nodeCount === 0 || workspace.graphStatus === "pending") {
-    await buildGraphForWorkspace(id, workspace.rootPath);
-  }
+  try {
+    await ensureGraphReady(id);
 
-  // ponytail: canvas-first ceiling; move to WebGL/streaming for larger full graphs.
-  const maxNodes = Math.min(parseInt(c.req.query("limit") ?? "25000", 10) || 25000, 25000);
-  const maxEdges = Math.min(parseInt(c.req.query("edgeLimit") ?? "75000", 10) || 75000, 75000);
+    // ponytail: canvas-first ceiling; move to WebGL/streaming for larger full graphs.
+    const maxNodes = Math.min(parseInt(c.req.query("limit") ?? "25000", 10) || 25000, 25000);
+    const maxEdges = Math.min(parseInt(c.req.query("edgeLimit") ?? "75000", 10) || 75000, 75000);
 
-  const {
-    nodes: nodeRows,
-    edges: edgeRows,
-    totalNodeCount,
-    totalEdgeCount,
-  } = getWorkspaceGraphOptimized(workspace.rootPath, maxNodes, maxEdges);
+    const {
+      nodes: nodeRows,
+      edges: edgeRows,
+      totalNodeCount,
+      totalEdgeCount,
+    } = getWorkspaceGraphOptimized(workspace.rootPath, maxNodes, maxEdges);
 
-  const degreeMap = new Map<string, number>();
-  for (const edge of edgeRows) {
-    degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
-    degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
-  }
+    const degreeMap = new Map<string, number>();
+    for (const edge of edgeRows) {
+      degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
+      degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
+    }
 
-  const validIds = new Set(nodeRows.map((n) => n.id));
+    const validIds = new Set(nodeRows.map((n) => n.id));
 
-  const nodes = nodeRows.map((node) => ({
-    id: node.id,
-    label: node.label,
-    type: node.type,
-    degree: degreeMap.get(node.id) ?? 0,
-    metadata: node.metadata,
-    path: typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
-    startLine: typeof node.metadata?.startLine === "number" ? node.metadata.startLine : undefined,
-    endLine: typeof node.metadata?.endLine === "number" ? node.metadata.endLine : undefined,
-    refId: node.refId,
-  }));
-
-  const edges = edgeRows
-    .filter((e) => validIds.has(e.source) && validIds.has(e.target))
-    .map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      type: edge.type,
-      weight: edge.weight,
+    const nodes = nodeRows.map((node) => ({
+      id: node.id,
+      label: node.label,
+      type: node.type,
+      degree: degreeMap.get(node.id) ?? 0,
+      metadata: node.metadata,
+      path: typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
+      startLine: typeof node.metadata?.startLine === "number" ? node.metadata.startLine : undefined,
+      endLine: typeof node.metadata?.endLine === "number" ? node.metadata.endLine : undefined,
+      refId: node.refId,
     }));
 
-  const nodeTypes = [...new Set(nodes.map((n) => n.type))].sort();
-  const edgeTypes = [...new Set(edges.map((e) => e.type))].sort();
+    const edges = edgeRows
+      .filter((e) => validIds.has(e.source) && validIds.has(e.target))
+      .map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type,
+        weight: edge.weight,
+      }));
 
-  return c.json({
-    workspaceId: id,
-    workspaceName: workspace.name,
-    nodes,
-    edges,
-    nodeTypes,
-    edgeTypes,
-    totalNodes: totalNodeCount,
-    totalEdges: totalEdgeCount,
-    displayedNodes: nodes.length,
-    displayedEdges: edges.length,
-  });
+    const nodeTypes = [...new Set(nodes.map((n) => n.type))].sort();
+    const edgeTypes = [...new Set(edges.map((e) => e.type))].sort();
+
+    return c.json({
+      workspaceId: id,
+      workspaceName: workspace.name,
+      nodes,
+      edges,
+      nodeTypes,
+      edgeTypes,
+      totalNodes: totalNodeCount,
+      totalEdges: totalEdgeCount,
+      displayedNodes: nodes.length,
+      displayedEdges: edges.length,
+    });
+  } catch (error) {
+    return c.json(
+      {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      },
+      500,
+    );
+  }
 });
 
 // Query
@@ -489,6 +504,7 @@ app.post("/api/query", async (c) => {
   try {
     const registry = createRegistryRepository();
     const workspace = await registry.getWorkspace(workspaceId);
+    await ensureGraphReady(workspaceId);
 
     const [result, neighborResults] = await Promise.all([
       codeQuery({ workspaceId, query, skipGraphExpand: true }),
@@ -563,7 +579,7 @@ app.post("/api/query", async (c) => {
 
 app.get("/api/settings/embedding", async (c) => {
   try {
-    const { getEmbeddingConfig } = await import("@openez-graph/core");
+    const { getEmbeddingConfig, LOCAL_EMBEDDING_MODELS } = await import("@openez-graph/core");
     const config = await getEmbeddingConfig();
     const registry = createRegistryRepository();
     const dbSettings = await registry.getAllSettings();
@@ -574,6 +590,8 @@ app.get("/api/settings/embedding", async (c) => {
       openaiModel: config.openaiModel,
       ollamaBaseUrl: config.ollamaBaseUrl,
       ollamaModel: config.ollamaModel,
+      localModel: config.localModel,
+      localModels: Object.keys(LOCAL_EMBEDDING_MODELS),
       dbOverrides: Object.keys(dbSettings).filter((k) => k.startsWith("embedding.")),
     });
   } catch (err) {
@@ -591,8 +609,9 @@ app.put("/api/settings/embedding", async (c) => {
       "embedding.openai_model": true,
       "embedding.ollama_base_url": true,
       "embedding.ollama_model": true,
+      "embedding.local_model": true,
     };
-    const VALID_PROVIDERS = new Set(["none", "openai", "ollama"]);
+    const VALID_PROVIDERS = new Set(["none", "openai", "ollama", "local"]);
     const registry = createRegistryRepository();
     const updated: string[] = [];
     for (const [key, value] of Object.entries(body)) {
@@ -606,12 +625,23 @@ app.put("/api/settings/embedding", async (c) => {
       if (key === "embedding.provider" && !VALID_PROVIDERS.has(value.trim())) {
         return c.json(
           {
-            error: `Invalid embedding provider '${value}'. Must be one of: none, openai, ollama.`,
+            error: `Invalid embedding provider '${value}'. Must be one of: none, openai, ollama, local.`,
           },
           400,
         );
       }
-      await registry.setSetting(key, value);
+      if (
+        key === "embedding.local_model" &&
+        !Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, value.trim())
+      ) {
+        return c.json(
+          {
+            error: `Unsupported local embedding model '${value}'. Must be one of: ${Object.keys(LOCAL_EMBEDDING_MODELS).join(", ")}.`,
+          },
+          400,
+        );
+      }
+      await registry.setSetting(key, key === "embedding.local_model" ? value.trim() : value);
       updated.push(key);
     }
     return c.json({ ok: true, updated });

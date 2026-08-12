@@ -1,17 +1,17 @@
-// Lazy-load gpt-tokenizer — the BPE vocab is ~965KB and only needed for retrieval, not indexing.
-// This keeps the index path fast by avoiding parsing the vocab on startup.
+// Token counting is split into two scoped strategies so indexing and
+// retrieval never share mutable global state:
+//   - fastTokenCounter: chars/4 approximation — 10x faster, used for indexing
+//   - exactTokenCounter: GPT BPE encoding — used for retrieval budgeting
+// Callers pick the strategy explicitly by passing the relevant TokenCounter.
+
+// Lazy-load gpt-tokenizer — the BPE vocab is ~965KB and only needed for
+// exact (retrieval) token counting, never for the fast indexing path.
 let _encode: ((text: string) => number[]) | null = null;
 let _decode: ((tokens: number[]) => string) | null = null;
 let _loadFailed = false;
-let _fastMode = false;
-
-/** Skip BPE encoding — use length/4 approximation. Call during indexing for speed. */
-export function setFastTokenCount(enabled: boolean): void {
-  _fastMode = enabled;
-}
 
 function loadTokenizer(): void {
-  if (_encode || _loadFailed || _fastMode) return;
+  if (_encode || _loadFailed) return;
   try {
     const tokenizer = require("gpt-tokenizer");
     _encode = tokenizer.encode;
@@ -21,8 +21,11 @@ function loadTokenizer(): void {
   }
 }
 
+/**
+ * Exact token count via GPT BPE encoding. Falls back to the chars/4
+ * approximation only when the tokenizer vocab cannot be loaded.
+ */
 export function countTokens(value: string): number {
-  if (_fastMode) return Math.ceil(value.length / 4);
   loadTokenizer();
   if (_encode) {
     try {
@@ -66,16 +69,24 @@ export function truncateToTokenLimit(value: string, maxTokens: number): string {
   return value.slice(0, approximateMaxChars);
 }
 
+/**
+ * Split `value` into chunks of at most `maxTokens` BPE tokens, overlapping by
+ * `overlapTokens` tokens. Falls back to a chars/4 split when BPE is unavailable.
+ */
 export function splitToTokenLimit(value: string, maxTokens: number, overlapTokens = 0): string[] {
-  if (!value || maxTokens <= 0) return [];
+  if (
+    !value ||
+    !Number.isInteger(maxTokens) ||
+    !Number.isInteger(overlapTokens) ||
+    maxTokens <= 0
+  ) {
+    return [];
+  }
 
   const overlap = Math.min(Math.max(0, overlapTokens), maxTokens - 1);
 
-  // In fast mode, skip BPE encoding and use the same char-based approximation
-  // as countTokens. This keeps splitting and counting consistent even if the
-  // real tokenizer was already loaded by an earlier call (e.g. retrieval).
   loadTokenizer();
-  if (_encode && _decode && !_fastMode) {
+  if (_encode && _decode) {
     try {
       const tokens = _encode(value);
       if (tokens.length <= maxTokens) return [value];
@@ -90,6 +101,24 @@ export function splitToTokenLimit(value: string, maxTokens: number, overlapToken
     }
   }
 
+  return splitApproximately(value, maxTokens, overlap);
+}
+
+/**
+ * Fast approximate split using a chars/4 token budget. No BPE encoding —
+ * consistent with `fastTokenCounter.count`.
+ */
+export function splitApproximately(value: string, maxTokens: number, overlapTokens = 0): string[] {
+  if (
+    !value ||
+    !Number.isInteger(maxTokens) ||
+    !Number.isInteger(overlapTokens) ||
+    maxTokens <= 0
+  ) {
+    return [];
+  }
+
+  const overlap = Math.min(Math.max(0, overlapTokens), maxTokens - 1);
   const maxChars = maxTokens * 4;
   const overlapChars = overlap * 4;
   const chunks: string[] = [];
@@ -98,3 +127,23 @@ export function splitToTokenLimit(value: string, maxTokens: number, overlapToken
   }
   return chunks;
 }
+
+/**
+ * Scoped token-counting strategy. Indexing passes `fastTokenCounter` so the
+ * hot parse/chunk path avoids BPE; retrieval uses `exactTokenCounter` (via
+ * `countTokens`/`splitToTokenLimit` directly) for precise budgeting.
+ */
+export interface TokenCounter {
+  count(value: string): number;
+  split(value: string, maxTokens: number, overlapTokens?: number): string[];
+}
+
+export const fastTokenCounter: TokenCounter = {
+  count: (value) => Math.ceil(value.length / 4),
+  split: splitApproximately,
+};
+
+export const exactTokenCounter: TokenCounter = {
+  count: countTokens,
+  split: splitToTokenLimit,
+};

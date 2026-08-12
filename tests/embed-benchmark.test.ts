@@ -1,376 +1,163 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { codeQuery } from "../packages/core/src/retrieval";
-import { closeRegistryDb, createRegistryRepository } from "../packages/db/src/sqlite";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+
 import { getEmbeddingConfig } from "../packages/core/src/embeddings";
+import { codeQuery } from "../packages/core/src/retrieval";
+import {
+  closeAllWorkspaceDbs,
+  closeRegistryDb,
+  createRegistryRepository,
+  createWorkspaceRepository,
+} from "../packages/db/src/sqlite";
+import { embedWorkspace, indexWorkspace } from "../packages/indexer/src";
+import {
+  evaluateRetrieval,
+  parseRetrievalCases,
+  summarizeQuality,
+} from "../packages/indexer/src/retrieval-eval";
 
-interface EvalQuery {
-  query: string;
-  expectedPaths: string[];
-  type: "keyword" | "semantic";
-}
+const RUN_BENCHMARK = process.env.OPENEZ_RUN_BENCHMARK === "1";
+const COMPARE_EMBEDDINGS = process.env.OPENEZ_BENCHMARK_EMBEDDINGS === "1";
+const FTS_RECALL_FLOOR = 0.7;
+const FTS_MRR_FLOOR = 0.45;
+const benchmarkRoot = path.resolve(process.env.OPENEZ_BENCHMARK_WORKSPACE_PATH ?? process.cwd());
+const workspaceId = process.env.OPENEZ_BENCHMARK_WORKSPACE ?? "openez-benchmark";
+const cases = parseRetrievalCases(
+  JSON.parse(
+    fs.readFileSync(path.join(import.meta.dir, "fixtures", "retrieval-eval.json"), "utf-8"),
+  ),
+);
 
-const evalSet: EvalQuery[] = [
-  // Keyword queries — FTS excels here (direct keyword match)
-  {
-    query: "where is workspace indexing implemented?",
-    expectedPaths: ["packages/indexer/src/index-workspace.ts"],
-    type: "keyword",
-  },
-  {
-    query: "how does the retrieval pipeline work?",
-    expectedPaths: ["packages/core/src/retrieval.ts"],
-    type: "keyword",
-  },
-  {
-    query: "where are embeddings written?",
-    expectedPaths: ["packages/indexer/src/index-workspace.ts"],
-    type: "keyword",
-  },
-  {
-    query: "how does codeQuery work?",
-    expectedPaths: ["packages/core/src/retrieval.ts"],
-    type: "keyword",
-  },
-  {
-    query: "where is the embedding provider selected?",
-    expectedPaths: ["packages/core/src/embeddings.ts"],
-    type: "keyword",
-  },
-  {
-    query: "how does vector search run?",
-    expectedPaths: ["packages/core/src/retrieval.ts"],
-    type: "keyword",
-  },
-  {
-    query: "where is the MCP server implemented?",
-    expectedPaths: ["apps/mcp/src/mcp-core.ts"],
-    type: "keyword",
-  },
-  {
-    query: "where is the SQLite workspace registry opened?",
-    expectedPaths: ["packages/db/src/sqlite/registry-db.ts"],
-    type: "keyword",
-  },
-  {
-    query: "how is markdown split into chunks?",
-    expectedPaths: ["packages/indexer/src/markdown.ts"],
-    type: "keyword",
-  },
-  {
-    query: "where are TypeScript symbols extracted?",
-    expectedPaths: ["packages/indexer/src/code.ts"],
-    type: "keyword",
-  },
-  {
-    query: "how are YAML JSON and TOML configs chunked?",
-    expectedPaths: ["packages/indexer/src/languages.ts"],
-    type: "keyword",
-  },
-  {
-    query: "where is the local workspace hint written?",
-    expectedPaths: ["packages/db/src/sqlite/local-workspace.ts"],
-    type: "keyword",
-  },
-  {
-    query: "how does Codex MCP setup work?",
-    expectedPaths: ["apps/cli/src/setup-codex.ts"],
-    type: "keyword",
-  },
-  {
-    query: "where are graph neighbors traversed?",
-    expectedPaths: ["packages/db/src/sqlite/repository.ts", "packages/core/src/graph.ts"],
-    type: "keyword",
-  },
-  {
-    query: "how is the FTS5 chunk index synchronized?",
-    expectedPaths: ["packages/db/src/sqlite/workspace-db.ts"],
-    type: "keyword",
-  },
-  {
-    query: "how does MCP resolve a workspace path?",
-    expectedPaths: ["apps/mcp/src/mcp-core.ts"],
-    type: "keyword",
-  },
-  {
-    query: "where is text truncated to a token budget?",
-    expectedPaths: ["packages/core/src/tokenizer.ts"],
-    type: "keyword",
-  },
-  // Semantic queries — no keyword overlap, embedding excels here
-  {
-    query: "convert text to numbers for similarity",
-    expectedPaths: ["packages/core/src/embeddings.ts"],
-    type: "semantic",
-  },
-  {
-    query: "store secret key safely encrypted",
-    expectedPaths: ["packages/db/src/sqlite/secure-storage.ts"],
-    type: "semantic",
-  },
-  {
-    query: "measure distance between two vectors",
-    expectedPaths: ["packages/core/src/retrieval.ts"],
-    type: "semantic",
-  },
-  {
-    query: "save configuration value to database",
-    expectedPaths: ["packages/db/src/sqlite/repository.ts"],
-    type: "semantic",
-  },
-  {
-    query: "split source code into searchable pieces",
-    expectedPaths: ["packages/indexer/src/index-workspace.ts"],
-    type: "semantic",
-  },
-  {
-    query: "connect to local AI model for inference",
-    expectedPaths: ["packages/core/src/embeddings.ts"],
-    type: "semantic",
-  },
-];
-
-function recallAt5(results: { path: string }[], expected: string[]): boolean {
-  const top5 = results.slice(0, 5).map((r) => r.path);
-  return expected.some((p) => top5.includes(p));
-}
-
-function reciprocalRank(results: { path: string }[], expected: string[]): number {
-  for (let i = 0; i < results.length; i++) {
-    if (expected.includes(results[i].path)) {
-      return 1 / (i + 1);
-    }
-  }
-  return 0;
-}
-
-async function runEval(): Promise<{
-  recall: number;
-  mrr: number;
-  avgLatency: number;
-  hits: number;
-  total: number;
-  keywordRecall: number;
-  semanticRecall: number;
-  keywordHits: number;
-  keywordTotal: number;
-  semanticHits: number;
-  semanticTotal: number;
-}> {
-  let hits = 0;
-  let mrrSum = 0;
-  let latencySum = 0;
-  let keywordHits = 0;
-  let semanticHits = 0;
-  const keywordQueries = evalSet.filter((q) => q.type === "keyword");
-  const semanticQueries = evalSet.filter((q) => q.type === "semantic");
-
-  for (const item of evalSet) {
-    const start = Date.now();
+async function runEvaluation() {
+  const qualities = [];
+  let latencyMs = 0;
+  for (const item of cases) {
+    const startedAt = performance.now();
     const result = await codeQuery({
-      workspaceId: process.env.OPENEZ_BENCHMARK_WORKSPACE ?? "openez",
+      workspaceId,
       query: item.query,
       limit: 10,
+      recordMetrics: false,
       skipGraphExpand: true,
     });
-    latencySum += Date.now() - start;
-
-    const sources = result.sources.map((s) => ({ path: s.path }));
-    const hit = recallAt5(sources, item.expectedPaths);
-    if (hit) {
-      hits++;
-      if (item.type === "keyword") keywordHits++;
-      else semanticHits++;
-    }
-    mrrSum += reciprocalRank(sources, item.expectedPaths);
+    latencyMs += performance.now() - startedAt;
+    qualities.push(
+      evaluateRetrieval(
+        result.sources.map((source) => source.path),
+        item.expectedPaths,
+      ),
+    );
   }
-
-  const total = evalSet.length;
-  return {
-    recall: hits / total,
-    mrr: mrrSum / total,
-    avgLatency: latencySum / total,
-    hits,
-    total,
-    keywordRecall: keywordHits / keywordQueries.length,
-    semanticRecall: semanticHits / semanticQueries.length,
-    keywordHits,
-    keywordTotal: keywordQueries.length,
-    semanticHits,
-    semanticTotal: semanticQueries.length,
-  };
+  return { ...summarizeQuality(qualities), avgLatencyMs: latencyMs / cases.length };
 }
 
-describe("FTS vs Embedding benchmark", () => {
-  let tempRegistryPath: string | null = null;
-  let savedRegistryEnv: string | undefined;
-  let savedProvider: string | null = null;
+describe("retrieval benchmark", () => {
+  let registryDir: string | null = null;
+  let savedRegistryPath: string | undefined;
+  let benchmarkStarted = false;
+  let realEmbeddingSettings: Record<string, string> = {};
 
   beforeAll(async () => {
-    // Isolate from the user's real registry DB to avoid mutating it.
-    if (process.env.OPENEZ_RUN_BENCHMARK !== "1") return;
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openez-bench-"));
-    tempRegistryPath = path.join(tempDir, "registry.sqlite");
-    savedRegistryEnv = process.env.AI_MEMORY_REGISTRY_DB_PATH;
-    process.env.AI_MEMORY_REGISTRY_DB_PATH = tempRegistryPath;
+    if (!RUN_BENCHMARK) return;
+    benchmarkStarted = true;
 
-    // Register the benchmark workspace into the temp registry so codeQuery can resolve it.
-    closeRegistryDb();
-    const benchId = process.env.OPENEZ_BENCHMARK_WORKSPACE ?? "openez";
-    const benchRoot = process.env.OPENEZ_BENCHMARK_WORKSPACE_PATH ?? process.cwd();
-    const reg = createRegistryRepository();
-    reg.createWorkspace({ id: benchId, name: benchId, rootPath: path.resolve(benchRoot) });
+    const expectedPaths = [...new Set(cases.flatMap((item) => item.expectedPaths ?? []))];
+    const missing = expectedPaths.filter(
+      (relativePath) => !fs.existsSync(path.join(benchmarkRoot, relativePath)),
+    );
+    if (missing.length > 0) throw new Error(`Stale retrieval fixture paths: ${missing.join(", ")}`);
+  }, 120_000);
 
-    // Copy embedding config from the real registry so the benchmark uses the same provider.
-    const savedEnv = process.env.AI_MEMORY_REGISTRY_DB_PATH;
+  beforeAll(async () => {
+    if (!RUN_BENCHMARK) return;
+
+    savedRegistryPath = process.env.AI_MEMORY_REGISTRY_DB_PATH;
     delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
     closeRegistryDb();
-    const realReg = createRegistryRepository();
-    const realSettings = await realReg.getAllSettings();
+    realEmbeddingSettings = await createRegistryRepository().getAllSettings();
     closeRegistryDb();
-    process.env.AI_MEMORY_REGISTRY_DB_PATH = savedEnv;
-    closeRegistryDb();
-    const tempReg = createRegistryRepository();
-    for (const [k, v] of Object.entries(realSettings)) {
-      if (k.startsWith("embedding.")) {
-        tempReg.setSetting(k, v);
+
+    registryDir = fs.mkdtempSync(path.join(os.tmpdir(), "openez-benchmark-"));
+    process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(registryDir, "registry.sqlite");
+    const registry = createRegistryRepository();
+    await registry.createWorkspace({ id: workspaceId, name: workspaceId, rootPath: benchmarkRoot });
+    if (COMPARE_EMBEDDINGS) {
+      for (const [key, value] of Object.entries(realEmbeddingSettings)) {
+        if (key.startsWith("embedding.")) await registry.setSetting(key, value);
       }
+      if (process.env.EMBEDDING_PROVIDER) {
+        await registry.setSetting("embedding.provider", process.env.EMBEDDING_PROVIDER);
+      }
+      if (process.env.OPENEZ_LOCAL_EMBEDDING_MODEL) {
+        await registry.setSetting(
+          "embedding.local_model",
+          process.env.OPENEZ_LOCAL_EMBEDDING_MODEL,
+        );
+      }
+    } else {
+      await registry.setSetting("embedding.provider", "none");
     }
     closeRegistryDb();
-  });
+    await indexWorkspace({ workspaceId });
+    if (COMPARE_EMBEDDINGS) {
+      const embedded = await embedWorkspace({ workspaceId });
+      if (embedded.embeddingsWritten === 0 && embedded.chunksConsidered > 0) {
+        const repo = createWorkspaceRepository(benchmarkRoot);
+        const [rows] = await repo.queryRaw("SELECT count(*) AS c FROM embeddings");
+        if (Number(rows?.c ?? 0) === 0) throw new Error("Embedding benchmark produced no vectors");
+      }
+    }
+  }, 120_000);
 
   afterAll(() => {
-    // Restore env and clean up temp DB.
-    if (savedRegistryEnv !== undefined) {
-      process.env.AI_MEMORY_REGISTRY_DB_PATH = savedRegistryEnv;
-    } else {
-      delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
-    }
+    if (!benchmarkStarted) return;
+    closeAllWorkspaceDbs();
     closeRegistryDb();
-    if (tempRegistryPath) {
-      const dir = path.dirname(tempRegistryPath);
-      try {
-        fs.rmSync(dir, { recursive: true, force: true });
-      } catch {
-        // best-effort cleanup
-      }
-    }
+    if (savedRegistryPath === undefined) delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    else process.env.AI_MEMORY_REGISTRY_DB_PATH = savedRegistryPath;
+    if (registryDir) fs.rmSync(registryDir, { recursive: true, force: true });
   });
 
-  it.skipIf(process.env.OPENEZ_RUN_BENCHMARK !== "1")(
-    "compares FTS-only vs FTS+embedding retrieval",
+  it.skipIf(!RUN_BENCHMARK)(
+    "meets the FTS quality floor and optionally compares embeddings",
     async () => {
       const config = await getEmbeddingConfig();
-      const hasEmbedding = config.provider !== "none";
+      const withEmbeddings =
+        COMPARE_EMBEDDINGS && config.provider !== "none" ? await runEvaluation() : null;
 
-      console.log("\n═══════════════════════════════════════════════════");
-      console.log("  Retrieval Benchmark: FTS vs FTS+Embedding");
-      console.log("═══════════════════════════════════════════════════");
-
-      // Query actual file/chunk counts from the same workspace DB that codeQuery uses.
-      const { createWorkspaceRepository } = await import("../packages/db/src/sqlite");
-      const benchWorkspaceId = process.env.OPENEZ_BENCHMARK_WORKSPACE ?? "openez";
-      const statsRegistry = createRegistryRepository();
-      const workspace = await statsRegistry.getWorkspace(benchWorkspaceId);
-      closeRegistryDb();
-      const wsRootPath =
-        workspace?.rootPath ?? process.env.OPENEZ_BENCHMARK_WORKSPACE_PATH ?? process.cwd();
-      const wsRepo = createWorkspaceRepository(wsRootPath);
-      const stats = await wsRepo.queryRaw(
-        "SELECT (SELECT count(*) FROM documents) as fileCount, (SELECT count(*) FROM chunks) as chunkCount",
-      );
-      const fileCount = Number(stats[0]?.fileCount ?? 0);
-      const chunkCount = Number(stats[0]?.chunkCount ?? 0);
-      console.log(`  Workspace: openez (${fileCount} files, ${chunkCount} chunks)`);
-      console.log(
-        `  Eval set:  ${evalSet.length} queries (${evalSet.filter((q) => q.type === "keyword").length} keyword + ${evalSet.filter((q) => q.type === "semantic").length} semantic)`,
-      );
-      console.log(
-        `  Embedding: ${hasEmbedding ? config.provider + "/" + (config.provider === "openai" ? config.openaiModel : config.ollamaModel) : "disabled"}`,
-      );
-      console.log("");
-
-      // Snapshot the original provider so we can restore it even if the test aborts.
       const registry = createRegistryRepository();
-      savedProvider = await registry.getSetting("embedding.provider");
+      const savedProvider = await registry.getSetting("embedding.provider");
+      await registry.setSetting("embedding.provider", "none");
+      closeRegistryDb();
+      const fts = await runEvaluation();
+      const restore = createRegistryRepository();
+      if (savedProvider === null) await restore.deleteSetting("embedding.provider");
+      else await restore.setSetting("embedding.provider", savedProvider);
       closeRegistryDb();
 
-      // Run with embedding enabled (current config)
-      const withEmbed = await runEval();
+      const repo = createWorkspaceRepository(benchmarkRoot);
+      const [stats] = await repo.queryRaw(
+        "SELECT (SELECT count(*) FROM documents) AS files, (SELECT count(*) FROM chunks) AS chunks",
+      );
+      console.log({
+        workspaceId,
+        files: Number(stats?.files ?? 0),
+        chunks: Number(stats?.chunks ?? 0),
+        queries: cases.length,
+        fts,
+        embeddings: withEmbeddings,
+      });
 
-      // Disable embedding, close DB to pick up change
-      const disableRegistry = createRegistryRepository();
-      await disableRegistry.setSetting("embedding.provider", "none");
-      closeRegistryDb();
-
-      let ftsOnly;
-      try {
-        ftsOnly = await runEval();
-      } finally {
-        const restoreRegistry = createRegistryRepository();
-        if (savedProvider === null) {
-          await restoreRegistry.deleteSetting("embedding.provider");
-        } else {
-          await restoreRegistry.setSetting("embedding.provider", savedProvider);
-        }
-        closeRegistryDb();
+      expect(fts.evaluatedRuns).toBe(cases.length);
+      expect(fts.recallAt5).toBeGreaterThanOrEqual(FTS_RECALL_FLOOR);
+      expect(fts.mrr).toBeGreaterThanOrEqual(FTS_MRR_FLOOR);
+      if (withEmbeddings) {
+        expect(withEmbeddings.recallAt5).toBeGreaterThanOrEqual(fts.recallAt5 - 0.02);
       }
-
-      console.log("  ┌──────────────────────┬──────────────┬──────────────────┐");
-      console.log("  │ Overall              │ FTS only     │ FTS + Embedding  │");
-      console.log("  ├──────────────────────┼──────────────┼──────────────────┤");
-      console.log(
-        `  │ Recall@5             │ ${(ftsOnly.recall * 100).toFixed(2)}%       │ ${(withEmbed.recall * 100).toFixed(2)}%           │`,
-      );
-      console.log(
-        `  │ MRR                  │ ${ftsOnly.mrr.toFixed(4)}       │ ${withEmbed.mrr.toFixed(4)}           │`,
-      );
-      console.log(
-        `  │ Queries hit          │ ${ftsOnly.hits}/${ftsOnly.total}        │ ${withEmbed.hits}/${withEmbed.total}          │`,
-      );
-      console.log(
-        `  │ Avg latency          │ ${ftsOnly.avgLatency.toFixed(0)} ms        │ ${withEmbed.avgLatency.toFixed(0)} ms            │`,
-      );
-      console.log("  └──────────────────────┴──────────────┴──────────────────┘");
-      console.log("");
-      console.log("  ┌──────────────────────┬──────────────┬──────────────────┐");
-      console.log("  │ Keyword queries      │ FTS only     │ FTS + Embedding  │");
-      console.log("  ├──────────────────────┼──────────────┼──────────────────┤");
-      console.log(
-        `  │ Recall@5             │ ${(ftsOnly.keywordRecall * 100).toFixed(2)}%       │ ${(withEmbed.keywordRecall * 100).toFixed(2)}%           │`,
-      );
-      console.log(
-        `  │ Queries hit          │ ${ftsOnly.keywordHits}/${ftsOnly.keywordTotal}        │ ${withEmbed.keywordHits}/${withEmbed.keywordTotal}          │`,
-      );
-      console.log("  └──────────────────────┴──────────────┴──────────────────┘");
-      console.log("");
-      console.log("  ┌──────────────────────┬──────────────┬──────────────────┐");
-      console.log("  │ Semantic queries     │ FTS only     │ FTS + Embedding  │");
-      console.log("  ├──────────────────────┼──────────────┼──────────────────┤");
-      console.log(
-        `  │ Recall@5             │ ${(ftsOnly.semanticRecall * 100).toFixed(2)}%       │ ${(withEmbed.semanticRecall * 100).toFixed(2)}%           │`,
-      );
-      console.log(
-        `  │ Queries hit          │ ${ftsOnly.semanticHits}/${ftsOnly.semanticTotal}         │ ${withEmbed.semanticHits}/${withEmbed.semanticTotal}          │`,
-      );
-      console.log("  └──────────────────────┴──────────────┴──────────────────┘");
-      console.log("");
-
-      const semanticDelta = (withEmbed.semanticRecall - ftsOnly.semanticRecall) * 100;
-      console.log(
-        `  Semantic Recall@5: ${ftsOnly.semanticHits}/${ftsOnly.semanticTotal} → ${withEmbed.semanticHits}/${withEmbed.semanticTotal} (${semanticDelta > 0 ? "+" : ""}${semanticDelta.toFixed(2)}%)`,
-      );
-      console.log("");
-
-      expect(ftsOnly.total).toBe(evalSet.length);
-      expect(withEmbed.total).toBe(evalSet.length);
-      // Guard the actual benchmark outcome, not just bookkeeping:
-      expect(withEmbed.recall).toBeGreaterThanOrEqual(ftsOnly.recall - 0.02);
-      expect(withEmbed.semanticRecall).toBeGreaterThanOrEqual(ftsOnly.semanticRecall);
     },
-    120000,
+    120_000,
   );
 });

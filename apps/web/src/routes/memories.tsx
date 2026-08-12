@@ -49,14 +49,8 @@ function MemoriesPage() {
   const queryOpts = isSearching
     ? memoriesSearchQueryOptions(debouncedSearch)
     : memoriesQueryOptions(currentPage, PAGE_SIZE);
-  const { data, isLoading } = useQuery<
-    { items: MemoryRow[]; totalCount: number },
-    Error,
-    { items: MemoryRow[]; totalCount: number },
-    string[]
-  >({
-    queryKey: queryOpts.queryKey as string[],
-    queryFn: queryOpts.queryFn,
+  const { data, isLoading } = useQuery({
+    ...queryOpts,
     placeholderData: (prev) => prev,
   });
 

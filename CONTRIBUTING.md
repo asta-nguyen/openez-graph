@@ -39,7 +39,7 @@ pnpm build:cli   # CLI bundle
 
 1. Create a branch from `main`.
 2. Make the smallest change that solves the problem.
-3. Add or update a focused Vitest test for non-trivial behavior.
+3. Add or update a focused Bun test for non-trivial behavior.
 4. Run the checks relevant to your change.
 5. Open a pull request explaining the problem, solution, and verification.
 

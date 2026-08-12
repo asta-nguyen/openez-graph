@@ -11,6 +11,7 @@ import {
 } from "../packages/db/src/sqlite/index";
 import { memoryRecall, memoryWrite } from "../packages/core/src/memory";
 import { codeQuery } from "../packages/core/src/retrieval";
+import { ensureGraphReady } from "../packages/indexer/src/graph-service";
 
 let tempRoot: string;
 let tempDir: string;
@@ -188,6 +189,7 @@ describe("end-to-end search pipeline", () => {
       workspaceId: "test-e2e",
       query: "authenticate user",
       limit: 5,
+      skipGraphExpand: true,
     });
 
     expect(result.sources.length).toBeGreaterThan(0);
@@ -197,6 +199,20 @@ describe("end-to-end search pipeline", () => {
     expect(result.sources[0]?.score).toBeGreaterThan(0);
   });
 
+  it("codeQuery expands through the ensured graph path", async () => {
+    const workspace = await setupWorkspaceWithContent();
+
+    const result = await codeQuery({
+      workspaceId: workspace.id,
+      query: "authenticate user",
+      limit: 5,
+      ensureGraph: ensureGraphReady,
+    });
+
+    expect(result.sources.length).toBeGreaterThan(0);
+    expect(await createWorkspaceRepository(tempRoot).getNodeCount()).toBeGreaterThan(0);
+  });
+
   it("codeQuery returns empty for no matches", async () => {
     await setupWorkspaceWithContent();
 
@@ -204,10 +220,48 @@ describe("end-to-end search pipeline", () => {
       workspaceId: "test-e2e",
       query: "zzznomatchxyz",
       limit: 5,
+      skipGraphExpand: true,
     });
 
     expect(result.sources).toHaveLength(0);
     expect(result.answerContext).toBe("");
+  });
+
+  it("loads retrieval limits from the selected workspace root", async () => {
+    await setupWorkspaceWithContent();
+    const repo = createWorkspaceRepository(tempRoot);
+    const authDocument = await repo.getDocumentByPath("src/auth.ts");
+    await repo.insertChunks([
+      {
+        documentId: authDocument!.id,
+        chunkIndex: 2,
+        heading: null,
+        content: "Authentication policy for privileged users.",
+        tokenCount: 7,
+        contentHash: "c4",
+        metadata: JSON.stringify({ kind: "code", startLine: 10, endLine: 10 }),
+      },
+    ]);
+    fs.writeFileSync(
+      path.join(tempRoot, "brain.config.js"),
+      [
+        "const config = {",
+        "  retrieval: {",
+        "    vectorLimit: 20, textLimit: 20, graphHops: 1,",
+        "    maxGraphNeighbors: 20, finalLimit: 1, maxContextTokens: 8000",
+        "  }",
+        "};",
+        "export default config;",
+      ].join("\n"),
+    );
+
+    const result = await codeQuery({
+      workspaceId: "test-e2e",
+      query: "authentication",
+      skipGraphExpand: true,
+    });
+
+    expect(result.sources).toHaveLength(1);
   });
 
   it("recalls only the active version of a written memory", async () => {

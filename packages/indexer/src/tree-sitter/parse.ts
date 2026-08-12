@@ -1,4 +1,5 @@
 import type { Node } from "web-tree-sitter";
+import type { TokenCounter } from "@openez-graph/core";
 
 import {
   createSymbolChunks,
@@ -350,6 +351,7 @@ function extractCallsInNode(
 export async function parseWithTreeSitter(
   config: LanguageConfig,
   content: string,
+  counter?: TokenCounter,
 ): Promise<IndexedCodeResult | null> {
   const tree = await parseContent(config.language, content);
   if (!tree) return null;
@@ -362,10 +364,10 @@ export async function parseWithTreeSitter(
       lines,
     );
 
-    const chunks = createSymbolChunks(symbols, lines, config.language);
+    const chunks = createSymbolChunks(symbols, lines, config.language, counter);
     if (chunks.length === 0) {
       return {
-        ...makeFallbackChunks(content, lines),
+        ...makeFallbackChunks(content, lines, counter),
         importPaths: [...new Set(importPaths)],
       };
     }

@@ -82,6 +82,22 @@ function textResult(result: Awaited<ReturnType<Client["callTool"]>>) {
 }
 
 describe("MCP agent contracts", () => {
+  it("advertises when agents should recall and write memory", async () => {
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const tools = (await client.listTools()).tools;
+      expect(tools.find((tool) => tool.name === "memory_recall")?.description).toContain(
+        "Before code work",
+      );
+      expect(tools.find((tool) => tool.name === "memory_write")?.description).toContain(
+        "architectural decision",
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("does not re-index an already indexed empty workspace on restart", async () => {
     await startSourceMcp(tempRoot);
     const workspace = await createRegistryRepository().getWorkspaceByPath(tempRoot);
@@ -187,7 +203,7 @@ describe("MCP agent contracts", () => {
   });
 
   it("resolves code_context callers and source snippets", async () => {
-    await createIndexedWorkspace("context", tempRoot);
+    const workspace = await createIndexedWorkspace("context", tempRoot);
     const { client, server } = await connectClient(tempRoot);
     try {
       const text = textResult(
@@ -211,9 +227,58 @@ describe("MCP agent contracts", () => {
         expect.objectContaining({ symbol: "caller", path: "src/caller.ts" }),
       );
       expect(countTokens(text)).toBeLessThanOrEqual(1200);
+      expect((await createRegistryRepository().getWorkspace(workspace.id))?.graphStatus).toBe(
+        "completed",
+      );
     } finally {
       await client.close();
       await server.close();
+    }
+  });
+
+  it("keeps context and structured sources paired under token truncation", async () => {
+    // Create two workspaces so code_context returns multiple result entries
+    // that can be truncated by fitToTokenBudget.
+    const secondRoot = path.join(tempRoot, "second");
+    fs.mkdirSync(secondRoot, { recursive: true });
+    await createIndexedWorkspace("context-a", tempRoot);
+    await createIndexedWorkspace("context-b", secondRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const text = textResult(
+        await client.callTool({
+          name: "code_context",
+          arguments: {
+            symbolOrPath: "target",
+            paths: [tempRoot, secondRoot],
+            maxTokens: 300,
+          },
+        }),
+      );
+      const body = JSON.parse(text) as {
+        metrics: { truncated: boolean };
+        results: Array<{
+          result: {
+            symbol?: { snippet?: string };
+            callers: Array<Record<string, unknown>>;
+            callees: Array<Record<string, unknown>>;
+          };
+        }>;
+      };
+
+      expect(countTokens(text)).toBeLessThanOrEqual(300);
+      expect(body.metrics.truncated).toBe(true);
+      // Every remaining result entry must have its structured source arrays
+      // intact — truncation drops whole entries, not inner arrays.
+      for (const entry of body.results) {
+        expect(Array.isArray(entry.result.callers)).toBe(true);
+        expect(Array.isArray(entry.result.callees)).toBe(true);
+      }
+    } finally {
+      await client.close();
+      await server.close();
+      closeAllWorkspaceDbs();
+      fs.rmSync(secondRoot, { recursive: true, force: true });
     }
   });
 });

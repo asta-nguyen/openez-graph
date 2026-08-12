@@ -39,7 +39,12 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     excludeGlobs: row.excludeGlobs || "",
     status: row.status as RegistryWorkspace["status"],
     indexingStatus: row.indexingStatus as RegistryWorkspace["indexingStatus"],
+    indexBuildOwner: row.indexBuildOwner ?? undefined,
+    indexLeaseExpiresAt: row.indexLeaseExpiresAt ?? undefined,
     graphStatus: row.graphStatus as RegistryWorkspace["graphStatus"],
+    indexGeneration: row.indexGeneration,
+    graphGeneration: row.graphGeneration,
+    graphLeaseExpiresAt: row.graphLeaseExpiresAt ?? undefined,
     lastIndexedAt: row.lastIndexedAt ?? undefined,
     lastGraphBuiltAt: row.lastGraphBuiltAt ?? undefined,
     documentCount: row.documentCount,
@@ -72,7 +77,7 @@ export function createRegistryRepository(): RegistryRepository {
   const db = getRegistryDb();
   const native = getRegistryNativeDb();
 
-  return {
+  const repo: RegistryRepository = {
     async listWorkspaces(): Promise<RegistryWorkspace[]> {
       const rows = db.select().from(schema.workspaces).all();
       return rows.map(mapWorkspaceRow).sort(compareWorkspaces);
@@ -175,6 +180,8 @@ export function createRegistryRepository(): RegistryRepository {
           | "status"
           | "indexingStatus"
           | "graphStatus"
+          | "indexGeneration"
+          | "graphGeneration"
           | "lastIndexedAt"
           | "lastGraphBuiltAt"
           | "documentCount"
@@ -195,10 +202,21 @@ export function createRegistryRepository(): RegistryRepository {
       if (updates.indexingStatus !== undefined) {
         sets.push("indexing_status = ?");
         params.push(updates.indexingStatus);
+        if (updates.indexingStatus !== "running") {
+          sets.push("index_build_owner = NULL", "index_lease_expires_at = NULL");
+        }
       }
       if (updates.graphStatus !== undefined) {
         sets.push("graph_status = ?");
         params.push(updates.graphStatus);
+      }
+      if (updates.indexGeneration !== undefined) {
+        sets.push("index_generation = ?");
+        params.push(updates.indexGeneration);
+      }
+      if (updates.graphGeneration !== undefined) {
+        sets.push("graph_generation = ?");
+        params.push(updates.graphGeneration);
       }
       if (updates.lastIndexedAt !== undefined) {
         sets.push("last_indexed_at = ?");
@@ -231,6 +249,202 @@ export function createRegistryRepository(): RegistryRepository {
 
       params.push(id);
       native.prepare(`UPDATE workspaces SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+    },
+
+    async tryClaimIndexing(
+      id: string,
+      ownerToken: string,
+      leaseExpiresAt: string,
+    ): Promise<boolean> {
+      const now = new Date().toISOString();
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET status = 'indexing', indexing_status = 'running',
+               index_build_owner = ?, index_lease_expires_at = ?,
+               last_error = '', updated_at = ?
+           WHERE id = ?
+             AND (indexing_status != 'running' OR index_lease_expires_at IS NULL OR index_lease_expires_at < ?)`,
+        )
+        .run(ownerToken, leaseExpiresAt, now, id, now) as { changes: number };
+      return result.changes > 0;
+    },
+
+    async refreshIndexingLease(
+      id: string,
+      ownerToken: string,
+      leaseExpiresAt: string,
+    ): Promise<boolean> {
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET index_lease_expires_at = ?, updated_at = ?
+           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+        )
+        .run(leaseExpiresAt, new Date().toISOString(), id, ownerToken) as { changes: number };
+      return result.changes > 0;
+    },
+
+    async releaseIndexing(id: string, ownerToken: string, error: string): Promise<boolean> {
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET status = 'error', indexing_status = 'failed',
+               index_build_owner = NULL, index_lease_expires_at = NULL,
+               last_error = ?, updated_at = ?
+           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+        )
+        .run(error, new Date().toISOString(), id, ownerToken) as { changes: number };
+      return result.changes > 0;
+    },
+
+    async completeIndexing(
+      id: string,
+      ownerToken: string,
+      result: {
+        documentCount: number;
+        chunkCount: number;
+        nodeCount: number;
+        edgeCount: number;
+        completedAt: string;
+      },
+    ): Promise<boolean> {
+      const update = native
+        .prepare(
+          `UPDATE workspaces
+           SET status = 'indexed', indexing_status = 'completed',
+               last_indexed_at = ?, document_count = ?, chunk_count = ?,
+               node_count = ?, edge_count = ?, last_error = '',
+               index_build_owner = NULL, index_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+        )
+        .run(
+          result.completedAt,
+          result.documentCount,
+          result.chunkCount,
+          result.nodeCount,
+          result.edgeCount,
+          new Date().toISOString(),
+          id,
+          ownerToken,
+        ) as { changes: number };
+      return update.changes > 0;
+    },
+
+    async failIndexing(id: string, ownerToken: string, error: string): Promise<boolean> {
+      // failIndexing and releaseIndexing share the same fenced failure
+      // semantics — delegate to avoid duplicating the SQL.
+      return repo.releaseIndexing(id, ownerToken, error);
+    },
+
+    async invalidateWorkspaceGraph(id: string): Promise<number> {
+      const row = native
+        .prepare(
+          `UPDATE workspaces
+           SET index_generation = index_generation + 1,
+               graph_status = CASE WHEN graph_status = 'running' THEN 'running' ELSE 'pending' END,
+               updated_at = ?
+           WHERE id = ?
+           RETURNING index_generation`,
+        )
+        .get(new Date().toISOString(), id) as { index_generation: number } | undefined;
+
+      if (!row) {
+        throw new Error(`Workspace '${id}' not found`);
+      }
+
+      return Number(row.index_generation);
+    },
+
+    async tryClaimGraphBuild(
+      id: string,
+      ownerToken: string,
+      leaseExpiresAt: string,
+    ): Promise<number | null> {
+      // Atomic compare-and-set: transition to 'running' only if:
+      // 1. status is not 'running', OR
+      // 2. status is 'running' but the lease has expired (takeover from dead process)
+      const now = new Date().toISOString();
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_status = 'running',
+               graph_build_owner = ?,
+               graph_build_epoch = graph_build_epoch + 1,
+               graph_lease_expires_at = ?,
+               updated_at = ?
+           WHERE id = ?
+             AND (graph_status != 'running' OR graph_lease_expires_at IS NULL OR graph_lease_expires_at < ?)
+           RETURNING graph_build_epoch`,
+        )
+        .get(ownerToken, leaseExpiresAt, now, id, now) as { graph_build_epoch: number } | undefined;
+      return result ? Number(result.graph_build_epoch) : null;
+    },
+
+    async refreshGraphBuildLease(
+      id: string,
+      ownerToken: string,
+      leaseExpiresAt: string,
+    ): Promise<boolean> {
+      // Refresh the lease only if we still own it (status is still 'running'
+      // and lease hasn't been taken over). Returns false if another process
+      // took over or the graph was completed/failed.
+      const now = new Date().toISOString();
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_lease_expires_at = ?, updated_at = ?
+           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
+        )
+        .run(leaseExpiresAt, now, id, ownerToken) as { changes: number };
+      return result.changes > 0;
+    },
+
+    async releaseGraphBuild(id, ownerToken): Promise<boolean> {
+      const result = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_status = 'pending', graph_build_owner = NULL,
+               graph_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
+        )
+        .run(new Date().toISOString(), id, ownerToken) as { changes: number };
+      return result.changes > 0;
+    },
+
+    async completeGraphBuild(id, ownerToken, generation, result): Promise<boolean> {
+      const update = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_status = 'completed', graph_generation = ?, node_count = ?, edge_count = ?,
+               last_graph_built_at = ?, last_error = '', graph_build_owner = NULL,
+               graph_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?
+             AND index_generation = ?`,
+        )
+        .run(
+          generation,
+          result.nodeCount,
+          result.edgeCount,
+          result.completedAt,
+          new Date().toISOString(),
+          id,
+          ownerToken,
+          generation,
+        ) as { changes: number };
+      return update.changes > 0;
+    },
+
+    async failGraphBuild(id, ownerToken, error): Promise<boolean> {
+      const update = native
+        .prepare(
+          `UPDATE workspaces
+           SET graph_status = 'failed', last_error = ?, graph_build_owner = NULL,
+               graph_lease_expires_at = NULL, updated_at = ?
+           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
+        )
+        .run(error, new Date().toISOString(), id, ownerToken) as { changes: number };
+      return update.changes > 0;
     },
 
     async deleteWorkspace(id: string): Promise<void> {
@@ -305,4 +519,5 @@ export function createRegistryRepository(): RegistryRepository {
       return result;
     },
   };
+  return repo;
 }
