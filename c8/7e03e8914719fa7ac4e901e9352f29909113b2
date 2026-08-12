@@ -1,0 +1,22 @@
+apps/cli/package.json
+  s_5bc8e9e818017b::t_4ba38548a0ea9e 3
+CHANGELOG.md
+  s_5bc8e9e818017b::t_f920f826d4b26b 288
+  s_5bc8e9e818017b::t_04bdd2259b6643 8-13,25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c87e03e8914719fa7ac4e901e9352f29909113b2",
+  "prompts": {},
+  "sessions": {
+    "s_5bc8e9e818017b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "awesome-search",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
