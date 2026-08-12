@@ -473,9 +473,9 @@ export async function indexWorkspace(input: {
   mode?: "incremental" | "full";
   onProgress?: (progress: { message: string; progress: number }) => Promise<void> | void;
 }): Promise<IndexWorkspaceSummary> {
-  // Token counting is now scoped via the TokenCounter interface — no global
-  // fast-mode toggle to reset. The try/finally is retained for structural
-  // stability but no longer toggles global tokenizer state.
+  // Token counting is scoped via the TokenCounter interface — no global
+  // state to reset. The try/finally ensures cleanup of the indexing lease,
+  // heartbeat, and FTS write mode even when indexing fails.
   let registry: ReturnType<typeof createRegistryRepository> | undefined;
   let indexingClaimed = false;
   let claimedWorkspaceId: string | undefined;
