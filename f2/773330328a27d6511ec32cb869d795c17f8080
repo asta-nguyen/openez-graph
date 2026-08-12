@@ -1,0 +1,39 @@
+video/src/scenes/Scene04HowItWorks.tsx
+  s_f8e69c86e4e0dc::t_d3f430bacd26cb 2
+  s_f8e69c86e4e0dc::t_ef5ec8da8e27a5 1,3-37
+video/src/scenes/Scene07CTA.tsx
+  s_f8e69c86e4e0dc::t_fb7219429db306 3
+  s_f8e69c86e4e0dc::t_c7dad8f381b73a 1-2,4-56
+video/src/scenes/Scene01Hook.tsx
+  s_f8e69c86e4e0dc::t_79687727b382c4 1-63
+video/src/scenes/Scene06Demo.tsx
+  s_f8e69c86e4e0dc::t_a397f5015ed70d 2,4
+  s_f8e69c86e4e0dc::t_4b43547f4c96b2 1,3,5-47
+video/src/scenes/Scene02Problem.tsx
+  s_f8e69c86e4e0dc::t_52747fac6c7a9d 1-99
+video/src/components/index.ts
+  s_f8e69c86e4e0dc::t_96104e91a3d5bb 1-8
+video/src/scenes/Scene05Features.tsx
+  s_f8e69c86e4e0dc::t_0172e40d126dc0 1,3-52
+  s_f8e69c86e4e0dc::t_bed6027e3a12e1 2
+video/src/scenes/Scene03Solution.tsx
+  s_f8e69c86e4e0dc::t_5a451b4dda3969 1-71
+video/src/scenes/SceneRouter.tsx
+  s_f8e69c86e4e0dc::t_529abce519dd59 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f2773330328a27d6511ec32cb869d795c17f8080",
+  "prompts": {},
+  "sessions": {
+    "s_f8e69c86e4e0dc": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-waste",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
