@@ -1,0 +1,20 @@
+docs/superpowers/specs/2026-08-12-openez-launch-video-design.md
+  s_f8e69c86e4e0dc::t_095850cd010dd3 1-294
+  s_f8e69c86e4e0dc::t_62e6c747ab4ac2 295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3034d27ecbe4e5e555eea2bf30408303aee0195a",
+  "prompts": {},
+  "sessions": {
+    "s_f8e69c86e4e0dc": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-waste",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
