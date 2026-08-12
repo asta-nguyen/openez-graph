@@ -1,0 +1,25 @@
+video/src/components/OrbitGraph.tsx
+  s_f8e69c86e4e0dc::t_7d109b341ce3e4 1-157
+video/src/components/Terminal.tsx
+  s_f8e69c86e4e0dc::t_09cc3418f6a3c5 1-65
+video/src/components/TokenCounter.tsx
+  s_f8e69c86e4e0dc::t_3d403333d516bc 1-32
+video/src/components/Background.tsx
+  s_f8e69c86e4e0dc::t_b51905a7f59969 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "937b31f27bdb047554f0767a3e00e2356e24d98b",
+  "prompts": {},
+  "sessions": {
+    "s_f8e69c86e4e0dc": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "violet-waste",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
