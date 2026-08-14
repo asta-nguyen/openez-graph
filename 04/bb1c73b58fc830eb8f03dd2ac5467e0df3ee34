@@ -1,0 +1,43 @@
+video/src/components/Timeline.tsx
+  s_13302ecec54bac::t_e448a060db5ce6 70,78-87
+video/src/components/Terminal.tsx
+  s_13302ecec54bac::t_fa85e15f7ea05c 64
+  s_13302ecec54bac::t_0f93673b5d5bbc 52-53,55
+  s_13302ecec54bac::t_78e76220bccef1 56-57,74-77
+video/src/scenes/Scene06Demo.tsx
+  s_13302ecec54bac::t_0f93673b5d5bbc 28-29
+video/src/scenes/Scene07CTA.tsx
+  s_13302ecec54bac::t_f0216ea0619b02 21,29,33-34,42,44,48-49,54-61
+video/src/components/MCPSurface.tsx
+  s_13302ecec54bac::t_e448a060db5ce6 27,39,47-54,64,88,94-100,103-109
+video/src/scenes/Scene04HowItWorks.tsx
+  s_13302ecec54bac::t_f0216ea0619b02 18-19,25,29
+video/src/scenes/Scene05Features.tsx
+  s_13302ecec54bac::t_f0216ea0619b02 20-21,27,31
+video/src/components/LangBadges.tsx
+  s_13302ecec54bac::t_e448a060db5ce6 51
+video/src/components/AgentLogos.tsx
+  s_13302ecec54bac::t_e448a060db5ce6 40
+video/src/scenes/Scene02Problem.tsx
+  s_13302ecec54bac::t_f0216ea0619b02 36-37,43,47-49,61,75,94-103
+docs/superpowers/plans/2026-08-14-openez-launch-video-ux-polish.md
+  s_13302ecec54bac::t_702f48449fea34 1-133,138-183
+  s_13302ecec54bac::t_f424737812c02f 134-137
+  s_13302ecec54bac::t_a68f59a6f8210f 184-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "04bb1c73b58fc830eb8f03dd2ac5467e0df3ee34",
+  "prompts": {},
+  "sessions": {
+    "s_13302ecec54bac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ffe53-f99b-7742-bdb3-1b11e5d9c999",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
