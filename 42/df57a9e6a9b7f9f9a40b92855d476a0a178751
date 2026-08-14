@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-08-14-openez-launch-video-ux-design.md
+  s_13302ecec54bac::t_031a3dab0b420e 1-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "42df57a9e6a9b7f9f9a40b92855d476a0a178751",
+  "prompts": {},
+  "sessions": {
+    "s_13302ecec54bac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ffe53-f99b-7742-bdb3-1b11e5d9c999",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
