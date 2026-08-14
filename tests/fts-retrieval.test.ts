@@ -53,14 +53,14 @@ async function insertTestDocument(
 
 async function expectStoredSearchText(
   repo: WorkspaceRepository,
-  inputs: Array<{ chunkId: string; content: string; metadata: string }>,
+  inputs: Array<{ chunkId: number; content: string; metadata: string }>,
 ): Promise<void> {
   const rows = await repo.queryRaw(
     `SELECT chunk_id, search_text FROM chunks_fts WHERE chunk_id IN (${inputs.map(() => "?").join(", ")})`,
     inputs.map((input) => input.chunkId),
   );
   expect(
-    Object.fromEntries(rows.map((row) => [String(row.chunk_id), String(row.search_text)])),
+    Object.fromEntries(rows.map((row) => [Number(row.chunk_id), String(row.search_text)])),
   ).toEqual(
     Object.fromEntries(
       inputs.map((input) => [input.chunkId, composeFtsSearchText(input.content, input.metadata)]),
@@ -68,7 +68,7 @@ async function expectStoredSearchText(
   );
   const unicodeInput = inputs.find((input) => input.metadata.includes("unicode needle"));
   if (unicodeInput) {
-    expect(rows.find((row) => String(row.chunk_id) === unicodeInput.chunkId)?.search_text).toBe(
+    expect(rows.find((row) => Number(row.chunk_id) === unicodeInput.chunkId)?.search_text).toBe(
       `unicode needle\n${unicodeInput.content}`,
     );
   }
@@ -143,24 +143,15 @@ describe("FTS retrieval", () => {
       metadata: testCase.metadata,
     }));
     const bulkChunkIds = await repo.insertChunks(bulkInputs);
-    await repo.bulkInsertFts(
-      bulkInputs.map((input, index) => ({
-        chunkId: bulkChunkIds[index],
-        path: "src/bulk.ts",
-        heading: null,
-        language: "typescript",
-        content: input.content,
-        metadata: input.metadata,
-      })),
-    );
+    repo.bulkInsertFtsFromChunks();
     await expectStoredSearchText(
       repo,
       bulkInputs.map((input, index) => ({ ...input, chunkId: bulkChunkIds[index] })),
     );
 
+    repo.restoreFtsTriggersOnly();
     const streamDocumentId = await insertTestDocument(repo, "src/stream.ts");
-    const streamInputs = ftsTextCases.map((testCase, chunkIndex) => ({
-      chunkId: `stream-chunk-${chunkIndex}`,
+    const streamInputsRaw = ftsTextCases.map((testCase, chunkIndex) => ({
       documentId: streamDocumentId,
       chunkIndex,
       content: `stream content ${testCase.name}`,
@@ -168,27 +159,11 @@ describe("FTS retrieval", () => {
       contentHash: `stream:${testCase.name}`,
       metadata: testCase.metadata,
     }));
-    for (const input of streamInputs) {
-      repo.streamChunk({
-        id: input.chunkId,
-        documentId: input.documentId,
-        chunkIndex: input.chunkIndex,
-        heading: null,
-        content: input.content,
-        tokenCount: input.tokenCount,
-        contentHash: input.contentHash,
-        metadata: input.metadata,
-      });
-      repo.streamFtsRow({
-        chunkId: input.chunkId,
-        path: "src/stream.ts",
-        heading: "",
-        language: "typescript",
-        content: input.content,
-        metadata: input.metadata,
-      });
-    }
-    await expectStoredSearchText(repo, streamInputs);
+    const streamChunkIds = await repo.insertChunks(streamInputsRaw);
+    await expectStoredSearchText(
+      repo,
+      streamInputsRaw.map((input, index) => ({ ...input, chunkId: streamChunkIds[index] })),
+    );
   });
 
   it("accepts malformed metadata and indexes the content", async () => {

@@ -41,7 +41,7 @@
     "query": "where is the local workspace hint written?",
     "expectedPaths": ["packages/db/src/sqlite/local-workspace.ts"]
   },
-  { "query": "how does Codex MCP setup work?", "expectedPaths": ["apps/cli/src/setup-codex.ts"] },
+  { "query": "how does Codex MCP setup work?", "expectedPaths": ["apps/cli/src/setup-agent.ts"] },
   {
     "query": "where are graph neighbors traversed?",
     "expectedPaths": ["packages/core/src/graph.ts"]

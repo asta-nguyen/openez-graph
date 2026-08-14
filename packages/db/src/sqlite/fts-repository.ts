@@ -1,17 +1,28 @@
-import type { NativeDatabase } from "./shared-types";
-import { safeParseJson, sanitizeFtsQuery } from "./utils";
+import type { DatabaseValue, JsonValue, NativeDatabase } from "./shared-types";
+import { isString, safeParseJson, sanitizeFtsQuery } from "./utils";
+
+// ponytail: This module uses raw SQL throughout because Drizzle ORM does not
+// support FTS5 virtual tables, the MATCH operator, bm25(), FTS5 special
+// commands (automerge), or CREATE TRIGGER. Migrating to Drizzle would require
+// dropping FTS5 in favor of a less capable full-text search solution. The raw
+// SQL here is the correct abstraction for FTS5 operations.
 
 export const FTS_SCHEMA_VERSION = "2";
 
 export function composeFtsSearchText(content: string, metadata: string): string {
+  // SAFETY: safeParseJson returns {} (the fallback) when metadata is not
+  // valid JSON; the cast annotates the parsed shape with an optional
+  // searchText field that may exist in chunk metadata.
   const parsed = safeParseJson(metadata, {}) as { searchText?: unknown };
-  const searchText = typeof parsed.searchText === "string" ? parsed.searchText.trim() : "";
+  // SAFETY: searchText is an opaque JSON value from chunk metadata; isString narrows it.
+  const rawSearchText = parsed.searchText as JsonValue;
+  const searchText = isString(rawSearchText) ? rawSearchText.trim() : "";
   return searchText ? `${searchText}\n${content}` : content;
 }
 
 export function composeFtsSearchTextSql(metadata: string, content: string): string {
   const normalizedSearchText = `CASE
-    WHEN json_valid(${metadata}) THEN CASE
+    WHEN ${metadata} LIKE '%"searchText"%' AND json_valid(${metadata}) THEN CASE
       WHEN json_type(${metadata}, '$.searchText') = 'text'
         THEN trim(
           json_extract(${metadata}, '$.searchText'),
@@ -34,9 +45,7 @@ export function composeFtsSearchTextSql(metadata: string, content: string): stri
  * statements are declared in the other split repository modules
  * (`document-repository.ts`, `graph-ops-shared.ts`, `embedding-repository.ts`).
  */
-export interface FtsStmts {
-  insertFtsRow: ReturnType<NativeDatabase["prepare"]>;
-}
+export interface FtsStmts {}
 
 /**
  * Dependencies that the FTS lifecycle methods need from the parent repository.
@@ -59,13 +68,44 @@ export interface FtsOpsDeps {
  * `getMeta`/`setMeta` from the parent repository; those are passed in via
  * `deps` to avoid a circular dependency on the meta/lifecycle module.
  */
-export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsOpsDeps) {
+export function createFtsOps(native: NativeDatabase, deps: FtsOpsDeps) {
   return {
     // ── Chunk Operations (FTS bulk insert) ──
 
+    bulkInsertFtsFromChunks(): number {
+      native.exec("BEGIN IMMEDIATE");
+      try {
+        native.exec("DROP TABLE IF EXISTS chunks_fts");
+        native.exec(
+          "CREATE VIRTUAL TABLE chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61')",
+        );
+        native.exec("INSERT INTO chunks_fts(chunks_fts, rank) VALUES('automerge', 0)");
+        const result = native
+          .prepare(
+            `INSERT INTO chunks_fts (rowid, chunk_id, path, heading, language, search_text)
+             SELECT c.id, c.id, d.path, coalesce(c.heading, ''), coalesce(d.language, ''),
+               ${composeFtsSearchTextSql("c.metadata", "c.content")}
+             FROM chunks c
+             INNER JOIN documents d ON d.id = c.document_id`,
+          )
+          .run();
+        native.exec("INSERT INTO chunks_fts(chunks_fts, rank) VALUES('automerge', 4)");
+        deps.setMeta("fts_schema_version", FTS_SCHEMA_VERSION);
+        native.exec("COMMIT");
+        return result.changes;
+      } catch (error) {
+        try {
+          native.exec("ROLLBACK");
+        } catch (rollbackError) {
+          console.error("FTS bulk rebuild rollback failed:", rollbackError);
+        }
+        throw error;
+      }
+    },
+
     async bulkInsertFts(
       inputs: Array<{
-        chunkId: string;
+        chunkId: number;
         path: string;
         heading: string | null;
         language: string | null;
@@ -78,7 +118,8 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
         const placeholders = batch.map(() => "(?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
+        // SAFETY: params are concrete column values matching the placeholder order.
+        const params: DatabaseValue[] = [];
         for (const item of batch) {
           const searchText = composeFtsSearchText(item.content, item.metadata);
           params.push(item.chunkId, item.path, item.heading ?? "", item.language ?? "", searchText);
@@ -117,7 +158,10 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
            ORDER BY bm25_score ASC
            LIMIT ?`,
         )
-        .all(ftsQuery, limit * 5) as Array<Record<string, unknown>>;
+        // SAFETY: SELECT chunks.id, chunks.content, chunks.heading,
+        // chunks.metadata, documents.path, bm25_score FROM chunks_fts JOIN
+        // returns DatabaseRow[] with those columns; no cast needed.
+        .all(ftsQuery, limit * 5);
 
       const seenPaths = new Set<string>();
       return rows
@@ -126,12 +170,12 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
           // Convert bm25 (lower = better) to a 0-1 score (higher = better)
           const score = -bm25;
           return {
-            id: String(row.id),
+            id: Number(row.id),
             path: String(row.path),
             content: String(row.content),
             score,
             heading: row.heading ? String(row.heading) : null,
-            metadata: safeParseJson(String(row.metadata ?? ""), {}) as Record<string, unknown>,
+            metadata: safeParseJson<Record<string, JsonValue>>(String(row.metadata ?? ""), {}),
           };
         })
         .filter((row) => {
@@ -172,7 +216,7 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
 
     insertFtsBatch(
       rows: Array<{
-        chunkId: string;
+        chunkId: number;
         path: string;
         heading: string;
         language: string;
@@ -185,7 +229,8 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
       for (let i = 0; i < rows.length; i += BATCH) {
         const batch = rows.slice(i, i + BATCH);
         const placeholders = batch.map(() => "(?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
+        // SAFETY: params are concrete column values matching the placeholder order.
+        const params: DatabaseValue[] = [];
         for (const r of batch) {
           params.push(
             r.chunkId,
@@ -201,23 +246,6 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
           )
           .run(...params);
       }
-    },
-
-    streamFtsRow(input: {
-      chunkId: string;
-      path: string;
-      heading: string;
-      language: string;
-      content: string;
-      metadata: string;
-    }): void {
-      stmts.insertFtsRow.run(
-        input.chunkId,
-        input.path,
-        input.heading,
-        input.language,
-        composeFtsSearchText(input.content, input.metadata),
-      );
     },
 
     ensureFtsReady(): void {
@@ -278,6 +306,12 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
     // ── Reset ──
 
     resetIndexArtifacts(): void {
+      // Drop FTS triggers + table first so DELETE FROM chunks gets SQLite's
+      // truncate optimization instead of row-by-row trigger firing.
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
+      native.exec("DROP TABLE IF EXISTS chunks_fts");
       native.exec("DELETE FROM graph_edges");
       native.exec("DELETE FROM graph_nodes");
       native.exec("DELETE FROM chunks");
@@ -305,6 +339,14 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
       );
       // A full rebuild starts a new graph fencing sequence and restores BLOB search.
       native.exec("DELETE FROM index_meta WHERE key IN ('embedding_format', 'graph_build_epoch')");
+      // Recreate the empty FTS table + triggers so the FTS subsystem is valid
+      // even when bulkInsertFtsFromChunks() is skipped (e.g. zero matching files).
+      // Without this, ensureFtsReady() returns early from stale fts_schema_version
+      // meta and later FTS queries hit a missing table.
+      native.exec(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61')",
+      );
+      restoreFtsTriggerDefinitions(native);
     },
   };
 }
@@ -321,8 +363,8 @@ export function restoreFtsTriggerDefinitions(
     native.exec(`
       CREATE TRIGGER chunks_fts_insert AFTER INSERT ON chunks
       BEGIN
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-        SELECT new.id, documents.path, coalesce(new.heading, ''),
+        INSERT INTO chunks_fts (rowid, chunk_id, path, heading, language, search_text)
+        SELECT new.id, new.id, documents.path, coalesce(new.heading, ''),
           coalesce(documents.language, ''),
           ${composeFtsSearchTextSql("new.metadata", "new.content")}
         FROM documents WHERE documents.id = new.document_id;
@@ -331,15 +373,15 @@ export function restoreFtsTriggerDefinitions(
     native.exec(`
       CREATE TRIGGER chunks_fts_delete AFTER DELETE ON chunks
       BEGIN
-        DELETE FROM chunks_fts WHERE chunk_id = old.id;
+        DELETE FROM chunks_fts WHERE rowid = old.id;
       END;
     `);
     native.exec(`
       CREATE TRIGGER chunks_fts_update AFTER UPDATE ON chunks
       BEGIN
-        DELETE FROM chunks_fts WHERE chunk_id = old.id;
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-        SELECT new.id, documents.path, coalesce(new.heading, ''),
+        DELETE FROM chunks_fts WHERE rowid = old.id;
+        INSERT INTO chunks_fts (rowid, chunk_id, path, heading, language, search_text)
+        SELECT new.id, new.id, documents.path, coalesce(new.heading, ''),
           coalesce(documents.language, ''),
           ${composeFtsSearchTextSql("new.metadata", "new.content")}
         FROM documents WHERE documents.id = new.document_id;

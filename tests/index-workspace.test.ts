@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import fsPromises from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -307,7 +306,7 @@ describe("indexWorkspace", () => {
     const touchedAt = new Date(Date.now() + 5_000);
     fs.utimesSync(sourcePath, touchedAt, touchedAt);
 
-    const readSpy = spyOn(fsPromises, "readFile");
+    const readSpy = spyOn(Bun, "file");
     const sourceWasRead = () =>
       readSpy.mock.calls.some(
         ([filePath]) => fs.realpathSync(String(filePath)) === fs.realpathSync(sourcePath),
@@ -530,7 +529,8 @@ describe("indexWorkspace", () => {
       `SELECT label, count(*) AS c FROM graph_nodes WHERE type = 'symbol' GROUP BY label`,
     );
     for (const sym of symbolNodes) {
-      expect(Number((sym as any).c)).toBe(1);
+      // SAFETY: queryRaw returns rows with a numeric c column from count(*).
+      expect(Number((sym as { c: number }).c)).toBe(1);
     }
 
     // Every edge references existing nodes

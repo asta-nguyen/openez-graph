@@ -2,7 +2,6 @@ import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 import { createGraphEdgeOps } from "./graph-edge-ops";
 import { createGraphNodeOps } from "./graph-node-ops";
 import { createGraphTraversalOps } from "./graph-traversal-ops";
-import type { GraphStmts } from "./graph-ops-shared";
 
 export type { GraphStmts } from "./graph-ops-shared";
 export { createGraphEdgeOps } from "./graph-edge-ops";
@@ -23,13 +22,9 @@ export { createGraphTraversalOps } from "./graph-traversal-ops";
  * visible to the graph/edge stream methods in the sub-modules.
  *
  */
-export function createGraphOps(
-  native: NativeDatabase,
-  stmts: GraphStmts,
-  streamNow: StreamTimestampHolder,
-) {
-  const nodeOps = createGraphNodeOps(native, stmts, streamNow);
-  const edgeOps = createGraphEdgeOps(native, stmts, streamNow);
-  const traversalOps = createGraphTraversalOps(native, stmts);
+export function createGraphOps(native: NativeDatabase, streamNow: StreamTimestampHolder) {
+  const nodeOps = createGraphNodeOps(native, streamNow);
+  const edgeOps = createGraphEdgeOps(native, streamNow);
+  const traversalOps = createGraphTraversalOps(native);
   return { ...nodeOps, ...edgeOps, ...traversalOps };
 }

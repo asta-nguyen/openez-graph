@@ -5,7 +5,7 @@ export async function memoryWrite(input: {
   title: string;
   content: string;
   tags?: string[];
-  supersedesId?: string;
+  supersedesId?: number;
   source?: "user" | "agent" | "system";
 }) {
   const registry = createRegistryRepository();

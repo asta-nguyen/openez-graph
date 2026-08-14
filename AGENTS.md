@@ -195,3 +195,14 @@ git push
 - Always run `pnpm build:web` before `pnpm build:cli` — CLI bundles stale frontend otherwise.
 - Check `--version` output before publishing — npm rejects re-publishing the same version.
 - Always commit `package.json` and `CHANGELOG.md` together to avoid changelog drift.
+
+<!-- openez:start -->
+
+## OpenEZ workflow
+
+- Before code work in a new session, call `memory_recall` with 1–3 keywords from the current task.
+- Use `code_query` before filesystem search and `code_context` for symbol or file follow-up.
+- Use `graph_neighbors` for relationship lookups between symbols, files, and edges.
+- Call `memory_write` after an architectural decision or non-obvious constraint is confirmed.
+- Use explicit workspace scope for cross-workspace work.
+<!-- openez:end -->

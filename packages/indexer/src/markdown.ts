@@ -2,7 +2,6 @@ import GithubSlugger from "github-slugger";
 
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
-import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
 
 interface HeadingState {
@@ -53,12 +52,17 @@ function splitLargeChunk(
   return chunks.filter(Boolean);
 }
 
+interface IndexMarkdownResult {
+  chunks: IndexedChunk[];
+  wikilinks: string[];
+}
+
 export function indexMarkdown(input: {
   content: string;
   targetTokens: number;
   overlapTokens: number;
   counter?: TokenCounter;
-}): { chunks: IndexedChunk[]; wikilinks: string[] } {
+}): IndexMarkdownResult {
   const counter = input.counter ?? exactTokenCounter;
   const lines = input.content.split("\n");
   const headingState: HeadingState = { path: [], depth: 0 };
@@ -126,7 +130,7 @@ export function indexMarkdown(input: {
         heading: section.heading,
         content,
         tokenCount: counter.count(content),
-        contentHash: hashContent(content),
+        contentHash: Bun.hash(content).toString(16),
         metadata: {
           kind: "markdown",
           headingPath: section.headingPath,

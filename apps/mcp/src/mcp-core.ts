@@ -26,6 +26,7 @@ import {
   findLocalWorkspaceConfig,
   removeWorkspace,
 } from "@openez-graph/db";
+import type { JsonValue } from "@openez-graph/db";
 import { ensureGraphReady, indexWorkspace, waitForFts } from "@openez-graph/indexer";
 
 const MIN_RESPONSE_TOKENS = 32;
@@ -238,7 +239,22 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
 
 type McpServerOptions = { defaultPath?: string; version?: string; build?: string };
 
-function jsonResponse(result: unknown, maxTokens?: number) {
+type JsonObject = { [key: string]: JsonValue };
+
+interface DeliveredPayload {
+  sources?: Array<{ workspaceId?: string }>;
+  metrics?: { truncated?: boolean };
+}
+
+function isString(value: JsonValue): value is string {
+  return Object.prototype.toString.call(value) === "[object String]";
+}
+
+function isNumber(value: JsonValue): value is number {
+  return Object.prototype.toString.call(value) === "[object Number]";
+}
+
+function jsonResponse<T>(result: T, maxTokens?: number) {
   const value = maxTokens ? fitToTokenBudget(result, maxTokens) : result;
   return {
     content: [
@@ -250,12 +266,12 @@ function jsonResponse(result: unknown, maxTokens?: number) {
   };
 }
 
-function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
-  const value = structuredClone(result) as Record<string, unknown>;
-  const metrics =
-    typeof value.metrics === "object" && value.metrics !== null
-      ? (value.metrics as Record<string, unknown>)
-      : {};
+function fitToTokenBudget<T>(result: T, maxTokens: number): T {
+  // SAFETY: result is a JSON object produced by MCP tool handlers; structuredClone preserves the object shape for property access below.
+  const value = structuredClone(result) as JsonObject;
+  // SAFETY: value.metrics was confirmed non-null and to be an Object instance via instanceof before this assertion.
+  const metrics: JsonObject =
+    value.metrics != null && value.metrics instanceof Object ? (value.metrics as JsonObject) : {};
   value.metrics = metrics;
   metrics.tokenBudget = maxTokens;
   metrics.truncated = false;
@@ -263,24 +279,26 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
   const serializedTokens = () => countTokens(JSON.stringify(value));
   const updateMetrics = () => {
     metrics.responseTokens = serializedTokens();
-    if (typeof metrics.selectedFullFileTokens === "number") {
+    const selectedFullFileTokens = metrics.selectedFullFileTokens;
+    if (isNumber(selectedFullFileTokens)) {
       metrics.estimatedTokensSaved = metrics.truncated
         ? 0
-        : Math.max(0, metrics.selectedFullFileTokens - Number(metrics.responseTokens));
+        : Math.max(0, selectedFullFileTokens - Number(metrics.responseTokens));
       metrics.method = "selected-full-files-minus-serialized-response";
     }
   };
   updateMetrics();
   if (serializedTokens() <= maxTokens) {
     updateMetrics();
-    return value;
+    // SAFETY: value is a structurally trimmed clone of the original result; the shape is compatible with T.
+    return value as T;
   }
 
   metrics.truncated = true;
   for (let attempts = 0; attempts < 10_000 && serializedTokens() > maxTokens; attempts += 1) {
-    const arrays: Array<{ items: unknown[]; minimum: number }> = [];
-    const strings: Array<{ owner: Record<string, unknown>; key: string; value: string }> = [];
-    const visit = (current: unknown, parentKey?: string) => {
+    const arrays: Array<{ items: JsonValue[]; minimum: number }> = [];
+    const strings: Array<{ owner: JsonObject; key: string; value: string }> = [];
+    const visit = (current: JsonValue, parentKey?: string) => {
       if (Array.isArray(current)) {
         // results and nodes can be trimmed to 1 entry but not emptied.
         // Source arrays (callers, callees, relatedChunks, sources, files)
@@ -301,10 +319,12 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
         current.forEach((item) => visit(item));
         return;
       }
-      if (!current || typeof current !== "object") return;
-      for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
-        if (typeof child === "string" && key !== "method")
-          strings.push({ owner: current as Record<string, unknown>, key, value: child });
+      if (!current || !(current instanceof Object)) return;
+      // SAFETY: current was confirmed to be an Object instance via instanceof above.
+      const currentObj = current as JsonObject;
+      for (const [key, child] of Object.entries(currentObj)) {
+        if (isString(child) && key !== "method")
+          strings.push({ owner: currentObj, key, value: child });
         else visit(child, key);
       }
     };
@@ -331,15 +351,16 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
   }
 
   updateMetrics();
-  while (serializedTokens() > maxTokens && typeof metrics.method === "string")
-    delete metrics.method;
+  while (serializedTokens() > maxTokens && isString(metrics.method)) delete metrics.method;
   updateMetrics();
   if (serializedTokens() > maxTokens) {
     const minimal = { metrics: { responseTokens: 0, tokenBudget: maxTokens, truncated: true } };
     minimal.metrics.responseTokens = countTokens(JSON.stringify(minimal));
-    return minimal;
+    // SAFETY: minimal is a last-resort trimmed response object compatible with T.
+    return minimal as T;
   }
-  return value;
+  // SAFETY: value is a structurally trimmed clone of the original result; the shape is compatible with T.
+  return value as T;
 }
 
 async function catchUpWorkspaceIndex(workspaceId: string): Promise<void> {
@@ -645,10 +666,8 @@ export function createMcpServer(options?: McpServerOptions) {
           responseBudget,
         );
         const responseTokens = countTokens(response.content[0].text);
-        const delivered = JSON.parse(response.content[0].text) as {
-          sources?: Array<{ workspaceId?: string }>;
-          metrics?: { truncated?: boolean };
-        };
+        // SAFETY: response.content[0].text is the JSON.stringify output of the tool result above; the asserted shape matches DeliveredPayload for the fields read below.
+        const delivered = JSON.parse(response.content[0].text) as DeliveredPayload;
         const totalRetrievalTokens = Math.max(
           1,
           results.reduce((sum, entry) => sum + entry.result.metrics.retrievalTokens, 0),

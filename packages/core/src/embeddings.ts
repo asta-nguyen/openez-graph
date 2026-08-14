@@ -21,12 +21,7 @@ const RETRYABLE_PATTERNS = [
   "capacity",
 ];
 
-function isRetryableError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const status =
-    typeof error === "object" && error !== null && "status" in error
-      ? Number((error as { status?: unknown }).status)
-      : Number.NaN;
+function isRetryableError(message: string, status: number): boolean {
   return (
     RETRYABLE_PATTERNS.some((pattern) => message.toLowerCase().includes(pattern.toLowerCase())) ||
     status === 429 ||
@@ -39,21 +34,23 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3, baseDelayMs =
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
-    } catch (error) {
-      if (attempt === maxAttempts || !isRetryableError(error)) {
-        throw error;
+    } catch (rawError) {
+      // SAFETY: thrown values from embedding providers are Error instances (optionally carrying a numeric `.status`); non-Error throws fall through to String() below.
+      const error = rawError as Error & { status?: unknown };
+      const message = error instanceof Error ? error.message : String(rawError ?? "");
+      const status = Number(error.status);
+      if (attempt === maxAttempts || !isRetryableError(message, status)) {
+        throw rawError;
       }
       const delay = baseDelayMs * Math.pow(2, attempt - 1);
       console.warn(
-        `Embedding attempt ${attempt}/${maxAttempts} failed, retrying in ${delay}ms: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Embedding attempt ${attempt}/${maxAttempts} failed, retrying in ${delay}ms: ${message}`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-  // Unreachable: the loop always returns or throws.
-  return undefined as unknown as T;
+  // Unreachable: the loop always returns or throws on every attempt.
+  throw new Error("withRetry: exhausted retries (unreachable)");
 }
 
 export interface EmbeddingProvider {

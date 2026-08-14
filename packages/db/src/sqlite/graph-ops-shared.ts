@@ -20,17 +20,31 @@ export interface GraphStmts {
 }
 
 /**
- * Maps a raw graph node row into the normalized shape returned by the
+ * Shape of a graph node row as returned by Drizzle's query builder
+ * (camelCase column keys, matching `schema.graphNodes.$inferSelect`).
+ */
+export interface GraphNodeRow {
+  id: number;
+  type: string;
+  label: string;
+  refId: string | null;
+  metadata: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Maps a Drizzle graph node row into the normalized shape returned by the
  * repository. Shared by node and traversal operations.
  */
-export function mapNodeRow(row: Record<string, unknown>) {
+export function mapNodeRow(row: GraphNodeRow) {
   return {
-    id: String(row.id),
+    id: Number(row.id),
     type: String(row.type),
     label: String(row.label),
-    refId: row.ref_id ? String(row.ref_id) : null,
+    refId: row.refId ? String(row.refId) : null,
     metadata: String(row.metadata ?? "{}"),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    createdAt: String(row.createdAt),
+    updatedAt: String(row.updatedAt),
   };
 }

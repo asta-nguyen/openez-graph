@@ -24,7 +24,7 @@ export function GitHubStars({ repo, initialCount = null }: GitHubStarsProps) {
         return res.json();
       })
       .then((data) => {
-        if (!cancelled && typeof data.stargazers_count === "number") {
+        if (!cancelled && Number.isFinite(data.stargazers_count)) {
           setStars(data.stargazers_count);
         }
       })

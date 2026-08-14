@@ -8,7 +8,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "dotenv": "^16.5.0",
     "zod": "^3.24.0"
   }
 }

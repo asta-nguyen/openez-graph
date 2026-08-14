@@ -7,11 +7,23 @@
  * needs.
  */
 
+import type { JsonValue } from "./shared-types";
+
+/** Type guard: true when `v` is a string primitive (not a String wrapper). */
+export function isString(v: JsonValue): v is string {
+  return Object.prototype.toString.call(v) === "[object String]";
+}
+
 export function safeParseJson<T>(value: string | undefined, fallback: T): T {
   if (!value) return fallback;
   try {
     const parsed = JSON.parse(value);
-    return (typeof parsed === "object" && parsed !== null ? parsed : fallback) as T;
+    // SAFETY: JSON.parse returns any; Object(v) === v is true only for
+    // non-primitive values (objects/arrays), matching the original
+    // typeof === "object" && !== null guard. Non-object results fall back
+    // to the caller's default, so the cast to T is justified by the
+    // runtime shape check above.
+    return (Object(parsed) === parsed ? parsed : fallback) as T;
   } catch {
     return fallback;
   }
@@ -43,14 +55,14 @@ export function sanitizeFtsQuery(query: string): string {
     "where",
     "work",
   ]);
-  const codeVerbs: Record<string, string> = {
+  const codeVerbs = {
     created: "create",
     generated: "generate",
     indexing: "index",
     selected: "select",
     stored: "store",
     written: "write",
-  };
+  } satisfies Record<string, string>;
   const terms = (query.match(/[\p{L}\p{N}$]+/gu) ?? []).filter(
     (t) => t.length > 1 && !stopwords.has(t.toLowerCase()),
   );
@@ -58,7 +70,8 @@ export function sanitizeFtsQuery(query: string): string {
   if (terms.length === 0) return "";
 
   // Use prefix matching (*) for each term, joined with OR
-  return [...new Set(terms.map((term) => codeVerbs[term.toLowerCase()] ?? term))]
+  const entry = (term: string) => Object.entries(codeVerbs).find(([k]) => k === term)?.[1];
+  return [...new Set(terms.map((term) => entry(term.toLowerCase()) ?? term))]
     .map((term) => `"${term}"*`)
     .join(" OR ");
 }

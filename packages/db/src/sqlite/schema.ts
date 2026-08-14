@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { blob, integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
-// ── Global Registry DB Schema ──
+// ── Global Registry DB ──────────────────────────────────────────────
 
 export const workspaces = sqliteTable(
   "workspaces",
@@ -51,34 +51,33 @@ export const settings = sqliteTable("settings", {
     .default(sql`(datetime('now'))`),
 });
 
-// ── Per-Workspace DB Schema ──
+export const registryMeta = sqliteTable("registry_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
 
-export const documents = sqliteTable(
-  "documents",
-  {
-    id: text("id").primaryKey(),
-    path: text("path").notNull(),
-    absolutePath: text("absolute_path").notNull(),
-    kind: text("kind").notNull(),
-    language: text("language"),
-    contentHash: text("content_hash").notNull(),
-    sizeBytes: integer("size_bytes").notNull(),
-    mtimeMs: integer("mtime_ms").notNull(),
-    createdAt: text("created_at")
-      .notNull()
-      .default(sql`(datetime('now'))`),
-    updatedAt: text("updated_at")
-      .notNull()
-      .default(sql`(datetime('now'))`),
-  },
-  (table) => ({
-    pathUnique: unique().on(table.path),
-  }),
-);
+// ── Per-Workspace DB ────────────────────────────────────────────────
+
+export const documents = sqliteTable("documents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  path: text("path").notNull().unique(),
+  absolutePath: text("absolute_path").notNull(),
+  kind: text("kind").notNull(),
+  language: text("language"),
+  contentHash: text("content_hash").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  mtimeMs: integer("mtime_ms").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
 
 export const chunks = sqliteTable("chunks", {
-  id: text("id").primaryKey(),
-  documentId: text("document_id")
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  documentId: integer("document_id")
     .notNull()
     .references(() => documents.id, { onDelete: "cascade" }),
   chunkIndex: integer("chunk_index").notNull(),
@@ -96,14 +95,14 @@ export const chunks = sqliteTable("chunks", {
 });
 
 export const embeddings = sqliteTable("embeddings", {
-  id: text("id").primaryKey(),
-  chunkId: text("chunk_id")
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  chunkId: integer("chunk_id")
     .notNull()
     .references(() => chunks.id, { onDelete: "cascade" }),
   provider: text("provider").notNull(),
   model: text("model").notNull(),
   dimensions: integer("dimensions").notNull(),
-  embedding: blob("embedding", { mode: "buffer" }).notNull(),
+  embedding: blob("embedding").notNull(),
   inputHash: text("input_hash"),
   createdAt: text("created_at")
     .notNull()
@@ -111,7 +110,7 @@ export const embeddings = sqliteTable("embeddings", {
 });
 
 export const graphNodes = sqliteTable("graph_nodes", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   type: text("type").notNull(),
   label: text("label").notNull(),
   refId: text("ref_id"),
@@ -125,11 +124,11 @@ export const graphNodes = sqliteTable("graph_nodes", {
 });
 
 export const graphEdges = sqliteTable("graph_edges", {
-  id: text("id").primaryKey(),
-  fromNodeId: text("from_node_id")
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  fromNodeId: integer("from_node_id")
     .notNull()
     .references(() => graphNodes.id, { onDelete: "cascade" }),
-  toNodeId: text("to_node_id")
+  toNodeId: integer("to_node_id")
     .notNull()
     .references(() => graphNodes.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
@@ -141,7 +140,7 @@ export const graphEdges = sqliteTable("graph_edges", {
 });
 
 export const indexRuns = sqliteTable("index_runs", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   mode: text("mode").notNull(),
   status: text("status").notNull().default("pending"),
   filesScanned: integer("files_scanned").notNull().default(0),
@@ -157,7 +156,7 @@ export const indexRuns = sqliteTable("index_runs", {
 });
 
 export const graphRuns = sqliteTable("graph_runs", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   mode: text("mode").notNull().default("incremental"),
   status: text("status").notNull().default("pending"),
   nodesCreated: integer("nodes_created").notNull().default(0),
@@ -171,7 +170,7 @@ export const graphRuns = sqliteTable("graph_runs", {
 });
 
 export const queryLogs = sqliteTable("query_logs", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   query: text("query").notNull(),
   mode: text("mode").notNull(),
   resultCount: integer("result_count").notNull().default(0),
@@ -184,12 +183,12 @@ export const queryLogs = sqliteTable("query_logs", {
 });
 
 export const memories = sqliteTable("memories", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
   content: text("content").notNull(),
   tags: text("tags").notNull().default(""),
   source: text("source").notNull(),
-  supersedesId: text("supersedes_id"),
+  supersedesId: integer("supersedes_id"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -197,3 +196,27 @@ export const memories = sqliteTable("memories", {
     .notNull()
     .default(sql`(datetime('now'))`),
 });
+
+export const indexMeta = sqliteTable("index_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
+export const parsedDocuments = sqliteTable("parsed_documents", {
+  documentId: integer("document_id")
+    .primaryKey()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  contentHash: text("content_hash").notNull(),
+  symbols: text("symbols"),
+  imports: text("imports"),
+  calls: text("calls"),
+  calledIdentifiers: text("called_identifiers"),
+  parserVersion: text("parser_version"),
+  parsedAt: integer("parsed_at").notNull(),
+});
+
+// FTS5 virtual table — declared as a Drizzle view-like table for query typing.
+// The actual table is created via raw `CREATE VIRTUAL TABLE` because Drizzle
+// does not support FTS5 virtual table definitions. Queries against chunks_fts
+// use the raw SQL API (prepare/run/all) since Drizzle's query builder does not
+// support FTS5 MATCH syntax.

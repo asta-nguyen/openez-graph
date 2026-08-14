@@ -1,10 +1,12 @@
 import module from "node:module";
 
+import type { DatabaseRow, DatabaseValue, RunResult } from "./shared-types";
+
 declare const __non_webpack_require__: typeof require | undefined;
 
 function getRequireUrl(): string {
   try {
-    if (typeof import.meta !== "undefined" && import.meta.url) {
+    if (import.meta.url) {
       return import.meta.url;
     }
   } catch {
@@ -13,22 +15,25 @@ function getRequireUrl(): string {
   return `file://${__filename}`;
 }
 
-const _require: typeof require =
-  typeof __non_webpack_require__ === "function"
-    ? __non_webpack_require__
-    : module.createRequire(getRequireUrl());
+let _require: typeof require;
+try {
+  const r = __non_webpack_require__;
+  _require = r !== undefined ? r : module.createRequire(getRequireUrl());
+} catch {
+  _require = module.createRequire(getRequireUrl());
+}
 
 interface NativeStatement {
-  all(...params: unknown[]): unknown[];
-  get(...params: unknown[]): unknown;
-  run(...params: unknown[]): unknown;
-  values(...params: unknown[]): unknown[];
-  bind(...params: unknown[]): NativeStatement;
+  all(...params: DatabaseValue[]): DatabaseRow[];
+  get(...params: DatabaseValue[]): DatabaseRow | undefined;
+  run(...params: DatabaseValue[]): RunResult;
+  values(...params: DatabaseValue[]): DatabaseValue[];
+  bind(...params: DatabaseValue[]): NativeStatement;
 }
 
 interface NativeDatabase {
-  pragma(command: string): unknown;
-  exec(sql: string): unknown;
+  pragma(command: string): void;
+  exec(sql: string): void;
   prepare(sql: string): NativeStatement;
   transaction<T>(fn: () => T): () => T;
   close(): void;
@@ -36,14 +41,17 @@ interface NativeDatabase {
 
 type NativeDatabaseConstructor = new (
   filename: string,
-  options?: { nativeBinding?: string },
+  options?: { create?: boolean; nativeBinding?: string },
 ) => NativeDatabase;
 
 export function createNativeDatabase(dbPath: string): NativeDatabase {
+  // SAFETY: _require("bun:sqlite").Database is the bun:sqlite Database
+  // constructor; the cast aligns its dynamic import with the
+  // NativeDatabaseConstructor structural interface used by the repository layer.
   const Database = _require("bun:sqlite").Database as NativeDatabaseConstructor;
-  const db = new Database(dbPath, { create: true } as { nativeBinding?: string });
+  const db = new Database(dbPath, { create: true });
   // Add .pragma() shim — bun:sqlite doesn't have it natively
-  (db as any).pragma = (cmd: string) => db.exec(`PRAGMA ${cmd}`);
+  db.pragma = (cmd: string) => db.exec(`PRAGMA ${cmd}`);
 
-  return db as unknown as NativeDatabase;
+  return db;
 }

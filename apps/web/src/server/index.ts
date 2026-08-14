@@ -6,15 +6,17 @@ import path from "node:path";
 
 function getDirname(): string {
   try {
-    if (typeof import.meta !== "undefined" && import.meta.url) {
+    if (import.meta.url) {
       return path.dirname(new URL(import.meta.url).pathname);
     }
   } catch {
     // import.meta not available (CJS)
   }
   // CJS: __dirname is a global, use it directly
-  if (typeof __dirname !== "undefined") {
+  try {
     return __dirname;
+  } catch {
+    // __dirname not available (ESM)
   }
   return process.cwd();
 }
@@ -52,6 +54,7 @@ import {
   removeWorkspace,
 } from "@openez-graph/db";
 import { ensureGraphReady, indexWorkspace } from "@openez-graph/indexer";
+import type { GraphNodeMetadata } from "../lib/api";
 
 const app = new Hono();
 app.use(
@@ -140,6 +143,7 @@ app.get("/api/dashboard", (c) => {
         try {
           return ws.rootPath && ws.rootPath !== "/" && existsSync(ws.rootPath);
         } catch {
+          /* path inaccessible — skip this workspace */
           return false;
         }
       }) ?? all[0];
@@ -210,6 +214,7 @@ app.get("/api/documents", (c) => {
     const totalCount = countWorkspaceDocuments(ws.rootPath);
     return c.json({ items, totalCount });
   } catch {
+    /* query failed — return empty results */
     return c.json({ items: [], totalCount: 0 });
   }
 });
@@ -224,6 +229,7 @@ app.post("/api/validate-path", async (c) => {
     if (!stats.isDirectory()) return c.json({ valid: false, error: "Path is not a directory" });
     return c.json({ valid: true });
   } catch {
+    /* path does not exist or is inaccessible */
     return c.json({
       valid: false,
       error: "Directory does not exist or is not accessible",
@@ -234,7 +240,6 @@ app.post("/api/validate-path", async (c) => {
 // Workspaces
 app.get("/api/workspaces", (c) => {
   try {
-    const dbPath = resolveRegistryDbPath();
     const all = listRegistryWorkspaces();
     const data = all.map((ws) => {
       let latestIndexRun = null;
@@ -299,6 +304,7 @@ app.post("/api/workspaces", async (c) => {
       const stats = await fs.stat(rootPath);
       if (!stats.isDirectory()) return c.json({ success: false, error: "Path is not a directory" });
     } catch {
+      /* path does not exist or is inaccessible */
       return c.json({
         success: false,
         error: "Directory does not exist or is not accessible",
@@ -344,7 +350,7 @@ app.patch("/api/workspaces/:id/pin", async (c) => {
   try {
     const id = c.req.param("id");
     const body = await c.req.json<{ pinned?: boolean }>().catch(() => null);
-    if (typeof body?.pinned !== "boolean") {
+    if (body?.pinned !== true && body?.pinned !== false) {
       return c.json({ success: false, error: "pinned (boolean) is required" }, 400);
     }
     if (!getRegistryWorkspace(id)) {
@@ -420,7 +426,7 @@ app.get("/api/workspaces/:id/graph", async (c) => {
       totalEdgeCount,
     } = getWorkspaceGraphOptimized(workspace.rootPath, maxNodes, maxEdges);
 
-    const degreeMap = new Map<string, number>();
+    const degreeMap = new Map<number, number>();
     for (const edge of edgeRows) {
       degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
       degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
@@ -434,9 +440,9 @@ app.get("/api/workspaces/:id/graph", async (c) => {
       type: node.type,
       degree: degreeMap.get(node.id) ?? 0,
       metadata: node.metadata,
-      path: typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
-      startLine: typeof node.metadata?.startLine === "number" ? node.metadata.startLine : undefined,
-      endLine: typeof node.metadata?.endLine === "number" ? node.metadata.endLine : undefined,
+      path: node.metadata?.path,
+      startLine: node.metadata?.startLine,
+      endLine: node.metadata?.endLine,
       refId: node.refId,
     }));
 
@@ -521,7 +527,7 @@ app.post("/api/query", async (c) => {
       id: string;
       type: string;
       label: string;
-      metadata: Record<string, unknown>;
+      metadata: GraphNodeMetadata;
     }> = [];
     const allGraphEdges: Array<{
       from_node_id: string;
@@ -540,9 +546,10 @@ app.post("/api/query", async (c) => {
             id: nodeId,
             type: String(node.type),
             label: String(node.label),
+            // SAFETY: node.metadata from graphNeighbors is either a DatabaseValue primitive or a parsed JSON object; instanceof Object distinguishes objects from primitives
             metadata:
-              typeof node.metadata === "object" && node.metadata !== null
-                ? (node.metadata as Record<string, unknown>)
+              node.metadata != null && node.metadata instanceof Object
+                ? (node.metadata as GraphNodeMetadata)
                 : {},
           });
         }
@@ -602,7 +609,7 @@ app.get("/api/settings/embedding", async (c) => {
 app.put("/api/settings/embedding", async (c) => {
   try {
     const body = await c.req.json();
-    const VALID_KEYS: Record<string, boolean> = {
+    const VALID_KEYS = {
       "embedding.provider": true,
       "embedding.openai_api_key": true,
       "embedding.openai_base_url": true,
@@ -610,38 +617,40 @@ app.put("/api/settings/embedding", async (c) => {
       "embedding.ollama_base_url": true,
       "embedding.ollama_model": true,
       "embedding.local_model": true,
-    };
+    } satisfies Record<string, boolean>;
     const VALID_PROVIDERS = new Set(["none", "openai", "ollama", "local"]);
     const registry = createRegistryRepository();
     const updated: string[] = [];
     for (const [key, value] of Object.entries(body)) {
-      if (!VALID_KEYS[key]) continue;
-      if (typeof value !== "string") continue;
-      if (value.trim() === "") {
+      if (!Object.prototype.hasOwnProperty.call(VALID_KEYS, key)) continue;
+      if (value?.constructor !== String) continue;
+      // SAFETY: constructor check above guarantees value is a string.
+      const strValue = value as string;
+      if (strValue.trim() === "") {
         await registry.deleteSetting(key);
         updated.push(key);
         continue;
       }
-      if (key === "embedding.provider" && !VALID_PROVIDERS.has(value.trim())) {
+      if (key === "embedding.provider" && !VALID_PROVIDERS.has(strValue.trim())) {
         return c.json(
           {
-            error: `Invalid embedding provider '${value}'. Must be one of: none, openai, ollama, local.`,
+            error: `Invalid embedding provider '${strValue}'. Must be one of: none, openai, ollama, local.`,
           },
           400,
         );
       }
       if (
         key === "embedding.local_model" &&
-        !Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, value.trim())
+        !Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, strValue.trim())
       ) {
         return c.json(
           {
-            error: `Unsupported local embedding model '${value}'. Must be one of: ${Object.keys(LOCAL_EMBEDDING_MODELS).join(", ")}.`,
+            error: `Unsupported local embedding model '${strValue}'. Must be one of: ${Object.keys(LOCAL_EMBEDDING_MODELS).join(", ")}.`,
           },
           400,
         );
       }
-      await registry.setSetting(key, key === "embedding.local_model" ? value.trim() : value);
+      await registry.setSetting(key, key === "embedding.local_model" ? strValue.trim() : strValue);
       updated.push(key);
     }
     return c.json({ ok: true, updated });
@@ -691,7 +700,7 @@ app.get("/api/memories", (c) => {
 
 app.get("/api/memories/:id", (c) => {
   try {
-    const id = c.req.param("id");
+    const id = Number(c.req.param("id"));
     const ws = resolveActiveWorkspace();
     if (!ws) return c.json({ ok: false, error: "No workspace" }, 404);
     const memory = getWorkspaceMemory(ws.rootPath, id);
@@ -709,7 +718,7 @@ app.post("/api/memories", async (c) => {
       content?: string;
       tags?: string[];
       source?: string;
-      supersedesId?: string;
+      supersedesId?: number;
     }>();
     if (!body.title?.trim()) return c.json({ ok: false, error: "title is required" }, 400);
     if (!body.content?.trim()) return c.json({ ok: false, error: "content is required" }, 400);
@@ -732,7 +741,7 @@ app.post("/api/memories", async (c) => {
 
 app.delete("/api/memories/:id", (c) => {
   try {
-    const id = c.req.param("id");
+    const id = Number(c.req.param("id"));
     const ws = resolveActiveWorkspace();
     if (!ws) return c.json({ ok: false, error: "No workspace" }, 404);
     const deleted = deleteWorkspaceMemory(ws.rootPath, id);
@@ -757,6 +766,7 @@ function resolveMetricsWorkspace(c: Context) {
       try {
         return w.rootPath && w.rootPath !== "/" && existsSync(w.rootPath);
       } catch {
+        /* path inaccessible — skip this workspace */
         return false;
       }
     }) ?? all[0]
@@ -772,6 +782,7 @@ app.get("/api/metrics", (c) => {
     const metrics = getWorkspaceQueryMetrics(ws.rootPath, 10);
     return c.json({ ...metrics, workspaceId: ws.id });
   } catch {
+    /* metrics unavailable — return empty */
     return c.json({
       metricMethod: "selected-full-files-minus-serialized-response",
       totalQueries: 0,
@@ -816,6 +827,7 @@ app.get("/api/changelog", (c) => {
     const content = readFileSync(filePath, "utf-8");
     return c.json({ content });
   } catch {
+    /* changelog unreadable — return empty */
     return c.json({ content: "" }, 500);
   }
 });

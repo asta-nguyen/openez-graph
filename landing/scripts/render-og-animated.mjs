@@ -206,7 +206,7 @@ async function main() {
     const res = await fetch('https://api.github.com/repos/asta-nguyen/openez-graph', { cache: 'force-cache', signal: AbortSignal.timeout(10000) });
     if (res.ok) {
       const data = await res.json();
-      if (typeof data.stargazers_count === 'number') starCount = data.stargazers_count;
+      if (Number.isFinite(data.stargazers_count)) starCount = data.stargazers_count;
     }
   } catch {}
 

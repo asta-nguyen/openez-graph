@@ -5,6 +5,8 @@ import readline from "node:readline";
 import chokidar from "chokidar";
 import { Command } from "commander";
 
+declare const __OPENEZ_BUILD_ID__: string;
+
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -24,7 +26,7 @@ try {
   // Compiled binary (bun build --compile) — process.argv[1] is virtual
   cliDir = process.cwd();
 }
-let pkg: { version: string };
+let pkg = { version: "" };
 try {
   pkg = JSON.parse(fs.readFileSync(path.resolve(cliDir, "../package.json"), "utf-8"));
 } catch {
@@ -178,6 +180,7 @@ program
     const summary = await indexWorkspace({
       workspaceId: workspace.id,
       mode: "full",
+      fullReindex: true,
       onProgress: (p) => console.log(`[${p.progress}%] ${p.message}`),
     });
     console.log(JSON.stringify(summary, null, 2));
@@ -277,13 +280,19 @@ program
   .option("--port <port>", "API server port (default: 11368)")
   .action(async (options) => {
     if (options.mcp) {
-      const { startMcpServer } = await import("./mcp-bridge");
-      await startMcpServer(options.path ? path.resolve(options.path) : undefined, pkg.version);
+      const { createAndStartMcpServer } = await import("@openez-graph/mcp");
+      await createAndStartMcpServer({
+        defaultPath: options.path ? path.resolve(options.path) : undefined,
+        version: pkg.version,
+        build: __OPENEZ_BUILD_ID__,
+      });
     } else if (options.web) {
       const port = options.port ? Number(options.port) : Number(process.env.API_PORT ?? 11368);
       process.env.API_PORT = String(port);
+      process.env.OPENEZ_WEB_AUTO_START = "false";
+      process.env.OPENEZ_CLI_BUNDLE = "true";
       const { serve } = await import("@hono/node-server");
-      const { createWebServer } = await import("./web-server");
+      const { createWebServer } = await import("@openez-graph/web");
       const app = createWebServer();
       serve({ fetch: app.fetch, hostname: "127.0.0.1", port }, (info) => {
         console.log(`OpenEZ Graph web dashboard:`);
@@ -460,7 +469,7 @@ configCmd
     if (key) {
       const { getEmbeddingConfig } = await import("@openez-graph/core");
       const config = await getEmbeddingConfig();
-      const configMap: Record<string, string | undefined> = {
+      const configMap = {
         "embedding.provider": config.provider,
         "embedding.openai_api_key": config.openaiApiKey || undefined,
         "embedding.openai_base_url": config.openaiBaseUrl,
@@ -468,7 +477,7 @@ configCmd
         "embedding.ollama_base_url": config.ollamaBaseUrl,
         "embedding.ollama_model": config.ollamaModel,
         "embedding.local_model": config.localModel,
-      };
+      } satisfies Record<string, string | undefined>;
       const value = configMap[key];
       if (value === undefined || value === "") {
         console.log("not set");
@@ -506,6 +515,7 @@ configCmd
   .command("set <key> <value>")
   .description("Set a config value. Keys: " + EMBEDDING_CONFIG_KEYS.join(", "))
   .action(async (key: string, value: string) => {
+    // SAFETY: key was validated against EMBEDDING_CONFIG_KEYS via .includes() below
     if (!EMBEDDING_CONFIG_KEYS.includes(key as (typeof EMBEDDING_CONFIG_KEYS)[number])) {
       console.error(`Error: unknown key '${key}'. Valid keys:`);
       for (const k of EMBEDDING_CONFIG_KEYS) {
@@ -547,15 +557,17 @@ configCmd
 
 const setup = program
   .command("setup")
-  .description("Configure editor/agent integrations (codex, claude, opencode, windsurf, devin)");
+  .description(
+    "Configure editor/agent integrations (codex, claude, opencode, windsurf, devin, zed)",
+  );
 
 setup
   .command("codex")
   .description("Add or update the shared OpenEZ MCP server entry in ~/.codex/config.toml")
   .argument("[path]", "path to the project directory", process.cwd())
   .action(async (targetPath) => {
-    const { setupCodex } = await import("./setup-codex");
-    await setupCodex(targetPath);
+    const { setupAgent } = await import("./setup-agent");
+    await setupAgent("codex", targetPath);
   });
 
 setup
@@ -563,8 +575,8 @@ setup
   .description("Add or update the shared OpenEZ MCP server entry in ~/.claude/settings.json")
   .argument("[path]", "path to the project directory", process.cwd())
   .action(async (targetPath) => {
-    const { setupClaude } = await import("./setup-claude");
-    await setupClaude(targetPath);
+    const { setupAgent } = await import("./setup-agent");
+    await setupAgent("claude", targetPath);
   });
 
 setup
@@ -574,8 +586,8 @@ setup
   )
   .argument("[path]", "path to the project directory", process.cwd())
   .action(async (targetPath) => {
-    const { setupOpenCode } = await import("./setup-opencode");
-    await setupOpenCode(targetPath);
+    const { setupAgent } = await import("./setup-agent");
+    await setupAgent("opencode", targetPath);
   });
 
 setup
@@ -585,8 +597,8 @@ setup
   )
   .argument("[path]", "path to the project directory", process.cwd())
   .action(async (targetPath) => {
-    const { setupWindsurf } = await import("./setup-windsurf");
-    await setupWindsurf(targetPath);
+    const { setupAgent } = await import("./setup-agent");
+    await setupAgent("windsurf", targetPath);
   });
 
 setup
@@ -594,8 +606,17 @@ setup
   .description("Add or update the shared OpenEZ MCP server entry in ~/.config/devin/config.json")
   .argument("[path]", "path to the project directory", process.cwd())
   .action(async (targetPath) => {
-    const { setupDevin } = await import("./setup-devin");
-    await setupDevin(targetPath);
+    const { setupAgent } = await import("./setup-agent");
+    await setupAgent("devin", targetPath);
+  });
+
+setup
+  .command("zed")
+  .description("Add or update the shared OpenEZ MCP server entry in ~/.config/zed/settings.json")
+  .argument("[path]", "path to the project directory", process.cwd())
+  .action(async (targetPath) => {
+    const { setupAgent } = await import("./setup-agent");
+    await setupAgent("zed", targetPath);
   });
 
 program.parseAsync(process.argv).catch((error) => {

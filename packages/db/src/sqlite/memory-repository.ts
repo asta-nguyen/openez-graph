@@ -1,34 +1,24 @@
-import crypto from "node:crypto";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/bun-sqlite";
 
+import * as schema from "./schema";
 import type { NativeDatabase } from "./shared-types";
 import type { StoredMemory } from "./types";
-
-/**
- * Prepared statements used by the memory operations.
- *
- * These are prepared once in `createWorkspaceRepository()` and reused across
- * calls. The memory module currently prepares its own statements inline (the
- * original implementation did the same), so this interface is intentionally
- * empty for now — it exists so the factory signature matches the other
- * extracted modules and later tasks can hoist statements here without changing
- * call sites.
- */
-export interface MemoryStmts {}
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
-function mapMemoryRow(row: Record<string, unknown>): StoredMemory {
+function mapMemoryRow(row: typeof schema.memories.$inferSelect): StoredMemory {
   return {
-    id: String(row.id),
-    title: String(row.title),
-    content: String(row.content),
-    tags: String(row.tags ?? ""),
-    source: String(row.source),
-    supersedesId: row.supersedes_id ? String(row.supersedes_id) : null,
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    tags: row.tags,
+    source: row.source,
+    supersedesId: row.supersedesId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -39,7 +29,12 @@ function mapMemoryRow(row: Record<string, unknown>): StoredMemory {
  * Behavior is identical to the original inline implementations — this is a
  * pure code-move.
  */
-export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
+export function createMemoryOps(native: NativeDatabase) {
+  // SAFETY: Drizzle's bun-sqlite adapter expects a `Database` instance from
+  // `bun:sqlite`; `NativeDatabase` is structurally compatible (exposes the
+  // same prepare/exec/pragma methods). The `as any` bridges the structural
+  // mismatch without affecting runtime behavior.
+  const db = drizzle(native as any, { schema });
   return {
     // ── Memory Operations ──
 
@@ -48,31 +43,29 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
       content: string;
       tags?: string;
       source: string;
-      supersedesId?: string;
+      supersedesId?: number;
     }) {
-      const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      native
-        .prepare(
-          "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          id,
-          input.title,
-          input.content,
-          input.tags ?? "",
-          input.source,
-          input.supersedesId ?? null,
-          now,
-          now,
-        );
-      return id;
+      // `RETURNING id` yields the autoincrement primary key, which equals the
+      // rowid that the original `lastInsertRowid` read exposed.
+      const inserted = db
+        .insert(schema.memories)
+        .values({
+          title: input.title,
+          content: input.content,
+          tags: input.tags ?? "",
+          source: input.source,
+          supersedesId: input.supersedesId ?? null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: schema.memories.id })
+        .get();
+      return inserted.id;
     },
 
-    async getMemory(id: string): Promise<StoredMemory | null> {
-      const row = native.prepare("SELECT * FROM memories WHERE id = ?").get(id) as
-        | Record<string, unknown>
-        | undefined;
+    async getMemory(id: number): Promise<StoredMemory | null> {
+      const row = db.select().from(schema.memories).where(eq(schema.memories.id, id)).get();
       return row ? mapMemoryRow(row) : null;
     },
 
@@ -81,29 +74,30 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
       const terms = [...new Set(normalized.split(/\s+/).filter(Boolean))].slice(0, 8);
       if (terms.length === 0) return [];
 
-      const clauses = terms.map(
-        () =>
-          "(lower(m.title) LIKE ? ESCAPE '\\' OR lower(m.content) LIKE ? ESCAPE '\\' OR lower(m.tags) LIKE ? ESCAPE '\\')",
-      );
-      const termParams = terms.flatMap((term) => {
+      // Exclude memories that have been superseded by a newer row. The outer
+      // table is referenced unqualified (Drizzle emits `FROM "memories"`) so
+      // the correlated subquery aliases a second reference as `newer`.
+      const notSuperseded = sql`NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = memories.id)`;
+
+      // Each search term must match title, content, or tags (case-insensitive
+      // LIKE with backslash escaping). The same pattern is bound three times
+      // per term, mirroring the original positional parameter layout.
+      const termConditions = terms.map((term) => {
         const pattern = `%${escapeLikePattern(term)}%`;
-        return [pattern, pattern, pattern];
+        return sql`(lower(memories.title) LIKE ${pattern} ESCAPE '\\' OR lower(memories.content) LIKE ${pattern} ESCAPE '\\' OR lower(memories.tags) LIKE ${pattern} ESCAPE '\\')`;
       });
       const phrasePattern = `%${escapeLikePattern(normalized)}%`;
-      const rows = native
-        .prepare(
-          `SELECT m.*
-         FROM memories m
-         WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
-           AND ${clauses.join(" AND ")}
-         ORDER BY CASE
-           WHEN lower(m.title) = ? THEN 0
-           WHEN lower(m.title) LIKE ? ESCAPE '\\' THEN 1
-           ELSE 2
-         END, m.updated_at DESC
-         LIMIT ?`,
+
+      const rows = db
+        .select()
+        .from(schema.memories)
+        .where(and(notSuperseded, ...termConditions))
+        .orderBy(
+          sql`CASE WHEN lower(memories.title) = ${normalized} THEN 0 WHEN lower(memories.title) LIKE ${phrasePattern} ESCAPE '\\' THEN 1 ELSE 2 END`,
+          desc(schema.memories.updatedAt),
         )
-        .all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
+        .limit(limit)
+        .all();
       return rows.map(mapMemoryRow);
     },
   };

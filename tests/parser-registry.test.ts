@@ -145,7 +145,7 @@ describe("CodeParser interface contract", () => {
     ];
     for (const p of parsers) {
       expect(p.name).toBeTruthy();
-      expect(typeof p.name).toBe("string");
+      expect(p.name).toEqual(expect.any(String));
     }
   });
 

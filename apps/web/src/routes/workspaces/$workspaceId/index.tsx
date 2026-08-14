@@ -87,6 +87,9 @@ function WorkspaceDetailPage() {
     );
 
   if (!result || !result.ok) {
+    // SAFETY: The "error" in result check confirms result has an error property of type string
+    const errorMsg =
+      result && "error" in result ? (result as { error: string }).error : "Unknown error";
     return (
       <div className="page">
         <Card className="border-destructive">
@@ -94,9 +97,7 @@ function WorkspaceDetailPage() {
             <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
             <h2 className="text-lg font-medium mb-2">Registry unavailable</h2>
             <p className="muted text-center mb-4 max-w-md">Could not open the registry database.</p>
-            <p className="text-sm text-destructive text-center max-w-md">
-              {result && "error" in result ? (result as { error: string }).error : "Unknown error"}
-            </p>
+            <p className="text-sm text-destructive text-center max-w-md">{errorMsg}</p>
           </CardContent>
         </Card>
       </div>

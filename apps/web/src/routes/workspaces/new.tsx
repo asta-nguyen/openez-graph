@@ -41,6 +41,13 @@ build/**
 coverage/**
 **/.turbo/**`;
 
+function getFormField(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  if (value === null) return "";
+  if (value instanceof File) return "";
+  return value;
+}
+
 function NewWorkspacePage() {
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
@@ -72,13 +79,13 @@ function NewWorkspacePage() {
     try {
       const formData = new FormData(e.currentTarget);
       const result = await api.createWorkspace({
-        name: formData.get("name") as string,
-        rootPath: formData.get("rootPath") as string,
-        includeGlobs: ((formData.get("includeGlobs") as string) || DEFAULT_INCLUDE_GLOBS)
+        name: getFormField(formData, "name"),
+        rootPath: getFormField(formData, "rootPath"),
+        includeGlobs: (getFormField(formData, "includeGlobs") || DEFAULT_INCLUDE_GLOBS)
           .split("\n")
           .map((s) => s.trim())
           .filter(Boolean),
-        excludeGlobs: ((formData.get("excludeGlobs") as string) || DEFAULT_EXCLUDE_GLOBS)
+        excludeGlobs: (getFormField(formData, "excludeGlobs") || DEFAULT_EXCLUDE_GLOBS)
           .split("\n")
           .map((s) => s.trim())
           .filter(Boolean),
@@ -175,6 +182,7 @@ function NewWorkspacePage() {
                     variant="secondary"
                     className="shrink-0"
                     onClick={() => {
+                      // SAFETY: The element with id "rootPath" is the <Input> element rendered in the form above
                       const input = document.getElementById("rootPath") as HTMLInputElement;
                       if (input?.value) handleValidatePath(input.value);
                     }}

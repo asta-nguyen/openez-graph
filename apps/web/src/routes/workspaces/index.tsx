@@ -70,6 +70,8 @@ function WorkspacesPage() {
 
   if (error || (result && !result.ok)) {
     const err = result && !result.ok ? result : null;
+    // SAFETY: The "error" in err check confirms err has an error property of type string
+    const errMsg = err && "error" in err ? (err as { error: string }).error : null;
     return (
       <div className="page">
         <div className="flex items-center justify-between">
@@ -83,11 +85,7 @@ function WorkspacesPage() {
             <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
             <h2 className="text-lg font-medium mb-2">Registry unavailable</h2>
             <p className="muted text-center mb-4 max-w-md">Could not open the registry database.</p>
-            {err && "error" in err && (
-              <p className="text-sm text-destructive text-center max-w-md">
-                {(err as { error: string }).error}
-              </p>
-            )}
+            {errMsg && <p className="text-sm text-destructive text-center max-w-md">{errMsg}</p>}
           </CardContent>
         </Card>
       </div>
@@ -274,6 +272,7 @@ function DeleteWorkspaceDialog({
 
   // Restore focus to the trigger when the dialog closes.
   useEffect(() => {
+    // SAFETY: document.activeElement returns Element | null; all active elements are HTMLElements in this DOM context
     const previouslyFocused = document.activeElement as HTMLElement | null;
     cancelRef.current?.focus();
     return () => {

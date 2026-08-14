@@ -1,1 +1,0 @@
-export { inferDocumentKind } from "./languages";

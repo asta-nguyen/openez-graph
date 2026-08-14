@@ -48,10 +48,12 @@ describe("migrateEmbeddingToBlob", () => {
     expect(() => initializeWorkspaceSchema(db)).not.toThrow();
 
     // Data is still there
+    // SAFETY: SELECT count(*) as c always returns a single row with a numeric c column.
     const count = db.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number };
     expect(count.c).toBe(2);
 
     // Column is still TEXT (not auto-migrated)
+    // SAFETY: PRAGMA table_info returns rows with name and type string columns.
     const info = db.prepare("PRAGMA table_info(embeddings)").all() as Array<{
       name: string;
       type: string;
@@ -60,6 +62,7 @@ describe("migrateEmbeddingToBlob", () => {
     expect(embCol!.type.toUpperCase()).toBe("TEXT");
 
     // Legacy format marker is set so retrieval can skip vector search
+    // SAFETY: SELECT value FROM index_meta returns a single row with a string value column or undefined.
     const meta = db.prepare("SELECT value FROM index_meta WHERE key = 'embedding_format'").get() as
       | { value: string }
       | undefined;
@@ -78,7 +81,6 @@ describe("migrateEmbeddingToBlob", () => {
 
     // Simulate legacy TEXT embeddings by dropping and recreating with TEXT
     const { createNativeDatabase } = require("../packages/db/src/sqlite/database-loader");
-    const { initializeWorkspaceSchema } = require("../packages/db/src/sqlite/workspace-db");
     // Get the actual workspace DB path
     const wsDbPath = path.join(wsRoot, ".openez", "index.sqlite");
     const db = createNativeDatabase(wsDbPath);
@@ -104,6 +106,7 @@ describe("migrateEmbeddingToBlob", () => {
 
     // Re-open to verify
     const db2 = createNativeDatabase(wsDbPath);
+    // SAFETY: PRAGMA table_info returns rows with name and type string columns.
     const info = db2.prepare("PRAGMA table_info(embeddings)").all() as Array<{
       name: string;
       type: string;
@@ -112,16 +115,19 @@ describe("migrateEmbeddingToBlob", () => {
     expect(embCol!.type.toUpperCase()).toBe("BLOB");
 
     // Legacy marker is cleared
+    // SAFETY: SELECT value FROM index_meta returns a single row with a string value column or null.
     const meta = db2
       .prepare("SELECT value FROM index_meta WHERE key = 'embedding_format'")
       .get() as { value: string } | null;
     expect(meta).toBeNull();
+    // SAFETY: SELECT value FROM index_meta returns a single row with a string value column or null.
     const graphEpoch = db2
       .prepare("SELECT value FROM index_meta WHERE key = 'graph_build_epoch'")
       .get() as { value: string } | null;
     expect(graphEpoch).toBeNull();
 
     // Old data is gone (table was recreated)
+    // SAFETY: SELECT count(*) as c always returns a single row with a numeric c column.
     const count = db2.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number };
     expect(count.c).toBe(0);
     db2.close();
@@ -138,13 +144,14 @@ describe("migrateEmbeddingToBlob", () => {
     // directly, so a non-existent chunk_id is acceptable for this migration test)
     const blob = new Uint8Array(new Float32Array([0.1, 0.2, 0.3]).buffer);
     db.prepare(
-      "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding) VALUES (?, ?, ?, ?, ?, ?)",
-    ).run("emb-1", "chunk-1", "ollama", "bge-m3", 3, blob);
+      "INSERT INTO embeddings (chunk_id, provider, model, dimensions, embedding) VALUES (?, ?, ?, ?, ?)",
+    ).run(1, "ollama", "bge-m3", 3, blob);
 
     // Run migration again (should be a no-op for BLOB columns)
     initializeWorkspaceSchema(db);
 
     // Verify data is preserved
+    // SAFETY: SELECT count(*) as c always returns a single row with a numeric c column.
     const count = db.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number };
     expect(count.c).toBe(1);
   });

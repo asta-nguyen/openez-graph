@@ -2,8 +2,7 @@ import path from "node:path";
 
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
-import { hashContent } from "./hash";
-import type { IndexedChunk } from "./types";
+import type { ChunkMetadata, IndexedChunk } from "./types";
 
 export function codeSearchText(text: string): string {
   const terms = text.match(/[A-Z]?[a-z0-9]+|[A-Z]+(?=[A-Z][a-z]|\b)/g) ?? [];
@@ -84,12 +83,6 @@ export interface IndexedCodeResult {
   definedSymbols: ExtractedSymbol[];
   calledIdentifiers: string[];
   callExpressions: Array<{ callerName: string; calleeName: string }>;
-}
-
-function isEscaped(text: string, index: number): boolean {
-  let slashes = 0;
-  while (text[index - slashes - 1] === "\\") slashes++;
-  return slashes % 2 === 1;
 }
 
 function stripNonCode(
@@ -246,7 +239,7 @@ export function parsePython(
         pendingDecorators.length > 0 ? pendingDecorators[0].lineIndex + 1 : i + 1;
       const startLine = decoratorStartLine;
 
-      const content = lines.slice(startLine - 1, endLine).join("\n");
+      const _content = lines.slice(startLine - 1, endLine).join("\n");
 
       definedSymbols.push({
         name,
@@ -436,15 +429,16 @@ export function parseGo(
       const startLine = currentLineNum;
       const endLine = findBraceBlockEnd(codeLines, i);
       const symbolName = receiverType ? `${receiverType}::${name}` : name;
-      definedSymbols.push({
+      const symbol: ExtractedSymbol = {
         name: symbolName,
         symbolType: "function",
         type: "function",
         exported,
         startLine,
         endLine,
-        ...(receiver ? { receiver: receiver.trim() } : {}),
-      });
+      };
+      if (receiver) symbol.receiver = receiver.trim();
+      definedSymbols.push(symbol);
       if (endLine > currentLineNum) {
         activeFunctions.push({ name, symbolName, receiverName, receiverType, endLine });
       }
@@ -844,7 +838,7 @@ function parseYamlConfig(content: string, counter: TokenCounter): IndexedChunk[]
       heading: currentKey,
       content: text,
       tokenCount: counter.count(text),
-      contentHash: hashContent(text),
+      contentHash: Bun.hash(text).toString(16),
       metadata: {
         kind: "config",
         language: "yaml",
@@ -900,7 +894,7 @@ function parseJsonConfig(content: string, counter: TokenCounter): IndexedChunk[]
 
   try {
     const parsed = JSON.parse(content);
-    if (typeof parsed !== "object" || parsed === null) {
+    if (parsed === null || !(parsed instanceof Object)) {
       return makeFallbackConfigChunk(content, "json", counter);
     }
 
@@ -911,12 +905,14 @@ function parseJsonConfig(content: string, counter: TokenCounter): IndexedChunk[]
         heading: key,
         content: text,
         tokenCount: counter.count(text),
-        contentHash: hashContent(text),
+        contentHash: Bun.hash(text).toString(16),
         metadata: {
           kind: "config",
           language: "json",
           section: key,
-          valueType: Array.isArray(value) ? "array" : typeof value,
+          valueType: Array.isArray(value)
+            ? "array"
+            : Object.prototype.toString.call(value).slice(8, -1).toLowerCase(),
         },
       });
     }
@@ -947,7 +943,7 @@ function parseTomlConfig(content: string, counter: TokenCounter): IndexedChunk[]
       heading: currentKey,
       content: text,
       tokenCount: counter.count(text),
-      contentHash: hashContent(text),
+      contentHash: Bun.hash(text).toString(16),
       metadata: {
         kind: "config",
         language: "toml",
@@ -1006,7 +1002,7 @@ function makeFallbackConfigChunk(
     {
       content,
       tokenCount: counter.count(content),
-      contentHash: hashContent(content),
+      contentHash: Bun.hash(content).toString(16),
       metadata: {
         kind: "config",
         language,
@@ -1074,15 +1070,6 @@ function countBraces(line: string): number {
   return count;
 }
 
-function findSemicolonEnd(lines: string[], startIndex: number): number {
-  for (let i = startIndex; i < lines.length; i++) {
-    if (lines[i].trim().endsWith(";")) {
-      return i + 1;
-    }
-  }
-  return startIndex + 1;
-}
-
 export function createSymbolChunks(
   symbols: ExtractedSymbol[],
   allLines: string[],
@@ -1092,26 +1079,27 @@ export function createSymbolChunks(
   return symbols.map((symbol) => {
     const content =
       symbol.content || allLines.slice(symbol.startLine - 1, symbol.endLine).join("\n");
+    const metadata: ChunkMetadata = {
+      kind: "code",
+      searchText: codeSearchText(content),
+      language,
+      symbolName: symbol.name,
+      symbolType: symbol.symbolType,
+      exported: symbol.exported,
+      startLine: symbol.startLine,
+      endLine: symbol.endLine,
+    };
+    if (symbol.decorators && symbol.decorators.length > 0) {
+      metadata.decorators = symbol.decorators;
+    }
     return {
       heading: symbol.name,
       content,
       tokenCount: counter.count(content),
-      contentHash: hashContent(content),
+      contentHash: Bun.hash(content).toString(16),
       symbolName: symbol.name,
       symbolType: symbol.symbolType,
-      metadata: {
-        kind: "code",
-        searchText: codeSearchText(content),
-        language,
-        symbolName: symbol.name,
-        symbolType: symbol.symbolType,
-        exported: symbol.exported,
-        startLine: symbol.startLine,
-        endLine: symbol.endLine,
-        ...(symbol.decorators && symbol.decorators.length > 0
-          ? { decorators: symbol.decorators }
-          : {}),
-      },
+      metadata,
     };
   });
 }
@@ -1132,7 +1120,7 @@ export function makeFallbackChunks(
     chunks.push({
       content: slice,
       tokenCount: counter.count(slice),
-      contentHash: hashContent(slice),
+      contentHash: Bun.hash(slice).toString(16),
       metadata: {
         kind: "code",
         searchText: codeSearchText(slice),

@@ -65,6 +65,10 @@ function getWorkspaceDbRaw(rootPath: string) {
   sqlite.pragma("page_size = 16384");
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  // SAFETY: Drizzle's bun-sqlite adapter expects a `Database` instance from
+  // `bun:sqlite`; `NativeDatabase` is structurally compatible (exposes the
+  // same prepare/exec/pragma methods). The `as any` bridges the structural
+  // mismatch without affecting runtime behavior.
   return { sqlite, db: drizzle(sqlite as any, { schema }) };
 }
 
@@ -91,9 +95,7 @@ export function closeWorkspaceDb(rootPath: string) {
   if (native) {
     try {
       native.close();
-    } catch {
-      // Already closed or closing in progress
-    }
+    } catch {}
     nativeCache.delete(rootPath);
   }
   dbCache.delete(rootPath);
@@ -103,9 +105,7 @@ export function closeAllWorkspaceDbs() {
   for (const native of nativeCache.values()) {
     try {
       native.close();
-    } catch {
-      // Already closed or closing in progress
-    }
+    } catch {}
   }
   nativeCache.clear();
   dbCache.clear();
@@ -134,6 +134,8 @@ export function getFullWorkspaceDdl(): string {
 
 export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
   const tableExists =
+    // SAFETY: SELECT count(*) as c returns a single row with an INTEGER
+    // `c` column; the cast narrows DatabaseRow to that shape.
     (
       sqlite
         .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='documents'")
@@ -141,7 +143,10 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     ).c > 0;
 
   if (tableExists) {
+    migrateTextPkToInteger(sqlite);
     const hasIndexMeta =
+      // SAFETY: SELECT count(*) as c returns a single row with an INTEGER
+      // `c` column; the cast narrows DatabaseRow to that shape.
       (
         sqlite
           .prepare(
@@ -156,6 +161,8 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     }
 
     const hasFts =
+      // SAFETY: SELECT count(*) as c returns a single row with an INTEGER
+      // `c` column; the cast narrows DatabaseRow to that shape.
       (
         sqlite
           .prepare(
@@ -169,37 +176,46 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
       );
       // Backfill existing chunks into the newly created FTS table.
       sqlite.exec(`
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-        SELECT c.id, d.path, coalesce(c.heading, ''),
+        INSERT INTO chunks_fts (rowid, chunk_id, path, heading, language, search_text)
+        SELECT c.id, c.id, d.path, coalesce(c.heading, ''),
           coalesce(d.language, ''),
           ${composeFtsSearchTextSql("c.metadata", "c.content")}
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id;
       `);
     } else {
-      // FTS table already exists — but indexing may have been interrupted
-      // (triggers were down, process crashed before restore). Backfill any
-      // chunks that exist in the chunks table but are missing from FTS,
-      // and remove orphaned FTS rows whose chunks were deleted.
-      sqlite.exec(`
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-        SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''),
-          ${composeFtsSearchTextSql("c.metadata", "c.content")}
-        FROM chunks c
-        INNER JOIN documents d ON d.id = c.document_id
-        LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-        WHERE f.chunk_id IS NULL;
-      `);
-      // Remove FTS rows for chunks that no longer exist (orphaned by
-      // interrupted deletes or manual DB edits).
-      sqlite.exec(`
-        DELETE FROM chunks_fts
-        WHERE chunk_id NOT IN (SELECT id FROM chunks);
-      `);
+      // FTS table already exists — backfill missing rows and remove orphans.
+      // Fast path: skip the LEFT JOIN scan when row counts already match.
+      // SAFETY: SELECT count(*) as c returns a single row with an INTEGER
+      // `c` column; the cast narrows DatabaseRow to that shape.
+      const chunkCount = (sqlite.prepare("SELECT count(*) as c FROM chunks").get() as { c: number })
+        .c;
+      // SAFETY: SELECT count(*) as c returns a single row with an INTEGER
+      // `c` column; the cast narrows DatabaseRow to that shape.
+      const ftsCount = (
+        sqlite.prepare("SELECT count(*) as c FROM chunks_fts").get() as { c: number }
+      ).c;
+      if (chunkCount !== ftsCount) {
+        sqlite.exec(`
+          INSERT INTO chunks_fts (rowid, chunk_id, path, heading, language, search_text)
+          SELECT c.id, c.id, d.path, coalesce(c.heading, ''),
+            coalesce(d.language, ''),
+            ${composeFtsSearchTextSql("c.metadata", "c.content")}
+          FROM chunks c
+          INNER JOIN documents d ON d.id = c.document_id
+          LEFT JOIN chunks_fts f ON f.rowid = c.id
+          WHERE f.rowid IS NULL;
+        `);
+        sqlite.exec(`
+          DELETE FROM chunks_fts
+          WHERE rowid NOT IN (SELECT id FROM chunks);
+        `);
+      }
     }
 
     const hasTypeLabelIdx =
+      // SAFETY: SELECT count(*) as c returns a single row with an INTEGER
+      // `c` column; the cast narrows DatabaseRow to that shape.
       (
         sqlite
           .prepare(
@@ -212,9 +228,13 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
         sqlite.exec(
           `CREATE UNIQUE INDEX idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol'`,
         );
-      } catch {}
+      } catch {
+        /* duplicate rows may prevent unique index — skip */
+      }
     }
     const hasEdgeIdx =
+      // SAFETY: SELECT count(*) as c returns a single row with an INTEGER
+      // `c` column; the cast narrows DatabaseRow to that shape.
       (
         sqlite
           .prepare(
@@ -248,6 +268,8 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     migrateEmbeddingDedup(sqlite);
 
     const hasParsedDocs =
+      // SAFETY: SELECT count(*) as c returns a single row with an INTEGER
+      // `c` column; the cast narrows DatabaseRow to that shape.
       (
         sqlite
           .prepare(
@@ -269,6 +291,9 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     } else {
       // Add called_identifiers and parser_version columns to existing
       // parsed_documents tables created before these fields existed.
+      // SAFETY: PRAGMA table_info returns rows with `name`, `type`, and
+      // other TEXT columns; the cast narrows DatabaseRow[] to { name: string }
+      // since only the `name` field is accessed.
       const parsedCols = new Set(
         (
           sqlite.prepare("PRAGMA table_info(parsed_documents)").all() as Array<{ name: string }>
@@ -303,6 +328,8 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns rows with `name`, `type`, and other
+  // TEXT columns; the cast narrows DatabaseRow[] to { name: string }.
   const columns = new Set(
     (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map(
       (row) => row.name,
@@ -321,6 +348,8 @@ function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>)
 }
 
 function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns rows with `name`, `type`, and other
+  // TEXT columns; the cast narrows DatabaseRow[] to { name: string }.
   const columns = new Set(
     (sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string }>).map(
       (row) => row.name,
@@ -333,6 +362,8 @@ function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>
 }
 
 function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns rows with `name` and `type` TEXT
+  // columns; the cast narrows DatabaseRow[] to that shape.
   const embeddingColumn = (
     sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string; type: string }>
   ).find((column) => column.name === "embedding");
@@ -345,6 +376,8 @@ function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) 
   sqlite.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
 
   // Skip dedup on empty table — window function is expensive even with 0 rows.
+  // SAFETY: SELECT count(*) as c returns a single row with an INTEGER `c`
+  // column; the cast narrows DatabaseRow to that shape.
   const count = (sqlite.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number }).c;
   if (count === 0) {
     sqlite.exec(
@@ -376,6 +409,8 @@ function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) 
 }
 
 function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns rows with `name` and `type` TEXT
+  // columns; the cast narrows DatabaseRow[] to that shape.
   const info = sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{
     name: string;
     type: string;
@@ -388,6 +423,9 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
     // FTS) until an explicit `openez reindex` rebuilds embeddings as BLOB.
     // The reindex path calls `resetIndexArtifacts()` which drops all rows
     // and recreates the embeddings table with the current BLOB schema.
+    // SAFETY: SELECT value FROM index_meta WHERE key = 'embedding_format'
+    // returns a single row with a TEXT `value` column (or undefined); the
+    // cast narrows DatabaseRow | undefined to that shape.
     const existing = sqlite
       .prepare("SELECT value FROM index_meta WHERE key = 'embedding_format'")
       .get() as { value: string } | undefined;
@@ -404,10 +442,37 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
   }
 }
 
+function migrateTextPkToInteger(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns rows with `name` and `type` TEXT
+  // columns; the cast narrows DatabaseRow[] to that shape.
+  const cols = sqlite.prepare("PRAGMA table_info(documents)").all() as Array<{
+    name: string;
+    type: string;
+  }>;
+  const idCol = cols.find((c) => c.name === "id");
+  if (!idCol || idCol.type.toUpperCase() === "INTEGER") return;
+
+  sqlite.exec(`
+    DROP TABLE IF EXISTS chunks_fts;
+    DROP TABLE IF EXISTS embeddings_vec;
+    DROP TABLE IF EXISTS embeddings;
+    DROP TABLE IF EXISTS graph_edges;
+    DROP TABLE IF EXISTS graph_nodes;
+    DROP TABLE IF EXISTS parsed_documents;
+    DROP TABLE IF EXISTS chunks;
+    DROP TABLE IF EXISTS documents;
+    DROP TABLE IF EXISTS index_runs;
+    DROP TABLE IF EXISTS graph_runs;
+    DROP TABLE IF EXISTS query_logs;
+    DROP TABLE IF EXISTS memories;
+  `);
+  sqlite.exec(getFullWorkspaceDdl());
+}
+
 function getWorkspaceTableDefinitions(): string[] {
   return [
     `CREATE TABLE IF NOT EXISTS documents (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       path TEXT NOT NULL UNIQUE,
       absolute_path TEXT NOT NULL,
       kind TEXT NOT NULL,
@@ -419,8 +484,8 @@ function getWorkspaceTableDefinitions(): string[] {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS chunks (
-      id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
       chunk_index INTEGER NOT NULL,
       heading TEXT,
       content TEXT NOT NULL,
@@ -431,8 +496,8 @@ function getWorkspaceTableDefinitions(): string[] {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS embeddings (
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY,
+      chunk_id INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
       provider TEXT NOT NULL,
       model TEXT NOT NULL,
       dimensions INTEGER NOT NULL,
@@ -441,7 +506,7 @@ function getWorkspaceTableDefinitions(): string[] {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_nodes (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       type TEXT NOT NULL,
       label TEXT NOT NULL,
       ref_id TEXT,
@@ -450,16 +515,16 @@ function getWorkspaceTableDefinitions(): string[] {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_edges (
-      id TEXT PRIMARY KEY,
-      from_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-      to_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY,
+      from_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+      to_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
       type TEXT NOT NULL,
       weight INTEGER NOT NULL DEFAULT 1,
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS index_runs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       mode TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       files_scanned INTEGER NOT NULL DEFAULT 0,
@@ -472,7 +537,7 @@ function getWorkspaceTableDefinitions(): string[] {
       finished_at TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS graph_runs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       mode TEXT NOT NULL DEFAULT 'incremental',
       status TEXT NOT NULL DEFAULT 'pending',
       nodes_created INTEGER NOT NULL DEFAULT 0,
@@ -483,7 +548,7 @@ function getWorkspaceTableDefinitions(): string[] {
       finished_at TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS query_logs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       query TEXT NOT NULL,
       mode TEXT NOT NULL,
       result_count INTEGER NOT NULL DEFAULT 0,
@@ -493,12 +558,12 @@ function getWorkspaceTableDefinitions(): string[] {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       tags TEXT NOT NULL DEFAULT '',
       source TEXT NOT NULL,
-      supersedes_id TEXT,
+      supersedes_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
@@ -507,7 +572,7 @@ function getWorkspaceTableDefinitions(): string[] {
       value TEXT NOT NULL
     )`,
     `CREATE TABLE IF NOT EXISTS parsed_documents (
-      document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+      document_id INTEGER PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
       content_hash TEXT NOT NULL,
       symbols TEXT,
       imports TEXT,

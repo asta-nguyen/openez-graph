@@ -175,6 +175,7 @@ describe("vector search", () => {
       [chunkId, embedding.provider, embedding.model],
     );
     expect(rows).toHaveLength(1);
+    // SAFETY: SELECT embedding returns a row with a Uint8Array embedding column.
     const row = rows[0] as { embedding: Uint8Array };
     expect(
       Array.from(

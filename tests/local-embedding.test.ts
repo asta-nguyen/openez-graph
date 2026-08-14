@@ -35,13 +35,7 @@ function f32ToF16(value: number): number {
 }
 
 function buildSafetensors(rows: number, fillRow: (row: number) => number[]): Buffer {
-  const header = JSON.stringify({
-    embeddings: {
-      dtype: "F16",
-      shape: [rows, FIXTURE_DIMS],
-      data_offsets: [0, rows * FIXTURE_DIMS * 2],
-    },
-  });
+  const header = `{"embeddings":{"dtype":"F16","shape":[${rows},${FIXTURE_DIMS}],"data_offsets":[0,${rows * FIXTURE_DIMS * 2}]}}`;
   const headerBytes = Buffer.from(header, "utf8");
   const headerLen = Buffer.alloc(8);
   headerLen.writeBigUInt64LE(BigInt(headerBytes.length), 0);
@@ -194,12 +188,17 @@ describe("ensureLocalEmbeddingCache", () => {
 
   it("rejects on checksum mismatch (permanent, no retry)", async () => {
     let calls = 0;
-    globalThis.fetch = (() => {
+    const mockFetch = (): Promise<Response> => {
       calls += 1;
       return Promise.resolve(
         new Response(new Uint8Array([0xde, 0xad, 0xbe, 0xef]), { status: 200 }),
       );
-    }) as unknown as typeof fetch;
+    };
+    Object.defineProperty(globalThis, "fetch", {
+      value: mockFetch,
+      writable: true,
+      configurable: true,
+    });
 
     await expect(ensureLocalEmbeddingCache(LOCAL_EMBEDDING_MODEL, cacheRoot)).rejects.toThrow(
       /checksum mismatch|Model download failed/,
@@ -211,10 +210,15 @@ describe("ensureLocalEmbeddingCache", () => {
 
   it("retries retryable HTTP statuses then gives up", async () => {
     let calls = 0;
-    globalThis.fetch = (() => {
+    const mockFetch = (): Promise<Response> => {
       calls += 1;
       return Promise.resolve(new Response(null, { status: 503 }));
-    }) as unknown as typeof fetch;
+    };
+    Object.defineProperty(globalThis, "fetch", {
+      value: mockFetch,
+      writable: true,
+      configurable: true,
+    });
 
     await expect(ensureLocalEmbeddingCache(LOCAL_EMBEDDING_MODEL, cacheRoot)).rejects.toThrow(
       /503/,
@@ -224,10 +228,15 @@ describe("ensureLocalEmbeddingCache", () => {
 
   it("exits immediately on a non-retryable HTTP status", async () => {
     let calls = 0;
-    globalThis.fetch = (() => {
+    const mockFetch = (): Promise<Response> => {
       calls += 1;
       return Promise.resolve(new Response(null, { status: 404 }));
-    }) as unknown as typeof fetch;
+    };
+    Object.defineProperty(globalThis, "fetch", {
+      value: mockFetch,
+      writable: true,
+      configurable: true,
+    });
 
     await expect(ensureLocalEmbeddingCache(LOCAL_EMBEDDING_MODEL, cacheRoot)).rejects.toThrow(
       /404/,

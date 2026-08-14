@@ -96,16 +96,14 @@ function extractCallName(node: Node, callRule: CallRule): string | null {
   return funcNode.text;
 }
 
-function walkTree(
-  root: Node,
-  config: LanguageConfig,
-  lines: string[],
-): {
+interface WalkTreeResult {
   symbols: ExtractedSymbol[];
   importPaths: string[];
   calledIdentifiers: Set<string>;
   callExpressions: Array<{ callerName: string; calleeName: string }>;
-} {
+}
+
+function walkTree(root: Node, config: LanguageConfig, _lines: string[]): WalkTreeResult {
   const symbols: ExtractedSymbol[] = [];
   const importPaths: string[] = [];
   const calledIdentifiers = new Set<string>();
@@ -233,15 +231,16 @@ function walkTree(
             ? `${parentName}::${name}`
             : name;
 
-        symbols.push({
+        const symbol: ExtractedSymbol = {
           name: fullName,
           symbolType: symbolRule.symbolType,
           type: symbolRule.symbolType,
           exported,
           startLine: startRow,
           endLine: endRow,
-          ...(receiver ? { receiver } : {}),
-        });
+        };
+        if (receiver) symbol.receiver = receiver;
+        symbols.push(symbol);
 
         // Extract calls within this symbol's body, skipping calls that are
         // inside nested symbols (those are extracted when processing the nested

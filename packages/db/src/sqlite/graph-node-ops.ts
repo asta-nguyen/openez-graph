@@ -1,7 +1,9 @@
-import crypto from "node:crypto";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
-import { mapNodeRow, type GraphStmts } from "./graph-ops-shared";
+import { mapNodeRow } from "./graph-ops-shared";
+import * as schema from "./schema";
 
 /**
  * Factory for graph node operations extracted from `createGraphOps()`.
@@ -11,16 +13,16 @@ import { mapNodeRow, type GraphStmts } from "./graph-ops-shared";
  * `refreshStreamTimestamp()` (defined in `document-repository.ts`) stays
  * visible to the node stream methods here.
  */
-export function createGraphNodeOps(
-  native: NativeDatabase,
-  stmts: GraphStmts,
-  streamNow: StreamTimestampHolder,
-) {
+export function createGraphNodeOps(native: NativeDatabase, streamNow: StreamTimestampHolder) {
+  // SAFETY: drizzle-orm/bun-sqlite expects a BunSqlite.Database instance;
+  // NativeDatabase is structurally compatible (exposes the same prepare/exec
+  // methods). The `as any` bridges the structural mismatch without affecting
+  // runtime behavior.
+  const db = drizzle(native as any, { schema });
+
   return {
     async getNodeCount(): Promise<number> {
-      const row = native.prepare("SELECT count(*) AS count FROM graph_nodes").get() as {
-        count: number;
-      };
+      const row = db.select({ count: count() }).from(schema.graphNodes).get();
       return row?.count ?? 0;
     },
 
@@ -31,179 +33,236 @@ export function createGraphNodeOps(
       label: string;
       refId?: string;
       metadata?: string;
-    }): Promise<string> {
+    }): Promise<number> {
       if (input.type === "symbol") {
         if (input.refId) {
-          const existing = stmts.nodeByTypeLabelRef.get(input.type, input.label, input.refId) as
-            | Record<string, unknown>
-            | undefined;
+          const existing = db
+            .select()
+            .from(schema.graphNodes)
+            .where(
+              and(
+                eq(schema.graphNodes.type, input.type),
+                eq(schema.graphNodes.label, input.label),
+                eq(schema.graphNodes.refId, input.refId),
+              ),
+            )
+            .get();
           if (existing) {
             const nextMetadata = input.metadata ?? String(existing.metadata ?? "{}");
             if (nextMetadata !== existing.metadata) {
-              stmts.updateNode.run(
-                input.refId,
-                nextMetadata,
-                new Date().toISOString(),
-                existing.id,
-              );
+              db.update(schema.graphNodes)
+                .set({
+                  refId: input.refId,
+                  metadata: nextMetadata,
+                  updatedAt: new Date().toISOString(),
+                })
+                .where(eq(schema.graphNodes.id, existing.id))
+                .run();
             }
-            return String(existing.id);
+            return Number(existing.id);
           }
         }
-        const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        stmts.insertNode.run(
-          id,
-          input.type,
-          input.label,
-          input.refId ?? null,
-          input.metadata ?? "{}",
-          now,
-          now,
-        );
-        return id;
+        // `RETURNING id` yields the autoincrement primary key, which equals
+        // the rowid that the original `lastInsertRowid` read exposed.
+        const inserted = db
+          .insert(schema.graphNodes)
+          .values({
+            type: input.type,
+            label: input.label,
+            refId: input.refId ?? null,
+            metadata: input.metadata ?? "{}",
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: schema.graphNodes.id })
+          .get();
+        return Number(inserted?.id ?? 0);
       }
 
-      // Non-symbol nodes: (type, label) is unique — use ON CONFLICT ... RETURNING (one query)
-      const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      const row = stmts.upsertNodeByTypeLabel.get(
-        id,
-        input.type,
-        input.label,
-        input.refId ?? null,
-        input.metadata ?? "{}",
-        now,
-        now,
-      ) as { id: string };
-      return String(row.id);
+      // SAFETY: INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING id always
+      // returns exactly one row (either the inserted or the updated row);
+      // the non-null assertion narrows away the undefined case that Drizzle's
+      // `.get()` return type includes.
+      const row = db
+        .insert(schema.graphNodes)
+        .values({
+          type: input.type,
+          label: input.label,
+          refId: input.refId ?? null,
+          metadata: input.metadata ?? "{}",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [schema.graphNodes.type, schema.graphNodes.label],
+          targetWhere: sql`${schema.graphNodes.type} != 'symbol'`,
+          set: {
+            refId: sql`COALESCE(excluded.ref_id, graph_nodes.ref_id)`,
+            metadata: sql`excluded.metadata`,
+            updatedAt: sql`excluded.updated_at`,
+          },
+        })
+        .returning({ id: schema.graphNodes.id })
+        .get()!;
+      return Number(row.id);
     },
 
     async insertGraphNodesBatch(
       inputs: Array<{ type: string; label: string; refId?: string; metadata?: string }>,
-    ): Promise<string[]> {
+    ): Promise<number[]> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const ids: string[] = inputs.map(() => crypto.randomUUID());
+      const ids: number[] = Array.from({ length: inputs.length });
       const BATCH = 2000;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
-          params.push(
-            ids[i + j],
-            item.type,
-            item.label,
-            item.refId ?? null,
-            item.metadata ?? "{}",
-            now,
-            now,
-          );
-        }
-        native
-          .prepare(
-            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders} ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET metadata = excluded.metadata, updated_at = excluded.updated_at`,
+        const rows = db
+          .insert(schema.graphNodes)
+          .values(
+            batch.map((item) => ({
+              type: item.type,
+              label: item.label,
+              refId: item.refId ?? null,
+              metadata: item.metadata ?? "{}",
+              createdAt: now,
+              updatedAt: now,
+            })),
           )
-          .run(...params);
+          .onConflictDoUpdate({
+            target: [schema.graphNodes.type, schema.graphNodes.label],
+            targetWhere: sql`${schema.graphNodes.type} != 'symbol'`,
+            set: {
+              metadata: sql`excluded.metadata`,
+              updatedAt: sql`excluded.updated_at`,
+            },
+          })
+          .returning({ id: schema.graphNodes.id })
+          .all();
+        for (let j = 0; j < rows.length; j++) {
+          ids[i + j] = Number(rows[j].id);
+        }
       }
       return ids;
     },
 
     async upsertGraphNodesBatch(
       inputs: Array<{ type: string; label: string; refId?: string; metadata?: string }>,
-    ): Promise<Array<{ label: string; id: string }>> {
+    ): Promise<Array<{ label: string; id: number }>> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
       const BATCH = 500;
-      const results: Array<{ label: string; id: string }> = [];
+      const results: Array<{ label: string; id: number }> = [];
 
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const item of batch) {
-          const id = crypto.randomUUID();
-          params.push(
-            id,
-            item.type,
-            item.label,
-            item.refId ?? null,
-            item.metadata ?? "{}",
-            now,
-            now,
-          );
-        }
-        const rows = native
-          .prepare(
-            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders}
-             ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET ref_id = COALESCE(excluded.ref_id, graph_nodes.ref_id), metadata = excluded.metadata, updated_at = excluded.updated_at
-             RETURNING id, label`,
+        const rows = db
+          .insert(schema.graphNodes)
+          .values(
+            batch.map((item) => ({
+              type: item.type,
+              label: item.label,
+              refId: item.refId ?? null,
+              metadata: item.metadata ?? "{}",
+              createdAt: now,
+              updatedAt: now,
+            })),
           )
-          .all(...params) as Array<{ id: string; label: string }>;
-        results.push(...rows.map((r) => ({ label: r.label, id: String(r.id) })));
+          .onConflictDoUpdate({
+            target: [schema.graphNodes.type, schema.graphNodes.label],
+            targetWhere: sql`${schema.graphNodes.type} != 'symbol'`,
+            set: {
+              refId: sql`COALESCE(excluded.ref_id, graph_nodes.ref_id)`,
+              metadata: sql`excluded.metadata`,
+              updatedAt: sql`excluded.updated_at`,
+            },
+          })
+          .returning({ id: schema.graphNodes.id, label: schema.graphNodes.label })
+          .all();
+        results.push(...rows.map((r) => ({ label: r.label, id: Number(r.id) })));
       }
       return results;
     },
 
-    async getGraphNode(id: string) {
-      const row = native.prepare("SELECT * FROM graph_nodes WHERE id = ?").get(id) as
-        | Record<string, unknown>
-        | undefined;
+    async getGraphNode(id: number) {
+      const row = db.select().from(schema.graphNodes).where(eq(schema.graphNodes.id, id)).get();
       return row ? mapNodeRow(row) : null;
     },
 
     async findGraphNode(type: string, label: string) {
-      const row = stmts.nodeByTypeLabel.get(type, label) as Record<string, unknown> | undefined;
+      const row = db
+        .select()
+        .from(schema.graphNodes)
+        .where(and(eq(schema.graphNodes.type, type), eq(schema.graphNodes.label, label)))
+        .get();
       return row ? mapNodeRow(row) : null;
     },
 
     async deleteGraphNodesByRefId(refId: string) {
-      stmts.deleteNodesByRefId.run(refId, refId);
+      db.delete(schema.graphNodes)
+        .where(
+          sql`${schema.graphNodes.refId} = ${refId} OR ${schema.graphNodes.refId} IN (SELECT ${schema.chunks.id} FROM ${schema.chunks} WHERE ${schema.chunks.documentId} = ${refId})`,
+        )
+        .run();
     },
 
     async findFileNode(relativePath: string) {
-      const row = stmts.nodeByTypeLabel.get("file", relativePath) as
-        | Record<string, unknown>
-        | undefined;
+      const row = db
+        .select()
+        .from(schema.graphNodes)
+        .where(and(eq(schema.graphNodes.type, "file"), eq(schema.graphNodes.label, relativePath)))
+        .get();
       return row ? mapNodeRow(row) : null;
     },
 
     async getSymbolNodesByFilePath(filePath: string) {
-      const rows = native
-        .prepare(
-          "SELECT * FROM graph_nodes WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ?",
+      const rows = db
+        .select()
+        .from(schema.graphNodes)
+        .where(
+          and(
+            eq(schema.graphNodes.type, "symbol"),
+            sql`json_extract(${schema.graphNodes.metadata}, '$.filePath') = ${filePath}`,
+          ),
         )
-        .all(filePath) as Array<Record<string, unknown>>;
+        .all();
       return rows.map(mapNodeRow);
     },
 
-    updateSymbolNode(id: string, refId: string, metadata: string) {
-      stmts.updateNode.run(refId, metadata, new Date().toISOString(), id);
+    updateSymbolNode(id: number, refId: string, metadata: string) {
+      db.update(schema.graphNodes)
+        .set({ refId, metadata, updatedAt: new Date().toISOString() })
+        .where(eq(schema.graphNodes.id, id))
+        .run();
     },
 
-    deleteGraphNodesByIds(ids: string[]) {
+    deleteGraphNodesByIds(ids: number[]) {
       if (ids.length === 0) return;
-      const placeholders = ids.map(() => "?").join(",");
-      native.prepare(`DELETE FROM graph_nodes WHERE id IN (${placeholders})`).run(...ids);
+      db.delete(schema.graphNodes).where(inArray(schema.graphNodes.id, ids)).run();
     },
 
-    deleteChunkNodesByChunkIds(chunkIds: string[]) {
+    deleteChunkNodesByChunkIds(chunkIds: number[]) {
       if (chunkIds.length === 0) return;
-      const placeholders = chunkIds.map(() => "?").join(",");
-      native
-        .prepare(`DELETE FROM graph_nodes WHERE type = 'chunk' AND ref_id IN (${placeholders})`)
-        .run(...chunkIds);
+      db.delete(schema.graphNodes)
+        .where(
+          and(
+            eq(schema.graphNodes.type, "chunk"),
+            inArray(schema.graphNodes.refId, chunkIds.map(String)),
+          ),
+        )
+        .run();
     },
 
-    async loadAllSymbolNodes(): Promise<Map<string, string>> {
-      const rows = native
-        .prepare("SELECT label, id FROM graph_nodes WHERE type = 'symbol'")
-        .all() as Array<{ label: string; id: string }>;
-      const map = new Map<string, string>();
+    async loadAllSymbolNodes(): Promise<Map<string, number>> {
+      const rows = db
+        .select({ label: schema.graphNodes.label, id: schema.graphNodes.id })
+        .from(schema.graphNodes)
+        .where(eq(schema.graphNodes.type, "symbol"))
+        .all();
+      const map = new Map<string, number>();
       for (const row of rows) {
-        if (!map.has(row.label)) map.set(row.label, String(row.id));
+        if (!map.has(row.label)) map.set(row.label, Number(row.id));
       }
       return map;
     },
@@ -211,27 +270,28 @@ export function createGraphNodeOps(
     // ── Streaming inserts (graph nodes) ──
 
     streamGraphNode(input: {
-      id: string;
+      id: number;
       type: string;
       label: string;
       refId?: string | null;
       metadata?: string;
     }): void {
       const now = streamNow.value;
-      stmts.insertNode.run(
-        input.id,
-        input.type,
-        input.label,
-        input.refId ?? null,
-        input.metadata ?? "{}",
-        now,
-        now,
-      );
+      db.insert(schema.graphNodes)
+        .values({
+          type: input.type,
+          label: input.label,
+          refId: input.refId ?? null,
+          metadata: input.metadata ?? "{}",
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
     },
 
     streamGraphNodesBatch(
       inputs: Array<{
-        id: string;
+        id: number;
         type: string;
         label: string;
         refId?: string | null;
@@ -243,16 +303,18 @@ export function createGraphNodeOps(
       const now = streamNow.value;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const n of batch) {
-          params.push(n.id, n.type, n.label, n.refId ?? null, n.metadata ?? "{}", now, now);
-        }
-        native
-          .prepare(
-            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders}`,
+        db.insert(schema.graphNodes)
+          .values(
+            batch.map((n) => ({
+              type: n.type,
+              label: n.label,
+              refId: n.refId ?? null,
+              metadata: n.metadata ?? "{}",
+              createdAt: now,
+              updatedAt: now,
+            })),
           )
-          .run(...params);
+          .run();
       }
     },
   };

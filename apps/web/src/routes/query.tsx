@@ -29,43 +29,25 @@ export const Route = createFileRoute("/query")({
   }),
 });
 
-const initialState = {
+const initialState: QueryResult = {
   answerContext: "",
-  sources: [] as Array<{
-    path: string;
-    startLine?: number;
-    endLine?: number;
-    score: number;
-    reason: string;
-  }>,
-  graphNodes: [] as Array<{
-    id: string;
-    type: string;
-    label: string;
-    metadata: Record<string, unknown>;
-  }>,
-  graphEdges: [] as Array<{ from_node_id: string; to_node_id: string; type: string }>,
-  error: null as string | null,
+  sources: [],
+  graphNodes: [],
+  graphEdges: [],
+  error: null,
 };
 
-function nodeTypeColor(type: string): string {
-  switch (type) {
-    case "file":
-      return "bg-chart-1/15 text-chart-1 border-chart-1/30";
-    case "chunk":
-      return "bg-chart-2/15 text-chart-2 border-chart-2/30";
-    case "symbol":
-      return "bg-chart-3/15 text-chart-3 border-chart-3/30";
-    case "entity":
-      return "bg-chart-4/15 text-chart-4 border-chart-4/30";
-    default:
-      return "bg-muted text-muted-foreground border-border";
-  }
-}
+const NODE_TYPE_COLORS = {
+  file: "bg-chart-1/15 text-chart-1 border-chart-1/30",
+  chunk: "bg-chart-2/15 text-chart-2 border-chart-2/30",
+  symbol: "bg-chart-3/15 text-chart-3 border-chart-3/30",
+  entity: "bg-chart-4/15 text-chart-4 border-chart-4/30",
+  default: "bg-muted text-muted-foreground border-border",
+} satisfies Record<string, string>;
 
 function QueryPage() {
   const { workspaceId: defaultWorkspaceId } = useSearch({ from: "/query" });
-  const [state, setState] = useState<QueryResult & { error: string | null }>(initialState);
+  const [state, setState] = useState<QueryResult>(initialState);
   const [pending, setPending] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -88,7 +70,6 @@ function QueryPage() {
 
   const fileNodes = state.graphNodes.filter((n) => n.type === "file");
   const symbolNodes = state.graphNodes.filter((n) => n.type === "symbol");
-  const chunkNodes = state.graphNodes.filter((n) => n.type === "chunk");
 
   const hasWorkspaceId = defaultWorkspaceId.trim().length > 0;
 
@@ -205,7 +186,7 @@ function QueryPage() {
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {fileNodes.map((node) => (
-                    <Badge key={node.id} variant="outline" className={nodeTypeColor("file")}>
+                    <Badge key={node.id} variant="outline" className={NODE_TYPE_COLORS.file}>
                       <FileText className="h-3 w-3 mr-1" /> {node.label}
                     </Badge>
                   ))}
@@ -219,7 +200,7 @@ function QueryPage() {
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {symbolNodes.map((node) => (
-                    <Badge key={node.id} variant="outline" className={nodeTypeColor("symbol")}>
+                    <Badge key={node.id} variant="outline" className={NODE_TYPE_COLORS.symbol}>
                       {node.label}
                     </Badge>
                   ))}

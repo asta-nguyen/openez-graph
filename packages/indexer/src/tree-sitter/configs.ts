@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
 
-import type { LanguageConfig, ImportRule } from "./parse";
+import type { LanguageConfig } from "./parse";
 
 // ── Python ──
 

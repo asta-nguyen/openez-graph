@@ -1,25 +1,33 @@
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
+import { parseChunkMetadata } from "./retrieval";
 import { countTokens, truncateToTokenLimit } from "./tokenizer";
 import type { CodeContextResult, CodeSymbolContext, GraphNeighborResult } from "./types";
 
-function metadata(node: Record<string, unknown>): Record<string, unknown> {
-  return typeof node.metadata === "object" && node.metadata !== null
-    ? (node.metadata as Record<string, unknown>)
-    : {};
+/**
+ * Row shape returned by the DB layer's `graphNeighbors`. All fields are `unknown`
+ * because the DB returns an index-signature row (`GraphNeighborNode`); that type is
+ * assignable here, so callers can pass rows straight through without a type assertion.
+ */
+interface GraphNodeRow {
+  id?: unknown;
+  type?: unknown;
+  label?: unknown;
+  ref_id?: unknown;
+  metadata?: unknown;
 }
 
-function compactNode(node: Record<string, unknown>): GraphNeighborResult["nodes"][number] {
-  const meta = metadata(node);
+function compactNode(node: GraphNodeRow): GraphNeighborResult["nodes"][number] {
+  const meta = parseChunkMetadata(JSON.stringify(node.metadata));
   const result: GraphNeighborResult["nodes"][number] = {
     id: String(node.id),
     type: String(node.type),
     label: String(node.label),
   };
   const filePath = meta.filePath ?? meta.path;
-  if (typeof filePath === "string") result.path = filePath;
-  if (typeof meta.startLine === "number") result.startLine = meta.startLine;
-  if (typeof meta.endLine === "number") result.endLine = meta.endLine;
+  if (filePath !== undefined) result.path = filePath;
+  if (meta.startLine !== undefined) result.startLine = meta.startLine;
+  if (meta.endLine !== undefined) result.endLine = meta.endLine;
   return result;
 }
 
@@ -54,20 +62,13 @@ export async function graphNeighbors(input: {
       const to = labels.get(String(edge.to_node_id));
       if (!from || !to) return [];
       const compact: GraphNeighborResult["edges"][number] = { from, to, type: String(edge.type) };
-      if (typeof edge.weight === "number") compact.weight = edge.weight;
+      const weight = Number.isFinite(edge.weight) ? Number(edge.weight) : undefined;
+      if (weight !== undefined) compact.weight = weight;
       return [compact];
     })
     .slice(0, limit);
 
   return { nodes, edges };
-}
-
-function parseJson(value: unknown): Record<string, unknown> {
-  try {
-    return JSON.parse(String(value ?? "{}")) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
 }
 
 export async function codeContext(input: {
@@ -98,8 +99,8 @@ export async function codeContext(input: {
     ...new Set(
       neighbors.nodes
         .filter((node) => node.type === "symbol")
-        .map((node) => node.ref_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0),
+        .map((node) => String(node.ref_id ?? ""))
+        .filter((id) => id.length > 0),
     ),
   ];
   const chunkRows =
@@ -112,22 +113,20 @@ export async function codeContext(input: {
      WHERE chunks.id IN (${referencedChunkIds.map(() => "?").join(",")})`,
           referencedChunkIds,
         );
-  const chunksById = new Map(chunkRows.map((row) => [String(row.id), row]));
+  const chunksById = new Map(chunkRows.map((row) => [Number(row.id), row]));
 
-  const describeSymbol = (
-    node: Record<string, unknown>,
-    includeSnippet = true,
-  ): CodeSymbolContext => {
-    const meta = metadata(node);
-    const chunk = chunksById.get(String(node.ref_id ?? ""));
-    const chunkMeta = parseJson(chunk?.metadata);
+  const describeSymbol = (node: GraphNodeRow, includeSnippet = true): CodeSymbolContext => {
+    const meta = parseChunkMetadata(JSON.stringify(node.metadata));
+    const chunk = chunksById.get(Number(node.ref_id));
+    const chunkMeta = parseChunkMetadata(String(chunk?.metadata ?? "{}"));
     const result: CodeSymbolContext = { symbol: String(node.label), label: String(node.label) };
-    const filePath = meta.filePath ?? chunk?.path;
-    if (typeof filePath === "string") result.path = filePath;
-    if (typeof chunkMeta.startLine === "number") result.startLine = chunkMeta.startLine;
-    if (typeof chunkMeta.endLine === "number") result.endLine = chunkMeta.endLine;
-    if (includeSnippet && typeof chunk?.content === "string")
-      result.snippet = String(chunk.content);
+    const chunkPath = chunk?.path;
+    const filePath = meta.filePath ?? (chunkPath != null ? String(chunkPath) : undefined);
+    if (filePath !== undefined) result.path = filePath;
+    if (chunkMeta.startLine !== undefined) result.startLine = chunkMeta.startLine;
+    if (chunkMeta.endLine !== undefined) result.endLine = chunkMeta.endLine;
+    const content = chunk?.content;
+    if (includeSnippet && content != null) result.snippet = String(content);
     return result;
   };
 
@@ -153,14 +152,14 @@ export async function codeContext(input: {
     relatedChunks: neighbors.nodes
       .filter((node) => node.type === "symbol")
       .flatMap((node) => {
-        const chunk = chunksById.get(String(node.ref_id ?? ""));
+        const chunk = chunksById.get(Number(node.ref_id));
         if (!chunk) return [];
-        const meta = parseJson(chunk.metadata);
+        const meta = parseChunkMetadata(String(chunk.metadata ?? "{}"));
         return [
           {
             path: String(chunk.path),
-            startLine: typeof meta.startLine === "number" ? meta.startLine : undefined,
-            endLine: typeof meta.endLine === "number" ? meta.endLine : undefined,
+            startLine: meta.startLine,
+            endLine: meta.endLine,
             heading: chunk.heading ? String(chunk.heading) : undefined,
             snippet: String(chunk.content),
           },

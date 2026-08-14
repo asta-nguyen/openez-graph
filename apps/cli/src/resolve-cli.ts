@@ -4,15 +4,15 @@ import path from "node:path";
 declare const __dirname: string | undefined;
 
 function getThisDir(): string {
-  if (typeof __dirname !== "undefined") {
+  try {
     return __dirname;
+  } catch {
+    /* __dirname not available (ESM) */
   }
   try {
-    if (typeof import.meta !== "undefined" && import.meta.dirname) {
-      return import.meta.dirname;
-    }
+    if (import.meta.dirname) return import.meta.dirname;
   } catch {
-    // import.meta not available (CJS)
+    /* import.meta not available (CJS) */
   }
   return process.cwd();
 }

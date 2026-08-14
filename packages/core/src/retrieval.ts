@@ -1,5 +1,6 @@
 import { getBrainSettings } from "@openez-graph/config";
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
+import type { JsonValue } from "@openez-graph/db";
 
 import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
 import type { EmbeddingProvider } from "./embeddings";
@@ -7,33 +8,71 @@ import { reciprocalRankFusion } from "./rrf";
 import { countTokens } from "./tokenizer";
 import type { CodeQueryResult, QuerySource } from "./types";
 
+/** Concrete chunk metadata fields stored in the `chunks.metadata` JSON column. */
+export interface ChunkMetadata {
+  startLine?: number;
+  endLine?: number;
+  kind?: string;
+  language?: string;
+  section?: string;
+  path?: string;
+  filePath?: string;
+  symbolType?: string;
+  symbolName?: string;
+}
+
+function isJsonNumber(value: JsonValue): value is number {
+  return Number.isFinite(value);
+}
+
+function isJsonValueString(value: JsonValue): value is string {
+  return Object.prototype.toString.call(value) === "[object String]";
+}
+
+/** Parse and validate a `chunks.metadata` JSON string into a typed ChunkMetadata at the I/O boundary. */
+export function parseChunkMetadata(raw: string | undefined): ChunkMetadata {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      startLine: isJsonNumber(parsed.startLine) ? parsed.startLine : undefined,
+      endLine: isJsonNumber(parsed.endLine) ? parsed.endLine : undefined,
+      kind: isJsonValueString(parsed.kind) ? parsed.kind : undefined,
+      language: isJsonValueString(parsed.language) ? parsed.language : undefined,
+      section: isJsonValueString(parsed.section) ? parsed.section : undefined,
+      path: isJsonValueString(parsed.path) ? parsed.path : undefined,
+      filePath: isJsonValueString(parsed.filePath) ? parsed.filePath : undefined,
+      symbolType: isJsonValueString(parsed.symbolType) ? parsed.symbolType : undefined,
+      symbolName: isJsonValueString(parsed.symbolName) ? parsed.symbolName : undefined,
+    };
+  } catch {
+    /* malformed metadata — treat as empty */
+    return {};
+  }
+}
+
 interface ChunkHit {
-  id: string;
+  id: number;
   path: string;
   content: string;
   score: number;
   heading: string | null;
-  metadata: Record<string, unknown>;
+  metadata: ChunkMetadata;
 }
 
 function sourceFromChunk(chunk: ChunkHit, reason: string): QuerySource {
-  const meta = chunk.metadata ?? {};
-  const startLine = typeof meta.startLine === "number" ? meta.startLine : undefined;
-  const endLine = typeof meta.endLine === "number" ? meta.endLine : undefined;
-
   return {
     path: chunk.path,
-    startLine,
-    endLine,
+    startLine: chunk.metadata.startLine,
+    endLine: chunk.metadata.endLine,
     score: chunk.score,
     reason,
   };
 }
 
 function formatContextBlock(chunk: ChunkHit): string {
-  const meta = chunk.metadata ?? {};
-  const startLine = typeof meta.startLine === "number" ? meta.startLine : "?";
-  const endLine = typeof meta.endLine === "number" ? meta.endLine : "?";
+  const startLine = chunk.metadata.startLine ?? "?";
+  const endLine = chunk.metadata.endLine ?? "?";
 
   return `[source: ${chunk.path}:${startLine}-${endLine} | score: ${chunk.score.toFixed(3)}]\n${chunk.content}`;
 }
@@ -53,18 +92,16 @@ export function cosineSimilarity(left: number[], right: number[]): number {
   return leftNorm === 0 || rightNorm === 0 ? 0 : dot / Math.sqrt(leftNorm * rightNorm);
 }
 
-export function parseEmbedding(value: unknown): number[] {
+export function parseEmbedding(value: Uint8Array | string): number[] {
   if (value instanceof Uint8Array) {
     return Array.from(new Float32Array(value.buffer, value.byteOffset, value.byteLength / 4));
-  }
-  if (value instanceof ArrayBuffer) {
-    return Array.from(new Float32Array(value));
   }
   // Legacy JSON TEXT embeddings (pre-BLOB migration)
   try {
     const parsed = JSON.parse(String(value));
-    return Array.isArray(parsed) && parsed.every((item) => typeof item === "number") ? parsed : [];
+    return Array.isArray(parsed) && parsed.every((item) => Number.isFinite(item)) ? parsed : [];
   } catch {
+    /* malformed embedding — treat as empty */
     return [];
   }
 }
@@ -112,14 +149,18 @@ export async function rankStoredEmbeddings(
   return results
     .map((row) => {
       const path = String(row.path);
-      const baseScore = cosineSimilarity(queryEmbedding, parseEmbedding(row.embedding));
+      // SAFETY: embeddings.embedding is a BLOB (Uint8Array) or legacy TEXT (string) per the schema; parseEmbedding handles both.
+      const baseScore = cosineSimilarity(
+        queryEmbedding,
+        parseEmbedding(row.embedding as Uint8Array | string),
+      );
       return {
-        id: String(row.id),
+        id: Number(row.id),
         path,
         content: String(row.content),
         score: isCodeFile(path) ? baseScore + CODE_FILE_BOOST : baseScore,
         heading: row.heading ? String(row.heading) : null,
-        metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+        metadata: parseChunkMetadata(String(row.metadata ?? "{}")),
       };
     })
     .filter((hit) => hit.score >= MIN_COSINE_SIMILARITY)
@@ -182,7 +223,7 @@ async function vectorSearch(rootPath: string, query: string, limit: number): Pro
 
 async function graphExpand(
   rootPath: string,
-  seedIds: string[],
+  seedIds: number[],
   depth: number,
   limit: number,
 ): Promise<ChunkHit[]> {
@@ -236,12 +277,12 @@ async function graphExpand(
   const seenPaths = new Set<string>();
   return results
     .map((row) => ({
-      id: String(row.id),
+      id: Number(row.id),
       path: String(row.path),
       content: String(row.content),
       score: Number(row.score ?? 0),
       heading: row.heading ? String(row.heading) : null,
-      metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+      metadata: parseChunkMetadata(String(row.metadata ?? "{}")),
     }))
     .filter((row) => {
       if (seenPaths.has(row.path)) return false;
@@ -296,10 +337,20 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
   console.error(
     `[retrieval] query: "${input.query}" | fts_limit=${retrieval.textLimit} vector_limit=${retrieval.vectorLimit}`,
   );
-  const [ftsResults, vectorResults] = await Promise.all([
+  const [ftsResultsRaw, vectorResults] = await Promise.all([
     repo.fullTextSearch(input.query, retrieval.textLimit),
     vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit),
   ]);
+  // fullTextSearch returns metadata already parsed by the DB layer; re-validate it through
+  // parseChunkMetadata so every ChunkHit carries a typed ChunkMetadata at the I/O boundary.
+  const ftsResults: ChunkHit[] = ftsResultsRaw.map((hit) => ({
+    id: hit.id,
+    path: hit.path,
+    content: hit.content,
+    score: hit.score,
+    heading: hit.heading,
+    metadata: parseChunkMetadata(JSON.stringify(hit.metadata)),
+  }));
   console.error(`[retrieval] results: fts=${ftsResults.length} vector=${vectorResults.length}`);
 
   // RRF fusion: FTS weighted 2x, vector weighted 1x. Vector can boost files FTS ranked low.
@@ -396,19 +447,4 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
   }
 
   return { answerContext, sources, metrics };
-}
-
-/** @deprecated Use codeQuery. */
-export const memoryQuery = codeQuery;
-
-function safeParseJson(
-  value: string | undefined,
-  fallback: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!value) return fallback;
-  try {
-    return JSON.parse(value) as Record<string, unknown>;
-  } catch {
-    return fallback;
-  }
 }

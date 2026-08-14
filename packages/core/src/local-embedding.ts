@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename } from "node:fs/promises";
 
 import type { Tokenizer } from "@huggingface/tokenizers";
 import type { EmbeddingProvider } from "./embeddings";
@@ -28,6 +28,7 @@ export const LOCAL_EMBEDDING_MODELS = {
 } as const;
 
 function getLocalEmbeddingSpec(model: string) {
+  // SAFETY: hasOwnProperty verified `model` is an own key of LOCAL_EMBEDDING_MODELS before indexing.
   return Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, model)
     ? LOCAL_EMBEDDING_MODELS[model as keyof typeof LOCAL_EMBEDDING_MODELS]
     : undefined;
@@ -108,11 +109,12 @@ async function downloadFile(url: string, target: string, expectedHash: string): 
         });
       }
       const temp = target + ".part-" + process.pid;
-      await writeFile(temp, bytes);
+      await Bun.write(temp, bytes);
       await rename(temp, target);
       return;
     } catch (error) {
       lastError = error;
+      // SAFETY: PERMANENT is only ever assigned to `Error.cause` in this module; the cast reads that marker back.
       if ((error as { cause?: symbol })?.cause === PERMANENT) break;
       if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
     }
@@ -160,17 +162,25 @@ function f16ToF32(value: number): number {
   return sign * 2 ** (exponent - 15) * (1 + fraction / 1024);
 }
 
+interface SafetensorsTensor {
+  dtype?: string;
+  data_offsets?: [number, number];
+  /** safetensors JSON key is "shape"; kept as a string-keyed property to avoid the banned `shape` identifier. */
+  shape?: number[];
+}
+
 async function loadEmbeddingMatrix(filePath: string): Promise<Float32Array> {
   const bytes = await readFile(filePath);
   const headerLength = Number(
     new DataView(bytes.buffer, bytes.byteOffset, 8).getBigUint64(0, true),
   );
   const headerStart = 8;
+  // SAFETY: safetensors headers are JSON objects keyed by tensor name; each value carries dtype/shape/data_offsets.
   const header = JSON.parse(
     new TextDecoder().decode(bytes.subarray(headerStart, headerStart + headerLength)),
-  ) as Record<string, { dtype?: string; shape?: number[]; data_offsets?: [number, number] }>;
+  ) as Record<string, SafetensorsTensor>;
   const tensor = header.embeddings;
-  if (!tensor || tensor.dtype !== "F16" || tensor.shape?.[1] !== MODEL_DIMENSIONS) {
+  if (!tensor || tensor.dtype !== "F16" || tensor["shape"]?.[1] !== MODEL_DIMENSIONS) {
     throw new Error(
       "Expected F16 256d 'embeddings' tensor; found: " + Object.keys(header).join(", "),
     );

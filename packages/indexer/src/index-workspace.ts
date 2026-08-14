@@ -1,10 +1,8 @@
-import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 
 import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
-import { fastTokenCounter, type TokenCounter } from "@openez-graph/core";
+import { countTokens, fastTokenCounter, type TokenCounter } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
@@ -12,13 +10,7 @@ import {
 } from "@openez-graph/db";
 import type { RegistryWorkspace, WorkspaceRepository } from "@openez-graph/db";
 
-import { hashContent } from "./hash";
-import {
-  createSymbolChunks,
-  inferDocumentKind,
-  makeFallbackChunks,
-  type ExtractedSymbol,
-} from "./languages";
+import { inferDocumentKind, type ExtractedSymbol } from "./languages";
 import { parseDocument } from "./parsers";
 import { scanWorkspaceFiles } from "./scanner";
 import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
@@ -69,6 +61,31 @@ export interface NativeParser {
     importPaths: string[];
     calledIdentifiers: string[];
     callExpressions: Array<{ callerName: string; calleeName: string }>;
+    chunks?: Array<{
+      content: string;
+      tokenCount?: number;
+      startLine: number;
+      endLine: number;
+    }>;
+  } | null>;
+  parseAndChunkBatch?(items: Array<{ language: string; content: string }>): Array<{
+    symbols: Array<{
+      name: string;
+      symbolType: string;
+      exported: boolean;
+      startLine: number;
+      endLine: number;
+      receiver?: string;
+    }>;
+    importPaths: string[];
+    calledIdentifiers: string[];
+    callExpressions: Array<{ callerName: string; calleeName: string }>;
+    chunks?: Array<{
+      content: string;
+      tokenCount?: number;
+      startLine: number;
+      endLine: number;
+    }>;
   } | null>;
 }
 
@@ -78,21 +95,16 @@ let _nativeParser: NativeParser | null | undefined;
  * Resolve the native tree-sitter parser once and cache the result. Returns
  * `null` when the platform-specific native extension is unavailable — callers
  * then fall back to the registry parsers and tag cached rows `fallback-v1`.
- * The resolved capability also drives parsed_documents cache validation: a
- * cache row is only reused when its `parser_version` matches the parser that
- * the current capability would use (`native-v1` vs `fallback-v1`).
  */
 export function resolveNativeParser(): NativeParser | null {
   if (_nativeParser !== undefined) return _nativeParser;
   try {
-    const nativePath = path.join(__dirname, "native", "index.linux-x64-gnu.node");
-    _nativeParser = require(nativePath) as NativeParser;
-  } catch {
-    try {
-      _nativeParser = require("@openez-graph/native") as NativeParser;
-    } catch {
-      _nativeParser = null;
-    }
+    // SAFETY: @openez-graph/native exports a NativeParser instance; the require
+    // succeeds only when the platform-specific native extension is loaded.
+    _nativeParser = require("@openez-graph/native") as NativeParser;
+  } catch (err) {
+    console.debug("[openez] native parser unavailable:", err);
+    _nativeParser = null;
   }
   return _nativeParser;
 }
@@ -233,7 +245,7 @@ export function createWorkspaceFileResolver(
   };
 }
 
-async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: string) {
+async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: number) {
   const chunks = await repo.getChunksByDocument(documentId);
   const chunkIds = chunks.map((c) => c.id);
 
@@ -241,7 +253,7 @@ async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: str
     await repo.deleteEmbeddingsByChunkIds(chunkIds);
   }
 
-  await repo.deleteGraphNodesByRefId(documentId);
+  await repo.deleteGraphNodesByRefId(String(documentId));
   await repo.deleteChunksByDocument(documentId);
 }
 
@@ -255,9 +267,9 @@ async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: str
  */
 async function resetChangedFileArtifacts(
   repo: WorkspaceRepository,
-  documentId: string,
+  documentId: number,
   relativePath: string,
-): Promise<Map<string, string>> {
+): Promise<Map<string, number>> {
   const chunks = await repo.getChunksByDocument(documentId);
   const chunkIds = chunks.map((c) => c.id);
 
@@ -276,7 +288,7 @@ async function resetChangedFileArtifacts(
 
   // Get existing symbol nodes for this file, delete their outgoing edges (will be rebuilt)
   const symbolNodes = await repo.getSymbolNodesByFilePath(relativePath);
-  const existingSymbolNodes = new Map<string, string>();
+  const existingSymbolNodes = new Map<string, number>();
   for (const sym of symbolNodes) {
     repo.deleteOutgoingEdges(sym.id, ["represented_by", "calls"]);
     existingSymbolNodes.set(sym.label, sym.id);
@@ -301,7 +313,7 @@ export function boundChunks(
       ...chunk,
       content,
       tokenCount: counter.count(content),
-      contentHash: hashContent(content),
+      contentHash: Bun.hash(content).toString(16),
       metadata: { ...chunk.metadata, splitIndex, splitCount: parts.length },
     }));
   });
@@ -371,43 +383,76 @@ async function parseInline(
   // Batch parse all tree-sitter files in one rayon-parallel call
   if (batchTasks.length > 0) {
     const _batchStart = Date.now();
-    const batchItems = batchTasks.map((t) => ({
-      language: inferDocumentKind(t.relativePath).language!,
-      content: t.content,
-    }));
-    // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust
-    const nativeResults = native!.parseCodeBatch(batchItems);
+    const batchItems = batchTasks.map((t) => {
+      const info = inferDocumentKind(t.relativePath);
+      return {
+        language: info.language ?? "text",
+        content: t.content,
+      };
+    });
+    const useChunkBatch = !!native!.parseAndChunkBatch;
+    const nativeResults =
+      useChunkBatch && native!.parseAndChunkBatch
+        ? native!.parseAndChunkBatch(batchItems)
+        : native!.parseCodeBatch(batchItems);
     process.stderr.write(
       `[t]   native-batch: ${Date.now() - _batchStart}ms (${batchTasks.length} files)\n`,
     );
     for (let i = 0; i < batchTasks.length; i++) {
       const task = batchTasks[i];
       const nr = nativeResults[i];
+      const info = inferDocumentKind(task.relativePath);
       if (nr) {
-        const lang = batchItems[i].language;
-        const lines = task.content.split("\n");
-        // Build symbol-aware chunks so code_context can match symbol names
-        // to chunks via metadata.symbolName. Fall back to line-based chunks
-        // only when no symbols were extracted.
-        const symbols: ExtractedSymbol[] = nr.symbols.map((s) => ({
-          name: s.name,
-          symbolType: s.symbolType,
-          type: s.symbolType,
-          exported: s.exported,
-          startLine: s.startLine,
-          endLine: s.endLine,
-          ...(s.receiver ? { receiver: s.receiver } : {}),
-        }));
+        const lang = info.language;
         let chunks: any[];
-        if (symbols.length > 0) {
-          chunks = createSymbolChunks(symbols, lines, lang, task.counter);
+        if (nr.chunks && nr.chunks.length > 0) {
+          chunks = nr.chunks.map((c: any) => ({
+            content: c.content,
+            tokenCount: c.tokenCount ?? 0,
+            contentHash: Bun.hash(c.content).toString(16),
+            metadata: {
+              kind: info.kind,
+              fallback: true,
+              startLine: c.startLine,
+              endLine: c.endLine,
+            },
+          }));
         } else {
-          chunks = makeFallbackChunks(task.content, lines, task.counter).chunks;
+          const lines = task.content.split("\n");
+          chunks = [];
+          for (let ci = 0; ci < lines.length; ci += 80) {
+            const slice = lines
+              .slice(ci, ci + 80)
+              .join("\n")
+              .trim();
+            if (!slice) continue;
+            chunks.push({
+              content: slice,
+              tokenCount: countTokens(slice),
+              contentHash: Bun.hash(slice).toString(16),
+              metadata: {
+                kind: info.kind,
+                fallback: true,
+                startLine: ci + 1,
+                endLine: Math.min(ci + 80, lines.length),
+              },
+            });
+          }
         }
-        // Bound chunks to configured token limits
-        chunks = boundChunks(chunks, task.targetTokens, task.overlapTokens, task.counter);
+        const symbols: ExtractedSymbol[] = nr.symbols.map((s: any) => {
+          const symbol: ExtractedSymbol = {
+            name: s.name,
+            symbolType: s.symbolType,
+            type: s.symbolType,
+            exported: s.exported,
+            startLine: s.startLine,
+            endLine: s.endLine,
+          };
+          if (s.receiver) symbol.receiver = s.receiver;
+          return symbol;
+        });
         results.set(task.id, {
-          kind: "code",
+          kind: info.kind,
           language: lang,
           parser: "tree-sitter-native",
           chunks,
@@ -439,28 +484,31 @@ async function parseInline(
     }
   }
 
-  // Parse remaining files (TS/JS, markdown, config) sequentially
-  for (const task of otherTasks) {
-    const indexed = await chunkDocument({
-      relativePath: task.relativePath,
-      absolutePath: task.absolutePath,
-      content: task.content,
-      targetTokens: task.targetTokens,
-      overlapTokens: task.overlapTokens,
-      counter: task.counter,
-    });
-    // Bound large symbol chunks (e.g. a 1000-line function) to the target
-    // token limit. The OxcParser creates one chunk per symbol, which can
-    // exceed the limit for very large functions.
-    if (indexed.kind === "code") {
-      indexed.chunks = boundChunks(
-        indexed.chunks,
-        task.targetTokens,
-        task.overlapTokens,
-        task.counter,
-      );
-    }
-    results.set(task.id, indexed);
+  // Parse remaining files (TS/JS, markdown, config) concurrently in batches
+  const CHUNK_PARALLEL = 64;
+  for (let i = 0; i < otherTasks.length; i += CHUNK_PARALLEL) {
+    const slice = otherTasks.slice(i, i + CHUNK_PARALLEL);
+    await Promise.all(
+      slice.map(async (task) => {
+        const indexed = await chunkDocument({
+          relativePath: task.relativePath,
+          absolutePath: task.absolutePath,
+          content: task.content,
+          targetTokens: task.targetTokens,
+          overlapTokens: task.overlapTokens,
+          counter: task.counter,
+        });
+        if (indexed.kind === "code") {
+          indexed.chunks = boundChunks(
+            indexed.chunks,
+            task.targetTokens,
+            task.overlapTokens,
+            task.counter,
+          );
+        }
+        results.set(task.id, indexed);
+      }),
+    );
     onProgress?.(results.size, tasks.length);
   }
 
@@ -471,6 +519,7 @@ export async function indexWorkspace(input: {
   workspaceId?: string;
   rootPath?: string;
   mode?: "incremental" | "full";
+  fullReindex?: boolean;
   onProgress?: (progress: { message: string; progress: number }) => Promise<void> | void;
 }): Promise<IndexWorkspaceSummary> {
   // Token counting is scoped via the TokenCounter interface — no global
@@ -541,6 +590,16 @@ export async function indexWorkspace(input: {
 
     await writeLocalWorkspaceConfig(workspace);
 
+    // For full reindex, delete the workspace DB files after claiming the lease
+    // so reindex starts clean — no WAL replay, no row-by-row deletes. This must
+    // happen after tryClaimIndexing() to avoid deleting a live indexer's files.
+    if (input.fullReindex) {
+      const dbDir = path.join(workspace.rootPath, ".openez");
+      for (const f of ["index.sqlite", "index.sqlite-wal", "index.sqlite-shm"]) {
+        fsSync.rmSync(path.join(dbDir, f), { force: true });
+      }
+    }
+
     const repo = createWorkspaceRepository(workspace.rootPath);
     const settings = await getBrainSettings(workspace.rootPath);
     const config = await loadBrainConfig(workspace.rootPath);
@@ -552,7 +611,7 @@ export async function indexWorkspace(input: {
     const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
     const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
     const runMode = input.mode ?? "incremental";
-    const chunkingFingerprint = hashContent(JSON.stringify(settings.chunking));
+    const chunkingFingerprint = Bun.hash(JSON.stringify(settings.chunking)).toString(16);
     const forceRechunk =
       runMode === "incremental" && repo.getMeta("chunking_fingerprint") !== chunkingFingerprint;
     let graphInvalidated = false;
@@ -604,7 +663,7 @@ export async function indexWorkspace(input: {
       }
     }
 
-    const workspaceFileResolver = createWorkspaceFileResolver(
+    const _workspaceFileResolver = createWorkspaceFileResolver(
       workspace.rootPath,
       files.map((file) => ({
         relativePath: file.relativePath,
@@ -616,18 +675,9 @@ export async function indexWorkspace(input: {
     let chunksWritten = 0;
     let bulkWriteMode = false;
     let needsWriteModeRestore = false;
-    // FTS inputs collected during transaction, inserted after finalize (no DB contention)
-    let ftsInputsForBackground: Array<{
-      chunkId: string;
-      path: string;
-      heading: string | null;
-      language: string | null;
-      content: string;
-      metadata: string;
-    }> = [];
     const _T0 = Date.now();
-    const symbolNodeIdsByFileAndName = new Map<string, string>();
-    const pendingCallEdges: Array<{
+    const _symbolNodeIdsByFileAndName = new Map<string, number>();
+    const _pendingCallEdges: Array<{
       callerName: string;
       calleeName: string;
       filePath: string;
@@ -674,7 +724,7 @@ export async function indexWorkspace(input: {
           const i = readIndex++;
           fileContents.set(
             filesToRead[i].relativePath,
-            await fs.readFile(filesToRead[i].absolutePath, "utf8"),
+            await Bun.file(filesToRead[i].absolutePath).text(),
           );
         }
       }
@@ -687,7 +737,7 @@ export async function indexWorkspace(input: {
       const _T2 = Date.now();
       for (const file of filesToRead) {
         const content = fileContents.get(file.relativePath)!;
-        const contentHash = hashContent(content);
+        const contentHash = Bun.hash(content).toString(16);
         const existingDocument = existingDocumentsByPath.get(file.relativePath);
         const unchanged =
           runMode === "incremental" &&
@@ -735,12 +785,17 @@ export async function indexWorkspace(input: {
       process.stderr.write(`[t] phase3 parse: ${Date.now() - _T3}ms\n`);
       await assertIndexingLease();
       const _T4 = Date.now();
+      const isBulkRun = runMode === "full" || parseTasks.length >= 100 || forceRechunk;
       if (parseTasks.length > 0) {
         await invalidateGraph();
         // ── Phase 4: Write all results to DB (main thread, transactioned) ──
         repo.setOptimizedWriteMode(true);
-        repo.dropFtsTriggers();
-        bulkWriteMode = true;
+        if (isBulkRun) {
+          repo.dropFtsTriggers();
+          bulkWriteMode = true;
+        } else {
+          needsWriteModeRestore = true;
+        }
       }
 
       // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
@@ -758,11 +813,11 @@ export async function indexWorkspace(input: {
           sizeBytes: number;
           mtimeMs: number;
         }> = [];
-        const docIdMap = new Map<string, string>(); // relativePath -> documentId
+        const docIdMap = new Map<string, number>(); // relativePath -> documentId
 
         for (const file of parseTasks) {
           const indexed = parseResults.get(file.id)!;
-          const contentHash = hashContent(file.content);
+          const contentHash = Bun.hash(file.content).toString(16);
           const existingDocument = existingDocumentsByPath.get(file.relativePath);
 
           if (existingDocument) {
@@ -801,7 +856,7 @@ export async function indexWorkspace(input: {
 
         // Step 2: Batch insert ALL chunks across all files in one call
         const allChunkInputs: Array<{
-          documentId: string;
+          documentId: number;
           chunkIndex: number;
           heading: string | null;
           content: string;
@@ -827,92 +882,80 @@ export async function indexWorkspace(input: {
             chunkFileMap.push({ fileRelativePath: file.relativePath, chunkIndex: ci });
           }
         }
-        const allChunkIds = await repo.insertChunks(allChunkInputs);
+        await repo.insertChunks(allChunkInputs);
         _dbSub["insert-chunks"] = Date.now() - _dbT1;
 
         // Precompute chunk offsets (prefix sum) for O(1) lookup
-        const chunkOffsets: number[] = new Array(parseTasks.length);
+        const chunkOffsets: number[] = Array.from({ length: parseTasks.length });
         let totalChunks = 0;
         for (let fi = 0; fi < parseTasks.length; fi++) {
           chunkOffsets[fi] = totalChunks;
           totalChunks += parseResults.get(parseTasks[fi].id)!.chunks.length;
         }
 
-        // Collect FTS inputs for bulk insert after transaction (triggers down — no double-write)
-        const ftsInputs = ftsInputsForBackground;
-        for (let fi = 0; fi < parseTasks.length; fi++) {
-          const file = parseTasks[fi];
-          const indexed = parseResults.get(file.id)!;
-          const chunkOffset = chunkOffsets[fi];
-          for (let ci = 0; ci < indexed.chunks.length; ci++) {
-            const chunk = indexed.chunks[ci];
-            ftsInputs.push({
-              chunkId: allChunkIds[chunkOffset + ci],
-              path: file.relativePath,
-              heading: chunk.heading ?? null,
-              language: indexed.language ?? null,
-              content: chunk.content,
-              metadata: JSON.stringify(chunk.metadata),
-            });
-          }
-        }
-        _dbSub["collect-fts"] = Date.now() - _dbT1;
-
         // Step 3: Cache parse results — graph building remains lazy/on-demand.
         for (let fi = 0; fi < parseTasks.length; fi++) {
           const file = parseTasks[fi];
           const indexed = parseResults.get(file.id)!;
-          const chunkOffset = chunkOffsets[fi];
+          const _chunkOffset = chunkOffsets[fi];
 
           chunksWritten += indexed.chunks.length;
           filesUpdated += 1;
         }
 
-        // Step 4: Cache parse results (symbols/imports/calls) so graph build
-        // can skip re-parsing. Keyed by document_id, invalidated on content change.
+        // Step 4: Cache parse results (symbols/imports/calls) in a single batch
+        const EMPTY_JSON_ARRAY = "[]";
+        type ParsedDocBatchEntry = {
+          documentId: number;
+          contentHash: string;
+          symbols: string;
+          imports: string;
+          calls: string;
+          calledIdentifiers: string;
+          parserVersion: string;
+        };
+        const parsedDocsBatch: ParsedDocBatchEntry[] = Array.from({ length: parseTasks.length });
         for (let fi = 0; fi < parseTasks.length; fi++) {
           const file = parseTasks[fi];
           const indexed = parseResults.get(file.id)!;
           const documentId = docIdMap.get(file.relativePath)!;
-          const contentHash = hashContent(file.content);
-          repo.insertParsedDocument({
+          const contentHash = Bun.hash(file.content).toString(16);
+          parsedDocsBatch[fi] = {
             documentId,
             contentHash,
-            symbols: JSON.stringify(indexed.definedSymbols ?? []),
-            imports: JSON.stringify(indexed.importPaths ?? []),
-            calls: JSON.stringify(indexed.callExpressions ?? []),
-            calledIdentifiers: JSON.stringify(indexed.calledIdentifiers ?? []),
+            symbols: indexed.definedSymbols?.length
+              ? JSON.stringify(indexed.definedSymbols)
+              : EMPTY_JSON_ARRAY,
+            imports: indexed.importPaths?.length
+              ? JSON.stringify(indexed.importPaths)
+              : EMPTY_JSON_ARRAY,
+            calls: indexed.callExpressions?.length
+              ? JSON.stringify(indexed.callExpressions)
+              : EMPTY_JSON_ARRAY,
+            calledIdentifiers: indexed.calledIdentifiers?.length
+              ? JSON.stringify(indexed.calledIdentifiers)
+              : EMPTY_JSON_ARRAY,
             parserVersion: parserVersionFor(indexed.parser),
-          });
+          };
         }
-
-        // Graph (nodes + edges + call edges) is built lazily on first
-        // graph_neighbors/code_context query — see buildGraphFromIndexedFiles()
+        repo.insertParsedDocumentsBatch(parsedDocsBatch);
 
         await reportProgress(`Writing ${parseTasks.length}/${parseTasks.length}...`, 95);
       });
       process.stderr.write(`[t]   db sub: ${JSON.stringify(_dbSub)}\n`);
 
-      // ── Phase 5: FTS insert (triggers still down — no double-write) + restore ──
+      // ── Phase 5: FTS rebuild from chunks table (single SQL, no row-by-row) ──
       process.stderr.write(`[t] phase4 db-write: ${Date.now() - _T4}ms\n`);
       const _T5 = Date.now();
 
-      // Insert FTS entries while triggers are still down (no trigger overhead)
-      if (ftsInputsForBackground.length > 0) {
+      if (bulkWriteMode) {
         _ftsBuildingWorkspaces.set(workspace.id, true);
-        const _ftsT = Date.now();
         try {
-          await repo.bulkInsertFts(ftsInputsForBackground);
-          process.stderr.write(
-            `[t]   fts-insert: ${Date.now() - _ftsT}ms (${ftsInputsForBackground.length} entries)\n`,
-          );
+          const ftsCount = repo.bulkInsertFtsFromChunks();
+          process.stderr.write(`[t]   fts-rebuild: ${Date.now() - _T5}ms (${ftsCount} entries)\n`);
         } finally {
           _ftsBuildingWorkspaces.delete(workspace.id);
         }
-      }
-
-      // Now restore FTS triggers (entries already inserted, no backfill needed)
-      if (bulkWriteMode) {
         repo.restoreFtsTriggersOnly();
         needsWriteModeRestore = true;
         bulkWriteMode = false;
@@ -930,10 +973,10 @@ export async function indexWorkspace(input: {
         embeddingsWritten: 0,
       });
 
-      const docCount = await repo.getDocumentCount();
-      const chunkCountResult = await repo.getChunkCount();
-      const nodeCount = await repo.getNodeCount();
-      const edgeCount = await repo.getEdgeCount();
+      const docCount = runMode === "full" ? files.length : await repo.getDocumentCount();
+      const chunkCountResult = runMode === "full" ? chunksWritten : await repo.getChunkCount();
+      const nodeCount = 0;
+      const edgeCount = 0;
 
       const completed = await activeRegistry.completeIndexing(workspace.id, indexingOwnerToken!, {
         documentCount: docCount,
@@ -948,18 +991,18 @@ export async function indexWorkspace(input: {
         );
       }
 
-      // Switch out of optimized write mode AFTER all writes are done.
-      // Doing it earlier causes fsync to flush ~70MB of dirty pages mid-finalize.
       if (needsWriteModeRestore) {
         repo.setOptimizedWriteMode(false);
+        needsWriteModeRestore = false;
       }
+
       process.stderr.write(`[t] phase7 finalize: ${Date.now() - _T7}ms\n`);
     } catch (error) {
       if (bulkWriteMode || needsWriteModeRestore) {
         try {
           repo.restoreFtsTriggers();
-        } catch {
-          /* preserve original indexing error */
+        } catch (triggerError) {
+          console.debug("[openez] failed to restore FTS triggers:", triggerError);
         }
         repo.setOptimizedWriteMode(false);
       }
@@ -1000,8 +1043,8 @@ export async function indexWorkspace(input: {
           indexingOwnerToken!,
           "Indexing aborted before completion",
         );
-      } catch {
-        // Preserve the original indexing error if registry cleanup fails.
+      } catch (releaseError) {
+        console.debug("[openez] failed to release indexing lease:", releaseError);
       }
     }
   }
@@ -1057,7 +1100,7 @@ export async function buildGraphGeneration(
   }
 
   // Read file contents
-  const fs = await import("node:fs/promises");
+  const _fs = await import("node:fs/promises");
 
   // Split documents: native-parseable (python/go/rust) vs registry-parseable
   const NATIVE_LANGS = new Set(["python", "go", "rust"]);
@@ -1110,7 +1153,7 @@ export async function buildGraphGeneration(
     }
 
     try {
-      const content = await fs.readFile(doc.absolutePath, "utf8");
+      const content = await Bun.file(doc.absolutePath).text();
       const parsed = await parseDocument({
         relativePath: doc.path,
         absolutePath: doc.absolutePath,
@@ -1138,8 +1181,9 @@ export async function buildGraphGeneration(
         calledIdentifiers: JSON.stringify(parsed.calledIdentifiers ?? []),
         parserVersion: parserVersionFor(parsed.parser),
       });
-    } catch {
-      /* file may have been deleted */
+    } catch (readError) {
+      console.debug("[openez] error reading doc for graph:", doc.path, readError);
+      continue;
     }
   }
 
@@ -1184,12 +1228,13 @@ export async function buildGraphGeneration(
       const batchDocPaths: string[] = [];
       for (const doc of nativeToParse) {
         try {
-          const content = await fs.readFile(doc.absolutePath, "utf8");
+          const content = await Bun.file(doc.absolutePath).text();
           const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
           batchItems.push({ language: lang, content });
           batchDocPaths.push(doc.path);
-        } catch {
-          /* file may have been deleted */
+        } catch (readError) {
+          console.debug("[openez] error reading native doc for batch:", doc.path, readError);
+          continue;
         }
       }
 
@@ -1236,7 +1281,7 @@ export async function buildGraphGeneration(
     for (const doc of nativeToParse) {
       if (parsedFiles.has(doc.path)) continue;
       try {
-        const content = await fs.readFile(doc.absolutePath, "utf8");
+        const content = await Bun.file(doc.absolutePath).text();
         const parsed = await parseDocument({
           relativePath: doc.path,
           absolutePath: doc.absolutePath,
@@ -1264,8 +1309,9 @@ export async function buildGraphGeneration(
           calledIdentifiers: JSON.stringify(parsed.calledIdentifiers ?? []),
           parserVersion: parserVersionFor(parsed.parser),
         });
-      } catch {
-        /* file may have been deleted */
+      } catch (parseError) {
+        console.debug("[openez] error parsing native doc fallback:", doc.path, parseError);
+        continue;
       }
     }
   }
@@ -1286,9 +1332,9 @@ export async function buildGraphGeneration(
   // ── Build nodes ──
   const allNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> =
     [];
-  const allEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> =
+  const allEdges: Array<{ fromNodeId: number; toNodeId: number; type: string; metadata?: string }> =
     [];
-  const symbolNodeIdsByFileAndName = new Map<string, string>();
+  const symbolNodeIdsByFileAndName = new Map<string, number>();
   const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
 
   // Map: filePath -> { fileNodeIdx, symNodeStart, symCount }
@@ -1300,7 +1346,7 @@ export async function buildGraphGeneration(
   }> = [];
 
   // Map: filePath -> doc.id (for chunk lookups)
-  const docIdByPath = new Map<string, string>();
+  const docIdByPath = new Map<string, number>();
   for (const doc of graphDocs) {
     docIdByPath.set(doc.path, doc.id);
   }
@@ -1312,15 +1358,16 @@ export async function buildGraphGeneration(
 
     // Load chunks for this document to map symbolName -> chunkId
     const chunks = await repo.getChunksByDocument(doc.id);
-    const chunkIdBySymbolName = new Map<string, string>();
+    const chunkIdBySymbolName = new Map<string, number>();
     for (const chunk of chunks) {
       try {
         const meta = JSON.parse(chunk.metadata);
         if (meta.symbolName) {
           chunkIdBySymbolName.set(meta.symbolName, chunk.id);
         }
-      } catch {
-        /* ignore malformed metadata */
+      } catch (jsonError) {
+        console.debug("[openez] error parsing chunk metadata json:", chunk.id, jsonError);
+        continue;
       }
     }
 
@@ -1329,7 +1376,7 @@ export async function buildGraphGeneration(
     allNodeInputs.push({
       type: "file",
       label: filePath,
-      refId: doc.id,
+      refId: String(doc.id),
       metadata: JSON.stringify({ path: filePath, language }),
     });
 
@@ -1341,7 +1388,7 @@ export async function buildGraphGeneration(
       allNodeInputs.push({
         type: "symbol",
         label: sym.name,
-        refId: refId ?? undefined,
+        refId: refId != null ? String(refId) : undefined,
         metadata: JSON.stringify({
           symbolType: sym.symbolType,
           filePath,
@@ -1361,14 +1408,14 @@ export async function buildGraphGeneration(
 
   // Generate IDs in memory so nodes and edges can be atomically swapped into
   // the live graph only after the complete snapshot has been assembled.
-  const nodeIds = allNodeInputs.map(() => crypto.randomUUID());
+  const nodeIds = allNodeInputs.map((_, i) => i);
 
   // ── Build edges ──
   // Maps for node lookup
-  const fileNodeIdsByPath = new Map<string, string>();
+  const fileNodeIdsByPath = new Map<string, number>();
   for (const meta of _symMeta) {
     const fileNodeId = nodeIds[meta.fileNodeIdx];
-    if (fileNodeId) fileNodeIdsByPath.set(meta.filePath, fileNodeId);
+    if (fileNodeId != null) fileNodeIdsByPath.set(meta.filePath, fileNodeId);
 
     for (let si = 0; si < meta.symCount; si++) {
       const symNodeId = nodeIds[meta.symNodeStart + si];
@@ -1376,7 +1423,7 @@ export async function buildGraphGeneration(
         `${meta.filePath}\0${allNodeInputs[meta.symNodeStart + si].label}`,
         symNodeId,
       );
-      if (fileNodeId && symNodeId && fileNodeId !== symNodeId) {
+      if (fileNodeId != null && symNodeId != null && fileNodeId !== symNodeId) {
         allEdges.push({ fromNodeId: fileNodeId, toNodeId: symNodeId, type: "defines" });
       }
     }
@@ -1385,7 +1432,7 @@ export async function buildGraphGeneration(
   // Import edges
   for (const [filePath, parsed] of parsedFiles) {
     const importerNode = fileNodeIdsByPath.get(filePath);
-    if (!importerNode) continue;
+    if (importerNode == null) continue;
     const language = parsed.language ?? "text";
     const seenTargets = new Set<string>();
     for (const importPath of parsed.importPaths) {
@@ -1394,13 +1441,13 @@ export async function buildGraphGeneration(
       if (seenTargets.has(targetPath)) continue; // deduplicate
       seenTargets.add(targetPath);
       const targetNode = fileNodeIdsByPath.get(targetPath);
-      if (!targetNode || targetNode === importerNode) continue;
+      if (targetNode == null || targetNode === importerNode) continue;
       allEdges.push({ fromNodeId: importerNode, toNodeId: targetNode, type: "imports" });
     }
   }
 
   // Call edges
-  const globalSymbolNodes = new Map<string, string>();
+  const globalSymbolNodes = new Map<string, number>();
   for (const [key, nodeId] of symbolNodeIdsByFileAndName) {
     const label = key.slice(key.indexOf("\0") + 1);
     if (!globalSymbolNodes.has(label)) globalSymbolNodes.set(label, nodeId);
@@ -1408,7 +1455,7 @@ export async function buildGraphGeneration(
   const _callMeta = `{"heuristic":true,"confidence":"low"}`;
   for (const call of pendingCallEdges) {
     const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
-    if (!callerNodeId) continue;
+    if (callerNodeId == null) continue;
     // Resolve call targets with lexical scope awareness:
     // 1. Try qualified name (callerName.calleeName) — handles nested functions
     //    that shadow top-level symbols (e.g. `two.helper` called from `two`)
@@ -1428,8 +1475,8 @@ export async function buildGraphGeneration(
     const calleeNodeId =
       lexicalNames
         .map((name) => symbolNodeIdsByFileAndName.get(`${call.filePath}\0${name}`))
-        .find((id): id is string => Boolean(id)) ?? globalSymbolNodes.get(call.calleeName);
-    if (!calleeNodeId || callerNodeId === calleeNodeId) continue;
+        .find((id): id is number => id != null) ?? globalSymbolNodes.get(call.calleeName);
+    if (calleeNodeId == null || callerNodeId === calleeNodeId) continue;
     allEdges.push({
       fromNodeId: callerNodeId,
       toNodeId: calleeNodeId,
@@ -1446,7 +1493,7 @@ export async function buildGraphGeneration(
   const published = repo.replaceGraphArtifacts({
     buildEpoch,
     nodes: allNodeInputs.map((node, index) => ({ ...node, id: nodeIds[index] })),
-    edges: uniqueEdges.map((edge) => ({ ...edge, id: crypto.randomUUID() })),
+    edges: uniqueEdges.map((edge, index) => ({ ...edge, id: index })),
   });
 
   process.stderr.write(

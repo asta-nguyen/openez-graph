@@ -19,16 +19,13 @@ export interface CodeQueryResult {
   };
 }
 
-/** @deprecated Use CodeQueryResult. */
-export type MemoryQueryResult = CodeQueryResult;
-
 export interface RecalledMemory {
-  id: string;
+  id: number;
   title: string;
   content: string;
   tags: string[];
   source: string;
-  supersedesId: string | null;
+  supersedesId: number | null;
   createdAt: string;
   updatedAt: string;
 }
