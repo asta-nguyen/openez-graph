@@ -1,0 +1,25 @@
+video/src/compositions/OpenEZLaunch16x9.tsx
+  s_13302ecec54bac::t_8dcab19fe18d82 7,22
+video/src/components/index.ts
+  s_13302ecec54bac::t_8dcab19fe18d82 9
+video/src/components/BrandLockup.tsx
+  s_13302ecec54bac::t_8dcab19fe18d82 1-57
+video/src/compositions/OpenEZLaunch9x16.tsx
+  s_13302ecec54bac::t_8dcab19fe18d82 7,22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "fe7b671f38bffbdbd90c7e6cc47fd386badce65d",
+  "prompts": {},
+  "sessions": {
+    "s_13302ecec54bac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ffe53-f99b-7742-bdb3-1b11e5d9c999",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
