@@ -17,11 +17,15 @@ export interface SymbolRule {
   /** output symbolType: "function", "class", "struct", etc. */
   symbolType: string;
   /** field name containing the identifier node (usually "name") */
-  nameField: string;
+  nameField?: string;
   /** override name extraction for complex nodes (e.g. Rust impl_item) */
   extractName?: (node: Node) => string | null;
   /** override context name for nesting (defaults to symbol name) */
-  extractContextName?: (node: Node) => string | null;
+  extractContextName?: (node: Node, contextStack: ReadonlyArray<ContextFrame>) => string | null;
+  /** push context stack without emitting a symbol or extracting calls */
+  contextOnly?: boolean;
+  /** context kind for this rule's frames; only "class" | "module" for Ruby */
+  contextKind?: "class" | "module";
   /** whether this node establishes a parent context for nested symbols */
   establishesContext?: boolean;
   /** determine if symbol is exported; defaults to language-specific */
@@ -30,6 +34,19 @@ export interface SymbolRule {
   receiverField?: string;
   /** transform receiver text (e.g. strip parens) */
   normalizeReceiver?: (text: string) => string;
+}
+
+/**
+ * Context frame on the walker's context stack. `kind` is optional — only
+ * Ruby class/module rules set it so singleton_class.extractContextName and
+ * the qualifyCall hook can walk back for the nearest class/module frame.
+ * Python/Go/Rust frames have kind: undefined.
+ */
+export interface ContextFrame {
+  name: string;
+  endRow: number;
+  kind?: "class" | "module";
+  receiver?: { varName: string; typeName: string };
 }
 
 export interface ImportRule {
@@ -58,6 +75,19 @@ export interface LanguageConfig {
   contextNodeTypes: Set<string>;
   /** name field for context nodes (for building "Class::method" names) */
   contextNameField: string;
+  /**
+   * Optional hook to qualify a callee name based on the call node's receiver
+   * and the active context stack. Returns the qualified callee, or null to
+   * keep the normalized name unqualified. Used for Ruby self.foo →
+   * TypeName::foo. Go receiver qualification stays in extractCallsInNode
+   * via receiverInfo and is unaffected.
+   */
+  qualifyCall?: (
+    callNode: Node,
+    calleeName: string,
+    normalized: string,
+    contextStack: ReadonlyArray<ContextFrame>,
+  ) => string | null;
 }
 
 // ── Extraction core ──
@@ -112,11 +142,7 @@ function walkTree(root: Node, config: LanguageConfig, _lines: string[]): WalkTre
   // Stack of parent contexts for nested symbol naming (e.g. Class::method).
   // Carries optional receiver (varName, typeName) for Go methods so calls
   // through the receiver variable can be qualified as Type::method.
-  const contextStack: Array<{
-    name: string;
-    endRow: number;
-    receiver?: { varName: string; typeName: string };
-  }> = [];
+  const contextStack: ContextFrame[] = [];
 
   // Map node types to symbol rules for quick lookup
   const symbolRuleMap = new Map<string, SymbolRule>();
@@ -201,72 +227,93 @@ function walkTree(root: Node, config: LanguageConfig, _lines: string[]): WalkTre
     // Check for symbol
     const symbolRule = symbolRuleMap.get(node.type);
     if (symbolRule) {
-      const name = symbolRule.extractName
-        ? symbolRule.extractName(node)
-        : getNodeName(node, symbolRule.nameField);
-      if (name) {
-        const parentName =
-          contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
-        const exported = symbolRule.isExported ? symbolRule.isExported(name, node) : false;
-
-        let receiver: string | undefined;
-        let receiverVar: string | null = null;
-        let receiverType: string | null = null;
-        if (symbolRule.receiverField) {
-          const rawReceiver = node.childForFieldName(symbolRule.receiverField)?.text;
-          if (rawReceiver) {
-            receiver = symbolRule.normalizeReceiver
-              ? symbolRule.normalizeReceiver(rawReceiver)
-              : rawReceiver;
-            receiverVar = goReceiverName(rawReceiver);
-            receiverType = goReceiverType(rawReceiver);
-          }
+      if (symbolRule.contextOnly) {
+        const contextName = symbolRule.extractContextName
+          ? (symbolRule.extractContextName(node, contextStack) ?? null)
+          : null;
+        if (contextName) {
+          contextStack.push({
+            name: contextName,
+            endRow,
+            kind: symbolRule.contextKind,
+          });
         }
+        // Skip symbol emission and call extraction — context-only.
+      } else {
+        const name = symbolRule.extractName
+          ? symbolRule.extractName(node)
+          : getNodeName(node, symbolRule.nameField ?? "name");
+        if (name) {
+          const parentName =
+            contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
+          const exported = symbolRule.isExported ? symbolRule.isExported(name, node) : false;
 
-        // Qualify method name with receiver type: Save → Foo::Save
-        // This prevents same-named methods on different types from colliding.
-        const fullName = receiverType
-          ? `${receiverType}::${name}`
-          : parentName
-            ? `${parentName}::${name}`
-            : name;
+          let receiver: string | undefined;
+          let receiverVar: string | null = null;
+          let receiverType: string | null = null;
+          if (symbolRule.receiverField) {
+            const rawReceiver = node.childForFieldName(symbolRule.receiverField)?.text;
+            if (rawReceiver) {
+              receiver = symbolRule.normalizeReceiver
+                ? symbolRule.normalizeReceiver(rawReceiver)
+                : rawReceiver;
+              receiverVar = goReceiverName(rawReceiver);
+              receiverType = goReceiverType(rawReceiver);
+            }
+          }
 
-        const symbol: ExtractedSymbol = {
-          name: fullName,
-          symbolType: symbolRule.symbolType,
-          type: symbolRule.symbolType,
-          exported,
-          startLine: startRow,
-          endLine: endRow,
-        };
-        if (receiver) symbol.receiver = receiver;
-        symbols.push(symbol);
+          // Qualify method name with receiver type: Save → Foo::Save
+          // This prevents same-named methods on different types from colliding.
+          const fullName = receiverType
+            ? `${receiverType}::${name}`
+            : parentName
+              ? `${parentName}::${name}`
+              : name;
 
-        // Extract calls within this symbol's body, skipping calls that are
-        // inside nested symbols (those are extracted when processing the nested
-        // symbol itself — avoids double-counting).
-        const receiverInfo =
-          receiverVar && receiverType
-            ? { varName: receiverVar, typeName: receiverType }
-            : undefined;
-        extractCallsInNode(
-          node,
-          config,
-          fullName,
-          receiverInfo,
-          calledIdentifiers,
-          callExpressions,
-        );
+          symbols.push({
+            name: fullName,
+            symbolType: symbolRule.symbolType,
+            type: symbolRule.symbolType,
+            exported,
+            startLine: startRow,
+            endLine: endRow,
+            ...(receiver ? { receiver } : {}),
+          });
 
-        const isContextNode =
-          symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
-        if (isContextNode) {
-          // Use extractContextName if provided (e.g. Rust impl uses type name
-          // for nesting, not the full "impl Trait for Type" symbol name)
-          const contextName = symbolRule.extractContextName
-            ? (symbolRule.extractContextName(node) ?? fullName)
-            : fullName;
-          contextStack.push({ name: contextName, endRow, receiver: receiverInfo });
+          // Extract calls within this symbol's body, skipping calls that are
+          // inside nested symbols (those are extracted when processing the nested
+          // symbol itself — avoids double-counting).
+          const receiverInfo =
+            receiverVar && receiverType
+              ? { varName: receiverVar, typeName: receiverType }
+              : undefined;
+          const isContextNode =
+            symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
+          const contextName = isContextNode
+            ? (symbolRule.extractContextName?.(node, contextStack) ?? fullName)
+            : null;
+          const callContext =
+            contextName && symbolRule.contextKind
+              ? [...contextStack, { name: contextName, endRow, kind: symbolRule.contextKind }]
+              : contextStack;
+          extractCallsInNode(
+            node,
+            config,
+            fullName,
+            receiverInfo,
+            calledIdentifiers,
+            callExpressions,
+            callContext,
+          );
+
+          if (isContextNode) {
+            contextStack.push({
+              name: contextName ?? fullName,
+              endRow,
+              kind: symbolRule.contextKind,
+              receiver: receiverInfo,
+            });
+          }
         }
       }
     } else if (isCallNode(node, config.callRule)) {
@@ -301,14 +348,25 @@ function extractCallsInNode(
   receiverInfo: { varName: string; typeName: string } | undefined,
   calledIdentifiers: Set<string>,
   callExpressions: Array<{ callerName: string; calleeName: string }>,
+  contextStack: ReadonlyArray<ContextFrame>,
 ): void {
   // Find nested symbol nodes so we can skip calls that belong to them.
   // Compare by position, not reference — web-tree-sitter returns new Node
   // wrapper objects on each descendantsOfType() call.
-  const nestedSymbolTypes = config.symbolRules.map((r) => r.nodeType);
+  const symbolRuleMap = new Map(config.symbolRules.map((rule) => [rule.nodeType, rule]));
   const nestedSymbols = symbolNode
-    .descendantsOfType(nestedSymbolTypes)
-    .filter((n) => !(n.startIndex === symbolNode.startIndex && n.endIndex === symbolNode.endIndex));
+    .descendantsOfType(config.symbolRules.map((rule) => rule.nodeType))
+    .filter((node) => {
+      if (node.startIndex === symbolNode.startIndex && node.endIndex === symbolNode.endIndex) {
+        return false;
+      }
+      const rule = symbolRuleMap.get(node.type);
+      if (!rule) return false;
+      if (rule.contextOnly) return true;
+      return Boolean(
+        rule.extractName ? rule.extractName(node) : getNodeName(node, rule.nameField ?? "name"),
+      );
+    });
 
   const callNodes = symbolNode.descendantsOfType(config.callRule.nodeType);
   for (const callNode of callNodes) {
@@ -332,16 +390,19 @@ function extractCallsInNode(
         ? `${receiverInfo.typeName}::${normalized}`
         : normalized;
 
+    const hookQualified = config.qualifyCall?.(callNode, calleeName, normalized, contextStack);
+    const finalCallee = hookQualified ?? qualifiedCallee;
+
     if (
       !normalized ||
       config.callIgnores.has(calleeName) ||
       config.callIgnores.has(normalized) ||
-      qualifiedCallee === callerName
+      finalCallee === callerName
     ) {
       continue;
     }
-    calledIdentifiers.add(qualifiedCallee);
-    callExpressions.push({ callerName, calleeName: qualifiedCallee });
+    calledIdentifiers.add(finalCallee);
+    callExpressions.push({ callerName, calleeName: finalCallee });
   }
 }
 

@@ -27,6 +27,7 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
   ".md",
   ".mdx",
   ".py",
+  ".rb",
 ] as const;
 
 // Parser version tags stored alongside cached parse results in
@@ -234,6 +235,10 @@ export function createWorkspaceFileResolver(
       if (language === "python") {
         const resolved = resolvePythonImport(importerRelativePath, importPath);
         if (resolved) return resolved;
+      }
+
+      if (language === "ruby") {
+        return resolveRelativeImport(importerRelativePath, importPath);
       }
 
       if (importPath.startsWith(".")) {

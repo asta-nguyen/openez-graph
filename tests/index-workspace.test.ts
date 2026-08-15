@@ -756,4 +756,80 @@ describe("indexWorkspace", () => {
       expect.objectContaining({ from: "Service.run", to: "Service.save", type: "calls" }),
     );
   });
+
+  it("indexes Ruby files with symbols and require_relative import edges", async () => {
+    fs.mkdirSync(path.join(workspaceRoot, "lib"), { recursive: true });
+    fs.writeFileSync(
+      path.join(workspaceRoot, "lib", "user.rb"),
+      [
+        "class User",
+        "  def greet(name)",
+        '    puts "Hello"',
+        "  end",
+        "",
+        "  def self.admin?",
+        "    true",
+        "  end",
+        "end",
+      ].join("\n"),
+    );
+    fs.writeFileSync(
+      path.join(workspaceRoot, "lib", "helper.rb"),
+      [
+        'require_relative "./user"',
+        "",
+        "module Helper",
+        "  def self.process(user)",
+        "    user.greet",
+        "  end",
+        "end",
+      ].join("\n"),
+    );
+
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+    const repo = createWorkspaceRepository(workspaceRoot);
+
+    // helper.rb should have an import edge to user.rb
+    const importEdges = await repo.queryRaw(
+      `SELECT count(*) AS c FROM graph_edges e
+       JOIN graph_nodes n ON n.id = e.from_node_id
+       WHERE e.type = 'imports' AND n.label = 'lib/helper.rb'`,
+    );
+    expect(Number(importEdges[0]?.c ?? 0)).toBe(1);
+
+    // User class symbol should exist
+    const userSymbol = await repo.queryRaw(
+      `SELECT label FROM graph_nodes
+       WHERE type = 'symbol' AND label = 'User::greet'`,
+    );
+    expect(userSymbol.length).toBeGreaterThan(0);
+  });
+
+  it("indexes SCSS and Slim files via FallbackParser with no symbols", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "app.scss"), ".container { max-width: 1200px; }\n");
+    fs.writeFileSync(path.join(workspaceRoot, "index.slim"), "h1 Welcome\np Hello\n");
+
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+    const repo = createWorkspaceRepository(workspaceRoot);
+
+    const scssDoc = await repo.getDocumentByPath("app.scss");
+    expect(scssDoc).not.toBeNull();
+    const scssChunks = await repo.getChunksByDocument(scssDoc!.id);
+    expect(scssChunks.length).toBeGreaterThanOrEqual(1);
+
+    const slimDoc = await repo.getDocumentByPath("index.slim");
+    expect(slimDoc).not.toBeNull();
+    const slimChunks = await repo.getChunksByDocument(slimDoc!.id);
+    expect(slimChunks.length).toBeGreaterThanOrEqual(1);
+
+    // No symbol nodes for SCSS/Slim
+    const symbolNodes = await repo.queryRaw(
+      `SELECT count(*) AS c FROM graph_nodes WHERE type = 'symbol'`,
+    );
+    expect(Number(symbolNodes[0]?.c ?? 0)).toBe(0);
+  });
 });

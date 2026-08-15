@@ -5,18 +5,31 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import picomatch from "picomatch";
 
 import type { FileToIndex } from "./types";
-import { codeExtensions, configExtensions, markdownExtensions } from "./languages";
+import {
+  codeExtensions,
+  configExtensions,
+  markdownExtensions,
+  scriptExtensions,
+  styleExtensions,
+  templateExtensions,
+} from "./languages";
 
 const DEFAULT_INCLUDE_PATTERNS = [
   ...Array.from(codeExtensions.keys()).map((ext) => `**/*${ext}`),
   ...Array.from(configExtensions.keys()).map((ext) => `**/*${ext}`),
   ...Array.from(markdownExtensions).map((ext) => `**/*${ext}`),
+  ...Array.from(styleExtensions.keys()).map((ext) => `**/*${ext}`),
+  ...Array.from(templateExtensions.keys()).map((ext) => `**/*${ext}`),
+  ...Array.from(scriptExtensions.keys()).map((ext) => `**/*${ext}`),
 ];
 
 const ALLOWED_EXTENSIONS = new Set([
   ...codeExtensions.keys(),
   ...configExtensions.keys(),
   ...markdownExtensions,
+  ...styleExtensions.keys(),
+  ...templateExtensions.keys(),
+  ...scriptExtensions.keys(),
 ]);
 
 const DEFAULT_EXCLUDE_PATTERNS = [

@@ -48,8 +48,9 @@ pnpm openez serve --mcp
 
 ### Indexing
 
-- TS/JS: rich path via `ts-morph`
-- Python/Go/Rust: basic top-level symbol extraction
+- TS/JS: rich path via `oxc-parser`
+- Python/Go/Rust/Ruby: tree-sitter AST symbol extraction with regex fallback
+- CoffeeScript/Slim/CSS/SCSS/SASS/LESS/Haml: scanner inclusion + fallback chunking
 - YAML/JSON/TOML: structure-aware chunking
 - Markdown: section-oriented chunking
 
