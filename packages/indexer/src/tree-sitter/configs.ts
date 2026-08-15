@@ -335,7 +335,7 @@ export const rustConfig: LanguageConfig = {
         }
         return typeName ? `impl ${typeName}` : null;
       },
-      extractContextName: (node) => {
+      extractContextName: (node, _contextStack) => {
         // Use the type name for nesting (Circle::draw, not impl Circle::draw)
         return node.childForFieldName("type")?.text ?? null;
       },
