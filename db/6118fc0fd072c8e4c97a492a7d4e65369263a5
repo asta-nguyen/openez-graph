@@ -1,0 +1,25 @@
+tests/tree-sitter-parser.test.ts
+  s_4ebc3147ece427::t_54ac73f6fb4fdd 7
+  s_4ebc3147ece427::t_d9eea0b7e1ac0a 381-510
+packages/indexer/src/tree-sitter/configs.ts
+  s_4ebc3147ece427::t_6636ede93d7fb1 377-559
+  s_4ebc3147ece427::t_c3f18df1faa0a7 3
+packages/indexer/src/tree-sitter/index.ts
+  s_4ebc3147ece427::t_483ae0fa4759fd 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "db6118fc0fd072c8e4c97a492a7d4e65369263a5",
+  "prompts": {},
+  "sessions": {
+    "s_4ebc3147ece427": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dedicated-handspring",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
