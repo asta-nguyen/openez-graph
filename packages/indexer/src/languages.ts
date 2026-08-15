@@ -29,6 +29,9 @@ export const codeExtensions = new Map<string, string>([
   [".py", "python"],
   [".go", "go"],
   [".rs", "rust"],
+  [".rb", "ruby"],
+  [".rake", "ruby"],
+  [".gemspec", "ruby"],
 ]);
 
 export const configExtensions = new Map<string, string>([
@@ -36,6 +39,23 @@ export const configExtensions = new Map<string, string>([
   [".yml", "yaml"],
   [".json", "json"],
   [".toml", "toml"],
+]);
+
+export const styleExtensions = new Map<string, string>([
+  [".css", "css"],
+  [".scss", "scss"],
+  [".sass", "scss"],
+  [".less", "less"],
+]);
+
+export const templateExtensions = new Map<string, string>([
+  [".slim", "slim"],
+  [".haml", "haml"],
+]);
+
+export const scriptExtensions = new Map<string, string>([
+  [".coffee", "coffeescript"],
+  [".litcoffee", "coffeescript"],
 ]);
 
 export const markdownExtensions = new Set([".md", ".mdx"]);
@@ -55,6 +75,18 @@ export function inferDocumentKind(filePath: string): LanguageInfo {
 
   if (codeExtensions.has(extension)) {
     return { kind: "code", language: codeExtensions.get(extension) ?? null, extension };
+  }
+
+  if (styleExtensions.has(extension)) {
+    return { kind: "code", language: styleExtensions.get(extension) ?? null, extension };
+  }
+
+  if (templateExtensions.has(extension)) {
+    return { kind: "code", language: templateExtensions.get(extension) ?? null, extension };
+  }
+
+  if (scriptExtensions.has(extension)) {
+    return { kind: "code", language: scriptExtensions.get(extension) ?? null, extension };
   }
 
   if (configExtensions.has(extension)) {
@@ -802,6 +834,108 @@ export function parseRust(
   return {
     chunks,
     importPaths,
+    definedSymbols,
+    calledIdentifiers: [...calledIdentifiers],
+    callExpressions,
+  };
+}
+
+// ── Ruby parser (regex fallback) ──
+
+function findRubyBlockEnd(codeLines: string[], startIndex: number): number {
+  const openingLine = codeLines[startIndex] ?? "";
+  if (openingLine.includes(";") && /\bend\s*(?:#.*)?$/.test(openingLine)) {
+    return startIndex + 1;
+  }
+
+  const baseIndent = codeLines[startIndex]?.search(/\S/) ?? 0;
+  for (let i = startIndex + 1; i < codeLines.length; i++) {
+    const trimmed = codeLines[i].trim();
+    if (trimmed === "") continue;
+    const indent = codeLines[i].search(/\S/);
+    if (indent < 0) continue;
+    if (indent < baseIndent) {
+      return i;
+    }
+    if (
+      indent === baseIndent &&
+      (trimmed === "end" || trimmed.startsWith("end ") || trimmed.startsWith("end\t"))
+    ) {
+      return i + 1;
+    }
+  }
+  return codeLines.length;
+}
+
+export function parseRuby(
+  content: string,
+  counter: TokenCounter = exactTokenCounter,
+): IndexedCodeResult {
+  const lines = content.split("\n");
+  const codeLines = stripNonCode(content, { hashComments: true }).split("\n");
+  const definedSymbols: ExtractedSymbol[] = [];
+  const importPaths: string[] = [];
+  const calledIdentifiers = new Set<string>();
+  const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
+
+  const symbolRegex =
+    /^\s*(?:def\s+(?:self\.)?(\w+[?!]?)|class\s+(\w+(?:::\w+)*)|module\s+(\w+(?:::\w+)*))/;
+  const requireRelativeRegex = /\brequire_relative\s+['"]([^'"]+)['"]/g;
+
+  const contextStack: Array<{ name: string; endLine: number }> = [];
+
+  for (let i = 0; i < codeLines.length; i++) {
+    const line = codeLines[i];
+    const trimmed = line.trim();
+
+    while (contextStack.length > 0 && i >= contextStack[contextStack.length - 1].endLine) {
+      contextStack.pop();
+    }
+
+    const match = symbolRegex.exec(trimmed);
+    if (match) {
+      const rawName = match[1] ?? match[2] ?? match[3];
+      if (!rawName) continue;
+      const isMethod = Boolean(match[1]);
+      const symbolType = isMethod ? "function" : match[2] ? "class" : "module";
+      const parentName =
+        contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
+      const name = parentName ? `${parentName}::${rawName}` : rawName;
+      const endLine = findRubyBlockEnd(codeLines, i);
+
+      definedSymbols.push({
+        name,
+        symbolType,
+        type: symbolType,
+        exported: isMethod ? false : !rawName.startsWith("_"),
+        startLine: i + 1,
+        endLine,
+      });
+
+      contextStack.push({ name, endLine });
+      continue;
+    }
+
+    // require_relative only — use original (unstripped) line so the string
+    // argument is still present (stripNonCode removes string literals).
+    requireRelativeRegex.lastIndex = 0;
+    let reqMatch: RegExpExecArray | null;
+    while ((reqMatch = requireRelativeRegex.exec(lines[i] ?? "")) !== null) {
+      importPaths.push(reqMatch[1]);
+    }
+  }
+
+  const chunks = createSymbolChunks(definedSymbols, lines, "ruby", counter);
+  if (chunks.length === 0) {
+    return {
+      ...makeFallbackChunks(content, lines, counter),
+      importPaths: [...new Set(importPaths)],
+    };
+  }
+
+  return {
+    chunks,
+    importPaths: [...new Set(importPaths)],
     definedSymbols,
     calledIdentifiers: [...calledIdentifiers],
     callExpressions,
