@@ -41,6 +41,23 @@ export const configExtensions = new Map<string, string>([
   [".toml", "toml"],
 ]);
 
+export const styleExtensions = new Map<string, string>([
+  [".css", "css"],
+  [".scss", "scss"],
+  [".sass", "scss"],
+  [".less", "less"],
+]);
+
+export const templateExtensions = new Map<string, string>([
+  [".slim", "slim"],
+  [".haml", "haml"],
+]);
+
+export const scriptExtensions = new Map<string, string>([
+  [".coffee", "coffeescript"],
+  [".litcoffee", "coffeescript"],
+]);
+
 export const markdownExtensions = new Set([".md", ".mdx"]);
 
 export interface LanguageInfo {
@@ -58,6 +75,18 @@ export function inferDocumentKind(filePath: string): LanguageInfo {
 
   if (codeExtensions.has(extension)) {
     return { kind: "code", language: codeExtensions.get(extension) ?? null, extension };
+  }
+
+  if (styleExtensions.has(extension)) {
+    return { kind: "code", language: styleExtensions.get(extension) ?? null, extension };
+  }
+
+  if (templateExtensions.has(extension)) {
+    return { kind: "code", language: templateExtensions.get(extension) ?? null, extension };
+  }
+
+  if (scriptExtensions.has(extension)) {
+    return { kind: "code", language: scriptExtensions.get(extension) ?? null, extension };
   }
 
   if (configExtensions.has(extension)) {
