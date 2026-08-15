@@ -45,19 +45,17 @@ end
     expect(result.importPaths).not.toContain("cache");
   });
 
-  it("extracts calls ignoring builtins", () => {
+  it("does not produce false call edges in regex fallback", () => {
     const result = parseRuby(`
 class User
   def save
+    user.name
     validate
-    puts "saving"
-    raise "error" unless valid?
   end
 end
 `);
 
-    expect(result.calledIdentifiers).toEqual(expect.arrayContaining(["validate", "valid?"]));
-    expect(result.calledIdentifiers).not.toContain("puts");
-    expect(result.calledIdentifiers).not.toContain("raise");
+    expect(result.callExpressions).toEqual([]);
+    expect(result.calledIdentifiers).toEqual([]);
   });
 });
