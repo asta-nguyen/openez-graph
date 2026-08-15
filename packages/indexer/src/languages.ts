@@ -44,7 +44,7 @@ export const configExtensions = new Map<string, string>([
 export const styleExtensions = new Map<string, string>([
   [".css", "css"],
   [".scss", "scss"],
-  [".sass", "sass"],
+  [".sass", "scss"],
   [".less", "less"],
 ]);
 
@@ -842,68 +842,6 @@ export function parseRust(
 
 // ── Ruby parser (regex fallback) ──
 
-const RUBY_CALL_IGNORES = new Set([
-  "if",
-  "unless",
-  "while",
-  "until",
-  "for",
-  "return",
-  "yield",
-  "break",
-  "next",
-  "redo",
-  "retry",
-  "puts",
-  "pp",
-  "p",
-  "print",
-  "raise",
-  "require",
-  "require_relative",
-  "load",
-  "autoload",
-  "attr_accessor",
-  "attr_reader",
-  "attr_writer",
-  "include",
-  "extend",
-  "define_method",
-  "lambda",
-  "proc",
-  "super",
-  "self",
-  "nil",
-  "true",
-  "false",
-  "new",
-  "Array",
-  "Hash",
-  "String",
-  "Integer",
-  "Float",
-  "Symbol",
-  "def",
-  "end",
-  "do",
-  "begin",
-  "case",
-  "when",
-  "then",
-  "else",
-  "elsif",
-  "and",
-  "or",
-  "not",
-  "in",
-  "defined?",
-]);
-
-function normalizeRubyCallName(value: string): string {
-  const parts = value.split(/[.::]/).filter(Boolean);
-  return parts[parts.length - 1] ?? value;
-}
-
 function findRubyBlockEnd(codeLines: string[], startIndex: number): number {
   const baseIndent = codeLines[startIndex]?.search(/\S/) ?? 0;
   for (let i = startIndex + 1; i < codeLines.length; i++) {
@@ -938,7 +876,6 @@ export function parseRuby(
   const symbolRegex =
     /^\s*(?:def\s+(?:self\.)?(\w+[?!]?)|class\s+(\w+(?:::\w+)*)|module\s+(\w+(?:::\w+)*))/;
   const requireRelativeRegex = /\brequire_relative\s+['"]([^'"]+)['"]/g;
-  const callRegex = /\b(\w+[?!]?)/g;
 
   const contextStack: Array<{ name: string; endLine: number }> = [];
 
@@ -969,28 +906,6 @@ export function parseRuby(
         startLine: i + 1,
         endLine,
       });
-
-      if (isMethod) {
-        for (let lineIdx = i + 1; lineIdx < endLine; lineIdx++) {
-          const bodyLine = codeLines[lineIdx];
-          if (!bodyLine) continue;
-          callRegex.lastIndex = 0;
-          let callMatch: RegExpExecArray | null;
-          while ((callMatch = callRegex.exec(bodyLine)) !== null) {
-            const rawCalled = callMatch[1];
-            const called = normalizeRubyCallName(rawCalled);
-            if (
-              !RUBY_CALL_IGNORES.has(rawCalled) &&
-              !RUBY_CALL_IGNORES.has(called) &&
-              called !== rawName &&
-              !/^\d+$/.test(called)
-            ) {
-              calledIdentifiers.add(called);
-              callExpressions.push({ callerName: name, calleeName: called });
-            }
-          }
-        }
-      }
 
       contextStack.push({ name, endLine });
       continue;
