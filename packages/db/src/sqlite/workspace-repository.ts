@@ -46,6 +46,13 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     insertDoc: native.prepare(
       "INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ),
+    docByPathOrAbs: native.prepare(
+      "SELECT * FROM documents WHERE path = ? OR absolute_path = ? OR path LIKE '%' || ? LIMIT 1",
+    ),
+    parsedDocSymbols: native.prepare("SELECT symbols FROM parsed_documents WHERE document_id = ?"),
+    chunksByDocOutline: native.prepare(
+      "SELECT chunk_index, heading, metadata FROM chunks WHERE document_id = ? ORDER BY chunk_index ASC",
+    ),
     chunksByDoc: native.prepare("SELECT * FROM chunks WHERE document_id = ? ORDER BY chunk_index"),
     insertChunk: native.prepare(
       "INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

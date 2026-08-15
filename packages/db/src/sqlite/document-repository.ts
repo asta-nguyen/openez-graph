@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { createChunkOps, type ChunkStmts } from "./chunk-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
+import type { FileOutlineResult, FileOutlineSymbol } from "./types";
 
 /**
  * Prepared statements used by the document operations.
@@ -15,6 +16,9 @@ export interface DocumentStmts {
   docByPath: ReturnType<NativeDatabase["prepare"]>;
   docById: ReturnType<NativeDatabase["prepare"]>;
   insertDoc: ReturnType<NativeDatabase["prepare"]>;
+  docByPathOrAbs: ReturnType<NativeDatabase["prepare"]>;
+  parsedDocSymbols: ReturnType<NativeDatabase["prepare"]>;
+  chunksByDocOutline: ReturnType<NativeDatabase["prepare"]>;
 }
 
 function mapDocumentRow(row: Record<string, unknown>) {
@@ -71,6 +75,104 @@ export function createDocumentOps(
     async getDocumentByPath(path: string) {
       const row = stmts.docByPath.get(path) as Record<string, unknown> | undefined;
       return row ? mapDocumentRow(row) : null;
+    },
+
+    async getFileOutline(filePath: string): Promise<FileOutlineResult | null> {
+      const normalized = filePath.replace(/^\.?\//, "");
+      let docRow = stmts.docByPathOrAbs.get(normalized, filePath, normalized) as
+        | Record<string, unknown>
+        | undefined;
+
+      if (!docRow) return null;
+
+      const doc = mapDocumentRow(docRow);
+      const symbols: FileOutlineSymbol[] = [];
+
+      const parsedRow = stmts.parsedDocSymbols.get(doc.id) as
+        | { symbols: string | null }
+        | undefined;
+
+      if (parsedRow?.symbols) {
+        try {
+          const rawSymbols = JSON.parse(parsedRow.symbols);
+          if (Array.isArray(rawSymbols)) {
+            for (const s of rawSymbols) {
+              symbols.push({
+                name: String(s.name || ""),
+                kind: String(s.symbolType || s.kind || s.type || "symbol"),
+                startLine: Number(s.startLine || 1),
+                endLine: Number(s.endLine || s.startLine || 1),
+                exported: Boolean(s.exported),
+                parentSymbol: s.parentSymbol ? String(s.parentSymbol) : undefined,
+              });
+            }
+          }
+        } catch {}
+      }
+
+      if (symbols.length === 0) {
+        const chunkRows = stmts.chunksByDocOutline.all(doc.id) as Array<{
+          chunk_index: number;
+          heading: string | null;
+          metadata: string;
+        }>;
+
+        for (const c of chunkRows) {
+          let meta: Record<string, unknown> = {};
+          try {
+            meta = JSON.parse(c.metadata || "{}");
+          } catch {}
+
+          const name =
+            c.heading || (meta.symbolName ? String(meta.symbolName) : `Chunk ${c.chunk_index + 1}`);
+          const kind = meta.symbolType ? String(meta.symbolType) : c.heading ? "section" : "chunk";
+          const startLine = Number(meta.startLine || 1);
+          const endLine = Number(meta.endLine || startLine);
+
+          symbols.push({
+            name,
+            kind,
+            startLine,
+            endLine,
+            exported: Boolean(meta.exported),
+          });
+        }
+      }
+
+      symbols.sort((a, b) => a.startLine - b.startLine);
+
+      const lines: string[] = [
+        `📄 ${doc.path} (${doc.language || doc.kind}, ${doc.sizeBytes.toLocaleString()} bytes)`,
+      ];
+
+      for (let i = 0; i < symbols.length; i++) {
+        const s = symbols[i];
+        const isLast = i === symbols.length - 1;
+        const prefix = isLast ? "  └── " : "  ├── ";
+        const kindIcon =
+          s.kind === "function" || s.kind === "method"
+            ? "🔹"
+            : s.kind === "class" || s.kind === "struct" || s.kind === "interface"
+              ? "📦"
+              : s.kind === "section"
+                ? "📑"
+                : "🔸";
+        const exportedBadge = s.exported ? " (exported)" : "";
+        const parentPrefix = s.parentSymbol ? `${s.parentSymbol}::` : "";
+        lines.push(
+          `${prefix}${kindIcon} ${s.kind} ${parentPrefix}${s.name} [L${s.startLine}-L${s.endLine}]${exportedBadge}`,
+        );
+      }
+
+      return {
+        path: doc.path,
+        absolutePath: doc.absolutePath,
+        language: doc.language,
+        kind: doc.kind,
+        sizeBytes: doc.sizeBytes,
+        symbols,
+        outlineText: lines.join("\n"),
+      };
     },
 
     async insertDocument(input: {
