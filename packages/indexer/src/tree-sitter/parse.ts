@@ -17,7 +17,7 @@ export interface SymbolRule {
   /** output symbolType: "function", "class", "struct", etc. */
   symbolType: string;
   /** field name containing the identifier node (usually "name") */
-  nameField: string;
+  nameField?: string;
   /** override name extraction for complex nodes (e.g. Rust impl_item) */
   extractName?: (node: Node) => string | null;
   /** override context name for nesting (defaults to symbol name) */
@@ -244,7 +244,7 @@ function walkTree(
       } else {
         const name = symbolRule.extractName
           ? symbolRule.extractName(node)
-          : getNodeName(node, symbolRule.nameField);
+          : getNodeName(node, symbolRule.nameField ?? "name");
         if (name) {
           const parentName =
             contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;

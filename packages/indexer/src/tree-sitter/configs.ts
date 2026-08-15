@@ -504,7 +504,6 @@ export const rubyConfig: LanguageConfig = {
     {
       nodeType: "singleton_class",
       symbolType: "class",
-      nameField: "value",
       contextOnly: true,
       extractContextName: (_node, contextStack) => {
         for (let i = contextStack.length - 1; i >= 0; i--) {
@@ -520,7 +519,6 @@ export const rubyConfig: LanguageConfig = {
     {
       nodeType: "assignment",
       symbolType: "lambda",
-      nameField: "left",
       extractName: (node) => {
         const rightNode = node.childForFieldName("right");
         if (!rightNode) return null;

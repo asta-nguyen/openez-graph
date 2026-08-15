@@ -34,7 +34,7 @@ function isTreeSitterLanguage(language: string): language is TreeSitterLanguage 
 }
 
 /**
- * Parses Python/Go/Rust using tree-sitter (WASM AST).
+ * Parses Python/Go/Rust/Ruby using tree-sitter (WASM AST).
  * Falls back to the regex parser if tree-sitter fails (grammar unavailable,
  * parse error, etc.) — matching the spec's resilience guidance.
  */
