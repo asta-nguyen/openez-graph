@@ -48,6 +48,7 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 | ----------------- | ---------------------------------------------------------------------------------------------- |
 | `code_query`      | Retrieve ranked code and documentation context                                                 |
 | `code_context`    | Get graph-adjacent context for a symbol or file (limit: 50/workspace, max 200, token-budgeted) |
+| `diff_context`    | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies        |
 | `graph_neighbors` | Inspect nearby graph nodes and edges                                                           |
 | `list_workspaces` | List registered workspaces and index status                                                    |
 | `memory_recall`   | Recall stored technical decisions and notes                                                    |
@@ -65,6 +66,7 @@ openez embed [path]         # create configured provider vectors
 openez reindex [path]       # rebuild the index (removes vectors; run embed after)
 openez watch [path]         # keep an index synchronized
 openez status [path]        # show workspace and graph counts
+openez diff [ref]           # review git diff with affected AST symbols & callers (--staged, --json)
 openez list                 # list registered workspaces
 openez serve --mcp          # start the MCP server
 openez serve --web          # start the management UI
