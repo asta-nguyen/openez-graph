@@ -44,7 +44,7 @@ export const configExtensions = new Map<string, string>([
 export const styleExtensions = new Map<string, string>([
   [".css", "css"],
   [".scss", "scss"],
-  [".sass", "scss"],
+  [".sass", "sass"],
   [".less", "less"],
 ]);
 
