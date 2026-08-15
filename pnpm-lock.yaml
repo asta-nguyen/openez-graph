@@ -80,6 +80,9 @@ importers:
       tree-sitter-python:
         specifier: ^0.25.0
         version: 0.25.0
+      tree-sitter-ruby:
+        specifier: ^0.23.1
+        version: 0.23.1
       tree-sitter-rust:
         specifier: ^0.24.0
         version: 0.24.0
