@@ -155,4 +155,87 @@ describe("migrateEmbeddingToBlob", () => {
     const count = db.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number };
     expect(count.c).toBe(1);
   });
+
+  test("preserves memories and query logs when migrating from legacy text primary keys", () => {
+    const db = createNativeDatabase(dbPath);
+    // Create legacy schema with TEXT primary keys
+    db.exec(`
+      CREATE TABLE documents (
+        id TEXT PRIMARY KEY,
+        path TEXT NOT NULL UNIQUE,
+        absolute_path TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        mtime_ms INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE memories (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        tags TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE query_logs (
+        id TEXT PRIMARY KEY,
+        query TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        result_count INTEGER NOT NULL DEFAULT 0,
+        tokens_returned INTEGER NOT NULL DEFAULT 0,
+        tokens_saved INTEGER NOT NULL DEFAULT 0,
+        files_scanned INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    // Insert sample legacy memory & query log
+    db.prepare(
+      "INSERT INTO memories (id, title, content, tags, source) VALUES (?, ?, ?, ?, ?)",
+    ).run("mem-1", "Architecture Decision", "Always use SQLite WAL mode", "arch,sqlite", "agent");
+
+    db.prepare(
+      "INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run("q-1", "indexing speed", "fts", 5, 200, 1500, 10);
+
+    // Run migration
+    initializeWorkspaceSchema(db);
+
+    // Documents table should now have INTEGER primary key
+    const docInfo = db.prepare("PRAGMA table_info(documents)").all() as Array<{
+      name: string;
+      type: string;
+    }>;
+    const docIdCol = docInfo.find((c) => c.name === "id");
+    expect(docIdCol!.type.toUpperCase()).toBe("INTEGER");
+
+    // Memories must be preserved
+    const memory = db
+      .prepare("SELECT * FROM memories WHERE title = ?")
+      .get("Architecture Decision") as {
+      id: number;
+      title: string;
+      content: string;
+      tags: string;
+      source: string;
+    };
+    expect(memory).toBeDefined();
+    expect(typeof memory.id).toBe("number");
+    expect(memory.content).toBe("Always use SQLite WAL mode");
+    expect(memory.tags).toBe("arch,sqlite");
+
+    // Query logs must be preserved
+    const queryLog = db
+      .prepare("SELECT * FROM query_logs WHERE query = ?")
+      .get("indexing speed") as {
+      id: number;
+      tokens_saved: number;
+    };
+    expect(queryLog).toBeDefined();
+    expect(typeof queryLog.id).toBe("number");
+    expect(queryLog.tokens_saved).toBe(1500);
+  });
 });

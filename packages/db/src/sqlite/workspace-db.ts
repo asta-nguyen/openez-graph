@@ -452,6 +452,29 @@ function migrateTextPkToInteger(sqlite: ReturnType<typeof createNativeDatabase>)
   const idCol = cols.find((c) => c.name === "id");
   if (!idCol || idCol.type.toUpperCase() === "INTEGER") return;
 
+  // SAFETY: Check if legacy memories or query_logs exist to preserve across migration
+  const hasMemories =
+    ((
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='memories'")
+        .get() as { c: number } | undefined
+    )?.c ?? 0) > 0;
+  const hasQueryLogs =
+    ((
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='query_logs'")
+        .get() as { c: number } | undefined
+    )?.c ?? 0) > 0;
+
+  if (hasMemories) {
+    sqlite.exec(`CREATE TEMP TABLE IF NOT EXISTS temp_memories_backup AS SELECT * FROM memories;`);
+  }
+  if (hasQueryLogs) {
+    sqlite.exec(
+      `CREATE TEMP TABLE IF NOT EXISTS temp_query_logs_backup AS SELECT * FROM query_logs;`,
+    );
+  }
+
   sqlite.exec(`
     DROP TABLE IF EXISTS chunks_fts;
     DROP TABLE IF EXISTS embeddings_vec;
@@ -467,6 +490,62 @@ function migrateTextPkToInteger(sqlite: ReturnType<typeof createNativeDatabase>)
     DROP TABLE IF EXISTS memories;
   `);
   sqlite.exec(getFullWorkspaceDdl());
+
+  // Restore memories if backed up
+  if (hasMemories) {
+    try {
+      const memoryCols = sqlite.prepare("PRAGMA table_info(temp_memories_backup)").all() as Array<{
+        name: string;
+      }>;
+      const colNames = new Set(memoryCols.map((c) => c.name));
+      const hasTitle = colNames.has("title");
+      const hasTags = colNames.has("tags");
+      const hasSource = colNames.has("source");
+
+      if (hasTitle) {
+        sqlite.exec(`
+          INSERT INTO memories (title, content, tags, source, created_at, updated_at)
+          SELECT 
+            title,
+            content,
+            ${hasTags ? "coalesce(tags, '')" : "''"},
+            ${hasSource ? "coalesce(source, 'manual')" : "'manual'"},
+            coalesce(created_at, datetime('now')),
+            coalesce(updated_at, datetime('now'))
+          FROM temp_memories_backup;
+        `);
+      } else {
+        sqlite.exec(`
+          INSERT INTO memories (title, content, tags, source, created_at, updated_at)
+          SELECT 
+            substr(content, 1, 50),
+            content,
+            '',
+            'manual',
+            datetime('now'),
+            datetime('now')
+          FROM temp_memories_backup;
+        `);
+      }
+    } catch {}
+    try {
+      sqlite.exec(`DROP TABLE IF EXISTS temp_memories_backup;`);
+    } catch {}
+  }
+
+  // Restore query_logs if backed up
+  if (hasQueryLogs) {
+    try {
+      sqlite.exec(`
+        INSERT INTO query_logs (query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at)
+        SELECT query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at
+        FROM temp_query_logs_backup;
+      `);
+    } catch {}
+    try {
+      sqlite.exec(`DROP TABLE IF EXISTS temp_query_logs_backup;`);
+    } catch {}
+  }
 }
 
 function getWorkspaceTableDefinitions(): string[] {
