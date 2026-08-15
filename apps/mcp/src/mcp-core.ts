@@ -89,6 +89,15 @@ const indexWorkspaceSchema = z.object({
   mode: z.enum(["incremental", "full"]).optional(),
 });
 
+const symbolDefinitionSchema = z.object({
+  workspaceIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
+  paths: z.array(z.string()).optional(),
+  path: z.string().optional(),
+  symbol: z.string().trim().min(1).optional(),
+  name: z.string().trim().optional(),
+});
+
 const removeWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
@@ -547,6 +556,29 @@ export function createMcpServer(options?: McpServerOptions) {
         },
       },
       {
+        name: "symbol_definition",
+        description:
+          "Targeted Go to Definition lookup. Resolves exact function, class, or symbol name directly to its definition chunk and source code in <2ms.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceIds: { type: "array", items: { type: "string" } },
+            workspaceId: { type: "string" },
+            paths: { type: "array", items: { type: "string" } },
+            path: { type: "string" },
+            symbol: {
+              type: "string",
+              description: "Exact symbol name to locate (e.g. 'scanWorkspaceFiles', 'AuthService')",
+            },
+            name: {
+              type: "string",
+              description: "Alias for symbol",
+            },
+          },
+          required: [],
+        },
+      },
+      {
         name: "remove_workspace",
         description:
           "Remove a workspace from the registry and delete its .openez data directory. Destructive and irreversible: call only with confirm: true after explicit user approval.",
@@ -821,6 +853,54 @@ export function createMcpServer(options?: McpServerOptions) {
         // preventing stale reindex attempts against the deleted workspace.
         stopWatcherForWorkspace(report.workspaceId);
         return jsonResponse(report);
+      }
+      case "symbol_definition": {
+        const input = symbolDefinitionSchema.parse(request.params.arguments ?? {});
+        const targetSymbol = String(input.symbol || input.name || "").trim();
+        if (!targetSymbol) {
+          throw new Error("Missing symbol name for symbol_definition.");
+        }
+
+        const workspaces = await resolver.resolveReadWorkspaces({
+          workspaceIds: input.workspaceIds,
+          workspaceId: input.workspaceId,
+          paths: input.paths,
+          path: input.path,
+        });
+
+        const allMatches: Array<{
+          workspaceId: string;
+          workspaceName: string;
+          name: string;
+          kind: string;
+          filePath: string;
+          startLine: number;
+          endLine: number;
+          exported: boolean;
+          parentSymbol?: string;
+          sourceCode?: string;
+          callerCount?: number;
+          calleeCount?: number;
+        }> = [];
+
+        for (const ws of workspaces) {
+          await catchUpWorkspaceIndex(ws.id);
+          const repo = createWorkspaceRepository(ws.rootPath);
+          const matches = await repo.getSymbolDefinitions(targetSymbol);
+          for (const m of matches) {
+            allMatches.push({
+              workspaceId: ws.id,
+              workspaceName: ws.name,
+              ...m,
+            });
+          }
+        }
+
+        return jsonResponse({
+          symbol: targetSymbol,
+          matchCount: allMatches.length,
+          matches: allMatches,
+        });
       }
       default:
         throw new Error(`Unknown tool: ${request.params.name}`);

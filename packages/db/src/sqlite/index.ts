@@ -22,6 +22,7 @@ export type {
   RegistryWorkspace,
   RegistryRepository,
   StoredMemory,
+  SymbolDefinitionMatch,
   WorkspaceRepository,
   WorkspaceSettings,
 } from "./types";
