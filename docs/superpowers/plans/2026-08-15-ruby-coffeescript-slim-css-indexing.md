@@ -37,10 +37,6 @@
 | `tests/parser-registry.test.ts`                      | Extend: dispatch assertions for new extensions.                                                                                                                           |
 | `tests/scanner.test.ts`                              | New: scanner includes new extensions.                                                                                                                                     |
 | `tests/index-workspace.test.ts`                      | Extend: E2E Ruby indexing with import edges.                                                                                                                              |
-| `tests/fixtures/ruby/user.rb`                        | Fixture: class + method + `def self.` + `class << self`.                                                                                                                  |
-| `tests/fixtures/ruby/helper.rb`                      | Fixture: module + `require_relative`.                                                                                                                                     |
-| `tests/fixtures/styles/app.scss`                     | Fixture: SCSS for fallback chunking.                                                                                                                                      |
-| `tests/fixtures/views/index.slim`                    | Fixture: Slim for fallback chunking.                                                                                                                                      |
 
 ---
 
@@ -409,10 +405,11 @@ end
     expect(result.importPaths).not.toContain("cache");
   });
 
-  it("extracts calls ignoring builtins", () => {
+  it("does not produce false call edges in the regex fallback", () => {
     const result = parseRuby(`
 class User
   def save
+    user.name
     validate
     puts "saving"
     raise "error" unless valid?
@@ -420,9 +417,8 @@ class User
 end
 `);
 
-    expect(result.calledIdentifiers).toEqual(expect.arrayContaining(["validate", "valid?"]));
-    expect(result.calledIdentifiers).not.toContain("puts");
-    expect(result.calledIdentifiers).not.toContain("raise");
+    expect(result.calledIdentifiers).toEqual([]);
+    expect(result.callExpressions).toEqual([]);
   });
 });
 ```
@@ -439,65 +435,26 @@ In `packages/indexer/src/languages.ts`, after the `parseRust` function (find its
 ```ts
 // ── Ruby parser (regex fallback) ──
 
-const RUBY_CALL_IGNORES = new Set([
-  "if",
-  "unless",
-  "while",
-  "until",
-  "for",
-  "return",
-  "yield",
-  "break",
-  "next",
-  "redo",
-  "retry",
-  "puts",
-  "pp",
-  "p",
-  "print",
-  "raise",
-  "require",
-  "require_relative",
-  "load",
-  "autoload",
-  "attr_accessor",
-  "attr_reader",
-  "attr_writer",
-  "include",
-  "extend",
-  "define_method",
-  "lambda",
-  "proc",
-  "super",
-  "self",
-  "nil",
-  "true",
-  "false",
-  "new",
-  "Array",
-  "Hash",
-  "String",
-  "Integer",
-  "Float",
-  "Symbol",
-]);
-
-function normalizeRubyCallName(value: string): string {
-  const parts = value.split(/[.::]/).filter(Boolean);
-  return parts[parts.length - 1] ?? value;
-}
-
 function findRubyBlockEnd(codeLines: string[], startIndex: number): number {
+  const openingLine = codeLines[startIndex] ?? "";
+  if (openingLine.includes(";") && /\bend\s*(?:#.*)?$/.test(openingLine)) {
+    return startIndex + 1;
+  }
+
   const baseIndent = codeLines[startIndex]?.search(/\S/) ?? 0;
   for (let i = startIndex + 1; i < codeLines.length; i++) {
     const trimmed = codeLines[i].trim();
     if (trimmed === "") continue;
-    if (trimmed === "end" || trimmed.startsWith("end ") || trimmed.startsWith("end\t")) {
-      return i + 1;
-    }
     const indent = codeLines[i].search(/\S/);
-    if (indent >= 0 && indent < baseIndent) {
+    if (indent < 0) continue;
+    if (indent < baseIndent) {
       return i;
+    }
+    if (
+      indent === baseIndent &&
+      (trimmed === "end" || trimmed.startsWith("end ") || trimmed.startsWith("end\t"))
+    ) {
+      return i + 1;
     }
   }
   return codeLines.length;
@@ -517,7 +474,6 @@ export function parseRuby(
   const symbolRegex =
     /^\s*(?:def\s+(?:self\.)?(\w+[?!]?)|class\s+(\w+(?:::\w+)*)|module\s+(\w+(?:::\w+)*))/;
   const requireRelativeRegex = /\brequire_relative\s+['"]([^'"]+)['"]/g;
-  const callRegex = /(\w+(?:::\w+)*(?:\.\w+)*)\s*\(/g;
 
   const contextStack: Array<{ name: string; endLine: number }> = [];
 
@@ -544,41 +500,19 @@ export function parseRuby(
         name,
         symbolType,
         type: symbolType,
-        exported: !rawName.startsWith("_"),
+        exported: isMethod ? false : !rawName.startsWith("_"),
         startLine: i + 1,
         endLine,
       });
-
-      if (isMethod) {
-        callRegex.lastIndex = 0;
-        for (let lineIdx = i; lineIdx < endLine; lineIdx++) {
-          const bodyLine = codeLines[lineIdx];
-          if (!bodyLine) continue;
-          callRegex.lastIndex = 0;
-          let callMatch: RegExpExecArray | null;
-          while ((callMatch = callRegex.exec(bodyLine)) !== null) {
-            const rawCalled = callMatch[1];
-            const called = normalizeRubyCallName(rawCalled);
-            if (
-              !RUBY_CALL_IGNORES.has(rawCalled) &&
-              !RUBY_CALL_IGNORES.has(called) &&
-              called !== rawName
-            ) {
-              calledIdentifiers.add(called);
-              callExpressions.push({ callerName: name, calleeName: called });
-            }
-          }
-        }
-      }
 
       contextStack.push({ name, endLine });
       continue;
     }
 
-    // require_relative only
+    // require_relative only — use the original line because string literals are stripped.
     requireRelativeRegex.lastIndex = 0;
     let reqMatch: RegExpExecArray | null;
-    while ((reqMatch = requireRelativeRegex.exec(line)) !== null) {
+    while ((reqMatch = requireRelativeRegex.exec(lines[i] ?? "")) !== null) {
       importPaths.push(reqMatch[1]);
     }
   }
@@ -1388,10 +1322,6 @@ git commit -m "feat(indexer): add CoffeeScript/Slim/CSS/SCSS scanner support"
 
 **Files:**
 
-- Create: `tests/fixtures/ruby/user.rb`
-- Create: `tests/fixtures/ruby/helper.rb`
-- Create: `tests/fixtures/styles/app.scss`
-- Create: `tests/fixtures/views/index.slim`
 - Modify: `tests/index-workspace.test.ts` (extend)
 - Test: `bun test tests/index-workspace.test.ts`
 
@@ -1399,59 +1329,7 @@ git commit -m "feat(indexer): add CoffeeScript/Slim/CSS/SCSS scanner support"
 
 - Consumes: `indexWorkspace`, `createRegistryRepository`, `createWorkspaceRepository` from existing test setup.
 
-- [ ] **Step 1: Create fixtures**
-
-Create `tests/fixtures/ruby/user.rb`:
-
-```ruby
-class User
-  def greet(name)
-    puts "Hello, #{name}"
-  end
-
-  def self.admin?
-    true
-  end
-
-  class << self
-    def bulk_create(users)
-      users.map { |u| u }
-    end
-  end
-end
-```
-
-Create `tests/fixtures/ruby/helper.rb`:
-
-```ruby
-require_relative "./user"
-
-module Helper
-  def self.process(user)
-    user.greet("World")
-  end
-end
-```
-
-Create `tests/fixtures/styles/app.scss`:
-
-```scss
-.container {
-  max-width: 1200px;
-  .header {
-    color: #333;
-  }
-}
-```
-
-Create `tests/fixtures/views/index.slim`:
-
-```slim
-h1 Welcome
-p Hello world
-```
-
-- [ ] **Step 2: Write the failing E2E test**
+- [ ] **Step 1: Write the failing E2E test**
 
 In `tests/index-workspace.test.ts`, add a new test inside the `describe("indexWorkspace", ...)` block:
 
@@ -1512,6 +1390,7 @@ it("indexes SCSS and Slim files via FallbackParser with no symbols", async () =>
 
   const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
   await indexWorkspace({ workspaceId: workspace.id });
+  await ensureGraphReady(workspace.id);
   const repo = createWorkspaceRepository(workspaceRoot);
 
   const scssDoc = await repo.getDocumentByPath("app.scss");
@@ -1532,32 +1411,32 @@ it("indexes SCSS and Slim files via FallbackParser with no symbols", async () =>
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/index-workspace.test.ts -t "indexes Ruby files"`
 Expected: FAIL — Ruby files not indexed (or import edge missing).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 3: Run test to verify it passes**
 
 Run: `bun test tests/index-workspace.test.ts -t "indexes Ruby files"`
 Expected: PASS — Ruby files indexed with symbols and import edges.
 
 If this fails because the WASM didn't load (parser falls back to regex), the regex fallback should still produce symbols and the import edge. If the import edge is missing, verify `resolveImport` Ruby branch is reached — check that `parsed.language` is `"ruby"` (not `null`).
 
-- [ ] **Step 5: Run full test suite**
+- [ ] **Step 4: Run full test suite**
 
 Run: `bun test tests/index-workspace.test.ts`
 Expected: all tests PASS (including existing TS tests — no regression).
 
-- [ ] **Step 6: Run typecheck**
+- [ ] **Step 5: Run typecheck**
 
 Run: `pnpm typecheck`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add tests/fixtures/ruby/ tests/fixtures/styles/ tests/fixtures/views/ tests/index-workspace.test.ts
+git add tests/index-workspace.test.ts
 git commit -m "test(indexer): E2E Ruby indexing with import edges and fallback chunking"
 ```
 

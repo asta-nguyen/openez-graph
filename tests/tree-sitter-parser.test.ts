@@ -469,6 +469,30 @@ describe("tree-sitter ruby parser", () => {
     expect(edge).toBeDefined();
   });
 
+  it("keeps calls in ordinary assignments attributed to the enclosing method", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      ["class User", "  def save(input)", "    result = parse(input)", "  end", "end"].join("\n"),
+    );
+
+    expect(result!.callExpressions).toContainEqual({
+      callerName: "User::save",
+      calleeName: "parse",
+    });
+  });
+
+  it("qualifies self calls directly in a class body", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      ["class User", "  self.configure", "end"].join("\n"),
+    );
+
+    expect(result!.callExpressions).toContainEqual({
+      callerName: "User",
+      calleeName: "User::configure",
+    });
+  });
+
   it("extracts require_relative imports only", async () => {
     const result = await parseWithTreeSitter(
       rubyConfig,

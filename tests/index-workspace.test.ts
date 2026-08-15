@@ -813,6 +813,7 @@ describe("indexWorkspace", () => {
 
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
     await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
     const repo = createWorkspaceRepository(workspaceRoot);
 
     const scssDoc = await repo.getDocumentByPath("app.scss");

@@ -843,6 +843,11 @@ export function parseRust(
 // ── Ruby parser (regex fallback) ──
 
 function findRubyBlockEnd(codeLines: string[], startIndex: number): number {
+  const openingLine = codeLines[startIndex] ?? "";
+  if (openingLine.includes(";") && /\bend\s*(?:#.*)?$/.test(openingLine)) {
+    return startIndex + 1;
+  }
+
   const baseIndent = codeLines[startIndex]?.search(/\S/) ?? 0;
   for (let i = startIndex + 1; i < codeLines.length; i++) {
     const trimmed = codeLines[i].trim();
@@ -902,7 +907,7 @@ export function parseRuby(
         name,
         symbolType,
         type: symbolType,
-        exported: !rawName.startsWith("_"),
+        exported: isMethod ? false : !rawName.startsWith("_"),
         startLine: i + 1,
         endLine,
       });
