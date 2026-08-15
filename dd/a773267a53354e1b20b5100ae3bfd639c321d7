@@ -1,0 +1,24 @@
+packages/indexer/src/languages.ts
+  s_4ebc3147ece427::t_74f2674b165738 44-60
+  s_4ebc3147ece427::t_7d3fbf3c6200e7 80-91
+packages/indexer/src/scanner.ts
+  s_4ebc3147ece427::t_9c26d14e2710d5 10-17,23-25,32-34
+tests/scanner.test.ts
+  s_4ebc3147ece427::t_ceefc449646056 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "dda773267a53354e1b20b5100ae3bfd639c321d7",
+  "prompts": {},
+  "sessions": {
+    "s_4ebc3147ece427": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dedicated-handspring",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
