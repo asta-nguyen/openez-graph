@@ -52,8 +52,8 @@ export interface ParseInput {
 
 /**
  * A parser for a specific class of source files.
- * Implementations: TsMorphParser (TS/JS), TreeSitterParser (Python/Go/Rust),
- * RegexParser (Python/Go/Rust fallback), MarkdownParser, ConfigParser, FallbackParser.
+ * Implementations: OxcParser (TS/JS), TreeSitterParser (Python/Go/Rust/Ruby),
+ * RegexParser (Python/Go/Rust/Ruby fallback), MarkdownParser, ConfigParser, FallbackParser.
  */
 export interface CodeParser {
   /** Parser name for metadata tagging (e.g. "ts-morph", "tree-sitter", "regex"). */

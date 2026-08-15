@@ -9,12 +9,12 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 
 **Zero config. No Docker. No Postgres. No Redis. Just install and go.**
 
-> **v1.0: Bun-powered, Rust-native parsing.** The CLI now runs exclusively on [Bun](https://bun.sh) 1.1+ with native `bun:sqlite` (no `better-sqlite3` compilation step). TS/JS parsing uses [oxc-parser](https://oxc.rs) (Rust-based, ~13x faster than Babel) instead of `ts-morph`. Python/Go/Rust use tree-sitter in rayon-parallel batches. Requires Bun 1.1+.
+> **v1.0: Bun-powered, Rust-native parsing.** The CLI now runs exclusively on [Bun](https://bun.sh) 1.1+ with native `bun:sqlite` (no `better-sqlite3` compilation step). TS/JS parsing uses [oxc-parser](https://oxc.rs) (Rust-based, ~13x faster than Babel) instead of `ts-morph`. Python/Go/Rust/Ruby use tree-sitter (WASM) with regex fallback. Requires Bun 1.1+.
 
 ## Features
 
 - **Bun-powered** — native `bun:sqlite` driver, no native compilation, near-instant startup
-- **Rust-native parsing** — [oxc-parser](https://oxc.rs) for TS/JS (~13x faster than Babel), tree-sitter for Python/Go/Rust in rayon-parallel batches
+- **Rust-native parsing** — [oxc-parser](https://oxc.rs) for TS/JS (~13x faster than Babel), tree-sitter (WASM) for Python/Go/Rust/Ruby with regex fallback
 - **Zero-config** — auto-registers workspace, auto-indexes; opt-in auto-sync via `OPENEZ_MCP_WATCH=1`
 - **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
 - **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
@@ -106,14 +106,16 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 
 ## Supported languages
 
-| Language                | Parser                       | Indexing depth                                                       |
-| ----------------------- | ---------------------------- | -------------------------------------------------------------------- |
-| TypeScript / JavaScript | [oxc-parser](https://oxc.rs) | Richest — symbol extraction, imports, calls (~13x faster than Babel) |
-| Python                  | tree-sitter (Rust, rayon)    | Symbol extraction, decorators, imports, calls                        |
-| Go                      | tree-sitter (Rust, rayon)    | Symbol extraction, receiver-qualified methods, calls                 |
-| Rust                    | tree-sitter (Rust, rayon)    | Symbol extraction, impl blocks, calls                                |
-| YAML / JSON / TOML      | Structure-aware              | Structure-aware chunking                                             |
-| Markdown                | Section-oriented             | Section-oriented chunking                                            |
+| Language                                              | Parser                       | Indexing depth                                                                           |
+| ----------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| TypeScript / JavaScript                               | [oxc-parser](https://oxc.rs) | Richest — symbol extraction, imports, calls (~13x faster than Babel)                     |
+| Python                                                | tree-sitter (WASM)           | Symbol extraction, decorators, imports, calls                                            |
+| Go                                                    | tree-sitter (WASM)           | Symbol extraction, receiver-qualified methods, calls                                     |
+| Rust                                                  | tree-sitter (WASM)           | Symbol extraction, impl blocks, calls                                                    |
+| Ruby                                                  | tree-sitter (WASM)           | Symbol extraction, `class << self` context, `self.foo` calls, `require_relative` imports |
+| CoffeeScript / Slim / CSS / SCSS / SASS / LESS / Haml | Fallback parser              | Scanned and chunked (no symbol extraction)                                               |
+| YAML / JSON / TOML                                    | Structure-aware              | Structure-aware chunking                                                                 |
+| Markdown                                              | Section-oriented             | Section-oriented chunking                                                                |
 
 ## Retrieval quality
 

@@ -1,6 +1,6 @@
 import type { Node } from "web-tree-sitter";
 
-import type { LanguageConfig, ImportRule } from "./parse";
+import type { ContextFrame, LanguageConfig, ImportRule } from "./parse";
 
 // ── Python ──
 
@@ -335,7 +335,7 @@ export const rustConfig: LanguageConfig = {
         }
         return typeName ? `impl ${typeName}` : null;
       },
-      extractContextName: (node) => {
+      extractContextName: (node, _contextStack) => {
         // Use the type name for nesting (Circle::draw, not impl Circle::draw)
         return node.childForFieldName("type")?.text ?? null;
       },
@@ -373,4 +373,185 @@ export const rustConfig: LanguageConfig = {
   normalizeCallName: normalizeRustCallName,
   contextNodeTypes: new Set(["function_item", "trait_item", "impl_item"]),
   contextNameField: "name",
+};
+
+// ── Ruby ──
+
+const RUBY_CALL_IGNORES = new Set([
+  "if",
+  "unless",
+  "while",
+  "until",
+  "for",
+  "return",
+  "yield",
+  "break",
+  "next",
+  "redo",
+  "retry",
+  "puts",
+  "pp",
+  "p",
+  "print",
+  "raise",
+  "require",
+  "require_relative",
+  "load",
+  "autoload",
+  "attr_accessor",
+  "attr_reader",
+  "attr_writer",
+  "include",
+  "extend",
+  "define_method",
+  "lambda",
+  "proc",
+  "super",
+  "self",
+  "nil",
+  "true",
+  "false",
+  "new",
+  "Array",
+  "Hash",
+  "String",
+  "Integer",
+  "Float",
+  "Symbol",
+]);
+
+function normalizeRubyCallName(value: string): string {
+  const parts = value.split(/[.::]/).filter(Boolean);
+  return parts[parts.length - 1] ?? value;
+}
+
+function extractRubyImports(node: Node): string[] {
+  const paths: string[] = [];
+  // Only require_relative calls produce import edges.
+  // require (gem), load, autoload do not resolve to local files.
+  if (node.type === "call") {
+    const methodNode = node.childForFieldName("method");
+    if (methodNode && methodNode.text === "require_relative") {
+      const argsNode = node.childForFieldName("arguments");
+      if (argsNode) {
+        const stringNode = argsNode.namedChildren.find(
+          (c) => c.type === "string" || c.type === "argument_list",
+        );
+        const target =
+          stringNode?.type === "string"
+            ? stringNode
+            : stringNode?.namedChildren.find((c) => c.type === "string");
+        if (target) {
+          const text = target.text.replace(/^['"]|['"]$/g, "");
+          if (text) paths.push(text);
+        }
+      }
+    }
+  }
+  return paths;
+}
+
+function rubyQualifyCall(
+  callNode: Node,
+  _calleeName: string,
+  normalized: string,
+  contextStack: ReadonlyArray<ContextFrame>,
+): string | null {
+  const receiverNode = callNode.childForFieldName("receiver");
+  if (!receiverNode || receiverNode.text !== "self") return null;
+  for (let i = contextStack.length - 1; i >= 0; i--) {
+    const frame = contextStack[i];
+    if (frame.kind === "class" || frame.kind === "module") {
+      return `${frame.name}::${normalized}`;
+    }
+  }
+  return null;
+}
+
+export const rubyConfig: LanguageConfig = {
+  language: "ruby",
+  symbolRules: [
+    {
+      nodeType: "class",
+      symbolType: "class",
+      nameField: "name",
+      establishesContext: true,
+      contextKind: "class",
+      isExported: (name) => name[0] >= "A" && name[0] <= "Z",
+    },
+    {
+      nodeType: "module",
+      symbolType: "module",
+      nameField: "name",
+      establishesContext: true,
+      contextKind: "module",
+      isExported: (name) => name[0] >= "A" && name[0] <= "Z",
+    },
+    {
+      nodeType: "method",
+      symbolType: "function",
+      nameField: "name",
+      establishesContext: true,
+      isExported: () => false,
+    },
+    {
+      nodeType: "singleton_method",
+      symbolType: "function",
+      nameField: "name",
+      establishesContext: true,
+      isExported: () => false,
+    },
+    {
+      nodeType: "singleton_class",
+      symbolType: "class",
+      contextOnly: true,
+      extractContextName: (_node, contextStack) => {
+        for (let i = contextStack.length - 1; i >= 0; i--) {
+          const frame = contextStack[i];
+          if (frame.kind === "class" || frame.kind === "module") {
+            return frame.name;
+          }
+        }
+        return null;
+      },
+      isExported: () => false,
+    },
+    {
+      nodeType: "assignment",
+      symbolType: "lambda",
+      extractName: (node) => {
+        const rightNode = node.childForFieldName("right");
+        if (!rightNode) return null;
+        // lambda { } or lambda do |x| end
+        if (rightNode.type === "lambda") {
+          const leftNode = node.childForFieldName("left");
+          return leftNode?.text ?? null;
+        }
+        // proc { } or Proc.new { } or lambda { } via call
+        if (rightNode.type === "call") {
+          const methodNode = rightNode.childForFieldName("method");
+          const methodName = methodNode?.text;
+          if (methodName === "proc" || methodName === "lambda") {
+            const leftNode = node.childForFieldName("left");
+            return leftNode?.text ?? null;
+          }
+          // Proc.new — check receiver is "Proc" and method is "new"
+          const receiverNode = rightNode.childForFieldName("receiver");
+          if (receiverNode?.text === "Proc" && methodName === "new") {
+            const leftNode = node.childForFieldName("left");
+            return leftNode?.text ?? null;
+          }
+        }
+        return null;
+      },
+      isExported: () => false,
+    },
+  ],
+  importRules: [{ nodeType: "call", extract: extractRubyImports }],
+  callRule: { nodeType: "call", functionField: "method" },
+  callIgnores: RUBY_CALL_IGNORES,
+  normalizeCallName: normalizeRubyCallName,
+  contextNodeTypes: new Set(["class", "module", "method", "singleton_method"]),
+  contextNameField: "name",
+  qualifyCall: rubyQualifyCall,
 };

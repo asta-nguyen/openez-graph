@@ -4,6 +4,7 @@ import {
   goConfig,
   parseWithTreeSitter,
   pythonConfig,
+  rubyConfig,
   rustConfig,
 } from "../packages/indexer/src/tree-sitter";
 import { fastTokenCounter } from "../packages/core/src/tokenizer";
@@ -374,6 +375,160 @@ describe("tree-sitter rust parser", () => {
     // draw should be nested under the impl context
     const drawSymbol = result!.definedSymbols.find((s) => s.name === "Circle::draw");
     expect(drawSymbol).toBeDefined();
+  });
+});
+
+// ── Ruby ──
+
+describe("tree-sitter ruby parser", () => {
+  it("extracts class, module, method, and singleton_method", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      [
+        "module MyApp",
+        "  class User",
+        "    def greet(name)",
+        '      puts "Hello"',
+        "    end",
+        "",
+        "    def self.admin?",
+        "      true",
+        "    end",
+        "  end",
+        "end",
+      ].join("\n"),
+    );
+
+    expect(result).not.toBeNull();
+    const names = result!.definedSymbols.map((s) => s.name);
+    expect(names).toEqual(
+      expect.arrayContaining(["MyApp", "MyApp::User", "MyApp::User::greet", "MyApp::User::admin?"]),
+    );
+  });
+
+  it("class << self is context-only — no pseudo-symbol, methods nest under parent class", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      [
+        "class User",
+        "  def instance_method",
+        "  end",
+        "",
+        "  class << self",
+        "    def bulk_create",
+        "    end",
+        "  end",
+        "end",
+      ].join("\n"),
+    );
+
+    expect(result).not.toBeNull();
+    const names = result!.definedSymbols.map((s) => s.name);
+    // No <Class::User> pseudo-symbol
+    expect(names).not.toContain("<Class::User>");
+    expect(names).not.toContain("User::<Class::User>");
+    // bulk_create nests under User, not under a pseudo class
+    expect(names).toContain("User::bulk_create");
+    expect(names).toContain("User::instance_method");
+  });
+
+  it("class << self nested in method walks back to class frame", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      [
+        "class User",
+        "  def setup",
+        "    class << self",
+        "      def dynamic_method",
+        "      end",
+        "    end",
+        "  end",
+        "end",
+      ].join("\n"),
+    );
+
+    expect(result).not.toBeNull();
+    const names = result!.definedSymbols.map((s) => s.name);
+    // dynamic_method should nest under User, not under User::setup
+    expect(names).toContain("User::dynamic_method");
+    expect(names).not.toContain("User::setup::dynamic_method");
+  });
+
+  it("self.foo call qualification produces User::foo → User::bar edge", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      ["class User", "  def foo", "    self.bar", "  end", "", "  def bar", "  end", "end"].join(
+        "\n",
+      ),
+    );
+
+    expect(result).not.toBeNull();
+    const edge = result!.callExpressions.find(
+      (e) => e.callerName === "User::foo" && e.calleeName === "User::bar",
+    );
+    expect(edge).toBeDefined();
+  });
+
+  it("keeps calls in ordinary assignments attributed to the enclosing method", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      ["class User", "  def save(input)", "    result = parse(input)", "  end", "end"].join("\n"),
+    );
+
+    expect(result!.callExpressions).toContainEqual({
+      callerName: "User::save",
+      calleeName: "parse",
+    });
+  });
+
+  it("qualifies self calls directly in a class body", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      ["class User", "  self.configure", "end"].join("\n"),
+    );
+
+    expect(result!.callExpressions).toContainEqual({
+      callerName: "User",
+      calleeName: "User::configure",
+    });
+  });
+
+  it("extracts require_relative imports only", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      [
+        'require "rails"',
+        'require_relative "./user"',
+        'load "helper.rb"',
+        'autoload :Cache, "cache"',
+        "",
+        "class App",
+        "end",
+      ].join("\n"),
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.importPaths).toEqual(["./user"]);
+    expect(result!.importPaths).not.toContain("rails");
+    expect(result!.importPaths).not.toContain("helper.rb");
+    expect(result!.importPaths).not.toContain("cache");
+  });
+
+  it("extracts named lambda assignment", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      [
+        "class Handler",
+        "  handler = lambda { |x| x + 1 }",
+        "  proc_var = proc { |x| x * 2 }",
+        "end",
+      ].join("\n"),
+    );
+
+    expect(result).not.toBeNull();
+    const names = result!.definedSymbols.map((s) => s.name);
+    expect(names).toContain("Handler::handler");
+    expect(names).toContain("Handler::proc_var");
   });
 });
 

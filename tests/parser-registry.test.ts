@@ -23,10 +23,22 @@ describe("parser registry dispatch", () => {
     expect(getParserForPath("src/legacy.jsx")).toBeInstanceOf(OxcParser);
   });
 
-  it("selects TreeSitterParser for Python/Go/Rust files", () => {
+  it("selects TreeSitterParser for Python/Go/Rust/Ruby files", () => {
     expect(getParserForPath("main.py")).toBeInstanceOf(TreeSitterParser);
     expect(getParserForPath("main.go")).toBeInstanceOf(TreeSitterParser);
     expect(getParserForPath("main.rs")).toBeInstanceOf(TreeSitterParser);
+    expect(getParserForPath("app.rb")).toBeInstanceOf(TreeSitterParser);
+    expect(getParserForPath("Rakefile.rake")).toBeInstanceOf(TreeSitterParser);
+    expect(getParserForPath("mygem.gemspec")).toBeInstanceOf(TreeSitterParser);
+  });
+
+  it("falls back to FallbackParser for CoffeeScript/Slim/CSS/SCSS files", () => {
+    expect(getParserForPath("app.coffee")).toBeInstanceOf(FallbackParser);
+    expect(getParserForPath("app.litcoffee")).toBeInstanceOf(FallbackParser);
+    expect(getParserForPath("styles/app.scss")).toBeInstanceOf(FallbackParser);
+    expect(getParserForPath("styles/app.css")).toBeInstanceOf(FallbackParser);
+    expect(getParserForPath("views/index.slim")).toBeInstanceOf(FallbackParser);
+    expect(getParserForPath("views/index.haml")).toBeInstanceOf(FallbackParser);
   });
 
   it("selects ConfigParser for config files", () => {
