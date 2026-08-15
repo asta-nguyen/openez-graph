@@ -1,0 +1,31 @@
+documents/PROJECT_OPERATIONS.md
+  s_4ebc3147ece427::t_c81b3a3fd7e33b 51-53
+packages/indexer/src/parsers/types.ts
+  s_4ebc3147ece427::t_e68319bab59206 55-56
+AGENTS.md
+  s_4ebc3147ece427::t_beac2a805fa976 120-121
+README.md
+  s_4ebc3147ece427::t_a7d279af72d551 37
+  s_4ebc3147ece427::t_fe4c8459d512ce 99-100
+apps/cli/README.md
+  s_4ebc3147ece427::t_91c23e3ecf2e9f 17
+  s_4ebc3147ece427::t_281a93d174c6d1 112-116
+  s_4ebc3147ece427::t_7a41c31f556417 12
+  s_4ebc3147ece427::t_da0347bbd96606 109-111,117-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d020a01fd04e697de2362375f696eff7650142a0",
+  "prompts": {},
+  "sessions": {
+    "s_4ebc3147ece427": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dedicated-handspring",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
