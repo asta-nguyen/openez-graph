@@ -1,0 +1,25 @@
+CHANGELOG.md
+  s_13302ecec54bac::t_2f73b22c9da4a8 8-18,303
+apps/cli/package.json
+  s_13302ecec54bac::t_2f73b22c9da4a8 3,54
+apps/cli/tsup.config.ts
+  s_13302ecec54bac::t_2f73b22c9da4a8 35
+pnpm-lock.yaml
+  s_13302ecec54bac::t_d13bce690288a5 83-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "dcb4ee538b69f171721ff1baad00415711b6e041",
+  "prompts": {},
+  "sessions": {
+    "s_13302ecec54bac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ffe53-f99b-7742-bdb3-1b11e5d9c999",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
