@@ -1,0 +1,66 @@
+.gitignore
+  h_611058a46223af 37
+AGENTS.md
+  h_611058a46223af 120-121
+CHANGELOG.md
+  h_611058a46223af 8-18,303
+README.md
+  h_611058a46223af 37,99-100
+apps/cli/README.md
+  h_611058a46223af 12,17,109-118
+apps/cli/package.json
+  h_611058a46223af 3,54
+apps/cli/tsup.config.ts
+  h_611058a46223af 35
+docs/superpowers/plans/2026-08-12-openez-launch-video.md
+  h_611058a46223af 1-2558
+docs/superpowers/plans/2026-08-15-ruby-coffeescript-slim-css-indexing.md
+  h_611058a46223af 1-1527
+docs/superpowers/specs/2026-08-12-openez-launch-video-design.md
+  h_611058a46223af 1-295
+docs/superpowers/specs/2026-08-15-ruby-coffeescript-slim-css-indexing-design.md
+  h_611058a46223af 1-379
+documents/PROJECT_OPERATIONS.md
+  h_611058a46223af 51-53
+packages/indexer/package.json
+  h_611058a46223af 20
+packages/indexer/src/index-workspace.ts
+  h_611058a46223af 30,240-243
+packages/indexer/src/languages.ts
+  h_611058a46223af 31-33,43-59,79-90,837-938
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  h_611058a46223af 3-10,17,24-25,34
+packages/indexer/src/parsers/types.ts
+  h_611058a46223af 55-56
+packages/indexer/src/scanner.ts
+  h_611058a46223af 8-15,21-23,30-32
+packages/indexer/src/tree-sitter/configs.ts
+  h_611058a46223af 3,338,377-557
+packages/indexer/src/tree-sitter/index.ts
+  h_611058a46223af 2-3
+packages/indexer/src/tree-sitter/parse.ts
+  h_611058a46223af 20,24-28,39-51,78-90,145,230-239,241-263,265-316,351,356,358-369,393-395,400,404-405
+pnpm-lock.yaml
+  h_611058a46223af 83-85,377-379,4419-4426,8460-8464
+tests/index-workspace.test.ts
+  h_611058a46223af 759-834
+tests/parser-registry.test.ts
+  h_611058a46223af 26,30-41
+tests/ruby-indexer.test.ts
+  h_611058a46223af 1-75
+tests/scanner.test.ts
+  h_611058a46223af 1-45
+tests/tree-sitter-parser.test.ts
+  h_611058a46223af 7,381-534
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6ef6c0dc519a716088e529cb9f4a0ea5fc6f998b",
+  "prompts": {},
+  "humans": {
+    "h_611058a46223af": {
+      "author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
