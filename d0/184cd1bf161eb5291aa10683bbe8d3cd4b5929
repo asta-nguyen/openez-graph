@@ -1,0 +1,21 @@
+tests/ruby-indexer.test.ts
+  s_4ebc3147ece427::t_be882d8d7780e2 48,52,58-59
+packages/indexer/src/languages.ts
+  s_4ebc3147ece427::t_e734b3a7b54c71 47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d0184cd1bf161eb5291aa10683bbe8d3cd4b5929",
+  "prompts": {},
+  "sessions": {
+    "s_4ebc3147ece427": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dedicated-handspring",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
