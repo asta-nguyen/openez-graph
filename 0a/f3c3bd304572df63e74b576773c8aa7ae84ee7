@@ -1,0 +1,21 @@
+packages/indexer/package.json
+  s_4ebc3147ece427::t_7069c229aa85c2 25
+pnpm-lock.yaml
+  s_4ebc3147ece427::t_47720e16924243 398-400,4539-4546,8927-8931
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0af3c3bd304572df63e74b576773c8aa7ae84ee7",
+  "prompts": {},
+  "sessions": {
+    "s_4ebc3147ece427": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dedicated-handspring",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
