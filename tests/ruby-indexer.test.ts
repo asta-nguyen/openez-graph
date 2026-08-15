@@ -26,6 +26,20 @@ end
     expect(user?.symbolType).toBe("class");
     const greet = result.definedSymbols.find((s) => s.name === "MyApp::User::greet");
     expect(greet?.symbolType).toBe("function");
+    expect(greet?.exported).toBe(false);
+  });
+
+  it("keeps following methods nested after a one-line definition", () => {
+    const result = parseRuby(`
+class User
+  def first; end
+  def second; end
+end
+`);
+
+    expect(result.definedSymbols.map((symbol) => symbol.name)).toEqual(
+      expect.arrayContaining(["User::first", "User::second"]),
+    );
   });
 
   it("extracts require_relative imports only", () => {

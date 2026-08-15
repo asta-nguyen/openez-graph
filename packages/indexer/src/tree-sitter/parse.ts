@@ -289,6 +289,15 @@ function walkTree(
             receiverVar && receiverType
               ? { varName: receiverVar, typeName: receiverType }
               : undefined;
+          const isContextNode =
+            symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
+          const contextName = isContextNode
+            ? (symbolRule.extractContextName?.(node, contextStack) ?? fullName)
+            : null;
+          const callContext =
+            contextName && symbolRule.contextKind
+              ? [...contextStack, { name: contextName, endRow, kind: symbolRule.contextKind }]
+              : contextStack;
           extractCallsInNode(
             node,
             config,
@@ -296,19 +305,12 @@ function walkTree(
             receiverInfo,
             calledIdentifiers,
             callExpressions,
-            contextStack,
+            callContext,
           );
 
-          const isContextNode =
-            symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
           if (isContextNode) {
-            // Use extractContextName if provided (e.g. Rust impl uses type name
-            // for nesting, not the full "impl Trait for Type" symbol name)
-            const contextName = symbolRule.extractContextName
-              ? (symbolRule.extractContextName(node, contextStack) ?? fullName)
-              : fullName;
             contextStack.push({
-              name: contextName,
+              name: contextName ?? fullName,
               endRow,
               kind: symbolRule.contextKind,
               receiver: receiverInfo,
@@ -353,10 +355,20 @@ function extractCallsInNode(
   // Find nested symbol nodes so we can skip calls that belong to them.
   // Compare by position, not reference — web-tree-sitter returns new Node
   // wrapper objects on each descendantsOfType() call.
-  const nestedSymbolTypes = config.symbolRules.map((r) => r.nodeType);
+  const symbolRuleMap = new Map(config.symbolRules.map((rule) => [rule.nodeType, rule]));
   const nestedSymbols = symbolNode
-    .descendantsOfType(nestedSymbolTypes)
-    .filter((n) => !(n.startIndex === symbolNode.startIndex && n.endIndex === symbolNode.endIndex));
+    .descendantsOfType(config.symbolRules.map((rule) => rule.nodeType))
+    .filter((node) => {
+      if (node.startIndex === symbolNode.startIndex && node.endIndex === symbolNode.endIndex) {
+        return false;
+      }
+      const rule = symbolRuleMap.get(node.type);
+      if (!rule) return false;
+      if (rule.contextOnly) return true;
+      return Boolean(
+        rule.extractName ? rule.extractName(node) : getNodeName(node, rule.nameField ?? "name"),
+      );
+    });
 
   const callNodes = symbolNode.descendantsOfType(config.callRule.nodeType);
   for (const callNode of callNodes) {
