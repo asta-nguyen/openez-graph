@@ -1,0 +1,22 @@
+docs/superpowers/specs/2026-08-15-ruby-coffeescript-slim-css-indexing-design.md
+  s_4ebc3147ece427::t_2a95f816988eec 183-187,192,200-201,214-216,218-222,228-230
+  s_4ebc3147ece427::t_dc95b36ac7fd76 372
+  s_4ebc3147ece427::t_f94f8912f50357 366-371,373-381
+  s_4ebc3147ece427::t_a9d58b453c2a14 144-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f7e21a43b06221a56b555982f54427b84bf63c60",
+  "prompts": {},
+  "sessions": {
+    "s_4ebc3147ece427": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dedicated-handspring",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
