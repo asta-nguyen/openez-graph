@@ -68,6 +68,7 @@ openez serve --mcp              # start MCP server (auto-index; auto-sync opt-in
 openez serve --web              # start web dashboard (default port 17881)
 openez serve --web --port 8080  # start web dashboard on custom port
 openez status [path]            # show workspace status
+openez diff [ref]               # review git diff with affected AST symbols & callers (--staged, --json)
 openez list                     # list registered workspaces
 openez setup claude             # wire up Claude Code
 openez setup codex              # wire up Codex
@@ -88,6 +89,7 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 | `list_workspaces` | List all registered workspaces                                                                      |
 | `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
 | `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
+| `diff_context`    | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies             |
 | `graph_neighbors` | Traverse graph edges from a node or label                                                           |
 | `memory_recall`   | Recall active memory entries and technical decisions                                                |
 | `memory_write`    | Write a memory entry (notes, decisions, patterns)                                                   |

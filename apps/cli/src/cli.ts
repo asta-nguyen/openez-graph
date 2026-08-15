@@ -8,6 +8,7 @@ import { Command } from "commander";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
+  findLocalWorkspaceConfig,
   getLocalWorkspaceDir,
   isSensitiveKey,
   removeWorkspace,
@@ -15,7 +16,11 @@ import {
   readLocalWorkspaceConfig,
 } from "@openez-graph/db";
 import { embedWorkspace, indexWorkspace } from "@openez-graph/indexer";
-import { isLocalEmbeddingModel, LOCAL_EMBEDDING_MODELS } from "@openez-graph/core";
+import {
+  analyzeDiffContext,
+  isLocalEmbeddingModel,
+  LOCAL_EMBEDDING_MODELS,
+} from "@openez-graph/core";
 
 let cliDir: string;
 try {
@@ -339,6 +344,33 @@ program
     if (workspace.lastError) {
       console.log(`  Last error: ${workspace.lastError}`);
     }
+  });
+
+// ── openez diff [ref] ──
+
+program
+  .command("diff")
+  .description("Analyze git diff and extract affected AST symbols and caller graph context")
+  .argument("[ref]", "Git ref or commit range (e.g. HEAD~1, origin/main)")
+  .option("-s, --staged", "Inspect staged git changes")
+  .option("-j, --json", "Output JSON review context bundle")
+  .option("-l, --limit <number>", "Maximum callers to display per symbol", "5")
+  .action(async (ref, options) => {
+    const localConfig = await findLocalWorkspaceConfig(process.cwd());
+    const rootPath = localConfig ? localConfig.rootPath : process.cwd();
+    const limit = Math.max(1, parseInt(options.limit, 10) || 5);
+    const report = await analyzeDiffContext(rootPath, {
+      ref,
+      staged: Boolean(options.staged),
+      limit,
+    });
+
+    if (options.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+
+    console.log(report.formattedSummary);
   });
 
 // ── openez list ──

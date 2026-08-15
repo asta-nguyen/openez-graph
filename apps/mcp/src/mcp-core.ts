@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 
 import {
+  analyzeDiffContext,
   codeContext,
   codeQuery,
   countTokens,
@@ -87,6 +88,16 @@ const indexWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
   mode: z.enum(["incremental", "full"]).optional(),
+});
+
+const diffContextSchema = z.object({
+  workspaceIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
+  paths: z.array(z.string()).optional(),
+  path: z.string().optional(),
+  ref: z.string().optional(),
+  staged: z.boolean().optional(),
+  limit: z.number().int().positive().max(50).optional(),
 });
 
 const removeWorkspaceSchema = z.object({
@@ -547,6 +558,33 @@ export function createMcpServer(options?: McpServerOptions) {
         },
       },
       {
+        name: "diff_context",
+        description:
+          "Analyze git diff changes and retrieve affected AST symbols and their caller/callee dependencies for intelligent code reviews.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceIds: { type: "array", items: { type: "string" } },
+            workspaceId: { type: "string" },
+            paths: { type: "array", items: { type: "string" } },
+            path: { type: "string" },
+            ref: {
+              type: "string",
+              description: "Git ref or commit range (e.g. 'HEAD~1', 'main', 'origin/main')",
+            },
+            staged: {
+              type: "boolean",
+              description: "Analyze only staged changes (git diff --staged)",
+            },
+            limit: {
+              type: "number",
+              description: "Max callers to include per symbol (default: 5)",
+            },
+          },
+          required: [],
+        },
+      },
+      {
         name: "remove_workspace",
         description:
           "Remove a workspace from the registry and delete its .openez data directory. Destructive and irreversible: call only with confirm: true after explicit user approval.",
@@ -821,6 +859,44 @@ export function createMcpServer(options?: McpServerOptions) {
         // preventing stale reindex attempts against the deleted workspace.
         stopWatcherForWorkspace(report.workspaceId);
         return jsonResponse(report);
+      }
+      case "diff_context": {
+        const input = diffContextSchema.parse(request.params.arguments ?? {});
+        const workspaces = await resolver.resolveReadWorkspaces({
+          workspaceIds: input.workspaceIds,
+          workspaceId: input.workspaceId,
+          paths: input.paths,
+          path: input.path,
+        });
+
+        const reports: Array<{
+          workspaceId: string;
+          workspaceName: string;
+          report: Awaited<ReturnType<typeof analyzeDiffContext>>;
+        }> = [];
+
+        for (const ws of workspaces) {
+          await catchUpWorkspaceIndex(ws.id);
+          await ensureGraphReady(ws.id);
+          const report = await analyzeDiffContext(ws.rootPath, {
+            ref: input.ref,
+            staged: input.staged,
+            limit: input.limit ?? 5,
+          });
+          reports.push({
+            workspaceId: ws.id,
+            workspaceName: ws.name,
+            report,
+          });
+        }
+
+        if (reports.length === 1) {
+          return jsonResponse(reports[0].report);
+        }
+
+        return jsonResponse({
+          workspaces: reports,
+        });
       }
       default:
         throw new Error(`Unknown tool: ${request.params.name}`);
