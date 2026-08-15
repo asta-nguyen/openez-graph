@@ -1,0 +1,36 @@
+docs/superpowers/specs/2026-08-15-ruby-coffeescript-slim-css-indexing-design.md
+  s_13302ecec54bac::t_0496740381c9bb 77-78
+  s_13302ecec54bac::t_635512ef5ef72f 260-262,344
+  s_13302ecec54bac::t_ec6d1fc44a8a4a 350
+  s_13302ecec54bac::t_50c79a3182c169 365-379
+packages/indexer/src/tree-sitter/parse.ts
+  s_13302ecec54bac::t_5abd38ca47c799 292-300,308,313,358,360-371
+docs/superpowers/plans/2026-08-15-ruby-coffeescript-slim-css-indexing.md
+  s_13302ecec54bac::t_a58e9a13f1daad 1436
+  s_13302ecec54bac::t_0496740381c9bb 408,412,420-421,439-443,449-450,453-458,503,512,515
+  s_13302ecec54bac::t_a7cc7a8de8fc71 1332,1393,1414,1419,1426,1431,1439
+tests/ruby-indexer.test.ts
+  s_13302ecec54bac::t_06b371ded942ec 29-42
+packages/indexer/src/languages.ts
+  s_13302ecec54bac::t_5abd38ca47c799 846-850,910
+tests/tree-sitter-parser.test.ts
+  s_13302ecec54bac::t_06b371ded942ec 472-495
+tests/index-workspace.test.ts
+  s_13302ecec54bac::t_c157882ec2e2f4 816
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "67d4b31ac16cfe2a1fb8e5a3cae7b3c20869f24d",
+  "prompts": {},
+  "sessions": {
+    "s_13302ecec54bac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ffe53-f99b-7742-bdb3-1b11e5d9c999",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
