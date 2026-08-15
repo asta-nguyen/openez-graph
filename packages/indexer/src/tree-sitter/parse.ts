@@ -126,16 +126,14 @@ function extractCallName(node: Node, callRule: CallRule): string | null {
   return funcNode.text;
 }
 
-function walkTree(
-  root: Node,
-  config: LanguageConfig,
-  lines: string[],
-): {
+interface WalkTreeResult {
   symbols: ExtractedSymbol[];
   importPaths: string[];
   calledIdentifiers: Set<string>;
   callExpressions: Array<{ callerName: string; calleeName: string }>;
-} {
+}
+
+function walkTree(root: Node, config: LanguageConfig, _lines: string[]): WalkTreeResult {
   const symbols: ExtractedSymbol[] = [];
   const importPaths: string[] = [];
   const calledIdentifiers = new Set<string>();

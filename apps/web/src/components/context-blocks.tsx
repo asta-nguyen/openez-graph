@@ -43,7 +43,7 @@ function parseContextBlocks(raw: string): ContextBlock[] {
 
 function inferLanguage(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
+  const map = {
     ts: "typescript",
     tsx: "tsx",
     js: "javascript",
@@ -60,8 +60,9 @@ function inferLanguage(path: string): string {
     toml: "toml",
     sh: "bash",
     bash: "bash",
-  };
-  return map[ext] ?? "text";
+  } satisfies Record<string, string>;
+  const entry = Object.entries(map).find(([k]) => k === ext);
+  return entry?.[1] ?? "text";
 }
 
 interface CodeSegment {

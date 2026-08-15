@@ -89,23 +89,19 @@ export default defineConfig({
     const nativeDir = path.resolve(__dirname, "../../packages/native");
     const nodeFile = path.join(nativeDir, "index.linux-x64-gnu.node");
     if (existsSync(nodeFile)) {
-      const nativeDest = path.resolve(__dirname, "dist/native");
-      mkdirSync(nativeDest, { recursive: true });
-      cpSync(nodeFile, path.join(nativeDest, "index.linux-x64-gnu.node"));
-      cpSync(path.join(nativeDir, "index.js"), path.join(nativeDest, "index.js"));
-      // Create node_modules/@openez-graph/native/package.json so require resolves from dist
-      mkdirSync(path.resolve(__dirname, "dist/node_modules/@openez-graph/native"), {
-        recursive: true,
-      });
+      const nativePkgDest = path.resolve(__dirname, "dist/node_modules/@openez-graph/native");
+      mkdirSync(nativePkgDest, { recursive: true });
+      cpSync(nodeFile, path.join(nativePkgDest, "index.linux-x64-gnu.node"));
+      cpSync(path.join(nativeDir, "index.js"), path.join(nativePkgDest, "index.js"));
       writeFileSync(
-        path.resolve(__dirname, "dist/node_modules/@openez-graph/native/package.json"),
+        path.join(nativePkgDest, "package.json"),
         JSON.stringify(
-          { name: "@openez-graph/native", version: "0.1.0", main: "../../native/index.js" },
+          { name: "@openez-graph/native", version: "0.1.0", main: "./index.js" },
           null,
           2,
         ),
       );
-      console.log("✓ Copied native .node + loader → dist/native/");
+      console.log("✓ Copied native .node + loader → dist/node_modules/@openez-graph/native/");
     } else {
       console.log("⚠ Native .node not found — run cargo build first");
     }
@@ -128,7 +124,7 @@ export default defineConfig({
             console.log(`✓ Copied ${tmpl} → dist/${tmpl}`);
           }
         }
-      } catch (e) {
+      } catch {
         console.log("⚠ Template build failed — runtime DDL fallback will be used");
       }
     }

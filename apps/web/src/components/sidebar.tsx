@@ -101,7 +101,7 @@ function NavLink({
 
   const handleMouseEnter = () => {
     if (!query) return;
-    const options = typeof query === "function" ? query() : query;
+    const options = query instanceof Function ? query() : query;
     queryClient.prefetchQuery(options);
   };
 

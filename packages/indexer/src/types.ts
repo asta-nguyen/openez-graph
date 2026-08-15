@@ -1,9 +1,30 @@
+export interface ChunkMetadata {
+  kind?: string;
+  language?: string;
+  section?: string;
+  startLine?: number;
+  endLine?: number;
+  splitIndex?: number;
+  splitCount?: number;
+  fallback?: boolean;
+  searchText?: string;
+  symbolName?: string;
+  symbolType?: string;
+  exported?: boolean;
+  headingPath?: string[];
+  valueType?: string;
+  receiver?: string;
+  decorators?: string[];
+  arrayTable?: boolean;
+  path?: string;
+}
+
 export interface IndexedChunk {
   heading?: string;
   content: string;
   tokenCount: number;
   contentHash: string;
-  metadata: Record<string, unknown>;
+  metadata: ChunkMetadata;
   symbolName?: string;
   symbolType?: string;
 }

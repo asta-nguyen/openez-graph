@@ -6,13 +6,45 @@
  * circular imports between the split modules and the original file.
  */
 
+/** SQLite scalar values that can be bound as statement parameters or returned from queries. */
+export type DatabaseValue = string | number | bigint | boolean | null | Uint8Array;
+
+/** A row returned by a SQLite query — column names mapped to their scalar values. */
+export interface DatabaseRow {
+  [key: string]: DatabaseValue;
+}
+
+/** Result of a `run()` call on a prepared statement. */
+export interface RunResult {
+  lastInsertRowid: number | bigint;
+  changes: number;
+}
+
+/** A JSON-compatible value tree (used for parsed metadata columns). */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+/**
+ * A graph node row whose `metadata` has been parsed from a JSON string into
+ * an object. Used by `graphNeighbors` where metadata is deserialized before
+ * returning to the caller.
+ */
+export interface GraphNeighborNode {
+  [key: string]: DatabaseValue | Record<string, JsonValue>;
+}
+
 export interface NativeDatabase {
-  pragma(command: string): unknown;
-  exec(sql: string): unknown;
+  pragma(command: string): void;
+  exec(sql: string): void;
   prepare(sql: string): {
-    all(...params: unknown[]): unknown[];
-    get(...params: unknown[]): unknown;
-    run(...params: unknown[]): unknown;
+    all(...params: DatabaseValue[]): DatabaseRow[];
+    get(...params: DatabaseValue[]): DatabaseRow | undefined;
+    run(...params: DatabaseValue[]): RunResult;
   };
 }
 

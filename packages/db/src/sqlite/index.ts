@@ -26,4 +26,5 @@ export type {
   WorkspaceSettings,
 } from "./types";
 export type { LocalWorkspaceConfig } from "./local-workspace";
+export type { JsonValue, DatabaseValue, DatabaseRow, RunResult } from "./shared-types";
 export * as schema from "./schema";

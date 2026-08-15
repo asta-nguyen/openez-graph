@@ -295,8 +295,8 @@ describe("end-to-end search pipeline", () => {
         workspaceId: "test-e2e",
         title: "Broken version",
         content: "This should not be stored",
-        supersedesId: "missing-memory",
+        supersedesId: 999999,
       }),
-    ).rejects.toThrow("Memory 'missing-memory' not found");
+    ).rejects.toThrow("Memory '999999' not found");
   });
 });

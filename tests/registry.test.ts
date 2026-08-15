@@ -94,6 +94,7 @@ describe("createRegistryRepository", () => {
     const migrated = await repository.getWorkspace("legacy-ws");
     expect(migrated).toMatchObject(expectedWorkspace);
     const firstInspection = createNativeDatabase(dbPath);
+    // SAFETY: PRAGMA table_info returns rows with a name string column.
     const columnsAfterFirstOpen = firstInspection
       .prepare("PRAGMA table_info(workspaces)")
       .all() as Array<{ name: string }>;
@@ -110,6 +111,7 @@ describe("createRegistryRepository", () => {
     expect(reopened).toMatchObject({ ...expectedWorkspace, graphGeneration: 0 });
     expect(reopened?.graphGeneration).toBe(0);
     const secondInspection = createNativeDatabase(dbPath);
+    // SAFETY: PRAGMA table_info returns rows with a name string column.
     const columnsAfterReopen = secondInspection
       .prepare("PRAGMA table_info(workspaces)")
       .all() as Array<{ name: string }>;
@@ -342,7 +344,7 @@ describe("createRegistryRepository", () => {
     await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
 
     await repo.setPinned("ws1", true);
-    expect(typeof (await repo.getWorkspace("ws1"))?.pinnedAt).toBe("string");
+    expect((await repo.getWorkspace("ws1"))?.pinnedAt).toEqual(expect.any(String));
 
     await repo.setPinned("ws1", false);
     expect((await repo.getWorkspace("ws1"))?.pinnedAt).toBeUndefined();

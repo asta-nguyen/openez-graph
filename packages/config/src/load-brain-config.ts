@@ -58,6 +58,7 @@ export async function loadBrainConfig(startDir = process.cwd()): Promise<BrainCo
   const evaluator = new Function(
     `${sanitized}\nreturn typeof __default__ !== "undefined" ? __default__ : (typeof config !== "undefined" ? config : undefined);`,
   );
+  // SAFETY: evaluator() executes a sanitized brain.config file whose default export is typed as BrainConfig; the cast bridges the `unknown` from `new Function` to that expected shape.
   const loaded = evaluator() as BrainConfig | undefined;
 
   const defaults = getDefaultSettings();

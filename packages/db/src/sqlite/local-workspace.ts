@@ -27,7 +27,7 @@ export async function writeLocalWorkspaceConfig(
   const configPath = getLocalWorkspaceConfigPath(workspace.rootPath);
 
   await fs.mkdir(path.dirname(configPath), { recursive: true });
-  await fs.writeFile(
+  await Bun.write(
     configPath,
     JSON.stringify(
       {
@@ -39,7 +39,6 @@ export async function writeLocalWorkspaceConfig(
       null,
       2,
     ) + "\n",
-    "utf8",
   );
 
   await ensureGitignoreEntry(workspace.rootPath, OPENEZ_DIRNAME);
@@ -54,6 +53,8 @@ async function ensureGitignoreEntry(rootPath: string, entry: string): Promise<vo
   try {
     content = await fs.readFile(gitignorePath, "utf8");
   } catch (err) {
+    // SAFETY: fs.readFile rejects with a NodeJS.ErrnoException for ENOENT;
+    // the cast narrows the unknown error to access the `code` property.
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 
@@ -64,7 +65,7 @@ async function ensureGitignoreEntry(rootPath: string, entry: string): Promise<vo
   if (hasEntry) return;
 
   const nl = content.endsWith("\n") ? "" : "\n";
-  await fs.writeFile(gitignorePath, content + nl + entry + "/\n", "utf8");
+  await Bun.write(gitignorePath, content + nl + entry + "/\n");
 }
 
 export async function readLocalWorkspaceConfig(
@@ -74,17 +75,24 @@ export async function readLocalWorkspaceConfig(
 
   try {
     const raw = await fs.readFile(configPath, "utf8");
+    // SAFETY: JSON.parse returns any; we cast to Partial<LocalWorkspaceConfig>
+    // and then validate each field is present (non-undefined) before using
+    // the value as a full LocalWorkspaceConfig.
     const parsed = JSON.parse(raw) as Partial<LocalWorkspaceConfig>;
     if (
-      typeof parsed.workspaceId !== "string" ||
-      typeof parsed.rootPath !== "string" ||
-      typeof parsed.name !== "string" ||
-      typeof parsed.updatedAt !== "string"
+      parsed.workspaceId === undefined ||
+      parsed.rootPath === undefined ||
+      parsed.name === undefined ||
+      parsed.updatedAt === undefined
     ) {
       return null;
     }
+    // SAFETY: all four required fields are checked non-undefined above, so
+    // the Partial<LocalWorkspaceConfig> satisfies the full contract.
     return parsed as LocalWorkspaceConfig;
   } catch (error) {
+    // SAFETY: fs.readFile rejects with a NodeJS.ErrnoException for ENOENT;
+    // the cast narrows the unknown error to access the `code` property.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
     }

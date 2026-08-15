@@ -118,7 +118,7 @@ export default async function LandingPage() {
     });
     if (res.ok) {
       const data = await res.json();
-      if (typeof data.stargazers_count === "number") {
+      if (Number.isFinite(data.stargazers_count)) {
         starCount = data.stargazers_count;
       }
     }
@@ -131,7 +131,7 @@ export default async function LandingPage() {
     });
     if (res.ok) {
       const data = await res.json();
-      if (typeof data.version === "string") {
+      if (Object.prototype.toString.call(data.version) === "[object String]") {
         cliVersion = data.version;
       }
     }

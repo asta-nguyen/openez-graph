@@ -17,10 +17,7 @@ const LANGUAGE_CONFIGS = {
   ruby: rubyConfig,
 } as const;
 
-const REGEX_FALLBACKS: Record<
-  string,
-  (content: string, counter: TokenCounter) => IndexedCodeResult
-> = {
+const REGEX_FALLBACKS = {
   python: parsePython,
   go: parseGo,
   rust: parseRust,
@@ -74,7 +71,7 @@ export class TreeSitterParser implements CodeParser {
     counter: TokenCounter,
   ): ParsedDocument {
     const fallback =
-      language && REGEX_FALLBACKS[language]
+      language && isTreeSitterLanguage(language)
         ? REGEX_FALLBACKS[language](input.content, counter)
         : {
             chunks: [],

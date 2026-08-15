@@ -29,8 +29,9 @@ describe("agent setup instructions", () => {
   const cases = [
     {
       name: "codex",
-      module: "./apps/cli/src/setup-codex.ts",
-      exported: "setupCodex",
+      module: "./apps/cli/src/setup-agent.ts",
+      exported: "setupAgent",
+      args: ["codex"],
       instructions: "AGENTS.md",
       config: path.join(".codex", "config.toml"),
       parse: Bun.TOML.parse,
@@ -38,8 +39,9 @@ describe("agent setup instructions", () => {
     },
     {
       name: "claude",
-      module: "./apps/cli/src/setup-claude.ts",
-      exported: "setupClaude",
+      module: "./apps/cli/src/setup-agent.ts",
+      exported: "setupAgent",
+      args: ["claude"],
       instructions: "CLAUDE.md",
       config: path.join(".claude", "settings.json"),
       parse: JSON.parse,
@@ -47,8 +49,9 @@ describe("agent setup instructions", () => {
     },
     {
       name: "opencode",
-      module: "./apps/cli/src/setup-opencode.ts",
-      exported: "setupOpenCode",
+      module: "./apps/cli/src/setup-agent.ts",
+      exported: "setupAgent",
+      args: ["opencode"],
       instructions: "AGENTS.md",
       config: path.join(".config", "opencode", "opencode.json"),
       parse: JSON.parse,
@@ -56,8 +59,9 @@ describe("agent setup instructions", () => {
     },
     {
       name: "windsurf",
-      module: "./apps/cli/src/setup-windsurf.ts",
-      exported: "setupWindsurf",
+      module: "./apps/cli/src/setup-agent.ts",
+      exported: "setupAgent",
+      args: ["windsurf"],
       instructions: "AGENTS.md",
       config: path.join(".codeium", "windsurf", "mcp_config.json"),
       parse: JSON.parse,
@@ -65,17 +69,28 @@ describe("agent setup instructions", () => {
     },
     {
       name: "devin",
-      module: "./apps/cli/src/setup-devin.ts",
-      exported: "setupDevin",
+      module: "./apps/cli/src/setup-agent.ts",
+      exported: "setupAgent",
+      args: ["devin"],
       instructions: "AGENTS.md",
       config: path.join(".config", "devin", "config.json"),
       parse: JSON.parse,
       serverKey: "mcpServers",
     },
+    {
+      name: "zed",
+      module: "./apps/cli/src/setup-agent.ts",
+      exported: "setupAgent",
+      args: ["zed"],
+      instructions: "AGENTS.md",
+      config: path.join(".config", "zed", "settings.json"),
+      parse: JSON.parse,
+      serverKey: "context_servers",
+    },
   ] as const;
 
   async function runSetup(setupCase: (typeof cases)[number]): Promise<void> {
-    const script = `const module = await import("${setupCase.module}"); await module.${setupCase.exported}(process.argv[1]);`;
+    const script = `const module = await import("${setupCase.module}"); await module.${setupCase.exported}(${setupCase.args.map((a) => `"${a}"`).join(", ")}, process.argv[1]);`;
     const childProcess = Bun.spawn([Bun.argv[0]!, "-e", script, projectPath], {
       cwd: path.resolve(import.meta.dir, ".."),
       env: { ...process.env, HOME: homePath },
@@ -91,12 +106,20 @@ describe("agent setup instructions", () => {
   // Extract the args array that launches the openez MCP server from a parsed
   // config. opencode stores `[command, ...args]` in a single `command` array;
   // every other agent stores a separate `args` field.
-  function getOpenEZArgs(parsed: Record<string, unknown>, serverKey: string): string[] {
-    const servers = parsed[serverKey] as Record<string, Record<string, unknown>>;
+  interface OpenEZServerEntry {
+    command?: string[];
+    args?: string[];
+  }
+  interface AgentServerConfig {
+    openez?: OpenEZServerEntry;
+  }
+  type ParsedAgentConfig = Record<string, AgentServerConfig>;
+  function getOpenEZArgs(parsed: ParsedAgentConfig, serverKey: string): string[] {
+    const servers = parsed[serverKey];
     const entry = servers?.openez;
     if (!entry) throw new Error("openez server entry missing from " + serverKey);
-    if (Array.isArray(entry.command)) return entry.command as string[];
-    if (Array.isArray(entry.args)) return entry.args as string[];
+    if (Array.isArray(entry.command)) return entry.command;
+    if (Array.isArray(entry.args)) return entry.args;
     throw new Error("openez entry has no command/args array");
   }
 
@@ -110,7 +133,8 @@ describe("agent setup instructions", () => {
       expect(instructions).toContain(END_MARKER);
 
       const config = fs.readFileSync(path.join(homePath, setupCase.config), "utf-8");
-      const parsed = setupCase.parse(config) as Record<string, unknown>;
+      // SAFETY: test fixture config is written by setupAgent and always has the agent's server-key mapping.
+      const parsed = setupCase.parse(config) as ParsedAgentConfig;
       // The openez MCP server entry must exist and launch `serve --mcp`.
       const args = getOpenEZArgs(parsed, setupCase.serverKey);
       expect(args.length).toBeGreaterThanOrEqual(2);

@@ -1,39 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-import dotenv from "dotenv";
-
 import { z } from "zod";
-
-function loadDotenvFromWorkspaceRoot() {
-  let currentDir: string;
-  try {
-    currentDir = path.dirname(fileURLToPath(import.meta.url));
-  } catch {
-    currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
-  }
-  let searchDir = currentDir;
-
-  while (true) {
-    const candidate = path.join(searchDir, ".env");
-    if (fs.existsSync(candidate)) {
-      dotenv.config({ path: candidate });
-      return;
-    }
-
-    const parentDir = path.dirname(searchDir);
-    if (parentDir === searchDir) {
-      break;
-    }
-
-    searchDir = parentDir;
-  }
-
-  dotenv.config();
-}
-
-loadDotenvFromWorkspaceRoot();
 
 const envSchema = z.object({
   EMBEDDING_PROVIDER: z.string().default("none"),

@@ -20,6 +20,7 @@ function readInstructionFile(instructionsPath: string): string {
     fd = fs.openSync(instructionsPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
     return fs.readFileSync(fd, "utf-8");
   } catch (error) {
+    // SAFETY: caught error is a Node.js filesystem error with .code property
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
     throw error;
   } finally {
@@ -33,6 +34,7 @@ function writeInstructionFileAtomic(instructionsPath: string, content: string): 
   try {
     mode = fs.statSync(instructionsPath).mode & 0o777;
   } catch (error) {
+    // SAFETY: caught error is a Node.js filesystem error with .code property
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   let fd: number | undefined;
@@ -55,6 +57,7 @@ function writeInstructionFileAtomic(instructionsPath: string, content: string): 
         throw new Error("Refusing to manage symlinked instruction file: " + instructionsPath);
       }
     } catch (error) {
+      // SAFETY: caught error is a Node.js filesystem error with .code property
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     fs.renameSync(tempPath, instructionsPath);
@@ -83,6 +86,7 @@ export function installAgentInstructions(
       throw new Error("Refusing to manage symlinked instruction file: " + instructionsPath);
     }
   } catch (error) {
+    // SAFETY: caught error is a Node.js filesystem error with .code property
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
 

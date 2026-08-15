@@ -3,11 +3,13 @@ export interface RankedItem<T> {
   score: number;
 }
 
-export function reciprocalRankFusion<T extends { id: string }>(
+export function reciprocalRankFusion<T>(
   resultSets: Array<Array<RankedItem<T>>>,
   k = 60,
   weights: number[] = [],
-  identity: (item: T) => string = (item) => item.id,
+  identity: (item: T) => string = (item: any) =>
+    // SAFETY: ranked items are ChunkHit-shaped rows whose `id` or `path` is the stable identity key; both are coerced to string so a missing field yields "".
+    String((item as any).id ?? (item as any).path ?? ""),
 ): Array<RankedItem<T>> {
   const map = new Map<string, RankedItem<T>>();
 

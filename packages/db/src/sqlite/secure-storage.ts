@@ -42,6 +42,8 @@ function getMasterKey(): Buffer {
         `Back up the file, then delete it only if no encrypted settings need preserving.`,
     );
   } catch (err: unknown) {
+    // SAFETY: caught value is a Node.js filesystem error from readFileSync;
+    // Node attaches a `code` string property (e.g. "ENOENT") to system errors.
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
       // File doesn't exist — legitimate first run, fall through to creation.
@@ -66,6 +68,9 @@ function getMasterKey(): Buffer {
   } catch (err: unknown) {
     // Another process created the file between our read and our open.
     // Reload the winning key instead of overwriting it.
+    // SAFETY: caught value is a Node.js filesystem error from openSync with
+    // flag "wx"; Node attaches a `code` string property (e.g. "EEXIST") to
+    // system errors.
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EEXIST") {
       ensureKeyFilePermissions(MASTER_KEY_FILE);

@@ -1,7 +1,5 @@
-import fg from "fast-glob";
-import fsAsync from "node:fs/promises";
 import path from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 
 // @ts-expect-error — picomatch v4 ships no type declarations
 import picomatch from "picomatch";
@@ -69,7 +67,7 @@ function loadGitignore(rootPath: string): string[] {
     return content
       .split("\n")
       .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#"))
+      .filter((line) => line && !line.startsWith("#") && !line.startsWith("!"))
       .flatMap((pattern) => {
         const hasSlash = pattern.replace(/\/$/, "").includes("/");
         const clean = pattern.replace(/^\//, "").replace(/\/$/, "");
@@ -81,10 +79,6 @@ function loadGitignore(rootPath: string): string[] {
   } catch {
     return [];
   }
-}
-
-function baseName(filePath: string): string {
-  return path.basename(filePath);
 }
 
 export async function scanWorkspaceFiles(input: {
@@ -113,65 +107,73 @@ export async function scanWorkspaceFiles(input: {
         .map((p) => p.trim())
     : DEFAULT_INCLUDE_PATTERNS;
 
-  // Native Rust scanner (rayon parallel walk) — fast path for default includes
+  // Native Rust scanner (parallel walk) — fast path for default includes
   if (!input.include) {
     try {
       let nativeBinding: any = null;
       try {
-        nativeBinding = require(
-          require("path").join(__dirname, "native", "index.linux-x64-gnu.node"),
-        );
-      } catch {
         nativeBinding = require("@openez-graph/native");
+      } catch (requireError) {
+        console.debug("[openez] native scanner module unavailable:", requireError);
+        nativeBinding = null;
       }
-      if (nativeBinding && typeof nativeBinding.scanWorkspaceFast === "function") {
+      if (nativeBinding && nativeBinding.scanWorkspaceFast instanceof Function) {
         const rawFiles: Array<{
           absolutePath: string;
           relativePath: string;
           sizeBytes: number;
           mtimeMs: number;
-        }> = nativeBinding.scanWorkspaceFast(rootPath, ALLOWED_EXTENSIONS);
+        }> = nativeBinding.scanWorkspaceFast(rootPath, Array.from(ALLOWED_EXTENSIONS));
         if (rawFiles && rawFiles.length > 0) {
           const isIgnored = picomatch(ignorePatterns, { dot: true });
-          const results: FileToIndex[] = [];
-          for (const f of rawFiles) {
-            if (!isIgnored(f.relativePath)) {
-              results.push({
-                absolutePath: f.absolutePath,
-                relativePath: f.relativePath,
-                sizeBytes: Number(f.sizeBytes),
-                mtimeMs: Number(f.mtimeMs),
-              });
-            }
-          }
-          return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+          return rawFiles
+            .filter((f) => !isIgnored(f.relativePath))
+            .map((f) => ({
+              absolutePath: f.absolutePath,
+              relativePath: f.relativePath,
+              sizeBytes: Number(f.sizeBytes),
+              mtimeMs: Number(f.mtimeMs),
+            }))
+            .sort((left, right) => left.relativePath.localeCompare(right.relativePath));
         }
       }
-    } catch {
-      /* fallback to fast-glob */
+    } catch (nativeScanError) {
+      console.debug("[openez] native scan failed, falling back to glob:", nativeScanError);
     }
   }
 
-  const entries = await fg(includePatterns, {
-    cwd: rootPath,
-    ignore: ignorePatterns,
-    onlyFiles: true,
-    absolute: true,
-    followSymbolicLinks: false,
-    dot: false,
-  });
+  const isIgnored = picomatch(ignorePatterns, { dot: true });
+  const matched = new Set<string>();
+  for (const pattern of includePatterns) {
+    const glob = new Bun.Glob(pattern);
+    for (const relPath of glob.scanSync({
+      cwd: rootPath,
+      onlyFiles: true,
+      followSymlinks: false,
+      dot: false,
+    })) {
+      if (!isIgnored(relPath)) {
+        matched.add(relPath);
+      }
+    }
+  }
 
-  const results = await Promise.all(
-    entries.map(async (absolutePath) => {
-      const stat = await fsAsync.stat(absolutePath);
-      return {
+  const results: FileToIndex[] = [];
+  for (const relativePath of matched) {
+    const absolutePath = path.join(rootPath, relativePath);
+    try {
+      const stat = statSync(absolutePath);
+      results.push({
         absolutePath,
-        relativePath: path.relative(rootPath, absolutePath),
+        relativePath,
         sizeBytes: stat.size,
         mtimeMs: Math.trunc(stat.mtimeMs),
-      } satisfies FileToIndex;
-    }),
-  );
+      });
+    } catch (statError) {
+      console.debug("[openez] skipping unreadable file in glob scan:", relativePath, statError);
+      continue;
+    }
+  }
 
   return results.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 }

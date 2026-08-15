@@ -14,12 +14,19 @@ import {
 } from "d3-force";
 import { getNodeColor, getEdgeColor } from "../../lib/utils";
 
+export interface GraphNodeMetadata {
+  path?: string;
+  startLine?: number;
+  endLine?: number;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
 export interface GraphNodeData {
-  id: string;
+  id: number;
   label: string;
   type: string;
   degree: number;
-  metadata: Record<string, unknown>;
+  metadata: GraphNodeMetadata;
   path?: string;
   startLine?: number;
   endLine?: number;
@@ -27,9 +34,9 @@ export interface GraphNodeData {
 }
 
 export interface GraphEdgeData {
-  id: string;
-  source: string;
-  target: string;
+  id: number;
+  source: number;
+  target: number;
   type: string;
   weight: number;
 }
@@ -37,14 +44,14 @@ export interface GraphEdgeData {
 export interface WorkspaceGraphProps {
   nodes: GraphNodeData[];
   edges: GraphEdgeData[];
-  selectedNodeId?: string | null;
-  onNodeClick?: (nodeId: string) => void;
-  onNodeHover?: (nodeId: string | null) => void;
+  selectedNodeId?: number | null;
+  onNodeClick?: (nodeId: number) => void;
+  onNodeHover?: (nodeId: number | null) => void;
   className?: string;
 }
 
 interface SimNode extends SimulationNodeDatum {
-  id: string;
+  id: number;
   label: string;
   type: string;
   degree: number;
@@ -107,8 +114,8 @@ export function WorkspaceGraph({
   const simRef = useRef<Simulation<SimNode, SimEdge> | null>(null);
   const simNodesRef = useRef<SimNode[]>([]);
   const simEdgesRef = useRef<SimEdge[]>([]);
-  const neighborSetRef = useRef<Set<string> | null>(null);
-  const hoverNeighborSetRef = useRef<Set<string> | null>(null);
+  const neighborSetRef = useRef<Set<number> | null>(null);
+  const hoverNeighborSetRef = useRef<Set<number> | null>(null);
 
   // Pan & zoom state
   const transformRef = useRef({ x: 0, y: 0, k: 1 });
@@ -116,8 +123,8 @@ export function WorkspaceGraph({
   const lastPanRef = useRef({ x: 0, y: 0 });
   const pointerStartRef = useRef({ x: 0, y: 0 });
   const movedRef = useRef(false);
-  const hoveredRef = useRef<string | null>(null);
-  const selectedRef = useRef<string | null>(selectedNodeId ?? null);
+  const hoveredRef = useRef<number | null>(null);
+  const selectedRef = useRef<number | null>(selectedNodeId ?? null);
   const draggingNodeRef = useRef<SimNode | null>(null);
   const dirtyRef = useRef(true);
   const edgeBucketsRef = useRef<Map<string, SimEdge[]>>(new Map());
@@ -142,7 +149,7 @@ export function WorkspaceGraph({
       return;
     }
 
-    const index = new Map<string, number>();
+    const index = new Map<number, number>();
     const simNodes: SimNode[] = nodes.map((n, i) => {
       index.set(n.id, i);
       return {
@@ -197,6 +204,7 @@ export function WorkspaceGraph({
       )
       .force(
         "charge",
+        // SAFETY: forceSimulation<SimNode> guarantees d is a SimNode; the cast restores the narrowed type from the generic simulation
         largeGraph ? null : forceManyBody().strength((d) => -30 - (d as SimNode).degree * 2),
       )
       .force("center", forceCenter(w / 2, h / 2))
@@ -229,7 +237,7 @@ export function WorkspaceGraph({
       dirtyRef.current = true;
       return;
     }
-    const neighbors = new Set<string>([selectedNodeId]);
+    const neighbors = new Set<number>([selectedNodeId]);
     for (const e of simEdgesRef.current) {
       if (e.source.id === selectedNodeId) neighbors.add(e.target.id);
       if (e.target.id === selectedNodeId) neighbors.add(e.source.id);
@@ -529,7 +537,7 @@ export function WorkspaceGraph({
       const id = node?.id ?? null;
       if (id !== hoveredRef.current) {
         hoveredRef.current = id;
-        const neighbors = id ? new Set<string>([id]) : null;
+        const neighbors = id ? new Set<number>([id]) : null;
         if (neighbors) {
           for (const edge of simEdgesRef.current) {
             if (edge.source.id === id) neighbors.add(edge.target.id);
@@ -561,7 +569,7 @@ export function WorkspaceGraph({
     function onClick(e: MouseEvent) {
       if (movedRef.current) return;
       const node = getNodeAt(e.clientX, e.clientY);
-      onClickRef.current?.(node?.id ?? "");
+      onClickRef.current?.(node?.id ?? 0);
     }
 
     function onWheel(e: WheelEvent) {

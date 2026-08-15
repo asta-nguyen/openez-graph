@@ -1,7 +1,8 @@
-import crypto from "node:crypto";
+import { and, count, eq, inArray, or } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
-import type { GraphStmts } from "./graph-ops-shared";
+import * as schema from "./schema";
 
 /**
  * Factory for graph edge operations extracted from `createGraphOps()`.
@@ -11,45 +12,59 @@ import type { GraphStmts } from "./graph-ops-shared";
  * `refreshStreamTimestamp()` (defined in `document-repository.ts`) stays
  * visible to the edge stream methods here.
  */
-export function createGraphEdgeOps(
-  native: NativeDatabase,
-  stmts: GraphStmts,
-  streamNow: StreamTimestampHolder,
-) {
+export function createGraphEdgeOps(native: NativeDatabase, streamNow: StreamTimestampHolder) {
+  // SAFETY: drizzle-orm/bun-sqlite expects a BunSqlite.Database instance;
+  // NativeDatabase is structurally compatible (exposes the same prepare/exec
+  // methods). The `as any` bridges the structural mismatch without affecting
+  // runtime behavior.
+  const db = drizzle(native as any, { schema });
+
   return {
     async getEdgeCount(): Promise<number> {
-      const row = native.prepare("SELECT count(*) AS count FROM graph_edges").get() as {
-        count: number;
-      };
+      const row = db.select({ count: count() }).from(schema.graphEdges).get();
       return row?.count ?? 0;
     },
 
     // ── Graph Edge Operations ──
 
     async insertEdge(input: {
-      fromNodeId: string;
-      toNodeId: string;
+      fromNodeId: number;
+      toNodeId: number;
       type: string;
       weight?: number;
       metadata?: string;
-    }): Promise<string> {
-      const id = crypto.randomUUID();
-      stmts.insertEdge.run(
-        id,
-        input.fromNodeId,
-        input.toNodeId,
-        input.type,
-        input.weight ?? 1,
-        input.metadata ?? "{}",
-        new Date().toISOString(),
-      );
-      return id;
+    }): Promise<number> {
+      // `RETURNING id` yields the autoincrement primary key, which equals
+      // the rowid that the original `lastInsertRowid` read exposed. When
+      // `ON CONFLICT DO NOTHING` suppresses a duplicate, no row is returned
+      // and 0 is used as the fallback (matching the stale-rowid behavior of
+      // the original `lastInsertRowid` read in the no-prior-insert case).
+      const inserted = db
+        .insert(schema.graphEdges)
+        .values({
+          fromNodeId: input.fromNodeId,
+          toNodeId: input.toNodeId,
+          type: input.type,
+          weight: input.weight ?? 1,
+          metadata: input.metadata ?? "{}",
+          createdAt: new Date().toISOString(),
+        })
+        .onConflictDoNothing({
+          target: [
+            schema.graphEdges.fromNodeId,
+            schema.graphEdges.toNodeId,
+            schema.graphEdges.type,
+          ],
+        })
+        .returning({ id: schema.graphEdges.id })
+        .get();
+      return Number(inserted?.id ?? 0);
     },
 
     async insertEdges(
       inputs: Array<{
-        fromNodeId: string;
-        toNodeId: string;
+        fromNodeId: number;
+        toNodeId: number;
         type: string;
         weight?: number;
         metadata?: string;
@@ -60,45 +75,49 @@ export function createGraphEdgeOps(
       const BATCH = 2000;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const item of batch) {
-          params.push(
-            crypto.randomUUID(),
-            item.fromNodeId,
-            item.toNodeId,
-            item.type,
-            item.weight ?? 1,
-            item.metadata ?? "{}",
-            now,
-          );
-        }
-        native
-          .prepare(
-            `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders} ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
+        db.insert(schema.graphEdges)
+          .values(
+            batch.map((item) => ({
+              fromNodeId: item.fromNodeId,
+              toNodeId: item.toNodeId,
+              type: item.type,
+              weight: item.weight ?? 1,
+              metadata: item.metadata ?? "{}",
+              createdAt: now,
+            })),
           )
-          .run(...params);
+          .onConflictDoNothing({
+            target: [
+              schema.graphEdges.fromNodeId,
+              schema.graphEdges.toNodeId,
+              schema.graphEdges.type,
+            ],
+          })
+          .run();
       }
     },
 
-    async deleteEdgesByNodeIds(nodeIds: string[]) {
+    async deleteEdgesByNodeIds(nodeIds: number[]) {
       if (nodeIds.length === 0) return;
-      const placeholders = nodeIds.map(() => "?").join(",");
-      native
-        .prepare(
-          `DELETE FROM graph_edges WHERE from_node_id IN (${placeholders}) OR to_node_id IN (${placeholders})`,
+      db.delete(schema.graphEdges)
+        .where(
+          or(
+            inArray(schema.graphEdges.fromNodeId, nodeIds),
+            inArray(schema.graphEdges.toNodeId, nodeIds),
+          ),
         )
-        .run(...nodeIds, ...nodeIds);
+        .run();
     },
 
-    deleteOutgoingEdges(nodeId: string, types?: string[]) {
+    deleteOutgoingEdges(nodeId: number, types?: string[]) {
       if (types && types.length > 0) {
-        const placeholders = types.map(() => "?").join(",");
-        native
-          .prepare(`DELETE FROM graph_edges WHERE from_node_id = ? AND type IN (${placeholders})`)
-          .run(nodeId, ...types);
+        db.delete(schema.graphEdges)
+          .where(
+            and(eq(schema.graphEdges.fromNodeId, nodeId), inArray(schema.graphEdges.type, types)),
+          )
+          .run();
       } else {
-        native.prepare("DELETE FROM graph_edges WHERE from_node_id = ?").run(nodeId);
+        db.delete(schema.graphEdges).where(eq(schema.graphEdges.fromNodeId, nodeId)).run();
       }
     },
 
@@ -106,9 +125,9 @@ export function createGraphEdgeOps(
 
     streamEdgesBatch(
       inputs: Array<{
-        id: string;
-        fromNodeId: string;
-        toNodeId: string;
+        id: number;
+        fromNodeId: number;
+        toNodeId: number;
         type: string;
         weight?: number;
         metadata?: string;
@@ -119,44 +138,46 @@ export function createGraphEdgeOps(
       const now = streamNow.value;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const e of batch) {
-          params.push(
-            e.id,
-            e.fromNodeId,
-            e.toNodeId,
-            e.type,
-            e.weight ?? 1,
-            e.metadata ?? "{}",
-            now,
-          );
-        }
-        native
-          .prepare(
-            `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders}`,
+        db.insert(schema.graphEdges)
+          .values(
+            batch.map((e) => ({
+              fromNodeId: e.fromNodeId,
+              toNodeId: e.toNodeId,
+              type: e.type,
+              weight: e.weight ?? 1,
+              metadata: e.metadata ?? "{}",
+              createdAt: now,
+            })),
           )
-          .run(...params);
+          .run();
       }
     },
 
     streamEdge(input: {
-      id: string;
-      fromNodeId: string;
-      toNodeId: string;
+      id: number;
+      fromNodeId: number;
+      toNodeId: number;
       type: string;
       weight?: number;
       metadata?: string;
     }): void {
-      stmts.insertEdge.run(
-        input.id,
-        input.fromNodeId,
-        input.toNodeId,
-        input.type,
-        input.weight ?? 1,
-        input.metadata ?? "{}",
-        streamNow.value,
-      );
+      db.insert(schema.graphEdges)
+        .values({
+          fromNodeId: input.fromNodeId,
+          toNodeId: input.toNodeId,
+          type: input.type,
+          weight: input.weight ?? 1,
+          metadata: input.metadata ?? "{}",
+          createdAt: streamNow.value,
+        })
+        .onConflictDoNothing({
+          target: [
+            schema.graphEdges.fromNodeId,
+            schema.graphEdges.toNodeId,
+            schema.graphEdges.type,
+          ],
+        })
+        .run();
     },
   };
 }

@@ -6,7 +6,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const NODE_COLORS: Record<string, string> = {
+const NODE_COLORS = {
   file: "#60a5fa",
   symbol: "#5cc9c2",
   function: "#fbbf24",
@@ -15,7 +15,7 @@ const NODE_COLORS: Record<string, string> = {
   variable: "#34d399",
   module: "#f97316",
   default: "#94a3b8",
-};
+} satisfies Record<string, string>;
 
 const NODE_COUNT = 70;
 const EDGE_THRESHOLD = 40;
@@ -43,7 +43,7 @@ function makeNodeTexture(color: string): THREE.CanvasTexture {
   return tex;
 }
 
-function makeLabelCanvas(text: string): { canvas: HTMLCanvasElement; scale: number } {
+function makeLabelCanvas(text: string) {
   const ctx = document.createElement("canvas").getContext("2d")!;
   const fontSize = 12;
   ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
@@ -263,6 +263,7 @@ export function InteractiveGraph() {
       const y = -((clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
       const hits = raycaster.intersectObjects(nodeSprites);
+      // SAFETY: hits[0].object is a Sprite from nodeSprites, whose userData.index was assigned a number at line 228.
       return hits.length > 0 ? (hits[0].object.userData.index as number) : null;
     }
 
@@ -288,6 +289,7 @@ export function InteractiveGraph() {
       // Scale effect
       for (let i = 0; i < nodeSprites.length; i++) {
         const sp = nodeSprites[i];
+        // SAFETY: sp is a Sprite from nodeSprites, whose userData.degree was assigned a number at line 229.
         const deg = sp.userData.degree as number;
         const base = (3 + deg * 0.4) * 0.7;
         sp.scale.set(i === idx ? base * 1.3 : base, i === idx ? base * 1.3 : base, 1);
@@ -313,18 +315,23 @@ export function InteractiveGraph() {
       controls.dispose();
       // Dispose label textures and sprite materials
       for (const { sprite } of nodeLabels) {
+        // SAFETY: each label sprite was constructed with a THREE.SpriteMaterial at line 239.
         (sprite.material as THREE.SpriteMaterial).map?.dispose();
+        // SAFETY: each label sprite was constructed with a THREE.SpriteMaterial at line 239.
         (sprite.material as THREE.SpriteMaterial).dispose();
       }
       // Dispose node sprite materials
       for (const sprite of nodeSprites) {
+        // SAFETY: each node sprite was constructed with a THREE.SpriteMaterial at line 216.
         (sprite.material as THREE.SpriteMaterial).map?.dispose();
+        // SAFETY: each node sprite was constructed with a THREE.SpriteMaterial at line 216.
         (sprite.material as THREE.SpriteMaterial).dispose();
       }
       // Dispose edge geometries and materials
       scene.traverse((obj) => {
         if (obj instanceof THREE.Line) {
           obj.geometry.dispose();
+          // SAFETY: obj is a THREE.Line, whose material is always a THREE.Material subtype.
           (obj.material as THREE.Material).dispose();
         }
       });

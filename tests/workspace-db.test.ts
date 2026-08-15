@@ -179,9 +179,9 @@ describe("createWorkspaceRepository", () => {
 
     await repo.executeRaw("DROP INDEX idx_graph_edges_from_to_type");
     const insertSql =
-      "INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata) VALUES (?, ?, ?, 'calls', 1, '{}')";
-    await repo.executeRaw(insertSql, ["legacy-edge-1", nodeA, nodeB]);
-    await repo.executeRaw(insertSql, ["legacy-edge-2", nodeA, nodeB]);
+      "INSERT INTO graph_edges (from_node_id, to_node_id, type, weight, metadata) VALUES (?, ?, 'calls', 1, '{}')";
+    await repo.executeRaw(insertSql, [nodeA, nodeB]);
+    await repo.executeRaw(insertSql, [nodeA, nodeB]);
     expect(await repo.getEdgeCount()).toBe(2);
 
     closeAllWorkspaceDbs();
@@ -324,7 +324,7 @@ describe("createWorkspaceRepository", () => {
       chunkIds,
     );
     expect(
-      Object.fromEntries(rows.map((row) => [String(row.chunk_id), String(row.search_text)])),
+      Object.fromEntries(rows.map((row) => [Number(row.chunk_id), String(row.search_text)])),
     ).toEqual(
       Object.fromEntries(
         inputs.map((input, index) => [
@@ -334,7 +334,7 @@ describe("createWorkspaceRepository", () => {
       ),
     );
     const unicodeIndex = cases.findIndex((testCase) => testCase.name === "unicode");
-    expect(rows.find((row) => String(row.chunk_id) === chunkIds[unicodeIndex])?.search_text).toBe(
+    expect(rows.find((row) => Number(row.chunk_id) === chunkIds[unicodeIndex])?.search_text).toBe(
       `unicode needle\n${inputs[unicodeIndex].content}`,
     );
   });

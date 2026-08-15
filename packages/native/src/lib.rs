@@ -1,5 +1,6 @@
 #![deny(clippy::all)]
 
+mod oxc_parser;
 mod parser;
 
 use napi_derive::napi;
@@ -62,26 +63,11 @@ pub fn scan_workspace_fast(root_path: String, allowed_extensions: Vec<String>) -
     .collect()
 }
 
-fn djb2_hash(s: &str) -> String {
-  let mut h: u32 = 5381;
-  for b in s.bytes() {
-    h = h.wrapping_shl(5).wrapping_add(h).wrapping_add(b as u32);
-  }
-  format!("{:x}", h)
-}
+use xxhash_rust::xxh3::xxh3_64;
 
-#[napi]
-pub fn fast_hash(content: String) -> String {
-  djb2_hash(&content)
-}
-
-#[napi]
-pub fn fast_hash_bytes(bytes: &[u8]) -> String {
-  let mut h: u32 = 5381;
-  for &b in bytes {
-    h = h.wrapping_shl(5).wrapping_add(h).wrapping_add(b as u32);
-  }
-  format!("{:x}", h)
+#[inline]
+fn fast_hash_str(s: &str) -> String {
+  format!("{:016x}", xxh3_64(s.as_bytes()))
 }
 
 #[napi(object)]
@@ -181,7 +167,7 @@ pub fn bound_chunks(
     let part_count = parts.len() as i32;
     for (split_index, content) in parts.into_iter().enumerate() {
       split.push(SplitItem {
-        content_hash: djb2_hash(&content),
+        content_hash: fast_hash_str(&content),
         token_count: count_tokens(&content),
         content,
         heading: chunk.heading.clone(),
@@ -250,7 +236,7 @@ fn merge_split_items(chunks: &[SplitItem], indices: Vec<i32>) -> BoundPlan {
     .collect::<Vec<_>>()
     .join("\n\n");
   BoundPlan {
-    content_hash: djb2_hash(&content),
+    content_hash: fast_hash_str(&content),
     token_count: count_tokens(&content),
     heading: chunks[0].heading.clone(),
     content,

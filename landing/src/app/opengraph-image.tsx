@@ -88,7 +88,7 @@ export default async function OGImage() {
     });
     if (res.ok) {
       const data = await res.json();
-      if (typeof data.stargazers_count === "number") {
+      if (Number.isFinite(data.stargazers_count)) {
         starCount = data.stargazers_count;
       }
     }

@@ -1,7 +1,6 @@
 import { exactTokenCounter } from "@openez-graph/core";
 
-import { hashContent } from "../hash";
-import { codeSearchText, createSymbolChunks, type ExtractedSymbol } from "../languages";
+import { createSymbolChunks, type ExtractedSymbol } from "../languages";
 import type { IndexedChunk } from "../types";
 import type { CodeParser, ParseInput, ParsedDocument } from "./types";
 
@@ -13,7 +12,8 @@ function getOxc(): any | null {
   if (_oxc !== undefined) return _oxc;
   try {
     _oxc = require("oxc-parser");
-  } catch {
+  } catch (requireError) {
+    console.debug("[openez] oxc-parser unavailable:", requireError);
     _oxc = null;
   }
   return _oxc;
@@ -23,13 +23,44 @@ interface OxcNode {
   type: string;
   start: number;
   end: number;
-  [key: string]: any;
+  name?: string;
+  id?: OxcNode;
+  declaration?: OxcNode;
+  declarations?: OxcNode[];
+  init?: OxcNode;
+  exportKind?: string;
+  exported?: boolean;
+  body?: OxcNode | OxcNode[];
+  key?: OxcNode;
+  value?: OxcNode;
+  kind?: string;
+  static?: boolean;
+  object?: OxcNode;
+  property?: OxcNode;
+  argument?: OxcNode;
+  left?: OxcNode;
+  elements?: (OxcNode | null)[];
+  properties?: OxcNode[];
+  params?: OxcNode[];
+  callee?: OxcNode;
+  param?: OxcNode;
+  source?: { value?: string };
+}
+
+type OxcValue = OxcNode | OxcValue[] | string | number | boolean | null | undefined;
+
+function isString(v: OxcValue): v is string {
+  return String(v) === v;
+}
+
+function isNonNullObject(v: OxcValue): v is OxcNode | OxcValue[] {
+  return v !== null && v instanceof Object;
 }
 
 function getNodeId(node: OxcNode): string | null {
   // oxc AST: identifier nodes have .name, function/class declarations have .id
-  if (node.type === "Identifier" && typeof node.name === "string") return node.name;
-  if (node.id && node.id.type === "Identifier") return node.id.name;
+  if (node.type === "Identifier" && isString(node.name)) return node.name;
+  if (node.id && node.id.type === "Identifier") return node.id.name ?? null;
   return null;
 }
 
@@ -54,7 +85,7 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
     // declaration before the getNodeId check below would skip them.
     if (node.type === "ExportNamedDeclaration") {
       if (node.declaration) {
-        const inner = extractSymbols([node.declaration as OxcNode], source);
+        const inner = extractSymbols([node.declaration], source);
         for (const s of inner) {
           s.symbol.exported = true;
           results.push(s);
@@ -64,7 +95,7 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
     }
     if (node.type === "ExportDefaultDeclaration") {
       if (node.declaration) {
-        const inner = extractSymbols([node.declaration as OxcNode], source);
+        const inner = extractSymbols([node.declaration], source);
         for (const s of inner) {
           s.symbol.exported = true;
           results.push(s);
@@ -79,7 +110,7 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
     // non-exported arrow/function expressions assigned to variables.
     if (node.type === "VariableDeclaration") {
       for (const decl of node.declarations ?? []) {
-        if (decl.id?.type === "Identifier") {
+        if (decl.id?.type === "Identifier" && isString(decl.id.name)) {
           const declName = decl.id.name;
           const isArrow = decl.init?.type === "ArrowFunctionExpression";
           const isFunc = decl.init?.type === "FunctionExpression";
@@ -88,13 +119,13 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
             const endLine = source.slice(0, decl.end).split("\n").length;
             // Associate the symbol with the function initializer node so its
             // body subtree is walked for call extraction.
-            const bodyNode = (decl.init as OxcNode) ?? decl;
+            const bodyNode = decl.init ?? decl;
             results.push({
               symbol: {
                 name: declName,
                 symbolType: "function",
                 type: "function",
-                exported: node.exportKind === "value" || (node as any).exported,
+                exported: node.exportKind === "value" || node.exported === true,
                 startLine,
                 endLine,
               },
@@ -169,15 +200,17 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
 function extractClassMethods(classNode: OxcNode, className: string, source: string): SymbolAst[] {
   const methods: SymbolAst[] = [];
   const addedNames = new Set<string>();
-  const classBody = classNode.body as OxcNode | undefined;
-  if (!classBody || !Array.isArray(classBody.body)) return methods;
+  const classBody = classNode.body;
+  if (!classBody || Array.isArray(classBody)) return methods;
+  const memberList = classBody.body;
+  if (!Array.isArray(memberList)) return methods;
 
-  for (const member of classBody.body as OxcNode[]) {
+  for (const member of memberList) {
     // MethodDefinition: { run() { ... } } or { constructor() { ... } }
     if (member.type === "MethodDefinition") {
-      const key = member.key as OxcNode | undefined;
-      if (key?.type !== "Identifier" || typeof key.name !== "string") continue;
-      const value = member.value as OxcNode | undefined;
+      const key = member.key;
+      if (key?.type !== "Identifier" || !isString(key.name)) continue;
+      const value = member.value;
       if (!value) continue;
       const methodName = key.name;
       const memberKind = member.kind === "get" || member.kind === "set" ? member.kind : null;
@@ -204,9 +237,9 @@ function extractClassMethods(classNode: OxcNode, className: string, source: stri
     // PropertyDefinition with an arrow/function initializer:
     // { handler = () => { ... } }
     if (member.type === "PropertyDefinition") {
-      const key = member.key as OxcNode | undefined;
-      if (key?.type !== "Identifier" || typeof key.name !== "string") continue;
-      const init = member.value as OxcNode | undefined;
+      const key = member.key;
+      if (key?.type !== "Identifier" || !isString(key.name)) continue;
+      const init = member.value;
       if (!init) continue;
       const isArrow = init.type === "ArrowFunctionExpression";
       const isFunc = init.type === "FunctionExpression";
@@ -241,28 +274,32 @@ function extractClassMethods(classNode: OxcNode, className: string, source: stri
  * circular references. Primitives and null are ignored.
  */
 function walkNodes(
-  value: unknown,
+  value: OxcValue,
   visitor: (node: OxcNode) => void,
   visited: WeakSet<object>,
   skippedScopes?: WeakSet<object>,
   isRoot = false,
 ): void {
-  if (value === null || typeof value !== "object") return;
+  if (!isNonNullObject(value)) return;
   if (Array.isArray(value)) {
     for (const item of value) walkNodes(item, visitor, visited, skippedScopes, false);
     return;
   }
-  if (visited.has(value as object)) return;
-  visited.add(value as object);
+  if (visited.has(value)) return;
+  visited.add(value);
 
-  if (!isRoot && skippedScopes?.has(value as object)) return;
+  if (!isRoot && skippedScopes?.has(value)) return;
 
-  const node = value as Record<string, unknown>;
-  const nodeType = node.type;
-  if (typeof nodeType === "string") {
-    visitor(node as unknown as OxcNode);
+  // SAFETY: oxc-parser AST nodes are objects with a string .type property;
+  // the walk only visits values from oxc-parser's parseSync output.
+  const node = value as OxcNode;
+  if (isString(node.type)) {
+    visitor(node);
   }
-  for (const [key, child] of Object.entries(node)) {
+  // SAFETY: Object.entries on an oxc AST object returns child properties
+  // that are OxcValue (nodes, arrays, or primitives) per the oxc AST schema.
+  const entries = Object.entries(value) as [string, OxcValue][];
+  for (const [key, child] of entries) {
     if (key === "parent") continue;
     walkNodes(child, visitor, visited, skippedScopes, false);
   }
@@ -275,15 +312,15 @@ function walkNodes(
  * - other -> null (skip)
  */
 function calleeName(callee: OxcNode): string | null {
-  if (callee.type === "Identifier" && typeof callee.name === "string") {
+  if (callee.type === "Identifier" && isString(callee.name)) {
     return callee.name;
   }
   if (callee.type === "ThisExpression") return "this";
   if (callee.type === "MemberExpression") {
-    const object = callee.object as OxcNode | undefined;
-    const property = callee.property as OxcNode | undefined;
+    const object = callee.object;
+    const property = callee.property;
     const objectName = object ? calleeName(object) : null;
-    if (objectName && property?.type === "Identifier" && typeof property.name === "string") {
+    if (objectName && property?.type === "Identifier" && isString(property.name)) {
       return `${objectName}.${property.name}`;
     }
   }
@@ -292,30 +329,30 @@ function calleeName(callee: OxcNode): string | null {
 
 function collectPatternBindings(pattern: OxcNode | undefined, bindings: Set<string>): void {
   if (!pattern) return;
-  if (pattern.type === "Identifier" && typeof pattern.name === "string") {
+  if (pattern.type === "Identifier" && isString(pattern.name)) {
     bindings.add(pattern.name);
     return;
   }
   if (pattern.type === "RestElement") {
-    collectPatternBindings(pattern.argument as OxcNode | undefined, bindings);
+    collectPatternBindings(pattern.argument, bindings);
     return;
   }
   if (pattern.type === "AssignmentPattern") {
-    collectPatternBindings(pattern.left as OxcNode | undefined, bindings);
+    collectPatternBindings(pattern.left, bindings);
     return;
   }
   if (pattern.type === "ArrayPattern") {
     for (const element of pattern.elements ?? []) {
-      collectPatternBindings(element as OxcNode | undefined, bindings);
+      collectPatternBindings(element ?? undefined, bindings);
     }
     return;
   }
   if (pattern.type === "ObjectPattern") {
     for (const property of pattern.properties ?? []) {
       if (property.type === "Property") {
-        collectPatternBindings(property.value as OxcNode | undefined, bindings);
+        collectPatternBindings(property.value, bindings);
       } else {
-        collectPatternBindings(property as OxcNode, bindings);
+        collectPatternBindings(property, bindings);
       }
     }
   }
@@ -323,17 +360,17 @@ function collectPatternBindings(pattern: OxcNode | undefined, bindings: Set<stri
 
 function collectLocalBindings(node: OxcNode, skippedScopes: WeakSet<object>): Set<string> {
   const bindings = new Set<string>();
-  collectPatternBindings(node.id as OxcNode | undefined, bindings);
+  collectPatternBindings(node.id, bindings);
   for (const parameter of node.params ?? []) {
-    collectPatternBindings(parameter as OxcNode, bindings);
+    collectPatternBindings(parameter, bindings);
   }
   walkNodes(
     node,
     (current: OxcNode) => {
       if (current.type === "VariableDeclarator") {
-        collectPatternBindings(current.id as OxcNode | undefined, bindings);
+        collectPatternBindings(current.id, bindings);
       } else if (current.type === "CatchClause") {
-        collectPatternBindings(current.param as OxcNode | undefined, bindings);
+        collectPatternBindings(current.param, bindings);
       }
     },
     new WeakSet<object>(),
@@ -348,10 +385,12 @@ function collectLocalBindings(node: OxcNode, skippedScopes: WeakSet<object>): Se
  * calls to the owning symbol. Calls nested inside a nested callable
  * declaration are skipped so they attribute to the inner function instead.
  */
-function extractCalls(symbolAsts: SymbolAst[]): {
+interface ExtractCallsResult {
   callExpressions: Array<{ callerName: string; calleeName: string }>;
   calledIdentifiers: Set<string>;
-} {
+}
+
+function extractCalls(symbolAsts: SymbolAst[]): ExtractCallsResult {
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
   const calledIdentifiers = new Set<string>();
   const staticSymbolNames = new Set(
@@ -374,8 +413,8 @@ function extractCalls(symbolAsts: SymbolAst[]): {
     walkNodes(
       node,
       (current: OxcNode) => {
-        if (current.type === "CallExpression") {
-          const rawName = calleeName(current.callee as OxcNode);
+        if (current.type === "CallExpression" && current.callee) {
+          const rawName = calleeName(current.callee);
           const className = symbol.name.includes(".") ? symbol.name.split(".")[0] : null;
           let name = rawName;
           if (
@@ -439,15 +478,24 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
       node,
       (current: OxcNode) => {
         if (current === node) return;
-        if (current.type === "FunctionDeclaration" && current.id?.type === "Identifier") {
+        if (
+          current.type === "FunctionDeclaration" &&
+          current.id?.type === "Identifier" &&
+          isString(current.id.name)
+        ) {
           registerCandidate(current.id.name, current);
         }
-        if (current.type === "FunctionExpression" && current.id?.type === "Identifier") {
+        if (
+          current.type === "FunctionExpression" &&
+          current.id?.type === "Identifier" &&
+          isString(current.id.name)
+        ) {
           registerCandidate(current.id.name, current);
         }
         if (
           current.type === "VariableDeclarator" &&
           current.id?.type === "Identifier" &&
+          isString(current.id.name) &&
           (current.init?.type === "ArrowFunctionExpression" ||
             current.init?.type === "FunctionExpression")
         ) {
@@ -574,13 +622,12 @@ export class OxcParser implements CodeParser {
     const oxc = getOxc();
     if (!oxc) {
       // Fallback: simple line-based chunking
-      const lines = input.content.split("\n");
       const chunks: IndexedChunk[] = [
         {
           heading: input.relativePath,
           content: input.content,
           tokenCount: counter.count(input.content),
-          contentHash: hashContent(input.content),
+          contentHash: Bun.hash(input.content).toString(16),
           metadata: {},
         },
       ];
@@ -598,6 +645,7 @@ export class OxcParser implements CodeParser {
     }
 
     const result = oxc.parseSync(input.relativePath, input.content);
+    // SAFETY: oxc-parser returns ESTree-compatible nodes with .type/.start/.end
     const body = result.program.body as OxcNode[];
     const symbolAsts = extractSymbols(body, input.content);
     const importPaths = extractImports(body);

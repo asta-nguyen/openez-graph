@@ -67,6 +67,7 @@ describe("embedding BLOB storage", () => {
     // Parse BLOB back to number[]
     const raw = rows[0].embedding;
     expect(raw).toBeInstanceOf(Uint8Array);
+    // SAFETY: raw is verified as Uint8Array by the assertion above.
     const float32 = new Float32Array((raw as Uint8Array).buffer);
     const parsed = Array.from(float32);
     expect(parsed).toHaveLength(5);

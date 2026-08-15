@@ -1,7 +1,6 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { api } from "../lib/api";
 import { documentsQueryOptions } from "../lib/queries";
 import {
   Table,

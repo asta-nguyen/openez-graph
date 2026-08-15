@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from "react";
 import { GraphLegend } from "./GraphLegend";
+import type { GraphNodeMetadata } from "./WorkspaceGraph";
 import { Badge, Input, Label } from "@openez-graph/ui";
 import { Loader2, Search, X } from "lucide-react";
 
@@ -10,11 +11,11 @@ const WorkspaceGraph = lazy(() =>
 );
 
 interface GraphNodeData {
-  id: string;
+  id: number;
   label: string;
   type: string;
   degree: number;
-  metadata: Record<string, unknown>;
+  metadata: GraphNodeMetadata;
   path?: string;
   startLine?: number;
   endLine?: number;
@@ -22,9 +23,9 @@ interface GraphNodeData {
 }
 
 interface GraphEdgeData {
-  id: string;
-  source: string;
-  target: string;
+  id: number;
+  source: number;
+  target: number;
   type: string;
   weight: number;
 }
@@ -48,7 +49,7 @@ interface GraphClientProps {
 
 export function GraphClient({ graphData }: GraphClientProps) {
   const [mounted, setMounted] = useState(false);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(
     () => new Set(graphData.nodeTypes),
@@ -56,7 +57,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
   const [selectedEdgeTypes, setSelectedEdgeTypes] = useState<Set<string>>(
     () => new Set(graphData.edgeTypes),
   );
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<number | null>(null);
   const [inspectorNode, setInspectorNode] = useState<GraphNodeData | null>(null);
 
   useEffect(() => {
@@ -64,13 +65,13 @@ export function GraphClient({ graphData }: GraphClientProps) {
   }, []);
 
   const nodeById = useMemo(() => {
-    const map = new Map<string, GraphNodeData>();
+    const map = new Map<number, GraphNodeData>();
     for (const node of graphData.nodes) map.set(node.id, node);
     return map;
   }, [graphData.nodes]);
 
   const edgesByTarget = useMemo(() => {
-    const map = new Map<string, GraphEdgeData[]>();
+    const map = new Map<number, GraphEdgeData[]>();
     for (const edge of graphData.edges) {
       const list = map.get(edge.target);
       if (list) list.push(edge);
@@ -80,7 +81,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
   }, [graphData.edges]);
 
   const edgesBySource = useMemo(() => {
-    const map = new Map<string, GraphEdgeData[]>();
+    const map = new Map<number, GraphEdgeData[]>();
     for (const edge of graphData.edges) {
       const list = map.get(edge.source);
       if (list) list.push(edge);
@@ -115,7 +116,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
   }, [graphData.edges, filteredNodes, selectedEdgeTypes]);
 
   const handleNodeClick = useCallback(
-    (nodeId: string) => {
+    (nodeId: number) => {
       if (!nodeId) {
         setSelectedNodeId(null);
         setInspectorNode(null);
@@ -127,7 +128,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
     [nodeById],
   );
 
-  const handleNodeHover = useCallback((nodeId: string | null) => {
+  const handleNodeHover = useCallback((nodeId: number | null) => {
     setHoveredNodeId(nodeId);
   }, []);
 

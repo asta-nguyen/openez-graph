@@ -15,6 +15,11 @@ tree-sitter = "0.25"
 tree-sitter-python = "0.25"
 tree-sitter-go = "0.25"
 tree-sitter-rust = "0.24"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+oxc_allocator = "0.144.0"
+oxc_parser = "0.144.0"
+oxc_span = "0.144.0"
+oxc_ast = "0.144.0"
 
 [profile.release]
 lto = true

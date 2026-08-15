@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 
-import { getRegistryDb, getRegistryNativeDb } from "./registry-db";
+import { getRegistryDb } from "./registry-db";
 import * as schema from "./schema";
 import { decryptValue, encryptValue, isSensitiveKey } from "./secure-storage";
 import type { RegistryRepository, RegistryWorkspace } from "./types";
@@ -37,10 +37,17 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     rootPath: row.rootPath,
     includeGlobs: row.includeGlobs || "",
     excludeGlobs: row.excludeGlobs || "",
+    // SAFETY: The workspaces table stores status as a TEXT column; application
+    // code only writes the literal values defined in the RegistryWorkspace
+    // union. The cast narrows the Drizzle `string` inference to that union.
     status: row.status as RegistryWorkspace["status"],
+    // SAFETY: indexing_status is a TEXT column whose values are constrained
+    // by application code to the RegistryWorkspace["indexingStatus"] union.
     indexingStatus: row.indexingStatus as RegistryWorkspace["indexingStatus"],
     indexBuildOwner: row.indexBuildOwner ?? undefined,
     indexLeaseExpiresAt: row.indexLeaseExpiresAt ?? undefined,
+    // SAFETY: graph_status is a TEXT column whose values are constrained
+    // by application code to the RegistryWorkspace["graphStatus"] union.
     graphStatus: row.graphStatus as RegistryWorkspace["graphStatus"],
     indexGeneration: row.indexGeneration,
     graphGeneration: row.graphGeneration,
@@ -59,6 +66,18 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
   };
 }
 
+/**
+ * Drizzle's bun-sqlite driver types `.run()` as `void` even though the
+ * underlying session returns a `Changes` object (`{ changes, lastInsertRowid }`)
+ * at runtime. This helper reads the affected-row count safely.
+ */
+function runChanges(result: any): number {
+  // SAFETY: bun-sqlite's Drizzle session returns `import("bun:sqlite").Changes`
+  // from `run()` at runtime, but the public builder type is `void`. The `any`
+  // parameter accepts the void-typed builder result and reads `changes` safely.
+  return result.changes;
+}
+
 function compareWorkspaces(a: RegistryWorkspace, b: RegistryWorkspace): number {
   if (a.pinnedAt && !b.pinnedAt) return -1;
   if (!a.pinnedAt && b.pinnedAt) return 1;
@@ -75,7 +94,6 @@ function compareWorkspaces(a: RegistryWorkspace, b: RegistryWorkspace): number {
 
 export function createRegistryRepository(): RegistryRepository {
   const db = getRegistryDb();
-  const native = getRegistryNativeDb();
 
   const repo: RegistryRepository = {
     async listWorkspaces(): Promise<RegistryWorkspace[]> {
@@ -154,20 +172,24 @@ export function createRegistryRepository(): RegistryRepository {
       }
 
       const now = new Date().toISOString();
-      native
-        .prepare(
-          `INSERT INTO workspaces (id, name, root_path, include_globs, exclude_globs, status, indexing_status, graph_status, document_count, chunk_count, node_count, edge_count, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 0, 0, 0, ?, ?)`,
-        )
-        .run(
-          input.id,
-          input.name,
-          normalizedRootPath,
-          input.includeGlobs ?? "",
-          input.excludeGlobs ?? "",
-          now,
-          now,
-        );
+      db.insert(schema.workspaces)
+        .values({
+          id: input.id,
+          name: input.name,
+          rootPath: normalizedRootPath,
+          includeGlobs: input.includeGlobs ?? "",
+          excludeGlobs: input.excludeGlobs ?? "",
+          status: "pending",
+          indexingStatus: "pending",
+          graphStatus: "pending",
+          documentCount: 0,
+          chunkCount: 0,
+          nodeCount: 0,
+          edgeCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
 
       return (await this.getWorkspace(input.id))!;
     },
@@ -192,63 +214,55 @@ export function createRegistryRepository(): RegistryRepository {
         >
       >,
     ): Promise<void> {
-      const sets: string[] = ["updated_at = ?"];
-      const params: unknown[] = [new Date().toISOString()];
+      const set: Partial<typeof schema.workspaces.$inferInsert> = {
+        updatedAt: new Date().toISOString(),
+      };
 
       if (updates.status !== undefined) {
-        sets.push("status = ?");
-        params.push(updates.status);
+        set.status = updates.status;
       }
       if (updates.indexingStatus !== undefined) {
-        sets.push("indexing_status = ?");
-        params.push(updates.indexingStatus);
+        set.indexingStatus = updates.indexingStatus;
         if (updates.indexingStatus !== "running") {
-          sets.push("index_build_owner = NULL", "index_lease_expires_at = NULL");
+          set.indexBuildOwner = null;
+          set.indexLeaseExpiresAt = null;
         }
       }
       if (updates.graphStatus !== undefined) {
-        sets.push("graph_status = ?");
-        params.push(updates.graphStatus);
+        set.graphStatus = updates.graphStatus;
       }
       if (updates.indexGeneration !== undefined) {
-        sets.push("index_generation = ?");
-        params.push(updates.indexGeneration);
+        set.indexGeneration = updates.indexGeneration;
       }
       if (updates.graphGeneration !== undefined) {
-        sets.push("graph_generation = ?");
-        params.push(updates.graphGeneration);
+        set.graphGeneration = updates.graphGeneration;
       }
       if (updates.lastIndexedAt !== undefined) {
-        sets.push("last_indexed_at = ?");
-        params.push(updates.lastIndexedAt);
+        set.lastIndexedAt = updates.lastIndexedAt;
       }
       if (updates.lastGraphBuiltAt !== undefined) {
-        sets.push("last_graph_built_at = ?");
-        params.push(updates.lastGraphBuiltAt);
+        set.lastGraphBuiltAt = updates.lastGraphBuiltAt;
       }
       if (updates.documentCount !== undefined) {
-        sets.push("document_count = ?");
-        params.push(updates.documentCount);
+        set.documentCount = updates.documentCount;
       }
       if (updates.chunkCount !== undefined) {
-        sets.push("chunk_count = ?");
-        params.push(updates.chunkCount);
+        set.chunkCount = updates.chunkCount;
       }
       if (updates.nodeCount !== undefined) {
-        sets.push("node_count = ?");
-        params.push(updates.nodeCount);
+        set.nodeCount = updates.nodeCount;
       }
       if (updates.edgeCount !== undefined) {
-        sets.push("edge_count = ?");
-        params.push(updates.edgeCount);
+        set.edgeCount = updates.edgeCount;
       }
       if (updates.lastError !== undefined) {
-        sets.push("last_error = ?");
-        params.push(updates.lastError);
+        set.lastError = updates.lastError;
       }
 
-      params.push(id);
-      native.prepare(`UPDATE workspaces SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+      // SAFETY: `set` is a Partial of the workspaces insert type; only fields
+      // present in `updates` are written, and their values match the column
+      // types (nullable columns accept null for the lease-clearing branches).
+      db.update(schema.workspaces).set(set).where(eq(schema.workspaces.id, id)).run();
     },
 
     async tryClaimIndexing(
@@ -257,17 +271,28 @@ export function createRegistryRepository(): RegistryRepository {
       leaseExpiresAt: string,
     ): Promise<boolean> {
       const now = new Date().toISOString();
-      const result = native
-        .prepare(
-          `UPDATE workspaces
-           SET status = 'indexing', indexing_status = 'running',
-               index_build_owner = ?, index_lease_expires_at = ?,
-               last_error = '', updated_at = ?
-           WHERE id = ?
-             AND (indexing_status != 'running' OR index_lease_expires_at IS NULL OR index_lease_expires_at < ?)`,
+      const result = db
+        .update(schema.workspaces)
+        .set({
+          status: "indexing",
+          indexingStatus: "running",
+          indexBuildOwner: ownerToken,
+          indexLeaseExpiresAt: leaseExpiresAt,
+          lastError: "",
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            or(
+              ne(schema.workspaces.indexingStatus, "running"),
+              isNull(schema.workspaces.indexLeaseExpiresAt),
+              lt(schema.workspaces.indexLeaseExpiresAt, now),
+            ),
+          ),
         )
-        .run(ownerToken, leaseExpiresAt, now, id, now) as { changes: number };
-      return result.changes > 0;
+        .run();
+      return runChanges(result) > 0;
     },
 
     async refreshIndexingLease(
@@ -275,27 +300,42 @@ export function createRegistryRepository(): RegistryRepository {
       ownerToken: string,
       leaseExpiresAt: string,
     ): Promise<boolean> {
-      const result = native
-        .prepare(
-          `UPDATE workspaces
-           SET index_lease_expires_at = ?, updated_at = ?
-           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+      const now = new Date().toISOString();
+      const result = db
+        .update(schema.workspaces)
+        .set({ indexLeaseExpiresAt: leaseExpiresAt, updatedAt: now })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            eq(schema.workspaces.indexingStatus, "running"),
+            eq(schema.workspaces.indexBuildOwner, ownerToken),
+          ),
         )
-        .run(leaseExpiresAt, new Date().toISOString(), id, ownerToken) as { changes: number };
-      return result.changes > 0;
+        .run();
+      return runChanges(result) > 0;
     },
 
     async releaseIndexing(id: string, ownerToken: string, error: string): Promise<boolean> {
-      const result = native
-        .prepare(
-          `UPDATE workspaces
-           SET status = 'error', indexing_status = 'failed',
-               index_build_owner = NULL, index_lease_expires_at = NULL,
-               last_error = ?, updated_at = ?
-           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+      const now = new Date().toISOString();
+      const result = db
+        .update(schema.workspaces)
+        .set({
+          status: "error",
+          indexingStatus: "failed",
+          indexBuildOwner: null,
+          indexLeaseExpiresAt: null,
+          lastError: error,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            eq(schema.workspaces.indexingStatus, "running"),
+            eq(schema.workspaces.indexBuildOwner, ownerToken),
+          ),
         )
-        .run(error, new Date().toISOString(), id, ownerToken) as { changes: number };
-      return result.changes > 0;
+        .run();
+      return runChanges(result) > 0;
     },
 
     async completeIndexing(
@@ -309,26 +349,31 @@ export function createRegistryRepository(): RegistryRepository {
         completedAt: string;
       },
     ): Promise<boolean> {
-      const update = native
-        .prepare(
-          `UPDATE workspaces
-           SET status = 'indexed', indexing_status = 'completed',
-               last_indexed_at = ?, document_count = ?, chunk_count = ?,
-               node_count = ?, edge_count = ?, last_error = '',
-               index_build_owner = NULL, index_lease_expires_at = NULL, updated_at = ?
-           WHERE id = ? AND indexing_status = 'running' AND index_build_owner = ?`,
+      const now = new Date().toISOString();
+      const update = db
+        .update(schema.workspaces)
+        .set({
+          status: "indexed",
+          indexingStatus: "completed",
+          lastIndexedAt: result.completedAt,
+          documentCount: result.documentCount,
+          chunkCount: result.chunkCount,
+          nodeCount: result.nodeCount,
+          edgeCount: result.edgeCount,
+          lastError: "",
+          indexBuildOwner: null,
+          indexLeaseExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            eq(schema.workspaces.indexingStatus, "running"),
+            eq(schema.workspaces.indexBuildOwner, ownerToken),
+          ),
         )
-        .run(
-          result.completedAt,
-          result.documentCount,
-          result.chunkCount,
-          result.nodeCount,
-          result.edgeCount,
-          new Date().toISOString(),
-          id,
-          ownerToken,
-        ) as { changes: number };
-      return update.changes > 0;
+        .run();
+      return runChanges(update) > 0;
     },
 
     async failIndexing(id: string, ownerToken: string, error: string): Promise<boolean> {
@@ -338,22 +383,23 @@ export function createRegistryRepository(): RegistryRepository {
     },
 
     async invalidateWorkspaceGraph(id: string): Promise<number> {
-      const row = native
-        .prepare(
-          `UPDATE workspaces
-           SET index_generation = index_generation + 1,
-               graph_status = CASE WHEN graph_status = 'running' THEN 'running' ELSE 'pending' END,
-               updated_at = ?
-           WHERE id = ?
-           RETURNING index_generation`,
-        )
-        .get(new Date().toISOString(), id) as { index_generation: number } | undefined;
+      const now = new Date().toISOString();
+      const row = db
+        .update(schema.workspaces)
+        .set({
+          indexGeneration: sql`${schema.workspaces.indexGeneration} + 1`,
+          graphStatus: sql`CASE WHEN ${schema.workspaces.graphStatus} = 'running' THEN 'running' ELSE 'pending' END`,
+          updatedAt: now,
+        })
+        .where(eq(schema.workspaces.id, id))
+        .returning({ indexGeneration: schema.workspaces.indexGeneration })
+        .get();
 
       if (!row) {
         throw new Error(`Workspace '${id}' not found`);
       }
 
-      return Number(row.index_generation);
+      return Number(row.indexGeneration);
     },
 
     async tryClaimGraphBuild(
@@ -365,20 +411,28 @@ export function createRegistryRepository(): RegistryRepository {
       // 1. status is not 'running', OR
       // 2. status is 'running' but the lease has expired (takeover from dead process)
       const now = new Date().toISOString();
-      const result = native
-        .prepare(
-          `UPDATE workspaces
-           SET graph_status = 'running',
-               graph_build_owner = ?,
-               graph_build_epoch = graph_build_epoch + 1,
-               graph_lease_expires_at = ?,
-               updated_at = ?
-           WHERE id = ?
-             AND (graph_status != 'running' OR graph_lease_expires_at IS NULL OR graph_lease_expires_at < ?)
-           RETURNING graph_build_epoch`,
+      const result = db
+        .update(schema.workspaces)
+        .set({
+          graphStatus: "running",
+          graphBuildOwner: ownerToken,
+          graphBuildEpoch: sql`${schema.workspaces.graphBuildEpoch} + 1`,
+          graphLeaseExpiresAt: leaseExpiresAt,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            or(
+              ne(schema.workspaces.graphStatus, "running"),
+              isNull(schema.workspaces.graphLeaseExpiresAt),
+              lt(schema.workspaces.graphLeaseExpiresAt, now),
+            ),
+          ),
         )
-        .get(ownerToken, leaseExpiresAt, now, id, now) as { graph_build_epoch: number } | undefined;
-      return result ? Number(result.graph_build_epoch) : null;
+        .returning({ graphBuildEpoch: schema.workspaces.graphBuildEpoch })
+        .get();
+      return result ? Number(result.graphBuildEpoch) : null;
     },
 
     async refreshGraphBuildLease(
@@ -390,61 +444,88 @@ export function createRegistryRepository(): RegistryRepository {
       // and lease hasn't been taken over). Returns false if another process
       // took over or the graph was completed/failed.
       const now = new Date().toISOString();
-      const result = native
-        .prepare(
-          `UPDATE workspaces
-           SET graph_lease_expires_at = ?, updated_at = ?
-           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
+      const result = db
+        .update(schema.workspaces)
+        .set({ graphLeaseExpiresAt: leaseExpiresAt, updatedAt: now })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            eq(schema.workspaces.graphStatus, "running"),
+            eq(schema.workspaces.graphBuildOwner, ownerToken),
+          ),
         )
-        .run(leaseExpiresAt, now, id, ownerToken) as { changes: number };
-      return result.changes > 0;
+        .run();
+      return runChanges(result) > 0;
     },
 
     async releaseGraphBuild(id, ownerToken): Promise<boolean> {
-      const result = native
-        .prepare(
-          `UPDATE workspaces
-           SET graph_status = 'pending', graph_build_owner = NULL,
-               graph_lease_expires_at = NULL, updated_at = ?
-           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
+      const now = new Date().toISOString();
+      const result = db
+        .update(schema.workspaces)
+        .set({
+          graphStatus: "pending",
+          graphBuildOwner: null,
+          graphLeaseExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            eq(schema.workspaces.graphStatus, "running"),
+            eq(schema.workspaces.graphBuildOwner, ownerToken),
+          ),
         )
-        .run(new Date().toISOString(), id, ownerToken) as { changes: number };
-      return result.changes > 0;
+        .run();
+      return runChanges(result) > 0;
     },
 
     async completeGraphBuild(id, ownerToken, generation, result): Promise<boolean> {
-      const update = native
-        .prepare(
-          `UPDATE workspaces
-           SET graph_status = 'completed', graph_generation = ?, node_count = ?, edge_count = ?,
-               last_graph_built_at = ?, last_error = '', graph_build_owner = NULL,
-               graph_lease_expires_at = NULL, updated_at = ?
-           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?
-             AND index_generation = ?`,
+      const now = new Date().toISOString();
+      const update = db
+        .update(schema.workspaces)
+        .set({
+          graphStatus: "completed",
+          graphGeneration: generation,
+          nodeCount: result.nodeCount,
+          edgeCount: result.edgeCount,
+          lastGraphBuiltAt: result.completedAt,
+          lastError: "",
+          graphBuildOwner: null,
+          graphLeaseExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            eq(schema.workspaces.graphStatus, "running"),
+            eq(schema.workspaces.graphBuildOwner, ownerToken),
+            eq(schema.workspaces.indexGeneration, generation),
+          ),
         )
-        .run(
-          generation,
-          result.nodeCount,
-          result.edgeCount,
-          result.completedAt,
-          new Date().toISOString(),
-          id,
-          ownerToken,
-          generation,
-        ) as { changes: number };
-      return update.changes > 0;
+        .run();
+      return runChanges(update) > 0;
     },
 
     async failGraphBuild(id, ownerToken, error): Promise<boolean> {
-      const update = native
-        .prepare(
-          `UPDATE workspaces
-           SET graph_status = 'failed', last_error = ?, graph_build_owner = NULL,
-               graph_lease_expires_at = NULL, updated_at = ?
-           WHERE id = ? AND graph_status = 'running' AND graph_build_owner = ?`,
+      const now = new Date().toISOString();
+      const update = db
+        .update(schema.workspaces)
+        .set({
+          graphStatus: "failed",
+          lastError: error,
+          graphBuildOwner: null,
+          graphLeaseExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.workspaces.id, id),
+            eq(schema.workspaces.graphStatus, "running"),
+            eq(schema.workspaces.graphBuildOwner, ownerToken),
+          ),
         )
-        .run(error, new Date().toISOString(), id, ownerToken) as { changes: number };
-      return update.changes > 0;
+        .run();
+      return runChanges(update) > 0;
     },
 
     async deleteWorkspace(id: string): Promise<void> {
@@ -455,24 +536,29 @@ export function createRegistryRepository(): RegistryRepository {
       if (pinned) {
         // Assign a monotonic pin_order so ordering is deterministic even when
         // multiple workspaces are pinned within the same millisecond.
-        const maxRow = native
-          .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
-          .get() as { max_order: number | null } | undefined;
-        const nextOrder = (maxRow?.max_order ?? 0) + 1;
-        native
-          .prepare("UPDATE workspaces SET pinned_at = ?, pin_order = ? WHERE id = ?")
-          .run(new Date().toISOString(), nextOrder, id);
+        const maxRow = db
+          .select({ max: sql<number>`MAX(${schema.workspaces.pinOrder})` })
+          .from(schema.workspaces)
+          .where(sql`${schema.workspaces.pinOrder} IS NOT NULL`)
+          .get();
+        // SAFETY: MAX(pin_order) returns NULL when no rows have pin_order set;
+        // sql<number> types the alias as `number`, so the null coalesce handles
+        // both the no-row (undefined) and empty-set (null) cases at runtime.
+        const nextOrder = (maxRow?.max ?? 0) + 1;
+        db.update(schema.workspaces)
+          .set({ pinnedAt: new Date().toISOString(), pinOrder: nextOrder })
+          .where(eq(schema.workspaces.id, id))
+          .run();
       } else {
-        native
-          .prepare("UPDATE workspaces SET pinned_at = NULL, pin_order = NULL WHERE id = ?")
-          .run(id);
+        db.update(schema.workspaces)
+          .set({ pinnedAt: null, pinOrder: null })
+          .where(eq(schema.workspaces.id, id))
+          .run();
       }
     },
 
     async getSetting(key: string): Promise<string | null> {
-      const row = native.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
-        | { value: string }
-        | undefined;
+      const row = db.select().from(schema.settings).where(eq(schema.settings.key, key)).get();
       if (!row) return null;
       if (isSensitiveKey(key)) {
         try {
@@ -487,23 +573,21 @@ export function createRegistryRepository(): RegistryRepository {
     async setSetting(key: string, value: string): Promise<void> {
       const stored = isSensitiveKey(key) ? encryptValue(value) : value;
       const now = new Date().toISOString();
-      native
-        .prepare(
-          `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
-                  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-        )
-        .run(key, stored, now);
+      db.insert(schema.settings)
+        .values({ key, value: stored, updatedAt: now })
+        .onConflictDoUpdate({
+          target: schema.settings.key,
+          set: { value: stored, updatedAt: now },
+        })
+        .run();
     },
 
     async deleteSetting(key: string): Promise<void> {
-      native.prepare("DELETE FROM settings WHERE key = ?").run(key);
+      db.delete(schema.settings).where(eq(schema.settings.key, key)).run();
     },
 
     async getAllSettings(): Promise<Record<string, string>> {
-      const rows = native.prepare("SELECT key, value FROM settings").all() as Array<{
-        key: string;
-        value: string;
-      }>;
+      const rows = db.select().from(schema.settings).all();
       const result: Record<string, string> = {};
       for (const row of rows) {
         if (isSensitiveKey(row.key)) {

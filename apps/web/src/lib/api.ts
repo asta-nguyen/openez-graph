@@ -44,7 +44,7 @@ export interface WorkspaceDetail extends WorkspaceListItem {
 }
 
 export interface RunRow {
-  id: string;
+  id: number;
   mode: string;
   status: string;
   filesScanned: number;
@@ -59,7 +59,7 @@ export interface RunRow {
 }
 
 export interface DocumentRow {
-  id: string;
+  id: number;
   path: string;
   kind: string;
   language?: string;
@@ -67,12 +67,12 @@ export interface DocumentRow {
 }
 
 export interface MemoryRow {
-  id: string;
+  id: number;
   title: string;
   content: string;
   tags: string[];
   source: string;
-  supersedesId: string | null;
+  supersedesId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -86,7 +86,7 @@ export interface QueryMetrics {
   avgTokensPerQuery: number;
   workspaceId: string | null;
   recentQueries: Array<{
-    id: string;
+    id: number;
     query: string;
     mode: string;
     resultCount: number;
@@ -108,16 +108,23 @@ export interface DashboardSnapshot {
   };
   recentRuns: RunRow[];
   recentDocuments: DocumentRow[];
-  recentMemories: Array<{ id: string; title: string; source: string }>;
+  recentMemories: Array<{ id: number; title: string; source: string }>;
   databaseAvailable: boolean;
 }
 
+export interface GraphNodeMetadata {
+  path?: string;
+  startLine?: number;
+  endLine?: number;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
 export interface GraphNodeData {
-  id: string;
+  id: number;
   label: string;
   type: string;
   degree: number;
-  metadata: Record<string, unknown>;
+  metadata: GraphNodeMetadata;
   path?: string;
   startLine?: number;
   endLine?: number;
@@ -125,9 +132,9 @@ export interface GraphNodeData {
 }
 
 export interface GraphEdgeData {
-  id: string;
-  source: string;
-  target: string;
+  id: number;
+  source: number;
+  target: number;
   type: string;
   weight: number;
 }
@@ -154,7 +161,7 @@ export interface QueryResult {
     score: number;
     reason: string;
   }>;
-  graphNodes: Array<{ id: string; type: string; label: string; metadata: Record<string, unknown> }>;
+  graphNodes: Array<{ id: string; type: string; label: string; metadata: GraphNodeMetadata }>;
   graphEdges: Array<{ from_node_id: string; to_node_id: string; type: string }>;
   error: string | null;
 }
@@ -245,19 +252,19 @@ export const api = {
     if (params.offset) qs.set("offset", String(params.offset));
     return request<{ items: MemoryRow[]; totalCount: number }>(`/memories?${qs}`);
   },
-  getMemory: (id: string) => request<{ ok: boolean; data: MemoryRow | null }>(`/memories/${id}`),
+  getMemory: (id: number) => request<{ ok: boolean; data: MemoryRow | null }>(`/memories/${id}`),
   createMemory: (input: {
     title: string;
     content: string;
     tags?: string[];
     source?: string;
-    supersedesId?: string;
+    supersedesId?: number;
   }) =>
     request<{ ok: boolean; data: MemoryRow | null }>(`/memories`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  deleteMemory: (id: string) => request<{ ok: boolean }>(`/memories/${id}`, { method: "DELETE" }),
+  deleteMemory: (id: number) => request<{ ok: boolean }>(`/memories/${id}`, { method: "DELETE" }),
   getMetrics: (workspaceId?: string) =>
     request<QueryMetrics>(workspaceId ? `/metrics?workspaceId=${workspaceId}` : "/metrics"),
   getEmbeddingConfig: () => request<EmbeddingConfigResponse>("/settings/embedding"),

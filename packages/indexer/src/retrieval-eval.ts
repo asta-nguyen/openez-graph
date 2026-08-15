@@ -1,3 +1,5 @@
+import type { JsonValue } from "@openez-graph/db";
+
 export interface RetrievalCase {
   query: string;
   expectedPaths?: string[];
@@ -11,27 +13,33 @@ export interface RetrievalQuality {
   firstRelevantRank: number | null;
 }
 
-export function parseRetrievalCases(value: unknown): RetrievalCase[] {
+function isJsonString(v: JsonValue): v is string {
+  return String(v) === v;
+}
+
+function isJsonObject(v: JsonValue): v is { [key: string]: JsonValue } {
+  return v !== null && v instanceof Object && !Array.isArray(v);
+}
+
+export function parseRetrievalCases(value: JsonValue): RetrievalCase[] {
   if (!Array.isArray(value)) {
     throw new Error("Benchmark input must be a JSON array.");
   }
 
   return value.map((item) => {
-    if (typeof item === "string" && item.trim()) return { query: item.trim() };
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as RetrievalCase).query === "string" &&
-      (item as RetrievalCase).query.trim() &&
-      Array.isArray((item as RetrievalCase).expectedPaths) &&
-      (item as RetrievalCase).expectedPaths!.every(
-        (path) => typeof path === "string" && path.length > 0,
-      )
-    ) {
-      return {
-        query: (item as RetrievalCase).query.trim(),
-        expectedPaths: [...(item as RetrievalCase).expectedPaths!],
-      };
+    if (isJsonString(item) && item.trim()) return { query: item.trim() };
+    if (isJsonObject(item)) {
+      const query = item.query;
+      const expectedPaths = item.expectedPaths;
+      if (isJsonString(query) && query.trim() && Array.isArray(expectedPaths)) {
+        const paths = expectedPaths.filter((p): p is string => isJsonString(p) && p.length > 0);
+        if (paths.length === expectedPaths.length) {
+          return {
+            query: query.trim(),
+            expectedPaths: [...paths],
+          };
+        }
+      }
     }
     throw new Error("Each benchmark item must be a query string or { query, expectedPaths }.");
   });

@@ -3,6 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
+/** Whether the DOM is available (i.e. running in a browser, not SSR). */
+function isBrowser(): boolean {
+  return globalThis.document !== undefined;
+}
+
+interface SampledText {
+  positions: Float32Array;
+  isGradient: Uint8Array;
+  canvasW: number;
+  canvasH: number;
+  bboxH: number;
+  centerY: number;
+}
+
 /* ── Sample text pixels → world positions (ported from kamehadb) ── */
 function sampleText(
   text: string,
@@ -12,15 +26,8 @@ function sampleText(
   weight: number,
   maxWidth: number,
   fontFamily: string,
-): {
-  positions: Float32Array;
-  isGradient: Uint8Array;
-  canvasW: number;
-  canvasH: number;
-  bboxH: number;
-  centerY: number;
-} {
-  if (typeof document === "undefined")
+): SampledText {
+  if (!isBrowser())
     return {
       positions: new Float32Array(count * 3),
       isGradient: new Uint8Array(count),

@@ -1,6 +1,6 @@
 import { Badge } from "@openez-graph/ui";
 
-const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+const statusVariants = {
   pending: "outline",
   indexing: "secondary",
   indexed: "default",
@@ -8,11 +8,12 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
   running: "secondary",
   completed: "default",
   failed: "destructive",
-};
+} satisfies Record<string, "default" | "secondary" | "destructive" | "outline">;
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
+  const entry = Object.entries(statusVariants).find(([k]) => k === status);
   return (
-    <Badge variant={statusVariants[status] ?? "outline"} className={className}>
+    <Badge variant={entry?.[1] ?? "outline"} className={className}>
       {status}
     </Badge>
   );

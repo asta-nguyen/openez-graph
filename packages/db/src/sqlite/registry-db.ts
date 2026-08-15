@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 
 import * as schema from "./schema";
 import { createNativeDatabase } from "./database-loader";
+import type { DatabaseRow, DatabaseValue, RunResult } from "./shared-types";
 import { resolveBundledFile } from "./workspace-db";
 
 let registryDb: ReturnType<typeof getRegistryDbRaw> | null = null;
@@ -16,11 +17,11 @@ let registryDb: ReturnType<typeof getRegistryDbRaw> | null = null;
  * this interface, allowing the db package to own all schema migration logic.
  */
 export interface SqliteLike {
-  exec(sql: string): unknown;
+  exec(sql: string): void;
   prepare(sql: string): {
-    all(...params: unknown[]): unknown[];
-    get(...params: unknown[]): unknown;
-    run(...params: unknown[]): unknown;
+    all(...params: DatabaseValue[]): DatabaseRow[];
+    get(...params: DatabaseValue[]): DatabaseRow | undefined;
+    run(...params: DatabaseValue[]): RunResult;
   };
 }
 
@@ -32,6 +33,8 @@ export interface SqliteLike {
 export function migrateRegistrySchema(sqlite: SqliteLike): void {
   const getColumns = () =>
     new Set(
+      // SAFETY: PRAGMA table_info returns rows with a `name` column (TEXT);
+      // the cast narrows DatabaseRow to the specific column shape we read.
       (sqlite.prepare("PRAGMA table_info(workspaces)").all() as Array<{ name: string }>).map(
         (row) => row.name,
       ),
@@ -57,12 +60,17 @@ export function migrateRegistrySchema(sqlite: SqliteLike): void {
   addColumnIfMissing("graph_lease_expires_at", "graph_lease_expires_at TEXT");
 
   // Backfill pin_order for pre-existing pinned workspaces that lack it.
+  // SAFETY: SELECT id FROM workspaces returns rows with a TEXT `id` column;
+  // the cast narrows DatabaseRow to the specific shape we iterate.
   const unbackfilled = sqlite
     .prepare(
       "SELECT id FROM workspaces WHERE pinned_at IS NOT NULL AND pin_order IS NULL ORDER BY pinned_at DESC",
     )
     .all() as Array<{ id: string }>;
   if (unbackfilled.length > 0) {
+    // SAFETY: SELECT MAX(pin_order) returns a single row with an INTEGER
+    // max_order column (or NULL when no rows match); the cast narrows
+    // DatabaseRow | undefined to the specific shape we read.
     const maxRow = sqlite
       .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
       .get() as { max_order: number | null } | undefined;
@@ -82,6 +90,9 @@ export function migrateRegistrySchema(sqlite: SqliteLike): void {
     value TEXT NOT NULL
   )`);
   const getMeta = (key: string): string | null => {
+    // SAFETY: SELECT value FROM registry_meta returns a single row with a
+    // TEXT `value` column (or undefined when the key is absent); the cast
+    // narrows DatabaseRow | undefined to the specific shape we read.
     const row = sqlite.prepare("SELECT value FROM registry_meta WHERE key = ?").get(key) as
       | { value: string }
       | undefined;
@@ -184,6 +195,9 @@ function getRegistryDbRaw() {
   sqlite.pragma("foreign_keys = ON");
   if (!usedTemplate) initializeRegistrySchema(sqlite);
   else migrateRegistrySchema(sqlite);
+  // SAFETY: drizzle-orm/bun-sqlite expects a BunSqlite.Database instance;
+  // our NativeDatabase interface is structurally compatible (exec, prepare,
+  // pragma) but the drizzle typings require the concrete BunSqlite type.
   return { sqlite, db: drizzle(sqlite as any, { schema }) };
 }
 
@@ -194,7 +208,7 @@ export function resolveRegistryDbPath(): string {
   }
 
   const homeDir = [os.homedir(), process.env.HOME, process.env.USERPROFILE, process.cwd()].find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0,
+    (value): value is string => value !== undefined && value.trim().length > 0,
   );
 
   if (!homeDir) {

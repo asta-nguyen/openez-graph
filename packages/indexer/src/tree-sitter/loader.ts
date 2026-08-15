@@ -8,19 +8,23 @@ declare const __non_webpack_require__: typeof require | undefined;
 
 function getRequireUrl(): string {
   try {
-    if (typeof import.meta !== "undefined" && import.meta.url) {
+    if (import.meta.url) {
       return import.meta.url;
     }
-  } catch {
-    // import.meta not available (CJS)
+  } catch (metaError) {
+    console.debug("[openez] import.meta check error:", metaError);
   }
   return `file://${__filename}`;
 }
 
-const _require: typeof require =
-  typeof __non_webpack_require__ === "function"
-    ? __non_webpack_require__
-    : module.createRequire(getRequireUrl());
+let _require: typeof require;
+try {
+  const nativeRequire = __non_webpack_require__;
+  _require =
+    nativeRequire instanceof Function ? nativeRequire : module.createRequire(getRequireUrl());
+} catch {
+  _require = module.createRequire(getRequireUrl());
+}
 
 // ── WASM asset path resolution ──
 // web-tree-sitter ships tree-sitter.wasm in its package root.
@@ -28,10 +32,15 @@ const _require: typeof require =
 // Both packages are marked external in tsup, so they resolve from node_modules
 // at runtime — same strategy as better-sqlite3.
 
+interface ParserInitOptions {
+  locateFile?: (file: string) => string;
+}
+
 function resolvePackageFile(packageName: string, subPath: string): string | null {
   try {
     return _require.resolve(`${packageName}/${subPath}`);
-  } catch {
+  } catch (resolveError) {
+    console.debug("[openez] failed to resolve package file:", packageName, subPath, resolveError);
     return null;
   }
 }
@@ -73,7 +82,7 @@ async function ensureInit(): Promise<void> {
 
   initPromise = (async () => {
     const wasmPath = resolveWebTreeSitterWasm();
-    const moduleOptions: Record<string, unknown> = {};
+    const moduleOptions: ParserInitOptions = {};
     if (wasmPath) {
       const wasmDir = path.dirname(wasmPath);
       const wasmBase = path.basename(wasmPath);
@@ -104,7 +113,8 @@ export async function loadLanguage(language: string): Promise<Language | null> {
       const lang = await Language.load(wasmPath);
       languageCache.set(language, lang);
       return lang;
-    } catch {
+    } catch (loadError) {
+      console.debug("[openez] failed to load tree-sitter language wasm:", language, loadError);
       languageCache.set(language, null);
       return null;
     }
@@ -124,7 +134,8 @@ export async function parseContent(language: string, content: string): Promise<T
   try {
     parser.setLanguage(lang);
     return parser.parse(content);
-  } catch {
+  } catch (parseError) {
+    console.debug("[openez] tree-sitter parse error:", language, parseError);
     return null;
   } finally {
     parser.delete();

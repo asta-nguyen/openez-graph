@@ -35,9 +35,11 @@ function leaseExpiry(): string {
   return new Date(Date.now() + LEASE_DURATION_MS).toISOString();
 }
 
-export function createGraphService(deps: GraphServiceDeps): {
+export interface GraphService {
   ensureGraphReady(workspaceId: string): Promise<void>;
-} {
+}
+
+export function createGraphService(deps: GraphServiceDeps): GraphService {
   // Process-local coalescing: if the same process already has a build in
   // flight for this workspace, attach to that promise rather than starting
   // a second one. Cross-process coordination is handled by the atomic

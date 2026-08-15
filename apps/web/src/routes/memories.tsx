@@ -66,7 +66,7 @@ function MemoriesPage() {
   }, [currentPage, totalPages, queryClient, isSearching]);
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.deleteMemory(id),
+    mutationFn: (id: number) => api.deleteMemory(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["memories"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });

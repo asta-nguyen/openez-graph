@@ -8,7 +8,7 @@ export function formatDate(date: Date | string | null | undefined): string {
   });
 }
 
-export const NODE_COLORS: Record<string, string> = {
+export const NODE_COLORS = {
   file: "#60a5fa",
   chunk: "#34d399",
   symbol: "#fbbf24",
@@ -16,9 +16,9 @@ export const NODE_COLORS: Record<string, string> = {
   entity: "#c084fc",
   document: "#22d3ee",
   default: "#94a3b8",
-};
+} satisfies Record<string, string>;
 
-export const EDGE_COLORS: Record<string, string> = {
+export const EDGE_COLORS = {
   imports: "#60a5fa",
   defines: "#fbbf24",
   contains: "#34d399",
@@ -28,12 +28,14 @@ export const EDGE_COLORS: Record<string, string> = {
   links_to: "#22d3ee",
   related_to: "#94a3b8",
   default: "#64748b",
-};
+} satisfies Record<string, string>;
 
 export function getNodeColor(type: string): string {
-  return NODE_COLORS[type] ?? NODE_COLORS.default;
+  const entry = Object.entries(NODE_COLORS).find(([k]) => k === type);
+  return entry?.[1] ?? NODE_COLORS.default;
 }
 
 export function getEdgeColor(type: string): string {
-  return EDGE_COLORS[type] ?? EDGE_COLORS.default;
+  const entry = Object.entries(EDGE_COLORS).find(([k]) => k === type);
+  return entry?.[1] ?? EDGE_COLORS.default;
 }

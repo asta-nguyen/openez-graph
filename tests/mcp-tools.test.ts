@@ -75,6 +75,7 @@ async function startSourceMcp(defaultPath: string) {
 }
 
 function textResult(result: Awaited<ReturnType<Client["callTool"]>>) {
+  // SAFETY: MCP callTool response content is always an array of content items with type and text fields.
   const content = result.content as Array<{ type: string; text?: string }>;
   const text = content.find((item) => item.type === "text");
   if (!text || text.type !== "text") throw new Error("Expected text tool response");
@@ -146,6 +147,7 @@ describe("MCP agent contracts", () => {
             },
           }),
         );
+        // SAFETY: code_query response body always contains metrics with responseTokens and tokenBudget.
         const body = JSON.parse(text) as {
           metrics: { responseTokens: number; tokenBudget: number };
         };
@@ -187,9 +189,10 @@ describe("MCP agent contracts", () => {
           arguments: { label: "target", depth: 2, limit: 20, maxTokens: 500 },
         }),
       );
+      // SAFETY: graph_neighbors response body always contains metrics and results with nodes.
       const body = JSON.parse(text) as {
         metrics: { truncated: boolean };
-        results: Array<{ result: { nodes: Array<Record<string, unknown>> } }>;
+        results: Array<{ result: { nodes: Array<{ id: string; type: string; label: string }> } }>;
       };
 
       expect(countTokens(text)).toBeLessThanOrEqual(500);
@@ -212,6 +215,7 @@ describe("MCP agent contracts", () => {
           arguments: { symbolOrPath: "target", maxTokens: 1200 },
         }),
       );
+      // SAFETY: code_context response body always contains results with symbol and callers.
       const body = JSON.parse(text) as {
         results: Array<{
           result: {
@@ -255,13 +259,14 @@ describe("MCP agent contracts", () => {
           },
         }),
       );
+      // SAFETY: code_context response body always contains metrics and results with callers and callees arrays.
       const body = JSON.parse(text) as {
         metrics: { truncated: boolean };
         results: Array<{
           result: {
             symbol?: { snippet?: string };
-            callers: Array<Record<string, unknown>>;
-            callees: Array<Record<string, unknown>>;
+            callers: Array<{ symbol?: string; path?: string }>;
+            callees: Array<{ symbol?: string; path?: string }>;
           };
         }>;
       };
@@ -283,9 +288,19 @@ describe("MCP agent contracts", () => {
   });
 });
 
-function toolJson(result: unknown): Record<string, unknown> {
-  const content = (result as { content: Array<{ type: string; text: string }> }).content;
-  return JSON.parse(content[0]!.text) as Record<string, unknown>;
+interface ToolJsonBody {
+  error?: string;
+  workspaceId?: string;
+  unregistered?: boolean;
+  dataDirRemoved?: boolean;
+  metrics?: { truncated?: boolean };
+  results?: Array<{ result: { nodes?: Array<{ id: string; type: string; label: string }> } }>;
+}
+function toolJson(result: Awaited<ReturnType<Client["callTool"]>>): ToolJsonBody {
+  // SAFETY: MCP callTool response content is always an array of content items with type and text fields.
+  const content = result.content as Array<{ type: string; text: string }>;
+  // SAFETY: MCP tool response text content is always valid JSON matching the tool output schema.
+  return JSON.parse(content[0]!.text) as ToolJsonBody;
 }
 
 describe("remove_workspace", () => {

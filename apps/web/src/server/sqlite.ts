@@ -4,12 +4,124 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 import { getFullWorkspaceDdl, getRegistryDdl, migrateRegistrySchema } from "@openez-graph/db";
+import type { GraphNodeMetadata } from "../lib/api";
+
+type SqliteValue = string | number | bigint | null | Uint8Array;
+type SqliteRow = Record<string, SqliteValue>;
+
+interface WorkspaceDbRow {
+  id: string;
+  name: string;
+  root_path: string;
+  include_globs: string;
+  exclude_globs: string;
+  status: string;
+  indexing_status: string;
+  graph_status: string;
+  last_indexed_at: string | null;
+  last_graph_built_at: string | null;
+  document_count: number;
+  chunk_count: number;
+  node_count: number;
+  edge_count: number;
+  last_error: string | null;
+  pinned_at: string | null;
+  pin_order: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RunDbRow {
+  id: number;
+  mode: string;
+  status: string;
+  files_scanned?: number;
+  files_updated?: number;
+  chunks_written?: number;
+  embeddings_written?: number;
+  nodes_created?: number;
+  edges_created?: number;
+  error_message: string | null;
+  started_at: string;
+  finished_at: string | null;
+}
+
+interface DocumentDbRow {
+  id: number;
+  path: string;
+  kind: string;
+  language: string | null;
+  updated_at: string | null;
+}
+
+interface GraphNodeDbRow {
+  id: number;
+  label: string;
+  type: string;
+  ref_id: string | null;
+  metadata: string;
+  created_at: string;
+}
+
+interface GraphEdgeDbRow {
+  id: number;
+  from_node_id: number;
+  to_node_id: number;
+  type: string;
+  weight: number;
+}
+
+interface MemoryDbRow {
+  id: number;
+  title: string;
+  content: string;
+  tags: string;
+  source: string;
+  supersedes_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CountRow {
+  count: number;
+}
+
+interface TableInfoRow {
+  name: string;
+}
+
+interface MaxOrderRow {
+  max_order: number | null;
+}
+
+interface QueryLogDbRow {
+  id: number;
+  query: string;
+  mode: string;
+  result_count: number;
+  tokens_returned: number;
+  tokens_saved: number;
+  files_scanned: number;
+  created_at: string;
+}
+
+interface QueryLogTotalsRow {
+  totalQueries: number;
+  totalTokensReturned: number;
+  totalTokensSaved: number;
+  totalFilesScanned: number;
+}
+
+interface WorkspaceGraphResult {
+  nodes: WebGraphNode[];
+  edges: WebGraphEdge[];
+  totalNodeCount: number;
+  totalEdgeCount: number;
+}
 
 function getRequireUrl(): string {
   try {
-    if (typeof import.meta !== "undefined" && import.meta.url) {
-      return import.meta.url;
-    }
+    return import.meta.url;
   } catch {
     // import.meta not available (CJS)
   }
@@ -19,26 +131,27 @@ function getRequireUrl(): string {
 const require = createRequire(getRequireUrl());
 
 interface SqliteStatement {
-  all(...params: unknown[]): unknown[];
-  get(...params: unknown[]): unknown;
+  all<T = SqliteRow>(...params: unknown[]): T[];
+  get<T = SqliteRow>(...params: unknown[]): T | undefined;
   run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
 }
 
 interface SqliteDb {
-  pragma(command: string): unknown;
+  pragma(command: string): void;
   exec(sql: string): this;
   prepare(sql: string): SqliteStatement;
   close(): void;
 }
 
 const { Database: BunDatabase } = require("bun:sqlite");
-// Wrap to add .pragma() shim — bun:sqlite doesn't have it natively
+// SAFETY: BunDatabase (from require("bun:sqlite")) is typed as any; the wrapper class adds the pragma shim, fulfilling the SqliteDb constructor contract
 const Database = class extends BunDatabase {
   constructor(filename: string, options?: any) {
     super(filename, options);
+    // SAFETY: BunDatabase instances accept arbitrary property assignment; pragma is a method shim delegating to exec
     (this as any).pragma = (cmd: string) => this.exec(`PRAGMA ${cmd}`);
   }
-} as unknown as new (filename: string, options?: any) => SqliteDb;
+} as new (filename: string, options?: any) => SqliteDb;
 
 let registryDb: SqliteDb | null = null;
 const workspaceDbs = new Map<string, SqliteDb>();
@@ -66,7 +179,7 @@ export interface WebRegistryWorkspace {
 }
 
 export interface WebRunRow {
-  id: string;
+  id: number;
   mode: string;
   status: string;
   filesScanned: number;
@@ -81,7 +194,7 @@ export interface WebRunRow {
 }
 
 export interface WebDocumentRow {
-  id: string;
+  id: number;
   path: string;
   kind: string;
   language?: string;
@@ -89,17 +202,17 @@ export interface WebDocumentRow {
 }
 
 export interface WebGraphNode {
-  id: string;
+  id: number;
   label: string;
   type: string;
   refId: string | null;
-  metadata: Record<string, unknown>;
+  metadata: GraphNodeMetadata;
 }
 
 export interface WebGraphEdge {
-  id: string;
-  source: string;
-  target: string;
+  id: number;
+  source: number;
+  target: number;
   type: string;
   weight: number;
 }
@@ -107,8 +220,10 @@ export interface WebGraphEdge {
 function safeParseJson<T>(value: string | undefined, fallback: T): T {
   if (!value) return fallback;
   try {
+    // SAFETY: JSON.parse returns any; T is the expected parsed shape, validated by the caller's type contract
     return JSON.parse(value) as T;
   } catch {
+    /* malformed json — return fallback */
     return fallback;
   }
 }
@@ -147,7 +262,7 @@ export function resolveRegistryDbPath(): string {
   }
 
   const homeDir = [os.homedir(), process.env.HOME, process.env.USERPROFILE, process.cwd()].find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0,
+    (value): value is string => value != null && value.trim().length > 0,
   );
 
   if (!homeDir) {
@@ -216,9 +331,10 @@ function initializeWorkspaceSchema(db: SqliteDb) {
 
 function migrateQueryLogColumns(db: SqliteDb) {
   const columns = new Set(
-    (db.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map(
-      (row) => row.name,
-    ),
+    db
+      .prepare("PRAGMA table_info(query_logs)")
+      .all<TableInfoRow>()
+      .map((row) => row.name),
   );
 
   if (!columns.has("tokens_returned")) {
@@ -253,7 +369,7 @@ function getWorkspaceDb(rootPath: string): SqliteDb {
   return db;
 }
 
-function mapWorkspace(row: Record<string, unknown>): WebRegistryWorkspace {
+function mapWorkspace(row: WorkspaceDbRow): WebRegistryWorkspace {
   return {
     id: String(row.id),
     name: String(row.name),
@@ -282,21 +398,21 @@ export function listRegistryWorkspaces(): WebRegistryWorkspace[] {
     .prepare(
       "SELECT * FROM workspaces ORDER BY (pinned_at IS NULL), pin_order DESC, pinned_at DESC, created_at DESC",
     )
-    .all() as Array<Record<string, unknown>>;
+    .all<WorkspaceDbRow>();
   return rows.map(mapWorkspace);
 }
 
 export function getRegistryWorkspace(id: string): WebRegistryWorkspace | null {
-  const row = getRegistryDb().prepare("SELECT * FROM workspaces WHERE id = ?").get(id) as
-    | Record<string, unknown>
-    | undefined;
+  const row = getRegistryDb()
+    .prepare("SELECT * FROM workspaces WHERE id = ?")
+    .get<WorkspaceDbRow>(id);
   return row ? mapWorkspace(row) : null;
 }
 
 export function getRegistryWorkspaceByPath(rootPath: string): WebRegistryWorkspace | null {
   const row = getRegistryDb()
     .prepare("SELECT * FROM workspaces WHERE root_path = ?")
-    .get(normalizeRootPath(rootPath)) as Record<string, unknown> | undefined;
+    .get<WorkspaceDbRow>(normalizeRootPath(rootPath));
   return row ? mapWorkspace(row) : null;
 }
 
@@ -421,7 +537,7 @@ export function setRegistryWorkspacePinned(id: string, pinned: boolean) {
   if (pinned) {
     const maxRow = db
       .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
-      .get() as { max_order: number | null } | undefined;
+      .get<MaxOrderRow>();
     const nextOrder = (maxRow?.max_order ?? 0) + 1;
     db.prepare("UPDATE workspaces SET pinned_at = ?, pin_order = ? WHERE id = ?").run(
       new Date().toISOString(),
@@ -433,9 +549,9 @@ export function setRegistryWorkspacePinned(id: string, pinned: boolean) {
   }
 }
 
-function mapRunRow(row: Record<string, unknown>, kind: "index" | "graph"): WebRunRow {
+function mapRunRow(row: RunDbRow, kind: "index" | "graph"): WebRunRow {
   return {
-    id: String(row.id),
+    id: Number(row.id),
     mode: String(row.mode ?? "incremental"),
     status: String(row.status),
     filesScanned: kind === "index" ? Number(row.files_scanned ?? 0) : 0,
@@ -453,24 +569,19 @@ function mapRunRow(row: Record<string, unknown>, kind: "index" | "graph"): WebRu
 export function getWorkspaceCounts(rootPath: string) {
   const db = getWorkspaceDb(rootPath);
   const documents = Number(
-    (db.prepare("SELECT COUNT(*) AS count FROM documents").get() as { count: number } | undefined)
-      ?.count ?? 0,
+    db.prepare("SELECT COUNT(*) AS count FROM documents").get<CountRow>()?.count ?? 0,
   );
   const chunks = Number(
-    (db.prepare("SELECT COUNT(*) AS count FROM chunks").get() as { count: number } | undefined)
-      ?.count ?? 0,
+    db.prepare("SELECT COUNT(*) AS count FROM chunks").get<CountRow>()?.count ?? 0,
   );
   const nodes = Number(
-    (db.prepare("SELECT COUNT(*) AS count FROM graph_nodes").get() as { count: number } | undefined)
-      ?.count ?? 0,
+    db.prepare("SELECT COUNT(*) AS count FROM graph_nodes").get<CountRow>()?.count ?? 0,
   );
   const edges = Number(
-    (db.prepare("SELECT COUNT(*) AS count FROM graph_edges").get() as { count: number } | undefined)
-      ?.count ?? 0,
+    db.prepare("SELECT COUNT(*) AS count FROM graph_edges").get<CountRow>()?.count ?? 0,
   );
   const memories = Number(
-    (db.prepare("SELECT COUNT(*) AS count FROM memories").get() as { count: number } | undefined)
-      ?.count ?? 0,
+    db.prepare("SELECT COUNT(*) AS count FROM memories").get<CountRow>()?.count ?? 0,
   );
   return { documents, chunks, nodes, edges, memories };
 }
@@ -478,9 +589,9 @@ export function getWorkspaceCounts(rootPath: string) {
 export function listWorkspaceDocuments(rootPath: string, limit = 50, offset = 0): WebDocumentRow[] {
   const rows = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM documents ORDER BY updated_at DESC, path ASC LIMIT ? OFFSET ?")
-    .all(limit, offset) as Array<Record<string, unknown>>;
+    .all<DocumentDbRow>(limit, offset);
   return rows.map((row) => ({
-    id: String(row.id),
+    id: Number(row.id),
     path: String(row.path),
     kind: String(row.kind),
     language: row.language ? String(row.language) : undefined,
@@ -489,57 +600,58 @@ export function listWorkspaceDocuments(rootPath: string, limit = 50, offset = 0)
 }
 
 export function countWorkspaceDocuments(rootPath: string): number {
-  const row = getWorkspaceDb(rootPath).prepare("SELECT COUNT(*) as count FROM documents").get() as
-    | { count: number }
-    | undefined;
+  const row = getWorkspaceDb(rootPath)
+    .prepare("SELECT COUNT(*) as count FROM documents")
+    .get<CountRow>();
   return row?.count ?? 0;
 }
 
 export function getLatestIndexRun(rootPath: string): WebRunRow | null {
   const row = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM index_runs ORDER BY started_at DESC LIMIT 1")
-    .get() as Record<string, unknown> | undefined;
+    .get<RunDbRow>();
   return row ? mapRunRow(row, "index") : null;
 }
 
 export function getLatestGraphRun(rootPath: string): WebRunRow | null {
   const row = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM graph_runs ORDER BY started_at DESC LIMIT 1")
-    .get() as Record<string, unknown> | undefined;
+    .get<RunDbRow>();
   return row ? mapRunRow(row, "graph") : null;
 }
 
 export function getRecentIndexRuns(rootPath: string, limit = 5): WebRunRow[] {
   const rows = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM index_runs ORDER BY started_at DESC LIMIT ?")
-    .all(limit) as Array<Record<string, unknown>>;
+    .all<RunDbRow>(limit);
   return rows.map((row) => mapRunRow(row, "index"));
 }
 
 export function getRecentGraphRuns(rootPath: string, limit = 5): WebRunRow[] {
   const rows = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM graph_runs ORDER BY started_at DESC LIMIT ?")
-    .all(limit) as Array<Record<string, unknown>>;
+    .all<RunDbRow>(limit);
   return rows.map((row) => mapRunRow(row, "graph"));
 }
 
 export function listGraphNodes(rootPath: string, limit = 500): WebGraphNode[] {
   const rows = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM graph_nodes ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as Array<Record<string, unknown>>;
+    .all<GraphNodeDbRow>(limit);
   return rows.map((row) => ({
-    id: String(row.id),
+    id: Number(row.id),
     label: String(row.label),
     type: String(row.type),
     refId: row.ref_id ? String(row.ref_id) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+    metadata: safeParseJson<GraphNodeMetadata>(String(row.metadata ?? "{}"), {}),
   }));
 }
 
 export function countGraphNodes(rootPath: string): number {
+  // SAFETY: COUNT(*) always returns exactly one row.
   const row = getWorkspaceDb(rootPath)
     .prepare("SELECT COUNT(*) AS count FROM graph_nodes")
-    .get() as { count: number };
+    .get<CountRow>() as CountRow;
   return row.count;
 }
 
@@ -569,97 +681,66 @@ export function listGraphNodesCurated(rootPath: string, limit = 300): WebGraphNo
       LIMIT ?
     `,
     )
-    .all(limit) as Array<Record<string, unknown>>;
+    .all<GraphNodeDbRow>(limit);
   return rows.map((row) => ({
-    id: String(row.id),
+    id: Number(row.id),
     label: String(row.label),
     type: String(row.type),
     refId: row.ref_id ? String(row.ref_id) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+    metadata: safeParseJson<GraphNodeMetadata>(String(row.metadata ?? "{}"), {}),
   }));
 }
 
 export function listGraphEdges(rootPath: string, limit = 1000): WebGraphEdge[] {
   const rows = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM graph_edges LIMIT ?")
-    .all(limit) as Array<Record<string, unknown>>;
+    .all<GraphEdgeDbRow>(limit);
   return rows.map((row) => ({
-    id: String(row.id),
-    source: String(row.from_node_id),
-    target: String(row.to_node_id),
+    id: Number(row.id),
+    source: Number(row.from_node_id),
+    target: Number(row.to_node_id),
     type: String(row.type),
     weight: Number(row.weight ?? 1),
   }));
 }
 
-export function getGraphNodeById(rootPath: string, nodeId: string): WebGraphNode | null {
+export function getGraphNodeById(rootPath: string, nodeId: number): WebGraphNode | null {
   const row = getWorkspaceDb(rootPath)
     .prepare("SELECT * FROM graph_nodes WHERE id = ?")
-    .get(nodeId) as Record<string, unknown> | undefined;
+    .get<GraphNodeDbRow>(nodeId);
   if (!row) {
     return null;
   }
   return {
-    id: String(row.id),
+    id: Number(row.id),
     label: String(row.label),
     type: String(row.type),
     refId: row.ref_id ? String(row.ref_id) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+    metadata: safeParseJson<GraphNodeMetadata>(String(row.metadata ?? "{}"), {}),
   };
 }
 
-export function searchGraphNodesByLabel(
-  rootPath: string,
-  query: string,
-  nodeTypes?: string[],
-): WebGraphNode[] {
-  const db = getWorkspaceDb(rootPath);
-  const likeQuery = `%${query.toLowerCase()}%`;
-
-  let rows: Array<Record<string, unknown>>;
-  if (nodeTypes && nodeTypes.length > 0) {
-    const placeholders = nodeTypes.map(() => "?").join(",");
-    rows = db
-      .prepare(
-        `SELECT * FROM graph_nodes WHERE lower(label) LIKE ? AND type IN (${placeholders}) LIMIT 50`,
-      )
-      .all(likeQuery, ...nodeTypes) as Array<Record<string, unknown>>;
-  } else {
-    rows = db
-      .prepare("SELECT * FROM graph_nodes WHERE lower(label) LIKE ? LIMIT 50")
-      .all(likeQuery) as Array<Record<string, unknown>>;
-  }
-
-  return rows.map((row) => ({
-    id: String(row.id),
-    label: String(row.label),
-    type: String(row.type),
-    refId: row.ref_id ? String(row.ref_id) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
-  }));
-}
-
 export interface WebMemoryRow {
-  id: string;
+  id: number;
   title: string;
   content: string;
   tags: string[];
   source: string;
-  supersedesId: string | null;
+  supersedesId: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
-function mapMemoryRow(row: Record<string, unknown>): WebMemoryRow {
+function mapMemoryRow(row: MemoryDbRow): WebMemoryRow {
   return {
-    id: String(row.id),
+    id: Number(row.id),
     title: String(row.title),
     content: String(row.content),
     tags: String(row.tags ?? "")
       .split(",")
       .filter(Boolean),
     source: String(row.source ?? "agent"),
-    supersedesId: row.supersedes_id ? String(row.supersedes_id) : null,
+    supersedesId: row.supersedes_id ? Number(row.supersedes_id) : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -673,7 +754,7 @@ export function listWorkspaceMemories(rootPath: string, limit = 50, offset = 0):
        ORDER BY m.updated_at DESC, m.created_at DESC
        LIMIT ? OFFSET ?`,
     )
-    .all(limit, offset) as Array<Record<string, unknown>>;
+    .all<MemoryDbRow>(limit, offset);
   return rows.map(mapMemoryRow);
 }
 
@@ -683,7 +764,7 @@ export function countWorkspaceMemories(rootPath: string): number {
       `SELECT COUNT(*) AS count FROM memories m
        WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)`,
     )
-    .get() as { count: number } | undefined;
+    .get<CountRow>();
   return row?.count ?? 0;
 }
 
@@ -715,14 +796,14 @@ export function searchWorkspaceMemories(
          m.updated_at DESC
        LIMIT ?`,
     )
-    .all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
+    .all<MemoryDbRow>(...termParams, normalized, phrasePattern, limit);
   return rows.map(mapMemoryRow);
 }
 
-export function getWorkspaceMemory(rootPath: string, id: string): WebMemoryRow | null {
-  const row = getWorkspaceDb(rootPath).prepare("SELECT * FROM memories WHERE id = ?").get(id) as
-    | Record<string, unknown>
-    | undefined;
+export function getWorkspaceMemory(rootPath: string, id: number): WebMemoryRow | null {
+  const row = getWorkspaceDb(rootPath)
+    .prepare("SELECT * FROM memories WHERE id = ?")
+    .get<MemoryDbRow>(id);
   return row ? mapMemoryRow(row) : null;
 }
 
@@ -732,16 +813,14 @@ export function insertWorkspaceMemory(input: {
   content: string;
   tags?: string[];
   source?: string;
-  supersedesId?: string;
-}): string {
-  const id = crypto.randomUUID();
+  supersedesId?: number;
+}): number {
   const now = new Date().toISOString();
-  getWorkspaceDb(input.rootPath)
+  const result = getWorkspaceDb(input.rootPath)
     .prepare(
-      "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO memories (title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
-      id,
       input.title,
       input.content,
       (input.tags ?? []).join(","),
@@ -750,10 +829,10 @@ export function insertWorkspaceMemory(input: {
       now,
       now,
     );
-  return id;
+  return Number(result.lastInsertRowid);
 }
 
-export function deleteWorkspaceMemory(rootPath: string, id: string): boolean {
+export function deleteWorkspaceMemory(rootPath: string, id: number): boolean {
   const result = getWorkspaceDb(rootPath).prepare("DELETE FROM memories WHERE id = ?").run(id);
   return result.changes > 0;
 }
@@ -766,7 +845,7 @@ export interface WebQueryMetrics {
   totalFilesScanned: number;
   avgTokensPerQuery: number;
   recentQueries: Array<{
-    id: string;
+    id: number;
     query: string;
     mode: string;
     resultCount: number;
@@ -788,7 +867,7 @@ export function getWorkspaceQueryMetrics(rootPath: string, recentLimit = 10): We
       COALESCE(SUM(files_scanned), 0) AS totalFilesScanned
      FROM query_logs`,
     )
-    .get() as Record<string, number> | undefined;
+    .get<QueryLogTotalsRow>();
 
   const recentRows = db
     .prepare(
@@ -797,7 +876,7 @@ export function getWorkspaceQueryMetrics(rootPath: string, recentLimit = 10): We
      ORDER BY created_at DESC
      LIMIT ?`,
     )
-    .all(recentLimit) as Array<Record<string, unknown>>;
+    .all<QueryLogDbRow>(recentLimit);
 
   const totalQueries = Number(totals?.totalQueries ?? 0);
   const totalTokensReturned = Number(totals?.totalTokensReturned ?? 0);
@@ -812,7 +891,7 @@ export function getWorkspaceQueryMetrics(rootPath: string, recentLimit = 10): We
     totalFilesScanned,
     avgTokensPerQuery: totalQueries > 0 ? Math.round(totalTokensReturned / totalQueries) : 0,
     recentQueries: recentRows.map((row) => ({
-      id: String(row.id),
+      id: Number(row.id),
       query: String(row.query),
       mode: String(row.mode),
       resultCount: Number(row.result_count ?? 0),
@@ -829,12 +908,7 @@ export function getWorkspaceGraphOptimized(
   rootPath: string,
   maxNodes: number,
   maxEdges: number,
-): {
-  nodes: WebGraphNode[];
-  edges: WebGraphEdge[];
-  totalNodeCount: number;
-  totalEdgeCount: number;
-} {
+): WorkspaceGraphResult {
   const db = getWorkspaceDb(rootPath);
 
   // Use prepared statements for better performance
@@ -867,25 +941,27 @@ export function getWorkspaceGraphOptimized(
   `);
 
   // Execute all queries
-  const countResult = countStmt.get() as { count: number };
-  const edgeCountResult = edgeCountStmt.get() as { count: number };
-  const nodeRows = nodesStmt.all(maxNodes) as Array<Record<string, unknown>>;
-  const edgeRows = edgesStmt.all(maxNodes, maxNodes, maxEdges) as Array<Record<string, unknown>>;
+  // SAFETY: COUNT(*) always returns exactly one row.
+  const countResult = countStmt.get<CountRow>() as CountRow;
+  // SAFETY: COUNT(*) always returns exactly one row.
+  const edgeCountResult = edgeCountStmt.get<CountRow>() as CountRow;
+  const nodeRows = nodesStmt.all<GraphNodeDbRow>(maxNodes);
+  const edgeRows = edgesStmt.all<GraphEdgeDbRow>(maxNodes, maxNodes, maxEdges);
 
   return {
     totalNodeCount: countResult.count,
     totalEdgeCount: edgeCountResult.count,
     nodes: nodeRows.map((row) => ({
-      id: String(row.id),
+      id: Number(row.id),
       label: String(row.label),
       type: String(row.type),
       refId: row.ref_id ? String(row.ref_id) : null,
-      metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+      metadata: safeParseJson<GraphNodeMetadata>(String(row.metadata ?? "{}"), {}),
     })),
     edges: edgeRows.map((row) => ({
-      id: String(row.id),
-      source: String(row.from_node_id),
-      target: String(row.to_node_id),
+      id: Number(row.id),
+      source: Number(row.from_node_id),
+      target: Number(row.to_node_id),
       type: String(row.type),
       weight: Number(row.weight ?? 1),
     })),
