@@ -1,0 +1,26 @@
+packages/indexer/src/languages.ts
+  s_4ebc3147ece427::t_33f357f6640c71 32-34
+  s_4ebc3147ece427::t_010367410cac85 814-856,871-883,886,893-911,913-944,946-955,958-969,972-973,975-995
+  s_4ebc3147ece427::t_77e55cf8fb66c5 945,956-957,970-971,974
+  s_4ebc3147ece427::t_7712f377e4a3b9 912
+  s_4ebc3147ece427::t_9b8b004e56ed95 857-870
+  s_4ebc3147ece427::t_ce0362965e608b 884-885,887-892
+tests/ruby-indexer.test.ts
+  s_4ebc3147ece427::t_39ee7d7e764a71 1-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9a9a2de755c2f4515919faed464fa17f9fa7601f",
+  "prompts": {},
+  "sessions": {
+    "s_4ebc3147ece427": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dedicated-handspring",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
