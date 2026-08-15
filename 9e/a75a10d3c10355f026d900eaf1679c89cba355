@@ -1,0 +1,27 @@
+tests/fixtures/ruby/user.rb
+  s_4ebc3147ece427::t_f18a005d95b854 1-15
+tests/fixtures/views/index.slim
+  s_4ebc3147ece427::t_d06d0a7f18bd7a 1-2
+tests/index-workspace.test.ts
+  s_4ebc3147ece427::t_52a7a4c65c3a90 759-833
+tests/fixtures/ruby/helper.rb
+  s_4ebc3147ece427::t_86f97c1bad1b1d 1-7
+tests/fixtures/styles/app.scss
+  s_4ebc3147ece427::t_389149ef04ed94 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9ea75a10d3c10355f026d900eaf1679c89cba355",
+  "prompts": {},
+  "sessions": {
+    "s_4ebc3147ece427": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dedicated-handspring",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
