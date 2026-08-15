@@ -41,6 +41,27 @@ export interface StoredMemory {
   updatedAt: string;
 }
 
+export interface WorkspaceQueryLog {
+  id: string;
+  query: string;
+  mode: string;
+  resultCount: number;
+  tokensReturned: number;
+  tokensSaved: number;
+  filesScanned: number;
+  createdAt: string;
+}
+
+export interface WorkspaceQueryMetrics {
+  totalQueries: number;
+  totalTokensReturned: number;
+  totalTokensSaved: number;
+  totalFilesScanned: number;
+  avgTokensPerQuery: number;
+  savingsPercentage: number;
+  recentQueries: WorkspaceQueryLog[];
+}
+
 export interface RegistryRepository {
   listWorkspaces(): Promise<RegistryWorkspace[]>;
   getWorkspace(id: string): Promise<RegistryWorkspace | null>;
@@ -142,6 +163,8 @@ export interface WorkspaceRepository {
   getChunkCount(): Promise<number>;
   getNodeCount(): Promise<number>;
   getEdgeCount(): Promise<number>;
+  getMemoryCount(): Promise<number>;
+  getQueryMetrics(recentLimit?: number): Promise<WorkspaceQueryMetrics>;
 
   getDocument(id: string): Promise<{
     id: string;

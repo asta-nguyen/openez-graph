@@ -106,5 +106,12 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
         .all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
       return rows.map(mapMemoryRow);
     },
+
+    async getMemoryCount(): Promise<number> {
+      const row = native.prepare("SELECT count(*) as c FROM memories").get() as
+        | { c: number }
+        | undefined;
+      return Number(row?.c ?? 0);
+    },
   };
 }

@@ -341,6 +341,144 @@ program
     }
   });
 
+// ── openez stats [path] (alias: tokens) ──
+
+program
+  .command("stats")
+  .alias("tokens")
+  .description("Show token savings and query telemetry for a workspace")
+  .argument("[path]", "path to the workspace directory", process.cwd())
+  .option("-a, --all", "Show aggregate stats across all registered workspaces")
+  .option("-l, --limit <number>", "Number of recent queries to show", "5")
+  .action(async (targetPath, options) => {
+    const registry = createRegistryRepository();
+    const limit = Math.max(1, parseInt(options.limit, 10) || 5);
+
+    if (options.all) {
+      const workspaces = await registry.listWorkspaces();
+      if (workspaces.length === 0) {
+        console.log("No workspaces registered.");
+        console.log("Run 'openez init <path>' to create one.");
+        return;
+      }
+
+      let grandTotalQueries = 0;
+      let grandTotalTokensReturned = 0;
+      let grandTotalTokensSaved = 0;
+      let grandTotalFilesScanned = 0;
+      let grandTotalDocs = 0;
+      let grandTotalChunks = 0;
+
+      console.log("\n============================================================");
+      console.log(" OpenEZ Global Token Savings & Workspace Analytics");
+      console.log("============================================================");
+
+      for (const ws of workspaces) {
+        const dbPath = path.join(ws.rootPath, ".openez", "index.sqlite");
+        if (!fs.existsSync(dbPath)) {
+          continue;
+        }
+
+        try {
+          const repo = createWorkspaceRepository(ws.rootPath);
+          const metrics = await repo.getQueryMetrics(0);
+          const docCount = await repo.getDocumentCount();
+          const chunkCount = await repo.getChunkCount();
+
+          grandTotalQueries += metrics.totalQueries;
+          grandTotalTokensReturned += metrics.totalTokensReturned;
+          grandTotalTokensSaved += metrics.totalTokensSaved;
+          grandTotalFilesScanned += metrics.totalFilesScanned;
+          grandTotalDocs += docCount;
+          grandTotalChunks += chunkCount;
+
+          console.log(`\n• ${ws.name} (${ws.id})`);
+          console.log(`  Path:           ${ws.rootPath}`);
+          console.log(
+            `  Indexed:        ${docCount.toLocaleString()} files / ${chunkCount.toLocaleString()} chunks`,
+          );
+          console.log(`  Queries Served: ${metrics.totalQueries.toLocaleString()}`);
+          console.log(
+            `  Tokens Saved:   ${metrics.totalTokensSaved.toLocaleString()} tokens (${metrics.savingsPercentage}% savings)`,
+          );
+        } catch {
+          console.log(`\n• ${ws.name} (${ws.id}) - [unreachable or unindexed]`);
+        }
+      }
+
+      const totalTokensProcessed = grandTotalTokensSaved + grandTotalTokensReturned;
+      const globalSavingsPct =
+        totalTokensProcessed > 0
+          ? ((grandTotalTokensSaved / totalTokensProcessed) * 100).toFixed(1)
+          : "0.0";
+
+      console.log("\n------------------------------------------------------------");
+      console.log(` Total Workspaces:      ${workspaces.length}`);
+      console.log(` Total Documents:       ${grandTotalDocs.toLocaleString()} files`);
+      console.log(` Total Chunks:          ${grandTotalChunks.toLocaleString()} chunks`);
+      console.log(` Total Queries:         ${grandTotalQueries.toLocaleString()} queries`);
+      console.log(` Total Tokens Returned: ${grandTotalTokensReturned.toLocaleString()} tokens`);
+      console.log(
+        ` Total Tokens Saved:    ${grandTotalTokensSaved.toLocaleString()} tokens (${globalSavingsPct}% context savings)`,
+      );
+      console.log("============================================================\n");
+      return;
+    }
+
+    const resolvedPath = path.resolve(targetPath);
+    const workspace = await registry.getWorkspaceByPath(resolvedPath);
+    if (!workspace) {
+      console.log(`No workspace registered at ${resolvedPath}`);
+      console.log("Run 'openez init <path>' to create one.");
+      return;
+    }
+
+    const repo = createWorkspaceRepository(workspace.rootPath);
+    const metrics = await repo.getQueryMetrics(limit);
+    const docCount = await repo.getDocumentCount();
+    const chunkCount = await repo.getChunkCount();
+    const nodeCount = await repo.getNodeCount();
+    const edgeCount = await repo.getEdgeCount();
+    const memoryCount = await repo.getMemoryCount();
+
+    console.log("\n============================================================");
+    console.log(` OpenEZ Stats: ${workspace.name} (${workspace.id})`);
+    console.log("============================================================");
+    console.log(`  Path:             ${workspace.rootPath}`);
+    console.log(`  Status:           ${workspace.status} (${workspace.indexingStatus})`);
+    if (workspace.lastIndexedAt) {
+      console.log(`  Last Indexed:     ${workspace.lastIndexedAt}`);
+    }
+
+    console.log("\n  ── 📊 Token Savings & Telemetry ────────────────────────────");
+    console.log(`  Total Queries:    ${metrics.totalQueries.toLocaleString()} queries`);
+    console.log(
+      `  Tokens Returned:  ${metrics.totalTokensReturned.toLocaleString()} tokens (avg ${metrics.avgTokensPerQuery.toLocaleString()} / query)`,
+    );
+    console.log(
+      `  Tokens Saved:     ${metrics.totalTokensSaved.toLocaleString()} tokens (${metrics.savingsPercentage}% context savings)`,
+    );
+    console.log(`  Files Scanned:    ${metrics.totalFilesScanned.toLocaleString()} files`);
+
+    console.log("\n  ── 📁 Index & Graph Breakdown ───────────────────────────────");
+    console.log(`  Documents:        ${docCount.toLocaleString()} files`);
+    console.log(`  Chunks:           ${chunkCount.toLocaleString()} chunks`);
+    console.log(`  Graph Nodes:      ${nodeCount.toLocaleString()} nodes`);
+    console.log(`  Graph Edges:      ${edgeCount.toLocaleString()} edges`);
+    console.log(`  Memories:         ${memoryCount.toLocaleString()} stored decisions`);
+
+    if (metrics.recentQueries.length > 0) {
+      console.log("\n  ── 🕒 Recent Queries ───────────────────────────────────────");
+      for (const q of metrics.recentQueries) {
+        const querySnippet = q.query.length > 50 ? `${q.query.slice(0, 47)}...` : q.query;
+        console.log(
+          `  • "${querySnippet}" → ${q.resultCount} results, ${q.tokensSaved.toLocaleString()} tokens saved (${q.createdAt})`,
+        );
+      }
+    }
+    console.log("============================================================\n");
+  });
+
 // ── openez list ──
 
 program

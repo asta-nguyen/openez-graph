@@ -22,6 +22,8 @@ export type {
   RegistryWorkspace,
   RegistryRepository,
   StoredMemory,
+  WorkspaceQueryLog,
+  WorkspaceQueryMetrics,
   WorkspaceRepository,
   WorkspaceSettings,
 } from "./types";

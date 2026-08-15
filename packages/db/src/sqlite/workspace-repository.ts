@@ -11,7 +11,7 @@ import { createGraphOps } from "./graph-repository";
 import type { GraphStmts } from "./graph-repository";
 import { createMemoryOps } from "./memory-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
-import type { WorkspaceRepository } from "./types";
+import type { WorkspaceQueryMetrics, WorkspaceRepository } from "./types";
 import { getWorkspaceDb, getWorkspaceNativeDb } from "./workspace-db";
 
 function getNativeWorkspaceDb(rootPath: string): {
@@ -182,6 +182,54 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           new Date().toISOString(),
         );
       return id;
+    },
+
+    async getQueryMetrics(recentLimit = 10): Promise<WorkspaceQueryMetrics> {
+      const totals = native
+        .prepare(
+          `SELECT
+          COUNT(*) AS totalQueries,
+          COALESCE(SUM(tokens_returned), 0) AS totalTokensReturned,
+          COALESCE(SUM(tokens_saved), 0) AS totalTokensSaved,
+          COALESCE(SUM(files_scanned), 0) AS totalFilesScanned
+         FROM query_logs`,
+        )
+        .get() as Record<string, number> | undefined;
+
+      const recentRows = native
+        .prepare(
+          `SELECT id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at
+         FROM query_logs
+         ORDER BY created_at DESC, rowid DESC
+         LIMIT ?`,
+        )
+        .all(recentLimit) as Array<Record<string, unknown>>;
+
+      const totalQueries = Number(totals?.totalQueries ?? 0);
+      const totalTokensReturned = Number(totals?.totalTokensReturned ?? 0);
+      const totalTokensSaved = Number(totals?.totalTokensSaved ?? 0);
+      const totalFilesScanned = Number(totals?.totalFilesScanned ?? 0);
+      const denominator = totalTokensSaved + totalTokensReturned;
+      const savingsPercentage = denominator > 0 ? (totalTokensSaved / denominator) * 100 : 0;
+
+      return {
+        totalQueries,
+        totalTokensReturned,
+        totalTokensSaved,
+        totalFilesScanned,
+        avgTokensPerQuery: totalQueries > 0 ? Math.round(totalTokensReturned / totalQueries) : 0,
+        savingsPercentage: Number(savingsPercentage.toFixed(1)),
+        recentQueries: recentRows.map((row) => ({
+          id: String(row.id),
+          query: String(row.query),
+          mode: String(row.mode),
+          resultCount: Number(row.result_count ?? 0),
+          tokensReturned: Number(row.tokens_returned ?? 0),
+          tokensSaved: Number(row.tokens_saved ?? 0),
+          filesScanned: Number(row.files_scanned ?? 0),
+          createdAt: String(row.created_at),
+        })),
+      };
     },
 
     // ── Raw SQL queries ──

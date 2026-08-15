@@ -65,6 +65,7 @@ openez embed [path]         # create configured provider vectors
 openez reindex [path]       # rebuild the index (removes vectors; run embed after)
 openez watch [path]         # keep an index synchronized
 openez status [path]        # show workspace and graph counts
+openez stats [path]         # show token savings and query telemetry (--all; alias: tokens)
 openez list                 # list registered workspaces
 openez serve --mcp          # start the MCP server
 openez serve --web          # start the management UI

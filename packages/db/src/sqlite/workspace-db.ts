@@ -176,27 +176,6 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id;
       `);
-    } else {
-      // FTS table already exists — but indexing may have been interrupted
-      // (triggers were down, process crashed before restore). Backfill any
-      // chunks that exist in the chunks table but are missing from FTS,
-      // and remove orphaned FTS rows whose chunks were deleted.
-      sqlite.exec(`
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-        SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''),
-          ${composeFtsSearchTextSql("c.metadata", "c.content")}
-        FROM chunks c
-        INNER JOIN documents d ON d.id = c.document_id
-        LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-        WHERE f.chunk_id IS NULL;
-      `);
-      // Remove FTS rows for chunks that no longer exist (orphaned by
-      // interrupted deletes or manual DB edits).
-      sqlite.exec(`
-        DELETE FROM chunks_fts
-        WHERE chunk_id NOT IN (SELECT id FROM chunks);
-      `);
     }
 
     const hasTypeLabelIdx =

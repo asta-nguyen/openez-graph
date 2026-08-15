@@ -68,6 +68,7 @@ openez serve --mcp              # start MCP server (auto-index; auto-sync opt-in
 openez serve --web              # start web dashboard (default port 17881)
 openez serve --web --port 8080  # start web dashboard on custom port
 openez status [path]            # show workspace status
+openez stats [path]             # show token savings and query telemetry (--all; alias: tokens)
 openez list                     # list registered workspaces
 openez setup claude             # wire up Claude Code
 openez setup codex              # wire up Codex
