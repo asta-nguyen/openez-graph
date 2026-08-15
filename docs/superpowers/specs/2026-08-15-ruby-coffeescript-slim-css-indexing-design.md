@@ -141,8 +141,8 @@ receiver variable with a known type, it refers to the enclosing type context.
 The `call` node exposes a `receiver` field (verified in node-types.json:
 `field receiver: ['_primary']`). The hook reads `callNode.childForFieldName("receiver")`,
 checks `text === "self"`, and if so walks the context stack backwards for the
-nearest frame with `kind: "class" | "module"` (see context frame change below),
-then qualifies the callee as `${contextName}::${normalized}`.
+nearest frame with `kind === "class" || kind === "module"` (see context frame
+change below), then qualifies the callee as `${contextName}::${normalized}`.
 
 `LanguageConfig` gains an optional `qualifyCall` hook:
 
@@ -180,16 +180,16 @@ Test assertion: in `class User; def foo; self.bar; end; end`, the call edge is
 
 ```ts
 /**
- * Discriminator for context frames. Lets context-only rules (singleton_class)
- * and qualifyCall hooks walk the stack backwards for the nearest class/module
- * frame, skipping method frames that may sit between.
+ * Optional discriminator on context frames. Only Ruby class/module rules set
+ * this so that singleton_class.extractContextName and the qualifyCall hook can
+ * walk the stack backwards for the nearest class/module frame, skipping method
+ * frames that may sit between. Python/Go/Rust do not set it — their frames
+ * have kind: undefined, which the walk-back logic skips.
  */
-export type ContextKind = "class" | "module" | "method" | "singleton_class" | "lambda";
-
 export interface ContextFrame {
   name: string;
   endRow: number;
-  kind: ContextKind;
+  kind?: "class" | "module";
   receiver?: { varName: string; typeName: string };
 }
 
@@ -197,8 +197,8 @@ export interface SymbolRule {
   // ...existing fields...
   /** Push context stack without emitting a symbol or extracting calls. */
   contextOnly?: boolean;
-  /** Context kind for this rule's frames. Defaults to the symbolType. */
-  contextKind?: ContextKind;
+  /** Context kind for this rule's frames. Only "class" | "module" for Ruby. */
+  contextKind?: "class" | "module";
   /**
    * Override context name for nesting. Receives the walker's current context
    * stack so context-only rules can derive their name from the enclosing scope
@@ -211,27 +211,23 @@ export interface SymbolRule {
 
 The existing `contextStack` array in `walkTree` changes from
 `Array<{ name: string; endRow: number; receiver?: ... }>` to
-`Array<ContextFrame>`. Every push site sets `kind`:
+`Array<ContextFrame>`. The `kind` field is optional — only Ruby `class` and
+`module` rules set it. Python/Go/Rust push frames without `kind` (undefined),
+so existing code reading `.name` / `.endRow` / `.receiver` is unaffected.
 
-- `class` rule → `kind: "class"`
-- `module` rule → `kind: "module"`
-- `method` / `singleton_method` rule → `kind: "method"`
-- `singleton_class` rule (context-only) → `kind: "singleton_class"`
-- named lambda rule → `kind: "lambda"`
-
-Go/Python/Rust configs do not set `contextKind`, so their frames default to
-`symbolType` (e.g. Go `function_declaration` → `kind: "function"`). The
-`ContextKind` union is open enough to admit those without conflict; existing
-code that reads `contextStack[i].name` / `.endRow` / `.receiver` is unaffected
-because those fields keep the same shape.
+`singleton_class.extractContextName` and `qualifyCall` walk the stack backwards
+checking `frame.kind === "class" || frame.kind === "module"`. Frames with
+`kind: undefined` (Python/Go/Rust functions, Rust traits/impls, Ruby methods,
+named lambdas) are skipped automatically — no need to enumerate their
+symbolTypes in a union.
 
 `walkTree` changes:
 
 - When `symbolRule.contextOnly` is true: skip symbol emission and
   `extractCallsInNode`. If `extractContextName` returns a non-null name, push a
-  context frame with that name, `kind: symbolRule.contextKind ?? "singleton_class"`,
-  and the node's `endRow`. If it returns null, do not push (the block is treated
-  as top-level for nested symbols).
+  context frame with that name, `kind: symbolRule.contextKind`, and the node's
+  `endRow`. If it returns null, do not push (the block is treated as top-level
+  for nested symbols).
 - Pass the current `contextStack` (as a readonly snapshot) to `extractContextName`.
 - Pass the current `contextStack` (readonly snapshot) to `config.qualifyCall` when
   set (see receiver qualification above).
@@ -367,19 +363,19 @@ degraded state.
 
 ## File change summary
 
-| File                                                                            | Change                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/indexer/package.json`                                                 | Add `tree-sitter-ruby@^0.23.1` dependency.                                                                                                                                                                                                                                                                                                                                        |
-| `packages/indexer/src/languages.ts`                                             | Add Ruby to `codeExtensions`; add `styleExtensions`, `templateExtensions`, `scriptExtensions`; add `parseRuby` regex fallback; update `inferDocumentKind`.                                                                                                                                                                                                                        |
-| `packages/indexer/src/scanner.ts`                                               | Extend `ALLOWED_EXTENSIONS` and `DEFAULT_INCLUDE_PATTERNS` with new extensions.                                                                                                                                                                                                                                                                                                   |
-| `packages/indexer/src/tree-sitter/configs.ts`                                   | Add `rubyConfig` with symbol/import/call rules.                                                                                                                                                                                                                                                                                                                                   |
-| `packages/indexer/src/tree-sitter/parse.ts`                                     | Add `contextOnly`, `contextKind` to `SymbolRule`; add `ContextFrame`/`ContextKind` types; change `contextStack` shape to `ContextFrame[]`; change `extractContextName` signature to accept `contextStack`; add optional `qualifyCall` to `LanguageConfig`; update `walkTree` to handle `contextOnly` and call `qualifyCall`; update `extractCallsInNode` to invoke `qualifyCall`. |
-| `packages/indexer/src/tree-sitter/index.ts`                                     | Export `rubyConfig`.                                                                                                                                                                                                                                                                                                                                                              |
-| `packages/indexer/src/parsers/tree-sitter-parser.ts`                            | Register `ruby` in `LANGUAGE_CONFIGS` and `REGEX_FALLBACKS`.                                                                                                                                                                                                                                                                                                                      |
-| `packages/indexer/src/index-workspace.ts`                                       | Add `.rb` to `RESOLVABLE_SOURCE_EXTENSIONS`; add Ruby branch in `resolveImport`.                                                                                                                                                                                                                                                                                                  |
-| `tests/ruby-indexer.test.ts`                                                    | New test file for regex fallback.                                                                                                                                                                                                                                                                                                                                                 |
-| `tests/tree-sitter-parser.test.ts`                                              | Add Ruby test block.                                                                                                                                                                                                                                                                                                                                                              |
-| `tests/parser-registry.test.ts`                                                 | Add dispatch assertions for new extensions.                                                                                                                                                                                                                                                                                                                                       |
-| `tests/scanner.test.ts`                                                         | New or extended: scanner includes new extensions.                                                                                                                                                                                                                                                                                                                                 |
-| `tests/index-workspace.test.ts`                                                 | E2E Ruby indexing with import edges.                                                                                                                                                                                                                                                                                                                                              |
-| `tests/fixtures/ruby/*.rb`, `tests/fixtures/styles/*`, `tests/fixtures/views/*` | Test fixtures.                                                                                                                                                                                                                                                                                                                                                                    |
+| File                                                                            | Change                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/indexer/package.json`                                                 | Add `tree-sitter-ruby@^0.23.1` dependency.                                                                                                                                                                                                                                                                                                                                                                      |
+| `packages/indexer/src/languages.ts`                                             | Add Ruby to `codeExtensions`; add `styleExtensions`, `templateExtensions`, `scriptExtensions`; add `parseRuby` regex fallback; update `inferDocumentKind`.                                                                                                                                                                                                                                                      |
+| `packages/indexer/src/scanner.ts`                                               | Extend `ALLOWED_EXTENSIONS` and `DEFAULT_INCLUDE_PATTERNS` with new extensions.                                                                                                                                                                                                                                                                                                                                 |
+| `packages/indexer/src/tree-sitter/configs.ts`                                   | Add `rubyConfig` with symbol/import/call rules.                                                                                                                                                                                                                                                                                                                                                                 |
+| `packages/indexer/src/tree-sitter/parse.ts`                                     | Add `contextOnly`, `contextKind` to `SymbolRule`; add `ContextFrame` type (with optional `kind?: "class" \| "module"`); change `contextStack` shape to `ContextFrame[]`; change `extractContextName` signature to accept `contextStack`; add optional `qualifyCall` to `LanguageConfig`; update `walkTree` to handle `contextOnly` and call `qualifyCall`; update `extractCallsInNode` to invoke `qualifyCall`. |
+| `packages/indexer/src/tree-sitter/index.ts`                                     | Export `rubyConfig`.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `packages/indexer/src/parsers/tree-sitter-parser.ts`                            | Register `ruby` in `LANGUAGE_CONFIGS` and `REGEX_FALLBACKS`.                                                                                                                                                                                                                                                                                                                                                    |
+| `packages/indexer/src/index-workspace.ts`                                       | Add `.rb` to `RESOLVABLE_SOURCE_EXTENSIONS`; add Ruby branch in `resolveImport`.                                                                                                                                                                                                                                                                                                                                |
+| `tests/ruby-indexer.test.ts`                                                    | New test file for regex fallback.                                                                                                                                                                                                                                                                                                                                                                               |
+| `tests/tree-sitter-parser.test.ts`                                              | Add Ruby test block.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `tests/parser-registry.test.ts`                                                 | Add dispatch assertions for new extensions.                                                                                                                                                                                                                                                                                                                                                                     |
+| `tests/scanner.test.ts`                                                         | New or extended: scanner includes new extensions.                                                                                                                                                                                                                                                                                                                                                               |
+| `tests/index-workspace.test.ts`                                                 | E2E Ruby indexing with import edges.                                                                                                                                                                                                                                                                                                                                                                            |
+| `tests/fixtures/ruby/*.rb`, `tests/fixtures/styles/*`, `tests/fixtures/views/*` | Test fixtures.                                                                                                                                                                                                                                                                                                                                                                                                  |
