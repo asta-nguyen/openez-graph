@@ -1,13 +1,20 @@
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
-import { parseGo, parsePython, parseRust, type IndexedCodeResult } from "../languages";
-import { goConfig, parseWithTreeSitter, pythonConfig, rustConfig } from "../tree-sitter";
+import { parseGo, parsePython, parseRuby, parseRust, type IndexedCodeResult } from "../languages";
+import {
+  goConfig,
+  parseWithTreeSitter,
+  pythonConfig,
+  rubyConfig,
+  rustConfig,
+} from "../tree-sitter";
 import type { CodeParser, ParseInput, ParsedDocument } from "./types";
 
 const LANGUAGE_CONFIGS = {
   python: pythonConfig,
   go: goConfig,
   rust: rustConfig,
+  ruby: rubyConfig,
 } as const;
 
 const REGEX_FALLBACKS: Record<
@@ -17,6 +24,7 @@ const REGEX_FALLBACKS: Record<
   python: parsePython,
   go: parseGo,
   rust: parseRust,
+  ruby: parseRuby,
 };
 
 type TreeSitterLanguage = keyof typeof LANGUAGE_CONFIGS;
