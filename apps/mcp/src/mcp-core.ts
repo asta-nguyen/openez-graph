@@ -89,6 +89,13 @@ const indexWorkspaceSchema = z.object({
   mode: z.enum(["incremental", "full"]).optional(),
 });
 
+const codeOutlineSchema = z.object({
+  workspaceId: z.string().optional(),
+  path: z.string().optional(),
+  filePath: z.string().optional(),
+  file: z.string().optional(),
+});
+
 const removeWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
@@ -547,6 +554,26 @@ export function createMcpServer(options?: McpServerOptions) {
         },
       },
       {
+        name: "code_outline",
+        description:
+          "Inspect the AST structure, functions, classes, and exported symbols of a file with line numbers (50 tokens vs 3,000 for reading the whole file).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceId: { type: "string", description: "ID of a registered workspace" },
+            path: {
+              type: "string",
+              description: "Relative or absolute path to the file inside the workspace",
+            },
+            filePath: {
+              type: "string",
+              description: "Alias for path",
+            },
+          },
+          required: [],
+        },
+      },
+      {
         name: "remove_workspace",
         description:
           "Remove a workspace from the registry and delete its .openez data directory. Destructive and irreversible: call only with confirm: true after explicit user approval.",
@@ -821,6 +848,34 @@ export function createMcpServer(options?: McpServerOptions) {
         // preventing stale reindex attempts against the deleted workspace.
         stopWatcherForWorkspace(report.workspaceId);
         return jsonResponse(report);
+      }
+      case "code_outline": {
+        const input = codeOutlineSchema.parse(request.params.arguments ?? {});
+        const targetPath = String(input.path || input.filePath || input.file || "").trim();
+        if (!targetPath) {
+          throw new Error("Missing file path for code_outline.");
+        }
+
+        const workspace = await resolver.resolveWriteWorkspace({
+          workspaceId: input.workspaceId,
+        });
+
+        await catchUpWorkspaceIndex(workspace.id);
+        const repo = createWorkspaceRepository(workspace.rootPath);
+        const outline = await repo.getFileOutline(targetPath);
+
+        if (!outline) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `File not found in index: '${targetPath}'. Ensure the file exists and is indexed.`,
+              },
+            ],
+          };
+        }
+
+        return jsonResponse(outline);
       }
       default:
         throw new Error(`Unknown tool: ${request.params.name}`);

@@ -86,6 +86,7 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 | Tool              | Description                                                                                         |
 | ----------------- | --------------------------------------------------------------------------------------------------- |
 | `list_workspaces` | List all registered workspaces                                                                      |
+| `code_outline`    | Inspect file AST structure, functions, classes, and exported symbols with line numbers (~50 tokens) |
 | `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
 | `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
 | `graph_neighbors` | Traverse graph edges from a node or label                                                           |
