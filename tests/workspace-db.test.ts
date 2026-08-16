@@ -280,6 +280,64 @@ describe("createWorkspaceRepository", () => {
     expect(await reopened.fullTextSearch("searchable", 5)).toHaveLength(1);
   });
 
+  it("repairs FTS rows when counts match but chunk IDs are stale", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const documents = await Promise.all(
+      ["old-a.ts", "old-b.ts", "new-c.ts"].map((documentPath) =>
+        repo.insertDocument({
+          path: documentPath,
+          absolutePath: path.join(tempRoot, documentPath),
+          kind: "code",
+          language: "typescript",
+          contentHash: documentPath,
+          sizeBytes: 10,
+          mtimeMs: 1,
+        }),
+      ),
+    );
+    const [oldChunkId] = await repo.insertChunks([
+      {
+        documentId: documents[0],
+        chunkIndex: 0,
+        content: "old alpha content",
+        tokenCount: 3,
+        contentHash: "old-a-chunk",
+        metadata: "{}",
+      },
+      {
+        documentId: documents[1],
+        chunkIndex: 0,
+        content: "old bravo content",
+        tokenCount: 3,
+        contentHash: "old-b-chunk",
+        metadata: "{}",
+      },
+    ]);
+
+    // Simulate an interrupted write while FTS triggers are disabled: one old
+    // chunk is replaced, so both tables still have the same row count.
+    repo.dropFtsTriggers();
+    await repo.executeRaw("DELETE FROM chunks WHERE id = ?", [oldChunkId]);
+    const [newChunkId] = await repo.insertChunks([
+      {
+        documentId: documents[2],
+        chunkIndex: 0,
+        content: "new charlie content",
+        tokenCount: 3,
+        contentHash: "new-c-chunk",
+        metadata: "{}",
+      },
+    ]);
+
+    closeAllWorkspaceDbs();
+    const reopened = createWorkspaceRepository(tempRoot);
+    const ftsRows = await reopened.queryRaw("SELECT chunk_id FROM chunks_fts ORDER BY chunk_id");
+    expect(ftsRows.map((row) => String(row.chunk_id))).toEqual(
+      expect.arrayContaining([newChunkId]),
+    );
+    expect(ftsRows.map((row) => String(row.chunk_id))).not.toContain(oldChunkId);
+  });
+
   it("keeps stale rebuild and backfill FTS text identical to application writes", async () => {
     const repo = createWorkspaceRepository(tempRoot);
     const docId = await repo.insertDocument({
