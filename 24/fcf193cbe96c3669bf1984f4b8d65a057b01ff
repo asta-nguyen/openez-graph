@@ -1,0 +1,23 @@
+apps/cli/package.json
+  s_0608c36e1c9f0b::t_0917762ea742df 3
+CHANGELOG.md
+  s_0608c36e1c9f0b::t_0d137544258e53 8
+  s_0608c36e1c9f0b::t_838e409ba01b40 9-15
+  s_0608c36e1c9f0b::t_d0bb553cd95e5d 310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "24fcf193cbe96c3669bf1984f4b8d65a057b01ff",
+  "prompts": {},
+  "sessions": {
+    "s_0608c36e1c9f0b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "snow-bank",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
