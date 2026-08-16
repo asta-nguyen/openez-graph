@@ -181,22 +181,50 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
       // (triggers were down, process crashed before restore). Backfill any
       // chunks that exist in the chunks table but are missing from FTS,
       // and remove orphaned FTS rows whose chunks were deleted.
-      sqlite.exec(`
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-        SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''),
-          ${composeFtsSearchTextSql("c.metadata", "c.content")}
-        FROM chunks c
-        INNER JOIN documents d ON d.id = c.document_id
-        LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-        WHERE f.chunk_id IS NULL;
-      `);
-      // Remove FTS rows for chunks that no longer exist (orphaned by
-      // interrupted deletes or manual DB edits).
-      sqlite.exec(`
-        DELETE FROM chunks_fts
-        WHERE chunk_id NOT IN (SELECT id FROM chunks);
-      `);
+      //
+      // Quick count check first: if chunks and FTS row counts differ, repair
+      // immediately. Equal counts are not sufficient: an interrupted write
+      // can replace one chunk while FTS still contains the old ID.
+      const chunkCount = (sqlite.prepare("SELECT count(*) as c FROM chunks").get() as { c: number })
+        .c;
+      const ftsCount = (
+        sqlite.prepare("SELECT count(*) as c FROM chunks_fts").get() as { c: number }
+      ).c;
+      let ftsInSync = chunkCount === ftsCount;
+      if (ftsInSync) {
+        // Scan FTS once and use chunks' PRIMARY KEY for the join. This is
+        // O(n), unlike the old chunks -> FTS join which scans UNINDEXED
+        // chunk_id once per chunk.
+        const ftsShape = sqlite
+          .prepare(
+            `
+            SELECT count(DISTINCT f.chunk_id) AS distinct_count,
+              count(*) - count(c.id) AS orphan_count
+            FROM chunks_fts f
+            LEFT JOIN chunks c ON c.id = f.chunk_id
+          `,
+          )
+          .get() as { distinct_count: number; orphan_count: number };
+        ftsInSync = ftsShape.distinct_count === chunkCount && ftsShape.orphan_count === 0;
+      }
+      if (!ftsInSync) {
+        sqlite.exec(`
+          INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
+          SELECT c.id, d.path, coalesce(c.heading, ''),
+            coalesce(d.language, ''),
+            ${composeFtsSearchTextSql("c.metadata", "c.content")}
+          FROM chunks c
+          INNER JOIN documents d ON d.id = c.document_id
+          LEFT JOIN chunks_fts f ON f.chunk_id = c.id
+          WHERE f.chunk_id IS NULL;
+        `);
+        // Remove FTS rows for chunks that no longer exist (orphaned by
+        // interrupted deletes or manual DB edits).
+        sqlite.exec(`
+          DELETE FROM chunks_fts
+          WHERE chunk_id NOT IN (SELECT id FROM chunks);
+        `);
+      }
     }
 
     const hasTypeLabelIdx =
