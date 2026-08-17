@@ -98,6 +98,71 @@ export function parseGitDiffHunks(diffText: string): FileDiffHunks[] {
 }
 
 /**
+ * When analyzing staged diffs with unstaged working-tree changes present, maps
+ * line ranges from the staged blob (INDEX) to current working-tree coordinates.
+ */
+export function mapStagedRangesToWorkingTree(
+  stagedRanges: ChangedHunkRange[],
+  unstagedDiffText: string,
+): ChangedHunkRange[] {
+  if (!unstagedDiffText.trim()) return stagedRanges;
+
+  const lines = unstagedDiffText.split("\n");
+  const hunks: Array<{
+    aStart: number;
+    aCount: number;
+    bStart: number;
+    bCount: number;
+    delta: number;
+  }> = [];
+
+  for (const line of lines) {
+    if (line.startsWith("@@ ")) {
+      const match = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+      if (match) {
+        const aStart = parseInt(match[1], 10);
+        const aCount = match[2] !== undefined ? parseInt(match[2], 10) : 1;
+        const bStart = parseInt(match[3], 10);
+        const bCount = match[4] !== undefined ? parseInt(match[4], 10) : 1;
+        hunks.push({
+          aStart,
+          aCount,
+          bStart,
+          bCount,
+          delta: bCount - aCount,
+        });
+      }
+    }
+  }
+
+  if (hunks.length === 0) return stagedRanges;
+
+  return stagedRanges.map((range) => {
+    let start = range.start;
+    let end = range.end;
+
+    for (const h of hunks) {
+      const aEnd = h.aCount === 0 ? h.aStart : h.aStart + h.aCount - 1;
+
+      if (end < h.aStart) {
+        // Range is before this hunk, unaffected
+        continue;
+      } else if (start > aEnd) {
+        // Range is after this hunk, shift by delta
+        start += h.delta;
+        end += h.delta;
+      } else {
+        // Range overlaps the unstaged hunk
+        start = Math.min(start, h.bStart);
+        end = Math.max(end + h.delta, h.bStart + Math.max(0, h.bCount - 1));
+      }
+    }
+
+    return { start: Math.max(1, start), end: Math.max(1, end) };
+  });
+}
+
+/**
  * Analyzes git diff against local workspace database to extract affected symbols and callers.
  */
 export async function analyzeDiffContext(
@@ -174,12 +239,30 @@ export async function analyzeDiffContext(
         } catch {}
       }
 
+      // Map staged hunk ranges to working tree line coordinates if unstaged changes exist
+      let rangesToMatch = fileDiff.ranges;
+      if (options.staged) {
+        try {
+          const unstagedDiff = execFileSync(
+            "git",
+            ["diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--", fileDiff.filePath],
+            {
+              cwd: resolvedRoot,
+              encoding: "utf8",
+              maxBuffer: 5 * 1024 * 1024,
+              stdio: ["ignore", "pipe", "pipe"],
+            },
+          );
+          rangesToMatch = mapStagedRangesToWorkingTree(fileDiff.ranges, unstagedDiff);
+        } catch {}
+      }
+
       for (const s of symbolsList) {
         const symStart = Number(s.startLine || 1);
         const symEnd = Number(s.endLine || symStart);
 
         // Check if any diff hunk overlaps with this symbol's line range
-        const overlaps = fileDiff.ranges.some((r) => r.start <= symEnd && r.end >= symStart);
+        const overlaps = rangesToMatch.some((r) => r.start <= symEnd && r.end >= symStart);
 
         if (overlaps) {
           // Query callers and callees from graph scoped to this document & file path
