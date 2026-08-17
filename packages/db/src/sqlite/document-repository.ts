@@ -17,6 +17,7 @@ export interface DocumentStmts {
   docById: ReturnType<NativeDatabase["prepare"]>;
   insertDoc: ReturnType<NativeDatabase["prepare"]>;
   docByPathOrAbs: ReturnType<NativeDatabase["prepare"]>;
+  docBySuffix: ReturnType<NativeDatabase["prepare"]>;
   parsedDocSymbols: ReturnType<NativeDatabase["prepare"]>;
   chunksByDocOutline: ReturnType<NativeDatabase["prepare"]>;
 }
@@ -48,7 +49,7 @@ function mapDocumentRow(row: Record<string, unknown>) {
  * methods that live in `chunk-repository.ts`.
  *
  * Chunk operations are composed in from `createChunkOps()` so callers of
- * `createDocumentOps()` continue to receive a single merged ops object.
+ * `createDocumentOps()` get both document and chunk methods on the same object.
  */
 export function createDocumentOps(
   native: NativeDatabase,
@@ -58,6 +59,8 @@ export function createDocumentOps(
   const chunkOps = createChunkOps(native, stmts, streamNow);
 
   return {
+    ...chunkOps,
+
     async getDocumentCount(): Promise<number> {
       const row = native.prepare("SELECT count(*) AS count FROM documents").get() as {
         count: number;
@@ -79,14 +82,46 @@ export function createDocumentOps(
 
     async getFileOutline(filePath: string): Promise<FileOutlineResult | null> {
       const normalized = filePath.replace(/^\.?\//, "");
-      let docRow = stmts.docByPathOrAbs.get(normalized, filePath, normalized) as
+      let docRow = stmts.docByPathOrAbs.get(normalized, filePath) as
         | Record<string, unknown>
         | undefined;
+
+      if (!docRow && !filePath.startsWith("/")) {
+        const candidates = stmts.docBySuffix.all(normalized) as Array<Record<string, unknown>>;
+        if (candidates.length === 1) {
+          docRow = candidates[0];
+        } else if (candidates.length > 1) {
+          const exactSuffix = candidates.find((c) => String(c.path).endsWith("/" + normalized));
+          if (exactSuffix) {
+            docRow = exactSuffix;
+          }
+        }
+      }
 
       if (!docRow) return null;
 
       const doc = mapDocumentRow(docRow);
       const symbols: FileOutlineSymbol[] = [];
+
+      const chunkRows = stmts.chunksByDocOutline.all(doc.id) as Array<{
+        chunk_index: number;
+        heading: string | null;
+        metadata: string;
+      }>;
+
+      const chunkMetaMap = new Map<string, { startLine: number; endLine: number }>();
+      for (const c of chunkRows) {
+        try {
+          const meta = JSON.parse(c.metadata || "{}");
+          const sName = meta.symbolName || c.heading;
+          if (sName && meta.startLine) {
+            chunkMetaMap.set(String(sName), {
+              startLine: Number(meta.startLine),
+              endLine: Number(meta.endLine || meta.startLine),
+            });
+          }
+        } catch {}
+      }
 
       const parsedRow = stmts.parsedDocSymbols.get(doc.id) as
         | { symbols: string | null }
@@ -97,11 +132,31 @@ export function createDocumentOps(
           const rawSymbols = JSON.parse(parsedRow.symbols);
           if (Array.isArray(rawSymbols)) {
             for (const s of rawSymbols) {
+              const name = String(s.name || "");
+              let startLine = Number(s.startLine || 0);
+              let endLine = Number(s.endLine || 0);
+
+              if (startLine <= 0) {
+                const fromChunk =
+                  chunkMetaMap.get(name) ||
+                  chunkMetaMap.get(name.split(".").pop() || "") ||
+                  chunkMetaMap.get(name.split("::").pop() || "");
+                if (fromChunk) {
+                  startLine = fromChunk.startLine;
+                  endLine = fromChunk.endLine;
+                } else {
+                  startLine = 1;
+                  endLine = 1;
+                }
+              } else if (endLine <= 0) {
+                endLine = startLine;
+              }
+
               symbols.push({
-                name: String(s.name || ""),
+                name,
                 kind: String(s.symbolType || s.kind || s.type || "symbol"),
-                startLine: Number(s.startLine || 1),
-                endLine: Number(s.endLine || s.startLine || 1),
+                startLine,
+                endLine,
                 exported: Boolean(s.exported),
                 parentSymbol: s.parentSymbol ? String(s.parentSymbol) : undefined,
               });
@@ -111,12 +166,6 @@ export function createDocumentOps(
       }
 
       if (symbols.length === 0) {
-        const chunkRows = stmts.chunksByDocOutline.all(doc.id) as Array<{
-          chunk_index: number;
-          heading: string | null;
-          metadata: string;
-        }>;
-
         for (const c of chunkRows) {
           let meta: Record<string, unknown> = {};
           try {
