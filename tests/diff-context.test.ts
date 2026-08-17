@@ -6,7 +6,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { analyzeDiffContext, parseGitDiffHunks } from "../packages/core/src/diff-context";
-import { createRegistryRepository } from "../packages/db/src/sqlite";
+import { closeRegistryDb, createRegistryRepository } from "../packages/db/src/sqlite";
 import { indexWorkspace } from "../packages/indexer/src";
 
 describe("diff-context analyzer", () => {
@@ -15,6 +15,7 @@ describe("diff-context analyzer", () => {
   const origRegistryDbPath = process.env.AI_MEMORY_REGISTRY_DB_PATH;
 
   beforeEach(() => {
+    closeRegistryDb();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openez-diff-test-"));
     process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(tmpDir, "registry.sqlite");
     workspaceRoot = path.join(tmpDir, "sample-project");
@@ -29,6 +30,7 @@ describe("diff-context analyzer", () => {
   });
 
   afterEach(() => {
+    closeRegistryDb();
     if (origRegistryDbPath !== undefined) {
       process.env.AI_MEMORY_REGISTRY_DB_PATH = origRegistryDbPath;
     } else {
@@ -120,5 +122,68 @@ export function checkout(amount: number): number {
     expect(report.files[0].affectedSymbols.length).toBeGreaterThan(0);
     expect(report.files[0].affectedSymbols[0].name).toBe("calculateTax");
     expect(report.formattedSummary).toContain("calculateTax");
+  });
+
+  test("correctly maps symbols when staged and unstaged edits coexist in the same file", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    const utilsPath = path.join(srcDir, "utils.ts");
+    fs.writeFileSync(
+      utilsPath,
+      `export function calculateTax(amount: number): number {
+  return amount * 0.1;
+}
+
+export function formatCurrency(amount: number): string {
+  return "$" + amount.toFixed(2);
+}
+`,
+    );
+
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+
+    // Staged change modifying calculateTax
+    fs.writeFileSync(
+      utilsPath,
+      `export function calculateTax(amount: number): number {
+  return amount * 0.15;
+}
+
+export function formatCurrency(amount: number): string {
+  return "$" + amount.toFixed(2);
+}
+`,
+    );
+    execSync("git add src/utils.ts", { cwd: workspaceRoot, stdio: "ignore" });
+
+    // Unstaged change adding lines at the top (shifting line numbers)
+    fs.writeFileSync(
+      utilsPath,
+      `// Unstaged header comment 1
+// Unstaged header comment 2
+// Unstaged header comment 3
+// Unstaged header comment 4
+
+export function calculateTax(amount: number): number {
+  return amount * 0.15;
+}
+
+export function formatCurrency(amount: number): string {
+  return "$" + amount.toFixed(2);
+}
+`,
+    );
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "staged-test" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const report = await analyzeDiffContext(workspaceRoot, { staged: true });
+
+    expect(report.totalFilesChanged).toBe(1);
+    expect(report.files[0].affectedSymbols.length).toBeGreaterThan(0);
+    expect(report.files[0].affectedSymbols[0].name).toBe("calculateTax");
   });
 });
