@@ -22,10 +22,10 @@ export interface GraphStmts {
 }
 
 export interface GraphNodeRawRow {
-  id: number;
+  id: number | string;
   type: string;
   label: string;
-  ref_id?: number | null;
+  ref_id?: number | string | null;
   metadata?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -36,11 +36,17 @@ export interface GraphNodeRawRow {
  * repository. Shared by node and traversal operations.
  */
 export function mapNodeRow(row: GraphNodeRawRow) {
+  const refIdRaw = row.ref_id;
+  let refId: string | number | null = null;
+  if (refIdRaw !== null && refIdRaw !== undefined) {
+    const num = Number(refIdRaw);
+    refId = Number.isNaN(num) ? String(refIdRaw) : num;
+  }
   return {
     id: Number(row.id),
     type: String(row.type),
     label: String(row.label),
-    refId: row.ref_id !== null && row.ref_id !== undefined ? Number(row.ref_id) : null,
+    refId,
     metadata: String(row.metadata ?? "{}"),
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? ""),

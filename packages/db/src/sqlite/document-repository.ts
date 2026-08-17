@@ -194,6 +194,7 @@ export function createDocumentOps(
     },
 
     async deleteDocument(id: number) {
+      db.delete(schema.parsedDocuments).where(eq(schema.parsedDocuments.documentId, id)).run();
       db.delete(schema.documents).where(eq(schema.documents.id, id)).run();
     },
 
