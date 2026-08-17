@@ -231,7 +231,21 @@ function unsafeDirectValue(
   }
   const interfaceDeclarations = environment.interfaces.get(name);
   if (interfaceDeclarations !== undefined) {
-    return isEffectivelyEmptyInterface(interfaceDeclarations) ? "empty-object" : null;
+    if (isEffectivelyEmptyInterface(interfaceDeclarations)) return "empty-object";
+    for (const iface of interfaceDeclarations) {
+      for (const member of iface.body.body) {
+        if (member.type === "TSIndexSignature" && member.typeAnnotation !== null) {
+          const val = unsafeDirectValue(
+            member.typeAnnotation.typeAnnotation,
+            environment,
+            substitutions,
+            resolvingAliases,
+          );
+          if (val !== null) return val;
+        }
+      }
+    }
+    return null;
   }
   const alias = environment.aliases.get(name);
   if (alias === undefined || resolvingAliases.has(name)) return null;
@@ -292,6 +306,17 @@ function dictionaryValueTypes(
     return source === undefined
       ? []
       : dictionaryValueTypes(source, environment, substitutions, resolvingAliases);
+  }
+
+  const ifaceDecls = environment.interfaces.get(name);
+  if (ifaceDecls !== undefined) {
+    return ifaceDecls.flatMap((decl) =>
+      decl.body.body.flatMap((member) =>
+        member.type === "TSIndexSignature" && member.typeAnnotation !== null
+          ? [{ type: member.typeAnnotation.typeAnnotation, substitutions }]
+          : [],
+      ),
+    );
   }
 
   const alias = environment.aliases.get(name);

@@ -169,14 +169,28 @@ function functionBoundary(node: ESTree.Node): ESTree.Node | null {
 }
 
 function resolvedVariableForIdentifier(
+  sourceCode: SourceCode,
+  identifier: ESTree.IdentifierReference,
   scopes: readonly {
     readonly references: readonly {
       readonly identifier: ESTree.Node;
       readonly resolved: Variable | null;
     }[];
   }[],
-  identifier: ESTree.IdentifierReference,
 ): Variable | null {
+  try {
+    let scope: any = (sourceCode as any).getScope?.(identifier);
+    while (scope) {
+      const variable = scope.set?.get(identifier.name);
+      if (variable) return variable;
+      const ref = scope.references?.find(
+        (r: any) => r.identifier.start === identifier.start && r.identifier.end === identifier.end,
+      );
+      if (ref?.resolved) return ref.resolved;
+      scope = scope.upper;
+    }
+  } catch {}
+
   for (const scope of scopes) {
     const reference = scope.references.find(
       (candidate) =>
@@ -325,13 +339,13 @@ export const noWidenThenAssertRule = defineRule({
     },
   },
   createOnce(context) {
-    let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];
+    let scopes: Parameters<typeof resolvedVariableForIdentifier>[2] = [];
 
     const checkAssertion = (node: ESTree.TSAsExpression | ESTree.TSTypeAssertion) => {
       const expression = assertedExpression(node);
       if (expression.type !== "Identifier") return;
 
-      const variable = resolvedVariableForIdentifier(scopes, expression);
+      const variable = resolvedVariableForIdentifier(context.sourceCode, expression, scopes);
       if (variable === null) return;
       const widened = widenedBinding(variable, scopes);
       if (
