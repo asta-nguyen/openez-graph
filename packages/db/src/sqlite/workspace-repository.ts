@@ -230,10 +230,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         // left in MEMORY by the old code), and checkpoint so the WAL doesn't
         // grow unbounded.
         native.pragma("synchronous = NORMAL");
-        const journalMode = String(native.pragma("journal_mode = WAL")).toLowerCase();
-        if (journalMode === "wal") {
-          native.pragma("wal_checkpoint(PASSIVE)");
-        }
+        native.pragma("journal_mode = WAL");
+        native.exec("PRAGMA wal_checkpoint(PASSIVE)");
         native.pragma("cache_size = -2000");
         native.pragma("temp_store = DEFAULT");
       }

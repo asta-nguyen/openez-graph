@@ -60,4 +60,39 @@ describe("scanWorkspaceFiles", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("does not allow gitignore negations to bypass hard DEFAULT_EXCLUDE_PATTERNS", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-scan-hard-"));
+    try {
+      fs.mkdirSync(path.join(root, "node_modules", "pkg"), { recursive: true });
+      fs.writeFileSync(path.join(root, "node_modules", "pkg", "index.js"), "export const a = 1;\n");
+      fs.writeFileSync(path.join(root, ".gitignore"), "!node_modules\n!node_modules/**\n");
+
+      const files = await scanWorkspaceFiles({ rootPath: root });
+      const relativePaths = files.map((f) => f.relativePath);
+
+      expect(relativePaths).not.toContain("node_modules/pkg/index.js");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("evaluates gitignore rules in sequential order where last matching rule wins", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-scan-seq-"));
+    try {
+      fs.mkdirSync(path.join(root, "docs"), { recursive: true });
+      fs.writeFileSync(path.join(root, "docs", "a.md"), "# A\n");
+      fs.writeFileSync(path.join(root, "docs", "b.md"), "# B\n");
+      // Rule 1 ignores all docs, Rule 2 un-ignores docs/a.md, Rule 3 re-ignores docs/a.md
+      fs.writeFileSync(path.join(root, ".gitignore"), "docs/*\n!docs/a.md\ndocs/a.md\n");
+
+      const files = await scanWorkspaceFiles({ rootPath: root });
+      const relativePaths = files.map((f) => f.relativePath);
+
+      expect(relativePaths).not.toContain("docs/a.md");
+      expect(relativePaths).not.toContain("docs/b.md");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
