@@ -1,0 +1,23 @@
+landing/src/app/globals.css
+  s_19bfa3a68969eb::t_07c456320d3fd3 240,379
+landing/src/app/page.tsx
+  s_19bfa3a68969eb::t_1b9bc4acec63bd 359,601
+  s_19bfa3a68969eb::t_31a3b41ead2d80 369,374,611,616,625
+  s_19bfa3a68969eb::t_0fd60c40baa399 646-647
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "57b6d965b27582a521bd42242a92bfe5ef5cc048",
+  "prompts": {},
+  "sessions": {
+    "s_19bfa3a68969eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a008d8-104c-7d13-a58c-19eca9b4caa7",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
