@@ -45,8 +45,8 @@ export interface SymbolDefinitionMatch {
   name: string;
   kind: string;
   filePath: string;
-  startLine: number;
-  endLine: number;
+  startLine?: number;
+  endLine?: number;
   exported: boolean;
   parentSymbol?: string;
   sourceCode?: string;

@@ -2,14 +2,14 @@
 
 ## 1. Goal
 
-Provide AI coding agents with a direct, pinpoint "Go to Definition" MCP tool (`symbol_definition`) that immediately resolves any exact symbol name (function, class, interface, type, method) to its precise declaration chunk, source code, and line numbers in **<2 ms** without scanning unrelated test files or comment matches.
+Provide AI coding agents with a direct, pinpoint "Go to Definition" MCP tool (`symbol_definition`) that immediately resolves any exact symbol name (function, class, interface, type, method) to its precise declaration chunk, source code, and line numbers, aiming for sub-5ms lookup latency without scanning unrelated test files or comment matches.
 
 ---
 
 ## 2. Problem Statement & Value Proposition
 
 - **Problem**: When an agent encounters `parseAndChunkBatch(file)` in code and needs to inspect its implementation, running `code_query("parseAndChunkBatch")` performs a broad full-text search returning 10+ call sites, test files, and docs, wasting tokens and context window.
-- **Solution**: `symbol_definition(symbol: "parseAndChunkBatch")` queries the symbol index directly, returning the exact declaration and source chunk in **<2 ms** with **90%+ token reduction**.
+- **Solution**: `symbol_definition(symbol: "parseAndChunkBatch")` queries the symbol index directly, returning the exact declaration and source chunk with targeted token usage and caller graph context.
 
 ---
 

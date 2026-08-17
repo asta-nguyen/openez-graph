@@ -8,13 +8,13 @@
 
 ## File Responsibility Matrix
 
-| File                                         | Responsibility                                                             |
-| -------------------------------------------- | -------------------------------------------------------------------------- |
-| `packages/db/src/sqlite/types.ts`            | Define `SymbolDefinitionMatch` and `SymbolDefinitionResult` interfaces.    |
-| `packages/db/src/sqlite/graph-repository.ts` | Implement `getSymbolDefinitions(symbolName: string)` in SQLite repository. |
-| `packages/db/src/sqlite/index.ts`            | Export new types.                                                          |
-| `apps/mcp/src/mcp-core.ts`                   | Register `symbol_definition` tool schema, descriptor, and request handler. |
-| `tests/symbol-definition.test.ts`            | Unit tests for symbol definition resolution.                               |
+| File                                             | Responsibility                                                             |
+| ------------------------------------------------ | -------------------------------------------------------------------------- |
+| `packages/db/src/sqlite/types.ts`                | Define `SymbolDefinitionMatch` and `SymbolDefinitionResult` interfaces.    |
+| `packages/db/src/sqlite/workspace-repository.ts` | Implement `getSymbolDefinitions(symbolName: string)` in SQLite repository. |
+| `packages/db/src/sqlite/index.ts`                | Export new types.                                                          |
+| `apps/mcp/src/mcp-core.ts`                       | Register `symbol_definition` tool schema, descriptor, and request handler. |
+| `tests/symbol-definition.test.ts`                | Unit tests for symbol definition resolution.                               |
 
 ---
 
@@ -23,7 +23,7 @@
 ### Task 1: Add Symbol Definition Types & DB Query
 
 - [x] Add `SymbolDefinitionMatch` to `packages/db/src/sqlite/types.ts`.
-- [x] Implement `getSymbolDefinitions(symbolName: string)` in `packages/db/src/sqlite/graph-repository.ts` / `workspace-repository.ts`.
+- [x] Implement `getSymbolDefinitions(symbolName: string)` in `packages/db/src/sqlite/workspace-repository.ts`.
 - [x] Export `SymbolDefinitionMatch` in `packages/db/src/sqlite/index.ts`.
 
 ### Task 2: MCP Tool Integration

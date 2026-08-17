@@ -189,22 +189,26 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       if (!trimmed) return [];
 
       const matches: SymbolDefinitionMatch[] = [];
+      const escaped = trimmed.replace(/[%_\\]/g, "\\$&");
 
       const parsedRows = native
         .prepare(
           `SELECT d.id as doc_id, d.path, p.symbols
            FROM parsed_documents p
            JOIN documents d ON d.id = p.document_id
-           WHERE p.symbols LIKE ?`,
+           WHERE p.symbols LIKE ? ESCAPE '\\'`,
         )
-        .all(`%"name":"${trimmed}"%`) as Array<{ doc_id: string; path: string; symbols: string }>;
+        .all(`%"name":"%${escaped}%`) as Array<{ doc_id: string; path: string; symbols: string }>;
 
       const nodeStmt = native.prepare(
-        "SELECT id, ref_id FROM graph_nodes WHERE label = ? OR label LIKE ? LIMIT 1",
+        "SELECT id, ref_id FROM graph_nodes WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ? AND (label = ? OR label LIKE ? ESCAPE '\\') LIMIT 1",
       );
       const chunkByIdStmt = native.prepare("SELECT content FROM chunks WHERE id = ?");
       const chunkByHeadingStmt = native.prepare(
-        "SELECT content FROM chunks WHERE document_id = ? AND (heading = ? OR heading LIKE ?) LIMIT 1",
+        "SELECT content FROM chunks WHERE document_id = ? AND (heading = ? OR heading LIKE ? ESCAPE '\\') LIMIT 1",
+      );
+      const chunksByDocStmt = native.prepare(
+        "SELECT heading, metadata FROM chunks WHERE document_id = ? ORDER BY chunk_index ASC",
       );
       const callersStmt = native.prepare(
         "SELECT COUNT(*) as c FROM graph_edges WHERE to_node_id = ? AND type = 'calls'",
@@ -217,17 +221,21 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         try {
           const rawSymbols = JSON.parse(row.symbols);
           if (Array.isArray(rawSymbols)) {
+            let chunkMetaMap: Map<string, { startLine: number; endLine: number }> | null = null;
+
             for (const s of rawSymbols) {
+              const sName = String(s.name || "");
               if (
-                s.name === trimmed ||
-                s.name?.endsWith(`::${trimmed}`) ||
-                s.name?.endsWith(`.${trimmed}`)
+                sName === trimmed ||
+                sName.endsWith(`::${trimmed}`) ||
+                sName.endsWith(`.${trimmed}`)
               ) {
                 let sourceCode: string | undefined;
                 let callerCount = 0;
                 let calleeCount = 0;
 
-                const node = nodeStmt.get(s.name, `%::${s.name}`) as
+                const escapedSName = sName.replace(/[%_\\]/g, "\\$&");
+                const node = nodeStmt.get(row.path, sName, `%::${escapedSName}`) as
                   | { id: string; ref_id: string | null }
                   | undefined;
 
@@ -241,8 +249,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
                 if (!sourceCode) {
                   const chunkHeadingRow = chunkByHeadingStmt.get(
                     row.doc_id,
-                    s.name,
-                    `%${s.name}%`,
+                    sName,
+                    `%${escapedSName}%`,
                   ) as { content: string } | undefined;
                   if (chunkHeadingRow?.content) sourceCode = chunkHeadingRow.content;
                 }
@@ -254,12 +262,47 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
                   calleeCount = Number(callees?.c ?? 0);
                 }
 
+                let startLine = Number(s.startLine || 0);
+                let endLine = Number(s.endLine || 0);
+
+                if (startLine <= 0) {
+                  if (!chunkMetaMap) {
+                    chunkMetaMap = new Map();
+                    const docChunks = chunksByDocStmt.all(row.doc_id) as Array<{
+                      heading: string | null;
+                      metadata: string;
+                    }>;
+                    for (const dc of docChunks) {
+                      try {
+                        const meta = JSON.parse(dc.metadata || "{}");
+                        const name = meta.symbolName || dc.heading;
+                        if (name && meta.startLine) {
+                          chunkMetaMap.set(String(name), {
+                            startLine: Number(meta.startLine),
+                            endLine: Number(meta.endLine || meta.startLine),
+                          });
+                        }
+                      } catch {}
+                    }
+                  }
+                  const fromChunk =
+                    chunkMetaMap.get(sName) ||
+                    chunkMetaMap.get(sName.split(".").pop() || "") ||
+                    chunkMetaMap.get(sName.split("::").pop() || "");
+                  if (fromChunk) {
+                    startLine = fromChunk.startLine;
+                    endLine = fromChunk.endLine;
+                  }
+                } else if (endLine <= 0) {
+                  endLine = startLine;
+                }
+
                 matches.push({
-                  name: String(s.name),
+                  name: sName,
                   kind: String(s.symbolType || s.kind || s.type || "symbol"),
                   filePath: row.path,
-                  startLine: Number(s.startLine || 1),
-                  endLine: Number(s.endLine || s.startLine || 1),
+                  startLine: startLine > 0 ? startLine : undefined,
+                  endLine: endLine > 0 ? endLine : undefined,
                   exported: Boolean(s.exported),
                   parentSymbol: s.parentSymbol ? String(s.parentSymbol) : undefined,
                   sourceCode,

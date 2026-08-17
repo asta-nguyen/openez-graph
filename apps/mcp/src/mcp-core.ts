@@ -96,6 +96,8 @@ const symbolDefinitionSchema = z.object({
   path: z.string().optional(),
   symbol: z.string().trim().min(1).optional(),
   name: z.string().trim().optional(),
+  limit: z.number().int().positive().optional(),
+  maxTokens: z.number().int().positive().optional(),
 });
 
 const removeWorkspaceSchema = z.object({
@@ -574,8 +576,12 @@ export function createMcpServer(options?: McpServerOptions) {
               type: "string",
               description: "Alias for symbol",
             },
+            limit: {
+              type: "integer",
+              description: "Maximum number of definition matches to return",
+            },
           },
-          required: [],
+          required: ["symbol"],
         },
       },
       {
@@ -858,12 +864,14 @@ export function createMcpServer(options?: McpServerOptions) {
         const input = symbolDefinitionSchema.parse(request.params.arguments ?? {});
         const targetSymbol = String(input.symbol || input.name || "").trim();
         if (!targetSymbol) {
-          throw new Error("Missing symbol name for symbol_definition.");
+          return jsonResponse({
+            error: "Missing required symbol parameter for symbol_definition.",
+          });
         }
 
         const workspaces = await resolver.resolveReadWorkspaces({
-          workspaceIds: input.workspaceIds,
           workspaceId: input.workspaceId,
+          workspaceIds: input.workspaceIds,
           paths: input.paths,
           path: input.path,
         });
@@ -874,8 +882,8 @@ export function createMcpServer(options?: McpServerOptions) {
           name: string;
           kind: string;
           filePath: string;
-          startLine: number;
-          endLine: number;
+          startLine?: number;
+          endLine?: number;
           exported: boolean;
           parentSymbol?: string;
           sourceCode?: string;
@@ -885,6 +893,7 @@ export function createMcpServer(options?: McpServerOptions) {
 
         for (const ws of workspaces) {
           await catchUpWorkspaceIndex(ws.id);
+          await ensureGraphReady(ws.rootPath);
           const repo = createWorkspaceRepository(ws.rootPath);
           const matches = await repo.getSymbolDefinitions(targetSymbol);
           for (const m of matches) {
@@ -896,11 +905,18 @@ export function createMcpServer(options?: McpServerOptions) {
           }
         }
 
-        return jsonResponse({
-          symbol: targetSymbol,
-          matchCount: allMatches.length,
-          matches: allMatches,
-        });
+        const limit = input.limit && input.limit > 0 ? input.limit : 50;
+        const boundedMatches = allMatches.slice(0, limit);
+
+        return jsonResponse(
+          {
+            symbol: targetSymbol,
+            matchCount: boundedMatches.length,
+            totalFound: allMatches.length,
+            matches: boundedMatches,
+          },
+          input.maxTokens,
+        );
       }
       default:
         throw new Error(`Unknown tool: ${request.params.name}`);
