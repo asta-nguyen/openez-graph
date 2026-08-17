@@ -91,8 +91,7 @@ const indexWorkspaceSchema = z.object({
 
 const codeOutlineSchema = z.object({
   workspaceId: z.string().optional(),
-  path: z.string().optional(),
-  filePath: z.string().optional(),
+  path: z.string().trim().min(1),
 });
 
 const removeWorkspaceSchema = z.object({
@@ -564,10 +563,6 @@ export function createMcpServer(options?: McpServerOptions) {
               type: "string",
               description: "Relative or absolute path to the file inside the workspace",
             },
-            filePath: {
-              type: "string",
-              description: "Alias for path",
-            },
           },
           required: ["path"],
         },
@@ -850,15 +845,15 @@ export function createMcpServer(options?: McpServerOptions) {
       }
       case "code_outline": {
         const input = codeOutlineSchema.parse(request.params.arguments ?? {});
-        const targetPath = String(input.path || input.filePath || "").trim();
-        if (!targetPath) {
-          return jsonResponse({ error: "Missing required file path for code_outline." });
-        }
+        const targetPath = input.path;
 
-        const workspace = await resolver.resolveWriteWorkspace({
+        const workspaces = await resolver.resolveReadWorkspaces({
           workspaceId: input.workspaceId,
         });
-
+        const workspace = workspaces[0];
+        if (!workspace) {
+          return jsonResponse({ error: "No registered workspace found." });
+        }
         await catchUpWorkspaceIndex(workspace.id);
         const repo = createWorkspaceRepository(workspace.rootPath);
         const outline = await repo.getFileOutline(targetPath);
