@@ -1,5 +1,3 @@
-import crypto from "node:crypto";
-
 import { createChunkOps, type ChunkStmts } from "./chunk-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 
@@ -18,7 +16,31 @@ export interface DocumentStmts {
   insertDocWithId: ReturnType<NativeDatabase["prepare"]>;
 }
 
-function mapDocumentRow(row: Record<string, unknown>) {
+interface DocumentRow {
+  id: number;
+  path: string;
+  absolute_path: string;
+  kind: string;
+  language: string | null;
+  content_hash: string;
+  size_bytes: number;
+  mtime_ms: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ParsedDocumentRow {
+  document_id: number;
+  content_hash: string;
+  symbols: string | null;
+  imports: string | null;
+  calls: string | null;
+  called_identifiers: string | null;
+  parser_version: string | null;
+  parsed_at: number;
+}
+
+function mapDocumentRow(row: DocumentRow) {
   return {
     id: Number(row.id),
     path: String(row.path),
@@ -56,6 +78,7 @@ export function createDocumentOps(
 
   return {
     async getDocumentCount(): Promise<number> {
+      // SAFETY: Query selects count(*) from documents table.
       const row = native.prepare("SELECT count(*) AS count FROM documents").get() as {
         count: number;
       };
@@ -65,12 +88,14 @@ export function createDocumentOps(
     // ── Document Operations ──
 
     async getDocument(id: number) {
-      const row = stmts.docById.get(id) as Record<string, unknown> | undefined;
+      // SAFETY: stmts.docById queries documents table matching DocumentRow schema.
+      const row = stmts.docById.get(id) as DocumentRow | undefined;
       return row ? mapDocumentRow(row) : null;
     },
 
     async getDocumentByPath(path: string) {
-      const row = stmts.docByPath.get(path) as Record<string, unknown> | undefined;
+      // SAFETY: stmts.docByPath queries documents table matching DocumentRow schema.
+      const row = stmts.docByPath.get(path) as DocumentRow | undefined;
       return row ? mapDocumentRow(row) : null;
     },
 
@@ -195,9 +220,10 @@ export function createDocumentOps(
     },
 
     async listDocuments() {
-      const rows = native.prepare("SELECT * FROM documents ORDER BY path").all() as Array<
-        Record<string, unknown>
-      >;
+      // SAFETY: Query selects all columns from documents table matching DocumentRow schema.
+      const rows = native
+        .prepare("SELECT * FROM documents ORDER BY path")
+        .all() as Array<DocumentRow>;
       return rows.map(mapDocumentRow);
     },
 
@@ -285,9 +311,10 @@ export function createDocumentOps(
       parserVersion: string | null;
       parsedAt: number;
     } | null {
+      // SAFETY: Query selects from parsed_documents table matching ParsedDocumentRow schema.
       const row = native
         .prepare("SELECT * FROM parsed_documents WHERE document_id = ?")
-        .get(documentId) as any;
+        .get(documentId) as ParsedDocumentRow | undefined;
       if (!row) return null;
       return {
         documentId: Number(row.document_id),

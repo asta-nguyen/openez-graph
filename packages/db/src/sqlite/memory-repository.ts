@@ -1,5 +1,3 @@
-import crypto from "node:crypto";
-
 import type { NativeDatabase } from "./shared-types";
 import type { StoredMemory } from "./types";
 
@@ -15,11 +13,22 @@ import type { StoredMemory } from "./types";
  */
 export interface MemoryStmts {}
 
+interface MemoryRow {
+  id: number;
+  title: string;
+  content: string;
+  tags: string | null;
+  source: string;
+  supersedes_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
-function mapMemoryRow(row: Record<string, unknown>): StoredMemory {
+function mapMemoryRow(row: MemoryRow): StoredMemory {
   return {
     id: Number(row.id),
     title: String(row.title),
@@ -71,8 +80,9 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
     },
 
     async getMemory(id: number): Promise<StoredMemory | null> {
+      // SAFETY: Query selects directly from memories table matching MemoryRow schema.
       const row = native.prepare("SELECT * FROM memories WHERE id = ?").get(id) as
-        | Record<string, unknown>
+        | MemoryRow
         | undefined;
       return row ? mapMemoryRow(row) : null;
     },
@@ -91,6 +101,7 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
         return [pattern, pattern, pattern];
       });
       const phrasePattern = `%${escapeLikePattern(normalized)}%`;
+      // SAFETY: Query selects m.* from memories table matching MemoryRow schema.
       const rows = native
         .prepare(
           `SELECT m.*
@@ -104,7 +115,7 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
          END, m.updated_at DESC
          LIMIT ?`,
         )
-        .all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
+        .all(...termParams, normalized, phrasePattern, limit) as Array<MemoryRow>;
       return rows.map(mapMemoryRow);
     },
   };

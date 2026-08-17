@@ -78,7 +78,6 @@ describe("migrateEmbeddingToBlob", () => {
 
     // Simulate legacy TEXT embeddings by dropping and recreating with TEXT
     const { createNativeDatabase } = require("../packages/db/src/sqlite/database-loader");
-    const { initializeWorkspaceSchema } = require("../packages/db/src/sqlite/workspace-db");
     // Get the actual workspace DB path
     const wsDbPath = path.join(wsRoot, ".openez", "index.sqlite");
     const db = createNativeDatabase(wsDbPath);
