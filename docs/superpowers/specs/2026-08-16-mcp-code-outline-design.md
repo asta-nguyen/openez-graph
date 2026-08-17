@@ -43,8 +43,10 @@ Provide coding agents with an instant, token-minimal MCP tool (`code_outline`) t
 ```json
 {
   "path": "packages/indexer/src/scanner.ts",
+  "absolutePath": "/abs/path/to/packages/indexer/src/scanner.ts",
   "language": "typescript",
-  "totalLines": 120,
+  "kind": "code",
+  "sizeBytes": 3420,
   "symbols": [
     {
       "name": "scanWorkspaceFiles",
@@ -61,7 +63,7 @@ Provide coding agents with an instant, token-minimal MCP tool (`code_outline`) t
       "exported": false
     }
   ],
-  "outlineText": "📄 packages/indexer/src/scanner.ts (120 lines, typescript)\n  ├── 🔹 function scanWorkspaceFiles(rootPath, options) [L25-L95] (exported)\n  └── 🔹 function isExcludedPath(filePath, patterns) [L98-L115]"
+  "outlineText": "📄 packages/indexer/src/scanner.ts (typescript, 3,420 bytes)\n  ├── 🔹 function scanWorkspaceFiles [L25-L95] (exported)\n  └── 🔹 function isExcludedPath [L98-L115]"
 }
 ```
 
@@ -71,15 +73,12 @@ Provide coding agents with an instant, token-minimal MCP tool (`code_outline`) t
 
 1. **Database Layer (`@openez-graph/db`)**:
    - `getFileOutline(filePath: string)` queries:
-     1. `documents` table to retrieve `id`, `path`, `language`, `sizeBytes`, `mtimeMs`.
+     1. `documents` table to retrieve `id`, `path`, `absolute_path`, `language`, `kind`, `sizeBytes`, `mtimeMs`.
      2. `parsed_documents` table to retrieve pre-extracted AST symbols (`symbols` JSON column).
-     3. `chunks` table if AST symbols are empty (fallback to chunk headings and line ranges).
-   - Constructs structured symbol tree with parent-child nesting.
-
-2. **Core Layer (`@openez-graph/core`)**:
+     3. `chunks` table if AST symbols are empty (fallback to chunk headings, symbols, and line ranges) and hydrates missing AST symbol line ranges.
    - Formats compact visual ASCII outline text tree.
 
-3. **MCP Layer (`@openez-graph/mcp`)**:
+2. **MCP Layer (`@openez-graph/mcp`)**:
    - Exposes `code_outline` tool in MCP server tool registry.
    - Resolves multi-workspace scoping from `workspaceId` or auto-detected path.
 

@@ -93,7 +93,6 @@ const codeOutlineSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
   filePath: z.string().optional(),
-  file: z.string().optional(),
 });
 
 const removeWorkspaceSchema = z.object({
@@ -570,7 +569,7 @@ export function createMcpServer(options?: McpServerOptions) {
               description: "Alias for path",
             },
           },
-          required: [],
+          required: ["path"],
         },
       },
       {
@@ -851,9 +850,9 @@ export function createMcpServer(options?: McpServerOptions) {
       }
       case "code_outline": {
         const input = codeOutlineSchema.parse(request.params.arguments ?? {});
-        const targetPath = String(input.path || input.filePath || input.file || "").trim();
+        const targetPath = String(input.path || input.filePath || "").trim();
         if (!targetPath) {
-          throw new Error("Missing file path for code_outline.");
+          return jsonResponse({ error: "Missing required file path for code_outline." });
         }
 
         const workspace = await resolver.resolveWriteWorkspace({

@@ -8,14 +8,14 @@
 
 ## File Responsibility Matrix
 
-| File                                            | Responsibility                                                                            |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `packages/db/src/sqlite/types.ts`               | Define `FileOutlineSymbol` and `FileOutlineResult` interfaces.                            |
-| `packages/db/src/sqlite/document-repository.ts` | Implement `getFileOutline(filePath: string)` querying `documents` and `parsed_documents`. |
-| `packages/core/src/outline.ts`                  | Symbol hierarchy builder and compact ASCII tree formatter.                                |
-| `packages/core/src/index.ts`                    | Export outline functions and types.                                                       |
-| `apps/mcp/src/mcp-core.ts`                      | Register `code_outline` tool definition, schema, and handler.                             |
-| `tests/code-outline.test.ts`                    | Unit and integration tests for `code_outline`.                                            |
+| File                                             | Responsibility                                                                                                                         |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/db/src/sqlite/types.ts`                | Define `FileOutlineSymbol` and `FileOutlineResult` interfaces.                                                                         |
+| `packages/db/src/sqlite/index.ts`                | Export `FileOutlineSymbol` and `FileOutlineResult` types.                                                                              |
+| `packages/db/src/sqlite/document-repository.ts`  | Implement `getFileOutline(filePath: string)` querying `documents`, `parsed_documents`, and `chunks` with formatted ASCII outline tree. |
+| `packages/db/src/sqlite/workspace-repository.ts` | Prepare and cache cached SQLite statements (`docByPathOrAbs`, `docBySuffix`, `parsedDocSymbols`, `chunksByDocOutline`).                |
+| `apps/mcp/src/mcp-core.ts`                       | Register `code_outline` tool definition, schema, and handler.                                                                          |
+| `tests/code-outline.test.ts`                     | Unit and integration tests for `code_outline`.                                                                                         |
 
 ---
 

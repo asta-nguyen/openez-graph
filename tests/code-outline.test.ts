@@ -10,14 +10,21 @@ import { indexWorkspace } from "../packages/indexer/src";
 describe("code_outline MCP & DB functionality", () => {
   let tmpDir: string;
   let workspaceRoot: string;
+  const origRegistryDbPath = process.env.AI_MEMORY_REGISTRY_DB_PATH;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openez-outline-test-"));
+    process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(tmpDir, "registry.sqlite");
     workspaceRoot = path.join(tmpDir, "sample-project");
     fs.mkdirSync(workspaceRoot, { recursive: true });
   });
 
   afterEach(() => {
+    if (origRegistryDbPath !== undefined) {
+      process.env.AI_MEMORY_REGISTRY_DB_PATH = origRegistryDbPath;
+    } else {
+      delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -130,5 +137,29 @@ Example code here.
     const repo = createWorkspaceRepository(workspaceRoot);
     const outline = await repo.getFileOutline("src/non-existent.ts");
     expect(outline).toBeNull();
+  });
+
+  test("disambiguates duplicate file basenames across directories", async () => {
+    const pkgA = path.join(workspaceRoot, "packages/a");
+    const pkgB = path.join(workspaceRoot, "packages/b");
+    fs.mkdirSync(pkgA, { recursive: true });
+    fs.mkdirSync(pkgB, { recursive: true });
+
+    fs.writeFileSync(path.join(pkgA, "utils.ts"), "export function funcA() { return 'a'; }\n");
+    fs.writeFileSync(path.join(pkgB, "utils.ts"), "export function funcB() { return 'b'; }\n");
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "outline-dups" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const outlineA = await repo.getFileOutline("packages/a/utils.ts");
+    const outlineB = await repo.getFileOutline("packages/b/utils.ts");
+
+    expect(outlineA?.path).toBe("packages/a/utils.ts");
+    expect(outlineA?.symbols[0]?.name).toBe("funcA");
+
+    expect(outlineB?.path).toBe("packages/b/utils.ts");
+    expect(outlineB?.symbols[0]?.name).toBe("funcB");
   });
 });
