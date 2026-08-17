@@ -9,7 +9,7 @@ Provide AI review agents and developers with an instant Git diff & PR context an
 ## 2. Problem Statement & Value Proposition
 
 - **Problem**: When reviewing a PR or git commit, code review agents only see textual git diff hunks. They don't know what methods were changed, who calls those methods, or what external services will break unless they manually run dozens of slow grep searches.
-- **Solution**: `openez diff [ref | --staged]` maps git diff hunks directly to indexed AST symbols and traverses the SQLite call graph in **<25 ms**, producing a complete **PR Review Context Bundle**.
+- **Solution**: `openez diff [ref | --staged]` maps git diff hunks directly to indexed AST symbols and traverses the SQLite call graph to produce a complete **PR Review Context Bundle**.
 
 ---
 
@@ -62,9 +62,9 @@ openez diff [ref] [options]
 1. **Git Diff Extractor**:
    - Runs `git diff` to collect modified files and hunk line boundaries (`@@ -L,N +L,N @@`).
 2. **AST Symbol Mapper**:
-   - Queries `parsed_documents` and `chunks` for each modified file to identify which functions/classes intersect the changed line ranges.
+   - Queries `parsed_documents` for each modified file to identify which functions/classes intersect the changed line ranges.
 3. **Call Graph Traversal**:
-   - Queries `graph_edges` and `graph_nodes` to identify incoming `calls` edges (affected callers) and outgoing calls/imports.
+   - Queries `graph_edges` and `graph_nodes` to identify incoming `calls` edges (affected callers), outgoing calls, and file-level `imports`.
 4. **Context Formatter**:
    - Prints formatted ASCII review card to terminal or outputs structured JSON.
 
