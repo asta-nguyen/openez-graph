@@ -21,12 +21,15 @@ function escapeLikePattern(value: string): string {
 
 function mapMemoryRow(row: Record<string, unknown>): StoredMemory {
   return {
-    id: String(row.id),
+    id: Number(row.id),
     title: String(row.title),
     content: String(row.content),
     tags: String(row.tags ?? ""),
     source: String(row.source),
-    supersedesId: row.supersedes_id ? String(row.supersedes_id) : null,
+    supersedesId:
+      row.supersedes_id !== null && row.supersedes_id !== undefined
+        ? Number(row.supersedes_id)
+        : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -48,16 +51,14 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
       content: string;
       tags?: string;
       source: string;
-      supersedesId?: string;
-    }) {
-      const id = crypto.randomUUID();
+      supersedesId?: number | null;
+    }): Promise<number> {
       const now = new Date().toISOString();
-      native
+      const res = native
         .prepare(
-          "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO memories (title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .run(
-          id,
           input.title,
           input.content,
           input.tags ?? "",
@@ -66,10 +67,10 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
           now,
           now,
         );
-      return id;
+      return Number(res.lastInsertRowid);
     },
 
-    async getMemory(id: string): Promise<StoredMemory | null> {
+    async getMemory(id: number): Promise<StoredMemory | null> {
       const row = native.prepare("SELECT * FROM memories WHERE id = ?").get(id) as
         | Record<string, unknown>
         | undefined;

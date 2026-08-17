@@ -65,7 +65,7 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
 
     async bulkInsertFts(
       inputs: Array<{
-        chunkId: string;
+        chunkId: number;
         path: string;
         heading: string | null;
         language: string | null;
@@ -139,7 +139,7 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
           // Convert bm25 (lower = better) to a 0-1 score (higher = better)
           const score = -bm25;
           return {
-            id: String(row.id),
+            id: Number(row.id),
             path: String(row.path),
             content: String(row.content),
             score,
@@ -185,7 +185,7 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
 
     insertFtsBatch(
       rows: Array<{
-        chunkId: string;
+        chunkId: number;
         path: string;
         heading: string;
         language: string;
@@ -217,7 +217,7 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
     },
 
     streamFtsRow(input: {
-      chunkId: string;
+      chunkId: number;
       path: string;
       heading: string;
       language: string;
@@ -291,44 +291,99 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
     // ── Reset ──
 
     resetIndexArtifacts(): void {
-      // Drop FTS triggers before deleting chunks. Without this, each chunk
-      // deletion fires the FTS delete trigger which does a full scan of the
-      // FTS shadow tables (chunk_id is UNINDEXED in FTS5). On a 92K-chunk
-      // workspace this turned a ~1s reset into >5 minutes.
+      // Drop FTS triggers before dropping tables.
       native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
       native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
       native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
-      // Drop and recreate the FTS table directly — cheaper than 92K triggered
-      // row deletes and avoids rebuilding the FTS index incrementally.
       native.exec("DROP TABLE IF EXISTS chunks_fts");
-      native.exec(
-        "CREATE VIRTUAL TABLE chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61')",
-      );
-      native.exec("DELETE FROM graph_edges");
-      native.exec("DELETE FROM graph_nodes");
-      native.exec("DELETE FROM chunks");
-      native.exec("DELETE FROM documents");
-      // Recreate embeddings table with current BLOB schema. This handles
-      // legacy TEXT embeddings: DROP the old table and CREATE with BLOB
-      // column type so reindex can insert new BLOB embeddings.
+      native.exec("DROP TABLE IF EXISTS embeddings_vec");
       native.exec("DROP TABLE IF EXISTS embeddings");
-      native.exec(`CREATE TABLE embeddings (
-        id TEXT PRIMARY KEY,
-        chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
-        provider TEXT NOT NULL,
-        model TEXT NOT NULL,
-        dimensions INTEGER NOT NULL,
-        embedding BLOB NOT NULL,
-        input_hash TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )`);
-      native.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
-      native.exec(
-        "CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash)",
-      );
-      native.exec(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model)",
-      );
+      native.exec("DROP TABLE IF EXISTS graph_edges");
+      native.exec("DROP TABLE IF EXISTS graph_nodes");
+      native.exec("DROP TABLE IF EXISTS parsed_documents");
+      native.exec("DROP TABLE IF EXISTS chunks");
+      native.exec("DROP TABLE IF EXISTS documents");
+
+      // Recreate index tables with the current INTEGER PRIMARY KEY AUTOINCREMENT schema.
+      // Notice that memories, query_logs, index_runs, and index_meta are NOT dropped.
+      native.exec(`
+        CREATE TABLE IF NOT EXISTS documents (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          path TEXT NOT NULL UNIQUE,
+          absolute_path TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          language TEXT,
+          content_hash TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          mtime_ms INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS chunks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+          chunk_index INTEGER NOT NULL,
+          heading TEXT,
+          content TEXT NOT NULL,
+          token_count INTEGER NOT NULL,
+          content_hash TEXT NOT NULL,
+          metadata TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS parsed_documents (
+          document_id INTEGER PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+          content_hash TEXT NOT NULL,
+          symbols TEXT,
+          imports TEXT,
+          calls TEXT,
+          called_identifiers TEXT,
+          parser_version TEXT,
+          parsed_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS graph_nodes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          type TEXT NOT NULL,
+          label TEXT NOT NULL,
+          ref_id INTEGER,
+          metadata TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS graph_edges (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          from_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+          to_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+          type TEXT NOT NULL,
+          weight REAL NOT NULL DEFAULT 1.0,
+          metadata TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS embeddings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          chunk_id INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+          provider TEXT NOT NULL,
+          model TEXT NOT NULL,
+          dimensions INTEGER NOT NULL,
+          embedding BLOB NOT NULL,
+          input_hash TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
+        CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
+        CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type);
+        CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label);
+        CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id);
+        CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id);
+        CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
+        CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
+        CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol';
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type);
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61');
+      `);
+
       // A full rebuild starts a new graph fencing sequence and restores BLOB search.
       native.exec("DELETE FROM index_meta WHERE key IN ('embedding_format', 'graph_build_epoch')");
     },

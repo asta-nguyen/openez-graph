@@ -27,14 +27,14 @@ export interface EmbedWorkspaceSummary {
 
 export async function writeEmbeddingsToRepo(
   repo: WorkspaceRepository,
-  chunkRows: Array<{ id: string; content: string; path: string; heading?: string | null }>,
+  chunkRows: Array<{ id: number; content: string; path: string; heading?: string | null }>,
   provider: EmbeddingProvider | null,
 ) {
   if (!provider || chunkRows.length === 0) {
     return { written: 0, failedBatches: 0 };
   }
 
-  const existingIds = new Set<string>();
+  const existingIds = new Set<number>();
   const LOOKUP_BATCH_SIZE = 500;
   for (let i = 0; i < chunkRows.length; i += LOOKUP_BATCH_SIZE) {
     const batch = chunkRows.slice(i, i + LOOKUP_BATCH_SIZE);
@@ -43,9 +43,9 @@ export async function writeEmbeddingsToRepo(
        WHERE provider = ? AND model = ? AND chunk_id IN (${batch.map(() => "?").join(",")})`,
       [provider.provider, embeddingStorageModel(provider), ...batch.map((chunk) => chunk.id)],
     );
-    for (const row of existing) existingIds.add(String(row.chunk_id));
+    for (const row of existing) existingIds.add(Number(row.chunk_id));
   }
-  const missingRows = chunkRows.filter((chunk) => !existingIds.has(chunk.id));
+  const missingRows = chunkRows.filter((chunk) => !existingIds.has(Number(chunk.id)));
   if (missingRows.length === 0) return { written: 0, failedBatches: 0 };
 
   const rowsToEmbed = missingRows.map((chunk) => ({
@@ -96,7 +96,7 @@ export async function writeEmbeddingsToRepo(
       return existing
         ? [
             {
-              chunkId: entry.chunk.id,
+              chunkId: Number(entry.chunk.id),
               provider: provider.provider,
               model: embeddingStorageModel(provider),
               dimensions: existing.dimensions,
@@ -112,15 +112,16 @@ export async function writeEmbeddingsToRepo(
     }
   }
 
-  const BATCH_SIZE = 50;
+  if (toEmbed.length === 0) return { written: reusedWritten, failedBatches: 0 };
+
+  const BATCH_SIZE = 100;
   let totalWritten = 0;
   let failedBatches = 0;
   for (let i = 0; i < toEmbed.length; i += BATCH_SIZE) {
     const batch = toEmbed.slice(i, i + BATCH_SIZE);
+    const texts = batch.map((entry) => formatEmbeddingInput(provider, entry.chunk, "document"));
     try {
-      const vectors = await provider.embed(
-        batch.map((entry) => formatEmbeddingInput(provider, entry.chunk, "document")),
-      );
+      const vectors = await provider.embed(texts);
       const dimensions = vectors[0]?.length ?? 0;
       if (
         vectors.length !== batch.length ||
@@ -146,7 +147,7 @@ export async function writeEmbeddingsToRepo(
       }
       await repo.insertEmbeddings(
         vectors.map((embedding, index) => ({
-          chunkId: batch[index].chunk.id,
+          chunkId: Number(batch[index].chunk.id),
           provider: provider.provider,
           model: embeddingStorageModel(provider),
           dimensions,
@@ -183,7 +184,7 @@ async function resolveWorkspace(input: {
 }
 
 async function collectChunkRows(repo: WorkspaceRepository) {
-  const rows: Array<{ id: string; content: string; path: string; heading: string | null }> = [];
+  const rows: Array<{ id: number; content: string; path: string; heading: string | null }> = [];
   for (const document of await repo.listDocuments()) {
     for (const chunk of await repo.getChunksByDocument(document.id)) {
       rows.push({

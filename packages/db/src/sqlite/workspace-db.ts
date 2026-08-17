@@ -24,9 +24,10 @@ export function resolveBundledFile(filename: string): string | null {
     path.join(__dirname, filename),
     // Bundled CLI alt: relative to process.argv[1] (same dir as cli.cjs)
     path.join(path.dirname(process.argv[1] || __filename), filename),
-    // Dev: packages/db/src/sqlite/ → packages/db/<filename> (up 3)
-    path.join(__dirname, "..", "..", "..", filename),
+    // Dev: packages/db/src/sqlite/ → packages/db/<filename> (up 2)
+    path.join(__dirname, "..", "..", filename),
     // Fallback: cwd
+    path.join(process.cwd(), "packages", "db", filename),
     path.join(process.cwd(), filename),
     path.join(process.cwd(), "apps", "cli", "dist", filename),
   ];
@@ -141,6 +142,8 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     ).c > 0;
 
   if (tableExists) {
+    migrateIndexTablesIfLegacy(sqlite);
+
     const hasIndexMeta =
       (
         sqlite
@@ -274,6 +277,9 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     migrateEmbeddingColumns(sqlite);
     migrateEmbeddingToBlob(sqlite);
     migrateEmbeddingDedup(sqlite);
+    migrateMemoriesTable(sqlite);
+    migrateQueryLogsTable(sqlite);
+    migrateRunsTables(sqlite);
 
     const hasParsedDocs =
       (
@@ -285,7 +291,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
       ).c > 0;
     if (!hasParsedDocs) {
       sqlite.exec(`CREATE TABLE IF NOT EXISTS parsed_documents (
-        document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+        document_id INTEGER PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
         content_hash TEXT NOT NULL,
         symbols TEXT,
         imports TEXT,
@@ -321,6 +327,9 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
   migrateEmbeddingColumns(sqlite);
   migrateEmbeddingToBlob(sqlite);
   migrateEmbeddingDedup(sqlite);
+  migrateMemoriesTable(sqlite);
+  migrateQueryLogsTable(sqlite);
+  migrateRunsTables(sqlite);
 
   // Create FTS triggers — getFullWorkspaceDdl creates the chunks_fts table but
   // not the triggers that auto-populate it on INSERT/DELETE/UPDATE.
@@ -432,10 +441,186 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
   }
 }
 
+function migrateIndexTablesIfLegacy(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const tableExists =
+    (
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='documents'")
+        .get() as { c: number }
+    ).c > 0;
+  if (!tableExists) return;
+
+  const info = sqlite.prepare("PRAGMA table_info(documents)").all() as Array<{
+    name: string;
+    type: string;
+  }>;
+  const idCol = info.find((c) => c.name === "id");
+  if (idCol && !idCol.type.toUpperCase().includes("INT")) {
+    // Legacy TEXT primary key detected on documents — recreate index tables with autoincrement schema
+    // (memories, query_logs, and index_runs are NOT dropped and remain preserved).
+    sqlite.transaction(() => {
+      sqlite.exec(`
+        DROP TRIGGER IF EXISTS chunks_fts_insert;
+        DROP TRIGGER IF EXISTS chunks_fts_delete;
+        DROP TRIGGER IF EXISTS chunks_fts_update;
+        DROP TABLE IF EXISTS chunks_fts;
+        DROP TABLE IF EXISTS embeddings_vec;
+        DROP TABLE IF EXISTS embeddings;
+        DROP TABLE IF EXISTS graph_edges;
+        DROP TABLE IF EXISTS graph_nodes;
+        DROP TABLE IF EXISTS parsed_documents;
+        DROP TABLE IF EXISTS chunks;
+        DROP TABLE IF EXISTS documents;
+      `);
+      for (const ddl of getWorkspaceTableDefinitions()) {
+        sqlite.exec(ddl);
+      }
+      sqlite.exec(`
+        CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
+        CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
+        CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type);
+        CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label);
+        CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id);
+        CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id);
+        CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
+        CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
+        CREATE INDEX IF NOT EXISTS idx_embeddings_provider_model_hash ON embeddings(provider, model, input_hash);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_chunk_provider_model ON embeddings(chunk_id, provider, model);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_type_label ON graph_nodes(type, label) WHERE type != 'symbol';
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_from_to_type ON graph_edges(from_node_id, to_node_id, type);
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61');
+      `);
+      sqlite.exec("DELETE FROM index_meta WHERE key IN ('embedding_format', 'graph_build_epoch')");
+    })();
+  }
+}
+
+function migrateMemoriesTable(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const tableExists =
+    (
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='memories'")
+        .get() as { c: number }
+    ).c > 0;
+  if (!tableExists) return;
+
+  const info = sqlite.prepare("PRAGMA table_info(memories)").all() as Array<{
+    name: string;
+    type: string;
+  }>;
+  const idCol = info.find((c) => c.name === "id");
+  if (!idCol || idCol.type.toUpperCase().includes("INT")) {
+    return; // Already integer primary key
+  }
+
+  // Migrate legacy TEXT id to INTEGER PRIMARY KEY AUTOINCREMENT while preserving all data.
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS memories_migration_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        tags TEXT,
+        source TEXT NOT NULL,
+        supersedes_id INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO memories_migration_new (title, content, tags, source, created_at, updated_at)
+      SELECT title, content, tags, source, created_at, updated_at FROM memories ORDER BY created_at ASC;
+      DROP TABLE memories;
+      ALTER TABLE memories_migration_new RENAME TO memories;
+      CREATE INDEX IF NOT EXISTS idx_memories_title ON memories(title);
+      CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
+    `);
+  })();
+}
+
+function migrateQueryLogsTable(sqlite: ReturnType<typeof createNativeDatabase>) {
+  const tableExists =
+    (
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='query_logs'")
+        .get() as { c: number }
+    ).c > 0;
+  if (!tableExists) return;
+
+  const info = sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{
+    name: string;
+    type: string;
+  }>;
+  const idCol = info.find((c) => c.name === "id");
+  if (!idCol || idCol.type.toUpperCase().includes("INT")) {
+    return; // Already integer primary key
+  }
+
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS query_logs_migration_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        query TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        tokens_returned INTEGER NOT NULL DEFAULT 0,
+        tokens_saved INTEGER NOT NULL DEFAULT 0,
+        files_scanned INTEGER NOT NULL DEFAULT 0,
+        result_count INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO query_logs_migration_new (query, duration_ms, tokens_returned, tokens_saved, files_scanned, result_count, created_at)
+      SELECT query, duration_ms, coalesce(tokens_returned, 0), coalesce(tokens_saved, 0), coalesce(files_scanned, 0), result_count, created_at FROM query_logs ORDER BY created_at ASC;
+      DROP TABLE query_logs;
+      ALTER TABLE query_logs_migration_new RENAME TO query_logs;
+      CREATE INDEX IF NOT EXISTS idx_query_logs_created ON query_logs(created_at);
+    `);
+  })();
+}
+
+function migrateRunsTables(sqlite: ReturnType<typeof createNativeDatabase>) {
+  for (const tableName of ["index_runs", "graph_runs"] as const) {
+    const tableExists =
+      (
+        sqlite
+          .prepare(
+            `SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
+          )
+          .get() as { c: number }
+      ).c > 0;
+    if (!tableExists) continue;
+
+    const info = sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+      name: string;
+      type: string;
+    }>;
+    const idCol = info.find((c) => c.name === "id");
+    if (!idCol || idCol.type.toUpperCase().includes("INT")) {
+      continue;
+    }
+
+    sqlite.transaction(() => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS ${tableName}_migration_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          status TEXT NOT NULL,
+          files_indexed INTEGER NOT NULL,
+          chunks_created INTEGER NOT NULL,
+          duration_ms INTEGER NOT NULL,
+          error TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO ${tableName}_migration_new (status, files_indexed, chunks_created, duration_ms, error, created_at)
+        SELECT status, files_indexed, chunks_created, duration_ms, error, created_at FROM ${tableName} ORDER BY created_at ASC;
+        DROP TABLE ${tableName};
+        ALTER TABLE ${tableName}_migration_new RENAME TO ${tableName};
+        CREATE INDEX IF NOT EXISTS idx_${tableName}_created ON ${tableName}(created_at);
+      `);
+    })();
+  }
+}
+
 function getWorkspaceTableDefinitions(): string[] {
   return [
     `CREATE TABLE IF NOT EXISTS documents (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       path TEXT NOT NULL UNIQUE,
       absolute_path TEXT NOT NULL,
       kind TEXT NOT NULL,
@@ -447,8 +632,8 @@ function getWorkspaceTableDefinitions(): string[] {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS chunks (
-      id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
       chunk_index INTEGER NOT NULL,
       heading TEXT,
       content TEXT NOT NULL,
@@ -459,8 +644,8 @@ function getWorkspaceTableDefinitions(): string[] {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS embeddings (
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chunk_id INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
       provider TEXT NOT NULL,
       model TEXT NOT NULL,
       dimensions INTEGER NOT NULL,
@@ -469,25 +654,25 @@ function getWorkspaceTableDefinitions(): string[] {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_nodes (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
       label TEXT NOT NULL,
-      ref_id TEXT,
+      ref_id INTEGER,
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS graph_edges (
-      id TEXT PRIMARY KEY,
-      from_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-      to_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+      to_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
       type TEXT NOT NULL,
       weight INTEGER NOT NULL DEFAULT 1,
       metadata TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS index_runs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       mode TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
       files_scanned INTEGER NOT NULL DEFAULT 0,
@@ -500,7 +685,7 @@ function getWorkspaceTableDefinitions(): string[] {
       finished_at TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS graph_runs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       mode TEXT NOT NULL DEFAULT 'incremental',
       status TEXT NOT NULL DEFAULT 'pending',
       nodes_created INTEGER NOT NULL DEFAULT 0,
@@ -511,7 +696,7 @@ function getWorkspaceTableDefinitions(): string[] {
       finished_at TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS query_logs (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       query TEXT NOT NULL,
       mode TEXT NOT NULL,
       result_count INTEGER NOT NULL DEFAULT 0,
@@ -521,12 +706,12 @@ function getWorkspaceTableDefinitions(): string[] {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       tags TEXT NOT NULL DEFAULT '',
       source TEXT NOT NULL,
-      supersedes_id TEXT,
+      supersedes_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
@@ -535,7 +720,7 @@ function getWorkspaceTableDefinitions(): string[] {
       value TEXT NOT NULL
     )`,
     `CREATE TABLE IF NOT EXISTS parsed_documents (
-      document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+      document_id INTEGER PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
       content_hash TEXT NOT NULL,
       symbols TEXT,
       imports TEXT,

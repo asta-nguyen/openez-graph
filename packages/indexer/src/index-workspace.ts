@@ -238,7 +238,7 @@ export function createWorkspaceFileResolver(
   };
 }
 
-async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: string) {
+async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: number) {
   const chunks = await repo.getChunksByDocument(documentId);
   const chunkIds = chunks.map((c) => c.id);
 
@@ -260,9 +260,9 @@ async function resetDocumentArtifacts(repo: WorkspaceRepository, documentId: str
  */
 async function resetChangedFileArtifacts(
   repo: WorkspaceRepository,
-  documentId: string,
+  documentId: number,
   relativePath: string,
-): Promise<Map<string, string>> {
+): Promise<Map<string, number>> {
   const chunks = await repo.getChunksByDocument(documentId);
   const chunkIds = chunks.map((c) => c.id);
 
@@ -281,7 +281,7 @@ async function resetChangedFileArtifacts(
 
   // Get existing symbol nodes for this file, delete their outgoing edges (will be rebuilt)
   const symbolNodes = await repo.getSymbolNodesByFilePath(relativePath);
-  const existingSymbolNodes = new Map<string, string>();
+  const existingSymbolNodes = new Map<string, number>();
   for (const sym of symbolNodes) {
     repo.deleteOutgoingEdges(sym.id, ["represented_by", "calls"]);
     existingSymbolNodes.set(sym.label, sym.id);
@@ -633,7 +633,7 @@ export async function indexWorkspace(input: {
     let needsWriteModeRestore = false;
     // FTS inputs collected during transaction, inserted after finalize (no DB contention)
     let ftsInputsForBackground: Array<{
-      chunkId: string;
+      chunkId: number;
       path: string;
       heading: string | null;
       language: string | null;
@@ -641,13 +641,6 @@ export async function indexWorkspace(input: {
       metadata: string;
     }> = [];
     const _T0 = Date.now();
-    const symbolNodeIdsByFileAndName = new Map<string, string>();
-    const pendingCallEdges: Array<{
-      callerName: string;
-      calleeName: string;
-      filePath: string;
-      parser: string;
-    }> = [];
 
     try {
       await reportProgress(
@@ -773,7 +766,7 @@ export async function indexWorkspace(input: {
           sizeBytes: number;
           mtimeMs: number;
         }> = [];
-        const docIdMap = new Map<string, string>(); // relativePath -> documentId
+        const docIdMap = new Map<string, number>(); // relativePath -> documentId
 
         for (const file of parseTasks) {
           const indexed = parseResults.get(file.id)!;
@@ -816,7 +809,7 @@ export async function indexWorkspace(input: {
 
         // Step 2: Batch insert ALL chunks across all files in one call
         const allChunkInputs: Array<{
-          documentId: string;
+          documentId: number;
           chunkIndex: number;
           heading: string | null;
           content: string;
@@ -1299,11 +1292,15 @@ export async function buildGraphGeneration(
   const resolver = createWorkspaceFileResolver(rootPath, knownFiles);
 
   // ── Build nodes ──
-  const allNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> =
+  const allNodeInputs: Array<{
+    type: string;
+    label: string;
+    refId?: number | string;
+    metadata?: string;
+  }> = [];
+  const allEdges: Array<{ fromNodeId: number; toNodeId: number; type: string; metadata?: string }> =
     [];
-  const allEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> =
-    [];
-  const symbolNodeIdsByFileAndName = new Map<string, string>();
+  const symbolNodeIdsByFileAndName = new Map<string, number>();
   const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
 
   // Map: filePath -> { fileNodeIdx, symNodeStart, symCount }
@@ -1315,7 +1312,7 @@ export async function buildGraphGeneration(
   }> = [];
 
   // Map: filePath -> doc.id (for chunk lookups)
-  const docIdByPath = new Map<string, string>();
+  const docIdByPath = new Map<string, number>();
   for (const doc of graphDocs) {
     docIdByPath.set(doc.path, doc.id);
   }
@@ -1327,7 +1324,7 @@ export async function buildGraphGeneration(
 
     // Load chunks for this document to map symbolName -> chunkId
     const chunks = await repo.getChunksByDocument(doc.id);
-    const chunkIdBySymbolName = new Map<string, string>();
+    const chunkIdBySymbolName = new Map<string, number>();
     for (const chunk of chunks) {
       try {
         const meta = JSON.parse(chunk.metadata);
@@ -1376,14 +1373,14 @@ export async function buildGraphGeneration(
 
   // Generate IDs in memory so nodes and edges can be atomically swapped into
   // the live graph only after the complete snapshot has been assembled.
-  const nodeIds = allNodeInputs.map(() => crypto.randomUUID());
+  const nodeIds: number[] = allNodeInputs.map((_, index) => index + 1);
 
   // ── Build edges ──
   // Maps for node lookup
-  const fileNodeIdsByPath = new Map<string, string>();
+  const fileNodeIdsByPath = new Map<string, number>();
   for (const meta of _symMeta) {
     const fileNodeId = nodeIds[meta.fileNodeIdx];
-    if (fileNodeId) fileNodeIdsByPath.set(meta.filePath, fileNodeId);
+    if (fileNodeId !== undefined) fileNodeIdsByPath.set(meta.filePath, fileNodeId);
 
     for (let si = 0; si < meta.symCount; si++) {
       const symNodeId = nodeIds[meta.symNodeStart + si];
@@ -1415,7 +1412,7 @@ export async function buildGraphGeneration(
   }
 
   // Call edges
-  const globalSymbolNodes = new Map<string, string>();
+  const globalSymbolNodes = new Map<string, number>();
   for (const [key, nodeId] of symbolNodeIdsByFileAndName) {
     const label = key.slice(key.indexOf("\0") + 1);
     if (!globalSymbolNodes.has(label)) globalSymbolNodes.set(label, nodeId);
@@ -1443,7 +1440,8 @@ export async function buildGraphGeneration(
     const calleeNodeId =
       lexicalNames
         .map((name) => symbolNodeIdsByFileAndName.get(`${call.filePath}\0${name}`))
-        .find((id): id is string => Boolean(id)) ?? globalSymbolNodes.get(call.calleeName);
+        .find((id): id is number => typeof id === "number") ??
+      globalSymbolNodes.get(call.calleeName);
     if (!calleeNodeId || callerNodeId === calleeNodeId) continue;
     allEdges.push({
       fromNodeId: callerNodeId,
@@ -1461,7 +1459,7 @@ export async function buildGraphGeneration(
   const published = repo.replaceGraphArtifacts({
     buildEpoch,
     nodes: allNodeInputs.map((node, index) => ({ ...node, id: nodeIds[index] })),
-    edges: uniqueEdges.map((edge) => ({ ...edge, id: crypto.randomUUID() })),
+    edges: uniqueEdges.map((edge, index) => ({ ...edge, id: index + 1 })),
   });
 
   process.stderr.write(

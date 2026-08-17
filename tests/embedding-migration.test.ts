@@ -139,7 +139,7 @@ describe("migrateEmbeddingToBlob", () => {
     const blob = new Uint8Array(new Float32Array([0.1, 0.2, 0.3]).buffer);
     db.prepare(
       "INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding) VALUES (?, ?, ?, ?, ?, ?)",
-    ).run("emb-1", "chunk-1", "ollama", "bge-m3", 3, blob);
+    ).run(1, 1, "ollama", "bge-m3", 3, blob);
 
     // Run migration again (should be a no-op for BLOB columns)
     initializeWorkspaceSchema(db);

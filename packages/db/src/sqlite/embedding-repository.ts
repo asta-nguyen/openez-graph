@@ -28,7 +28,7 @@ export function createEmbeddingOps(native: NativeDatabase, stmts: EmbeddingStmts
 
     async insertEmbeddings(
       inputs: Array<{
-        chunkId: string;
+        chunkId: number;
         provider: string;
         model: string;
         dimensions: number;
@@ -39,7 +39,6 @@ export function createEmbeddingOps(native: NativeDatabase, stmts: EmbeddingStmts
       const now = new Date().toISOString();
       for (const input of inputs) {
         stmts.insertEmbedding.run(
-          crypto.randomUUID(),
           input.chunkId,
           input.provider,
           input.model,
@@ -51,7 +50,7 @@ export function createEmbeddingOps(native: NativeDatabase, stmts: EmbeddingStmts
       }
     },
 
-    async deleteEmbeddingsByChunkIds(chunkIds: string[]) {
+    async deleteEmbeddingsByChunkIds(chunkIds: number[]) {
       if (chunkIds.length === 0) return;
       const placeholders = chunkIds.map(() => "?").join(",");
       native.prepare(`DELETE FROM embeddings WHERE chunk_id IN (${placeholders})`).run(...chunkIds);

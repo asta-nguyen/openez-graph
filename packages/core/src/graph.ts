@@ -99,7 +99,7 @@ export async function codeContext(input: {
       neighbors.nodes
         .filter((node) => node.type === "symbol")
         .map((node) => node.ref_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0),
+        .filter((id): id is number | string => id !== null && id !== undefined && id !== ""),
     ),
   ];
   const chunkRows =

@@ -15,11 +15,12 @@ export interface DocumentStmts {
   docByPath: ReturnType<NativeDatabase["prepare"]>;
   docById: ReturnType<NativeDatabase["prepare"]>;
   insertDoc: ReturnType<NativeDatabase["prepare"]>;
+  insertDocWithId: ReturnType<NativeDatabase["prepare"]>;
 }
 
 function mapDocumentRow(row: Record<string, unknown>) {
   return {
-    id: String(row.id),
+    id: Number(row.id),
     path: String(row.path),
     absolutePath: String(row.absolute_path),
     kind: String(row.kind),
@@ -63,7 +64,7 @@ export function createDocumentOps(
 
     // ── Document Operations ──
 
-    async getDocument(id: string) {
+    async getDocument(id: number) {
       const row = stmts.docById.get(id) as Record<string, unknown> | undefined;
       return row ? mapDocumentRow(row) : null;
     },
@@ -74,7 +75,7 @@ export function createDocumentOps(
     },
 
     async insertDocument(input: {
-      id?: string;
+      id?: number;
       path: string;
       absolutePath: string;
       kind: string;
@@ -82,11 +83,24 @@ export function createDocumentOps(
       contentHash: string;
       sizeBytes: number;
       mtimeMs: number;
-    }) {
-      const id = input.id ?? crypto.randomUUID();
+    }): Promise<number> {
       const now = new Date().toISOString();
-      stmts.insertDoc.run(
-        id,
+      if (input.id !== undefined) {
+        stmts.insertDocWithId.run(
+          input.id,
+          input.path,
+          input.absolutePath,
+          input.kind,
+          input.language,
+          input.contentHash,
+          input.sizeBytes,
+          input.mtimeMs,
+          now,
+          now,
+        );
+        return input.id;
+      }
+      const res = stmts.insertDoc.run(
         input.path,
         input.absolutePath,
         input.kind,
@@ -97,7 +111,7 @@ export function createDocumentOps(
         now,
         now,
       );
-      return id;
+      return Number(res.lastInsertRowid);
     },
 
     async insertDocumentsBatch(
@@ -110,19 +124,15 @@ export function createDocumentOps(
         sizeBytes: number;
         mtimeMs: number;
       }>,
-    ): Promise<string[]> {
+    ): Promise<number[]> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const ids: string[] = inputs.map(() => crypto.randomUUID());
+      const ids: number[] = [];
       const BATCH = 500;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
-          params.push(
-            ids[i + j],
+        for (const item of batch) {
+          const res = stmts.insertDoc.run(
             item.path,
             item.absolutePath,
             item.kind,
@@ -133,18 +143,14 @@ export function createDocumentOps(
             now,
             now,
           );
+          ids.push(Number(res.lastInsertRowid));
         }
-        native
-          .prepare(
-            `INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES ${placeholders}`,
-          )
-          .run(...params);
       }
       return ids;
     },
 
     async updateDocument(
-      id: string,
+      id: number,
       updates: Partial<{
         absolutePath: string;
         kind: string;
@@ -184,7 +190,7 @@ export function createDocumentOps(
       native.prepare(`UPDATE documents SET ${sets.join(", ")} WHERE id = ?`).run(...params);
     },
 
-    async deleteDocument(id: string) {
+    async deleteDocument(id: number) {
       native.prepare("DELETE FROM documents WHERE id = ?").run(id);
     },
 
@@ -198,7 +204,7 @@ export function createDocumentOps(
     // ── Streaming inserts (document) ──
 
     streamDocument(input: {
-      id: string;
+      id?: number;
       path: string;
       absolutePath: string;
       kind: string;
@@ -208,8 +214,22 @@ export function createDocumentOps(
       mtimeMs: number;
     }): void {
       const now = streamNow.value;
+      if (input.id !== undefined) {
+        stmts.insertDocWithId.run(
+          input.id,
+          input.path,
+          input.absolutePath,
+          input.kind,
+          input.language ?? null,
+          input.contentHash,
+          input.sizeBytes,
+          input.mtimeMs,
+          now,
+          now,
+        );
+        return;
+      }
       stmts.insertDoc.run(
-        input.id,
         input.path,
         input.absolutePath,
         input.kind,
@@ -229,7 +249,7 @@ export function createDocumentOps(
     // ── parsed_documents cache ──
 
     insertParsedDocument(input: {
-      documentId: string;
+      documentId: number;
       contentHash: string;
       symbols: string;
       imports: string;
@@ -255,8 +275,8 @@ export function createDocumentOps(
         );
     },
 
-    getParsedDocument(documentId: string): {
-      documentId: string;
+    getParsedDocument(documentId: number): {
+      documentId: number;
       contentHash: string;
       symbols: string | null;
       imports: string | null;
@@ -270,7 +290,7 @@ export function createDocumentOps(
         .get(documentId) as any;
       if (!row) return null;
       return {
-        documentId: String(row.document_id),
+        documentId: Number(row.document_id),
         contentHash: String(row.content_hash),
         symbols: row.symbols ? String(row.symbols) : null,
         imports: row.imports ? String(row.imports) : null,
@@ -286,7 +306,7 @@ export function createDocumentOps(
      * the `parsed_documents` table has `ON DELETE CASCADE` referencing `documents(id)`.
      * Kept for manual cleanup scenarios.
      */
-    deleteParsedDocumentsByDocumentIds(documentIds: string[]): void {
+    deleteParsedDocumentsByDocumentIds(documentIds: number[]): void {
       if (documentIds.length === 0) return;
       const placeholders = documentIds.map(() => "?").join(",");
       native

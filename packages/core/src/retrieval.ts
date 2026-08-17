@@ -8,7 +8,7 @@ import { countTokens } from "./tokenizer";
 import type { CodeQueryResult, QuerySource } from "./types";
 
 interface ChunkHit {
-  id: string;
+  id: number | string;
   path: string;
   content: string;
   score: number;
@@ -182,7 +182,7 @@ async function vectorSearch(rootPath: string, query: string, limit: number): Pro
 
 async function graphExpand(
   rootPath: string,
-  seedIds: string[],
+  seedIds: Array<number | string>,
   depth: number,
   limit: number,
 ): Promise<ChunkHit[]> {

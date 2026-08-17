@@ -5,20 +5,24 @@ import { type GraphStmts } from "./graph-ops-shared";
 /** Graph traversal only. Graph lifecycle and construction live in the indexer. */
 export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStmts) {
   return {
-    async graphNeighbors(labelOrId: string, depth: number, limit = 50) {
+    async graphNeighbors(labelOrId: string | number, depth: number, limit = 50) {
       const seedNodes = native
         .prepare("SELECT * FROM graph_nodes WHERE id = ? OR label = ? ORDER BY id = ? DESC LIMIT 1")
-        .all(labelOrId, labelOrId, labelOrId) as Array<Record<string, unknown>>;
+        .all(labelOrId, String(labelOrId), labelOrId) as Array<Record<string, unknown>>;
 
       if (seedNodes.length === 0) return { nodes: [], edges: [] };
 
-      const seedId = String(seedNodes[0].id);
-      const visited = new Set<string>();
+      const seedId = Number(seedNodes[0].id);
+      const visited = new Set<number>();
       const resultNodes: Array<Record<string, unknown>> = [
-        { ...seedNodes[0], metadata: safeParseJson(String(seedNodes[0].metadata ?? ""), {}) },
+        {
+          ...seedNodes[0],
+          id: Number(seedNodes[0].id),
+          metadata: safeParseJson(String(seedNodes[0].metadata ?? ""), {}),
+        },
       ];
       const resultEdges: Array<Record<string, unknown>> = [];
-      const resultEdgeIds = new Set<string>();
+      const resultEdgeIds = new Set<number>();
       let currentBatch = [seedId];
       visited.add(seedId);
 
@@ -31,10 +35,10 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
           )
           .all(...currentBatch, ...currentBatch, limit) as Array<Record<string, unknown>>;
 
-        const nextBatch: string[] = [];
+        const nextBatch: number[] = [];
         for (const edge of edges) {
-          const fromId = String(edge.from_node_id);
-          const toId = String(edge.to_node_id);
+          const fromId = Number(edge.from_node_id);
+          const toId = Number(edge.to_node_id);
           if (!visited.has(fromId) && visited.size < limit) {
             nextBatch.push(fromId);
             visited.add(fromId);
@@ -43,7 +47,7 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
             nextBatch.push(toId);
             visited.add(toId);
           }
-          const edgeId = String(edge.id);
+          const edgeId = Number(edge.id);
           if (
             visited.has(fromId) &&
             visited.has(toId) &&
@@ -51,7 +55,12 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
             resultEdges.length < limit
           ) {
             resultEdgeIds.add(edgeId);
-            resultEdges.push(edge);
+            resultEdges.push({
+              ...edge,
+              id: edgeId,
+              from_node_id: fromId,
+              to_node_id: toId,
+            });
           }
         }
 
@@ -60,7 +69,11 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
             | Record<string, unknown>
             | undefined;
           if (node) {
-            resultNodes.push({ ...node, metadata: safeParseJson(String(node.metadata ?? ""), {}) });
+            resultNodes.push({
+              ...node,
+              id: Number(node.id),
+              metadata: safeParseJson(String(node.metadata ?? ""), {}),
+            });
           }
         }
         currentBatch = nextBatch;
@@ -77,16 +90,16 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
     replaceGraphArtifacts(input: {
       buildEpoch: number;
       nodes: Array<{
-        id: string;
+        id?: number;
         type: string;
         label: string;
-        refId?: string;
+        refId?: number | string;
         metadata?: string;
       }>;
       edges: Array<{
-        id: string;
-        fromNodeId: string;
-        toNodeId: string;
+        id?: number;
+        fromNodeId: number;
+        toNodeId: number;
         type: string;
         weight?: number;
         metadata?: string;
@@ -120,7 +133,7 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
           const params: unknown[] = [];
           for (const node of batch) {
             params.push(
-              node.id,
+              typeof node.id === "number" ? node.id : null,
               node.type,
               node.label,
               node.refId ?? null,
@@ -142,7 +155,7 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
           const params: unknown[] = [];
           for (const edge of batch) {
             params.push(
-              edge.id,
+              typeof edge.id === "number" ? edge.id : null,
               edge.fromNodeId,
               edge.toNodeId,
               edge.type,
@@ -153,24 +166,26 @@ export function createGraphTraversalOps(native: NativeDatabase, _stmts: GraphStm
           }
           native
             .prepare(
-              `INSERT INTO graph_edges
-                 (id, from_node_id, to_node_id, type, weight, metadata, created_at)
+              `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at)
                VALUES ${placeholders}`,
             )
             .run(...params);
         }
         native
-          .prepare("INSERT OR REPLACE INTO index_meta (key, value) VALUES ('graph_build_epoch', ?)")
+          .prepare(
+            `INSERT INTO index_meta (key, value) VALUES ('graph_build_epoch', ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          )
           .run(String(input.buildEpoch));
-        replaced = true;
         native.exec("COMMIT");
-        return replaced;
+        replaced = true;
       } catch (error) {
         try {
           native.exec("ROLLBACK");
         } catch {}
         throw error;
       }
+      return replaced;
     },
   };
 }
