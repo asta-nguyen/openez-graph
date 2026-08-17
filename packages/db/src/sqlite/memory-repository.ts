@@ -1,5 +1,11 @@
+import { eq } from "drizzle-orm";
+import type { drizzle } from "drizzle-orm/bun-sqlite";
+
+import * as schema from "./schema";
 import type { NativeDatabase } from "./shared-types";
 import type { StoredMemory } from "./types";
+
+export type WorkspaceDrizzleDb = ReturnType<typeof drizzle>;
 
 /**
  * Prepared statements used by the memory operations.
@@ -13,45 +19,32 @@ import type { StoredMemory } from "./types";
  */
 export interface MemoryStmts {}
 
-interface MemoryRow {
-  id: number;
-  title: string;
-  content: string;
-  tags: string | null;
-  source: string;
-  supersedes_id: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
-function mapMemoryRow(row: MemoryRow): StoredMemory {
+function mapMemoryRow(row: typeof schema.memories.$inferSelect): StoredMemory {
   return {
-    id: Number(row.id),
-    title: String(row.title),
-    content: String(row.content),
-    tags: String(row.tags ?? ""),
-    source: String(row.source),
-    supersedesId:
-      row.supersedes_id !== null && row.supersedes_id !== undefined
-        ? Number(row.supersedes_id)
-        : null,
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    tags: row.tags ?? "",
+    source: row.source,
+    supersedesId: row.supersedesId ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
 /**
  * Factory for memory operations extracted from
  * `createWorkspaceRepository()`.
- *
- * Behavior is identical to the original inline implementations — this is a
- * pure code-move.
  */
-export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
+export function createMemoryOps(
+  db: WorkspaceDrizzleDb,
+  native: NativeDatabase,
+  _stmts: MemoryStmts,
+) {
   return {
     // ── Memory Operations ──
 
@@ -63,27 +56,24 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
       supersedesId?: number | null;
     }): Promise<number> {
       const now = new Date().toISOString();
-      const res = native
-        .prepare(
-          "INSERT INTO memories (title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          input.title,
-          input.content,
-          input.tags ?? "",
-          input.source,
-          input.supersedesId ?? null,
-          now,
-          now,
-        );
-      return Number(res.lastInsertRowid);
+      const res = db
+        .insert(schema.memories)
+        .values({
+          title: input.title,
+          content: input.content,
+          tags: input.tags ?? "",
+          source: input.source,
+          supersedesId: input.supersedesId ?? null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: schema.memories.id })
+        .get();
+      return res.id;
     },
 
     async getMemory(id: number): Promise<StoredMemory | null> {
-      // SAFETY: Query selects directly from memories table matching MemoryRow schema.
-      const row = native.prepare("SELECT * FROM memories WHERE id = ?").get(id) as
-        | MemoryRow
-        | undefined;
+      const row = db.select().from(schema.memories).where(eq(schema.memories.id, id)).get();
       return row ? mapMemoryRow(row) : null;
     },
 
@@ -101,7 +91,7 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
         return [pattern, pattern, pattern];
       });
       const phrasePattern = `%${escapeLikePattern(normalized)}%`;
-      // SAFETY: Query selects m.* from memories table matching MemoryRow schema.
+      // SAFETY: Query selects m.* from memories table matching schema.memories shape.
       const rows = native
         .prepare(
           `SELECT m.*
@@ -115,7 +105,9 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
          END, m.updated_at DESC
          LIMIT ?`,
         )
-        .all(...termParams, normalized, phrasePattern, limit) as Array<MemoryRow>;
+        .all(...termParams, normalized, phrasePattern, limit) as Array<
+        typeof schema.memories.$inferSelect
+      >;
       return rows.map(mapMemoryRow);
     },
   };

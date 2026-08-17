@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import { eq } from "drizzle-orm";
 
 import type { ChunkStmts } from "./chunk-repository";
 import { createDocumentOps } from "./document-repository";
@@ -10,34 +10,39 @@ import type { FtsStmts } from "./fts-repository";
 import { createGraphOps } from "./graph-repository";
 import type { GraphStmts } from "./graph-repository";
 import { createMemoryOps } from "./memory-repository";
+import * as schema from "./schema";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 import type { WorkspaceRepository } from "./types";
 import { getWorkspaceDb, getWorkspaceNativeDb } from "./workspace-db";
 
-function getNativeWorkspaceDb(rootPath: string): {
+interface WorkspaceDbPair {
   db: ReturnType<typeof getWorkspaceDb>;
   native: NativeDatabase;
-} {
+}
+
+type RawSqlValue = string | number | boolean | Uint8Array | null;
+type RawSqlRow = Record<string, RawSqlValue>;
+
+function getNativeWorkspaceDb(rootPath: string): WorkspaceDbPair {
   const db = getWorkspaceDb(rootPath);
   const native = getWorkspaceNativeDb(rootPath);
   return { db, native };
 }
 
 export function createWorkspaceRepository(rootPath: string): WorkspaceRepository {
-  const { native } = getNativeWorkspaceDb(rootPath);
+  const { db, native } = getNativeWorkspaceDb(rootPath);
 
   // Legacy TEXT-embedding DBs intentionally lack the
   // idx_embeddings_chunk_provider_model unique index (migrateEmbeddingDedup
   // skips it for TEXT columns), so ON CONFLICT(chunk_id, provider, model)
   // would fail at prepare() time. Detect once and pick the right SQL.
-  const hasEmbeddingUniqueIdx =
-    (
-      native
-        .prepare(
-          "SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_embeddings_chunk_provider_model'",
-        )
-        .get() as { c: number }
-    ).c > 0;
+  // SAFETY: Query selects count(*) from sqlite_master to check index existence.
+  const countRow = native
+    .prepare(
+      "SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_embeddings_chunk_provider_model'",
+    )
+    .get() as { c: number };
+  const hasEmbeddingUniqueIdx = countRow.c > 0;
 
   // ── Cached prepared statements (prepared once, reused thousands of times) ──
   const stmts: DocumentStmts & ChunkStmts & GraphStmts & FtsStmts & EmbeddingStmts = {
@@ -108,9 +113,10 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
   const streamNow: StreamTimestampHolder = { value: new Date().toISOString() };
 
-  const documentOps = createDocumentOps(native, stmts, streamNow);
+  const documentOps = createDocumentOps(db, native, stmts, streamNow);
 
   const getMeta = (key: string): string | null => {
+    // SAFETY: index_meta table returns { value: string } when row exists.
     const row = native.prepare("SELECT value FROM index_meta WHERE key = ?").get(key) as
       | { value: string }
       | undefined;
@@ -123,7 +129,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
   const graphOps = createGraphOps(native, stmts, streamNow);
   const ftsOps = createFtsOps(native, stmts, { getMeta, setMeta });
   const embeddingOps = createEmbeddingOps(native, stmts);
-  const memoryOps = createMemoryOps(native, stmts);
+  const memoryOps = createMemoryOps(db, native, stmts);
 
   return {
     rootPath,
@@ -137,62 +143,64 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     async createIndexRun(input): Promise<number> {
       const now = new Date().toISOString();
-      const res = native
-        .prepare(
-          "INSERT INTO index_runs (mode, status, files_scanned, files_updated, chunks_written, embeddings_written, started_at) VALUES (?, 'running', 0, 0, 0, 0, ?)",
-        )
-        .run(input.mode, now);
-      return Number(res.lastInsertRowid);
+      const res = db
+        .insert(schema.indexRuns)
+        .values({
+          mode: input.mode,
+          status: "running",
+          filesScanned: 0,
+          filesUpdated: 0,
+          chunksWritten: 0,
+          embeddingsWritten: 0,
+          startedAt: now,
+        })
+        .returning({ id: schema.indexRuns.id })
+        .get();
+      return res.id;
     },
 
     async completeIndexRun(id, updates) {
-      const sets: string[] = ["finished_at = ?"];
-      const params: unknown[] = [new Date().toISOString()];
+      const setValues: Partial<typeof schema.indexRuns.$inferInsert> = {
+        finishedAt: new Date().toISOString(),
+      };
       if (updates.status !== undefined) {
-        sets.push("status = ?");
-        params.push(updates.status);
+        setValues.status = updates.status;
       }
       if (updates.filesScanned !== undefined) {
-        sets.push("files_scanned = ?");
-        params.push(updates.filesScanned);
+        setValues.filesScanned = updates.filesScanned;
       }
       if (updates.filesUpdated !== undefined) {
-        sets.push("files_updated = ?");
-        params.push(updates.filesUpdated);
+        setValues.filesUpdated = updates.filesUpdated;
       }
       if (updates.chunksWritten !== undefined) {
-        sets.push("chunks_written = ?");
-        params.push(updates.chunksWritten);
+        setValues.chunksWritten = updates.chunksWritten;
       }
       if (updates.embeddingsWritten !== undefined) {
-        sets.push("embeddings_written = ?");
-        params.push(updates.embeddingsWritten);
+        setValues.embeddingsWritten = updates.embeddingsWritten;
       }
       if (updates.errorMessage !== undefined) {
-        sets.push("error_message = ?");
-        params.push(updates.errorMessage);
+        setValues.errorMessage = updates.errorMessage;
       }
-      params.push(id);
-      native.prepare(`UPDATE index_runs SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+      db.update(schema.indexRuns).set(setValues).where(eq(schema.indexRuns.id, id)).run();
     },
 
     // ── Query Log Operations ──
 
     async insertQueryLog(input): Promise<number> {
-      const res = native
-        .prepare(
-          "INSERT INTO query_logs (query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          input.query,
-          input.mode,
-          input.resultCount,
-          input.tokensReturned ?? 0,
-          input.tokensSaved ?? 0,
-          input.filesScanned ?? 0,
-          new Date().toISOString(),
-        );
-      return Number(res.lastInsertRowid);
+      const res = db
+        .insert(schema.queryLogs)
+        .values({
+          query: input.query,
+          mode: input.mode,
+          resultCount: input.resultCount,
+          tokensReturned: input.tokensReturned ?? 0,
+          tokensSaved: input.tokensSaved ?? 0,
+          filesScanned: input.filesScanned ?? 0,
+          createdAt: new Date().toISOString(),
+        })
+        .returning({ id: schema.queryLogs.id })
+        .get();
+      return res.id;
     },
 
     // ── Raw SQL queries ──
@@ -206,9 +214,11 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     async queryRaw(sqlQuery: string, params?: unknown[]) {
       if (params) {
-        return native.prepare(sqlQuery).all(...params) as Array<Record<string, unknown>>;
+        // SAFETY: Raw query interface returns rows matching generic RawSqlRow map.
+        return native.prepare(sqlQuery).all(...params) as Array<RawSqlRow>;
       }
-      return native.prepare(sqlQuery).all() as Array<Record<string, unknown>>;
+      // SAFETY: Raw query interface returns rows matching generic RawSqlRow map.
+      return native.prepare(sqlQuery).all() as Array<RawSqlRow>;
     },
 
     async transaction<T>(fn: () => T | Promise<T>): Promise<T> {
@@ -261,6 +271,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     },
 
     getMeta(key: string): string | null {
+      // SAFETY: index_meta table returns { value: string } when row exists.
       const row = native.prepare("SELECT value FROM index_meta WHERE key = ?").get(key) as
         | { value: string }
         | undefined;

@@ -56,7 +56,7 @@ export const settings = sqliteTable("settings", {
 export const documents = sqliteTable(
   "documents",
   {
-    id: text("id").primaryKey(),
+    id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
     path: text("path").notNull(),
     absolutePath: text("absolute_path").notNull(),
     kind: text("kind").notNull(),
@@ -77,8 +77,8 @@ export const documents = sqliteTable(
 );
 
 export const chunks = sqliteTable("chunks", {
-  id: text("id").primaryKey(),
-  documentId: text("document_id")
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  documentId: integer("document_id", { mode: "number" })
     .notNull()
     .references(() => documents.id, { onDelete: "cascade" }),
   chunkIndex: integer("chunk_index").notNull(),
@@ -96,8 +96,8 @@ export const chunks = sqliteTable("chunks", {
 });
 
 export const embeddings = sqliteTable("embeddings", {
-  id: text("id").primaryKey(),
-  chunkId: text("chunk_id")
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  chunkId: integer("chunk_id", { mode: "number" })
     .notNull()
     .references(() => chunks.id, { onDelete: "cascade" }),
   provider: text("provider").notNull(),
@@ -111,10 +111,10 @@ export const embeddings = sqliteTable("embeddings", {
 });
 
 export const graphNodes = sqliteTable("graph_nodes", {
-  id: text("id").primaryKey(),
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   type: text("type").notNull(),
   label: text("label").notNull(),
-  refId: text("ref_id"),
+  refId: integer("ref_id", { mode: "number" }),
   metadata: text("metadata").notNull().default("{}"),
   createdAt: text("created_at")
     .notNull()
@@ -125,11 +125,11 @@ export const graphNodes = sqliteTable("graph_nodes", {
 });
 
 export const graphEdges = sqliteTable("graph_edges", {
-  id: text("id").primaryKey(),
-  fromNodeId: text("from_node_id")
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  fromNodeId: integer("from_node_id", { mode: "number" })
     .notNull()
     .references(() => graphNodes.id, { onDelete: "cascade" }),
-  toNodeId: text("to_node_id")
+  toNodeId: integer("to_node_id", { mode: "number" })
     .notNull()
     .references(() => graphNodes.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
@@ -141,7 +141,7 @@ export const graphEdges = sqliteTable("graph_edges", {
 });
 
 export const indexRuns = sqliteTable("index_runs", {
-  id: text("id").primaryKey(),
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   mode: text("mode").notNull(),
   status: text("status").notNull().default("pending"),
   filesScanned: integer("files_scanned").notNull().default(0),
@@ -157,7 +157,7 @@ export const indexRuns = sqliteTable("index_runs", {
 });
 
 export const graphRuns = sqliteTable("graph_runs", {
-  id: text("id").primaryKey(),
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   mode: text("mode").notNull().default("incremental"),
   status: text("status").notNull().default("pending"),
   nodesCreated: integer("nodes_created").notNull().default(0),
@@ -171,7 +171,7 @@ export const graphRuns = sqliteTable("graph_runs", {
 });
 
 export const queryLogs = sqliteTable("query_logs", {
-  id: text("id").primaryKey(),
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   query: text("query").notNull(),
   mode: text("mode").notNull(),
   resultCount: integer("result_count").notNull().default(0),
@@ -184,16 +184,29 @@ export const queryLogs = sqliteTable("query_logs", {
 });
 
 export const memories = sqliteTable("memories", {
-  id: text("id").primaryKey(),
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
   content: text("content").notNull(),
   tags: text("tags").notNull().default(""),
   source: text("source").notNull(),
-  supersedesId: text("supersedes_id"),
+  supersedesId: integer("supersedes_id", { mode: "number" }),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`(datetime('now'))`),
+});
+
+export const parsedDocuments = sqliteTable("parsed_documents", {
+  documentId: integer("document_id", { mode: "number" })
+    .primaryKey()
+    .references(() => documents.id, { onDelete: "cascade" }),
+  contentHash: text("content_hash").notNull(),
+  symbols: text("symbols"),
+  imports: text("imports"),
+  calls: text("calls"),
+  calledIdentifiers: text("called_identifiers"),
+  parserVersion: text("parser_version"),
+  parsedAt: integer("parsed_at").notNull(),
 });

@@ -1,6 +1,10 @@
-import crypto from "node:crypto";
+import { asc, count, eq } from "drizzle-orm";
+import type { drizzle } from "drizzle-orm/bun-sqlite";
 
+import * as schema from "./schema";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
+
+export type WorkspaceDrizzleDb = ReturnType<typeof drizzle>;
 
 /**
  * Prepared statements used by the chunk operations.
@@ -17,18 +21,18 @@ export interface ChunkStmts {
   deleteChunksByDoc: ReturnType<NativeDatabase["prepare"]>;
 }
 
-function mapChunkRow(row: Record<string, unknown>) {
+function mapChunkRow(row: typeof schema.chunks.$inferSelect) {
   return {
-    id: Number(row.id),
-    documentId: Number(row.document_id),
-    chunkIndex: Number(row.chunk_index),
+    id: row.id,
+    documentId: row.documentId,
+    chunkIndex: row.chunkIndex,
     heading: row.heading ? String(row.heading) : null,
-    content: String(row.content),
-    tokenCount: Number(row.token_count),
-    contentHash: String(row.content_hash),
-    metadata: String(row.metadata ?? "{}"),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    content: row.content,
+    tokenCount: row.tokenCount,
+    contentHash: row.contentHash,
+    metadata: row.metadata ?? "{}",
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -41,20 +45,26 @@ function mapChunkRow(row: Record<string, unknown>) {
  * that still live in `document-repository.ts`.
  */
 export function createChunkOps(
+  db: WorkspaceDrizzleDb,
   native: NativeDatabase,
   stmts: ChunkStmts,
   streamNow: StreamTimestampHolder,
 ) {
   return {
     async getChunkCount(): Promise<number> {
-      const row = native.prepare("SELECT count(*) AS count FROM chunks").get() as { count: number };
-      return row?.count ?? 0;
+      const res = db.select({ count: count() }).from(schema.chunks).get();
+      return res?.count ?? 0;
     },
 
     // ── Chunk Operations ──
 
     async getChunksByDocument(documentId: number) {
-      const rows = stmts.chunksByDoc.all(documentId) as Array<Record<string, unknown>>;
+      const rows = db
+        .select()
+        .from(schema.chunks)
+        .where(eq(schema.chunks.documentId, documentId))
+        .orderBy(asc(schema.chunks.chunkIndex))
+        .all();
       return rows.map(mapChunkRow);
     },
 
@@ -88,7 +98,7 @@ export function createChunkOps(
           ids.push(Number(res.lastInsertRowid));
         }
       };
-      if (typeof native.transaction === "function") {
+      if ("transaction" in native && native.transaction) {
         native.transaction(runInsert)();
       } else {
         runInsert();
@@ -97,7 +107,7 @@ export function createChunkOps(
     },
 
     async deleteChunksByDocument(documentId: number) {
-      stmts.deleteChunksByDoc.run(documentId);
+      db.delete(schema.chunks).where(eq(schema.chunks.documentId, documentId)).run();
     },
 
     // ── Streaming inserts (chunk) ──

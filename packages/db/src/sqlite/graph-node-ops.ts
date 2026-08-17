@@ -1,7 +1,20 @@
-import crypto from "node:crypto";
-
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 import { mapNodeRow, type GraphStmts } from "./graph-ops-shared";
+
+interface GraphNodeRawRow {
+  id: number;
+  type: string;
+  label: string;
+  ref_id: number | string | null;
+  metadata: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface UpsertNodeResult {
+  id: number | string;
+  label?: string;
+}
 
 /**
  * Factory for graph node operations extracted from `createGraphOps()`.
@@ -18,6 +31,7 @@ export function createGraphNodeOps(
 ) {
   return {
     async getNodeCount(): Promise<number> {
+      // SAFETY: Query selects count(*) from graph_nodes table.
       const row = native.prepare("SELECT count(*) AS count FROM graph_nodes").get() as {
         count: number;
       };
@@ -34,8 +48,9 @@ export function createGraphNodeOps(
     }): Promise<number> {
       if (input.type === "symbol") {
         if (input.refId !== undefined && input.refId !== null) {
+          // SAFETY: Prepared statement queries graph_nodes matching GraphNodeRawRow.
           const existing = stmts.nodeByTypeLabelRef.get(input.type, input.label, input.refId) as
-            | Record<string, unknown>
+            | GraphNodeRawRow
             | undefined;
           if (existing) {
             const nextMetadata = input.metadata ?? String(existing.metadata ?? "{}");
@@ -64,6 +79,7 @@ export function createGraphNodeOps(
 
       // Non-symbol nodes: (type, label) is unique — use ON CONFLICT ... RETURNING (one query)
       const now = new Date().toISOString();
+      // SAFETY: RETURNING clause returns id matching UpsertNodeResult.
       const row = stmts.upsertNodeByTypeLabel.get(
         input.type,
         input.label,
@@ -71,7 +87,7 @@ export function createGraphNodeOps(
         input.metadata ?? "{}",
         now,
         now,
-      ) as { id: number | string };
+      ) as UpsertNodeResult;
       return Number(row.id);
     },
 
@@ -117,6 +133,7 @@ export function createGraphNodeOps(
       const results: Array<{ label: string; id: number }> = [];
 
       for (const item of inputs) {
+        // SAFETY: RETURNING clause returns id and label matching UpsertNodeResult.
         const row = stmts.upsertNodeByTypeLabel.get(
           item.type,
           item.label,
@@ -124,21 +141,23 @@ export function createGraphNodeOps(
           item.metadata ?? "{}",
           now,
           now,
-        ) as { id: number | string; label: string };
+        ) as UpsertNodeResult;
         results.push({ label: row.label ?? item.label, id: Number(row.id) });
       }
       return results;
     },
 
     async getGraphNode(id: number) {
+      // SAFETY: Query selects from graph_nodes table matching GraphNodeRawRow.
       const row = native.prepare("SELECT * FROM graph_nodes WHERE id = ?").get(id) as
-        | Record<string, unknown>
+        | GraphNodeRawRow
         | undefined;
       return row ? mapNodeRow(row) : null;
     },
 
     async findGraphNode(type: string, label: string) {
-      const row = stmts.nodeByTypeLabel.get(type, label) as Record<string, unknown> | undefined;
+      // SAFETY: Prepared statement queries graph_nodes matching GraphNodeRawRow.
+      const row = stmts.nodeByTypeLabel.get(type, label) as GraphNodeRawRow | undefined;
       return row ? mapNodeRow(row) : null;
     },
 
@@ -147,18 +166,18 @@ export function createGraphNodeOps(
     },
 
     async findFileNode(relativePath: string) {
-      const row = stmts.nodeByTypeLabel.get("file", relativePath) as
-        | Record<string, unknown>
-        | undefined;
+      // SAFETY: Prepared statement queries graph_nodes matching GraphNodeRawRow.
+      const row = stmts.nodeByTypeLabel.get("file", relativePath) as GraphNodeRawRow | undefined;
       return row ? mapNodeRow(row) : null;
     },
 
     async getSymbolNodesByFilePath(filePath: string) {
+      // SAFETY: Query selects from graph_nodes table matching GraphNodeRawRow.
       const rows = native
         .prepare(
           "SELECT * FROM graph_nodes WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ?",
         )
-        .all(filePath) as Array<Record<string, unknown>>;
+        .all(filePath) as Array<GraphNodeRawRow>;
       return rows.map(mapNodeRow);
     },
 
@@ -181,6 +200,7 @@ export function createGraphNodeOps(
     },
 
     async loadAllSymbolNodes(): Promise<Map<string, number>> {
+      // SAFETY: Query selects label and id from graph_nodes table.
       const rows = native
         .prepare("SELECT label, id FROM graph_nodes WHERE type = 'symbol'")
         .all() as Array<{ label: string; id: number }>;
