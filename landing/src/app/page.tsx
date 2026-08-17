@@ -64,6 +64,14 @@ const languages = [
   { name: "Python", color: "text-green-400" },
   { name: "Go", color: "text-cyan-400" },
   { name: "Rust", color: "text-orange-400" },
+  { name: "Ruby", color: "text-red-400" },
+  { name: "CoffeeScript", color: "text-amber-400" },
+  { name: "Slim", color: "text-fuchsia-400" },
+  { name: "CSS", color: "text-pink-400" },
+  { name: "SCSS", color: "text-pink-300" },
+  { name: "SASS", color: "text-rose-400" },
+  { name: "LESS", color: "text-indigo-300" },
+  { name: "Haml", color: "text-violet-400" },
   { name: "YAML", color: "text-red-400" },
   { name: "JSON", color: "text-emerald-400" },
   { name: "TOML", color: "text-purple-400" },
@@ -74,7 +82,7 @@ const features = [
   {
     icon: Layers,
     title: "Semantic Indexing",
-    desc: "TS/JS gets full AST-level indexing via ts-morph. Python, Go, Rust get tree-sitter AST parsing with regex fallback. Docs and config files get structure-aware chunking — all stored in local SQLite.",
+    desc: "TS/JS gets full AST-level indexing via oxc-parser. Python, Go, Rust, and Ruby get tree-sitter AST parsing with regex fallback. CoffeeScript, Slim, CSS, SCSS, SASS, LESS, and Haml are scanned and chunked. Docs and config files get structure-aware chunking — all stored in local SQLite.",
   },
   {
     icon: Search,
@@ -105,7 +113,7 @@ const features = [
 
 const stats = [
   { label: "MCP tools", target: 7, suffix: "" },
-  { label: "Indexed formats", target: 9, suffix: "" },
+  { label: "Indexed formats", target: 17, suffix: "" },
   { label: "Agent setups", target: 5, suffix: "" },
   { label: "Local database", target: 1, suffix: "" },
 ];
@@ -418,7 +426,8 @@ export default async function LandingPage() {
             </h2>
             <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-10 text-pretty">
               Rich AST-level indexing for TypeScript and JavaScript. Tree-sitter AST parsing for
-              Python, Go, and Rust. Structure-aware chunking for config files and documentation.
+              Python, Go, Rust, and Ruby. Fallback chunking for CoffeeScript, Slim, CSS, SCSS, SASS,
+              LESS, and Haml. Structure-aware chunking for config files and documentation.
             </p>
             <div className="flex flex-wrap justify-center gap-2.5">
               {languages.map((lang) => (
