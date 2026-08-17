@@ -444,30 +444,40 @@ async function parseInline(
     }
   }
 
-  // Parse remaining files (TS/JS, markdown, config) sequentially
-  for (const task of otherTasks) {
-    const indexed = await chunkDocument({
-      relativePath: task.relativePath,
-      absolutePath: task.absolutePath,
-      content: task.content,
-      targetTokens: task.targetTokens,
-      overlapTokens: task.overlapTokens,
-      counter: task.counter,
-    });
-    // Bound large symbol chunks (e.g. a 1000-line function) to the target
-    // token limit. The OxcParser creates one chunk per symbol, which can
-    // exceed the limit for very large functions.
-    if (indexed.kind === "code") {
-      indexed.chunks = boundChunks(
-        indexed.chunks,
-        task.targetTokens,
-        task.overlapTokens,
-        task.counter,
-      );
+  // Parse remaining files (TS/JS, markdown, config) concurrently with bounded worker pool
+  const PARSE_CONCURRENCY = 32;
+  let taskIdx = 0;
+  async function parseWorker() {
+    while (taskIdx < otherTasks.length) {
+      const idx = taskIdx++;
+      const task = otherTasks[idx];
+      const indexed = await chunkDocument({
+        relativePath: task.relativePath,
+        absolutePath: task.absolutePath,
+        content: task.content,
+        targetTokens: task.targetTokens,
+        overlapTokens: task.overlapTokens,
+        counter: task.counter,
+      });
+      // Bound large symbol chunks (e.g. a 1000-line function) to the target
+      // token limit. The OxcParser creates one chunk per symbol, which can
+      // exceed the limit for very large functions.
+      if (indexed.kind === "code") {
+        indexed.chunks = boundChunks(
+          indexed.chunks,
+          task.targetTokens,
+          task.overlapTokens,
+          task.counter,
+        );
+      }
+      results.set(task.id, indexed);
+      onProgress?.(results.size, tasks.length);
     }
-    results.set(task.id, indexed);
-    onProgress?.(results.size, tasks.length);
   }
+
+  await Promise.all(
+    Array.from({ length: Math.min(PARSE_CONCURRENCY, otherTasks.length) }, () => parseWorker()),
+  );
 
   return results;
 }

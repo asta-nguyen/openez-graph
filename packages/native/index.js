@@ -284,12 +284,20 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`);
 }
 
-const { scanWorkspaceFast, fastHash, fastHashBytes, boundChunks, parseCodeNative, parseCodeBatch } =
-  nativeBinding;
+const {
+  parseCodeNative,
+  parseCodeBatch,
+  parseAndChunkBatch,
+  scanWorkspaceFast,
+  fastHash,
+  fastHashBytes,
+  boundChunks,
+} = nativeBinding;
 
+module.exports.parseCodeNative = parseCodeNative;
+module.exports.parseCodeBatch = parseCodeBatch;
+module.exports.parseAndChunkBatch = parseAndChunkBatch;
 module.exports.scanWorkspaceFast = scanWorkspaceFast;
 module.exports.fastHash = fastHash;
 module.exports.fastHashBytes = fastHashBytes;
 module.exports.boundChunks = boundChunks;
-module.exports.parseCodeNative = parseCodeNative;
-module.exports.parseCodeBatch = parseCodeBatch;

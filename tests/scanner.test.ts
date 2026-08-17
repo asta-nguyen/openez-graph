@@ -42,4 +42,22 @@ describe("scanWorkspaceFiles", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("respects .gitignore negation rules", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-scan-neg-"));
+    try {
+      fs.mkdirSync(path.join(root, "temp"), { recursive: true });
+      fs.writeFileSync(path.join(root, "temp", "ignored.js"), "console.log('ignored')\n");
+      fs.writeFileSync(path.join(root, "temp", "special.js"), "console.log('special')\n");
+      fs.writeFileSync(path.join(root, ".gitignore"), "temp/*\n!temp/special.js\n");
+
+      const files = await scanWorkspaceFiles({ rootPath: root });
+      const relativePaths = files.map((f) => f.relativePath).sort();
+
+      expect(relativePaths).toContain("temp/special.js");
+      expect(relativePaths).not.toContain("temp/ignored.js");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
