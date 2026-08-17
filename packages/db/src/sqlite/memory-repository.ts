@@ -23,16 +23,30 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
-function mapMemoryRow(row: typeof schema.memories.$inferSelect): StoredMemory {
+interface MemoryRawRow {
+  id: number;
+  title: string;
+  content: string;
+  tags?: string | null;
+  source: string;
+  supersedesId?: number | null;
+  supersedes_id?: number | null;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+}
+
+function mapMemoryRow(row: MemoryRawRow): StoredMemory {
   return {
     id: row.id,
     title: row.title,
     content: row.content,
     tags: row.tags ?? "",
     source: row.source,
-    supersedesId: row.supersedesId ?? null,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    supersedesId: row.supersedesId ?? row.supersedes_id ?? null,
+    createdAt: row.createdAt ?? row.created_at ?? "",
+    updatedAt: row.updatedAt ?? row.updated_at ?? "",
   };
 }
 
@@ -91,23 +105,29 @@ export function createMemoryOps(
         return [pattern, pattern, pattern];
       });
       const phrasePattern = `%${escapeLikePattern(normalized)}%`;
-      // SAFETY: Query selects m.* from memories table matching schema.memories shape.
+      // SAFETY: Query selects m.* from memories table matching MemoryRawRow shape.
       const rows = native
         .prepare(
-          `SELECT m.*
-         FROM memories m
-         WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
-           AND ${clauses.join(" AND ")}
-         ORDER BY CASE
-           WHEN lower(m.title) = ? THEN 0
-           WHEN lower(m.title) LIKE ? ESCAPE '\\' THEN 1
-           ELSE 2
-         END, m.updated_at DESC
-         LIMIT ?`,
+          `SELECT
+             m.id AS id,
+             m.title AS title,
+             m.content AS content,
+             m.tags AS tags,
+             m.source AS source,
+             m.supersedes_id AS supersedes_id,
+             m.created_at AS created_at,
+             m.updated_at AS updated_at
+           FROM memories m
+           WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
+             AND ${clauses.join(" AND ")}
+           ORDER BY CASE
+             WHEN lower(m.title) = ? THEN 0
+             WHEN lower(m.title) LIKE ? ESCAPE '\\' THEN 1
+             ELSE 2
+           END, m.updated_at DESC
+           LIMIT ?`,
         )
-        .all(...termParams, normalized, phrasePattern, limit) as Array<
-        typeof schema.memories.$inferSelect
-      >;
+        .all(...termParams, normalized, phrasePattern, limit) as Array<MemoryRawRow>;
       return rows.map(mapMemoryRow);
     },
   };

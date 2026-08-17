@@ -5,14 +5,14 @@ interface GraphNodeRawRow {
   id: number;
   type: string;
   label: string;
-  ref_id: number | string | null;
+  ref_id: number | null;
   metadata: string;
   created_at: string;
   updated_at: string;
 }
 
 interface UpsertNodeResult {
-  id: number | string;
+  id: number;
   label?: string;
 }
 
