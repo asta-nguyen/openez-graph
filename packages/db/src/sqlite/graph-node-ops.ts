@@ -1,15 +1,5 @@
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
-import { mapNodeRow, type GraphStmts } from "./graph-ops-shared";
-
-interface GraphNodeRawRow {
-  id: number;
-  type: string;
-  label: string;
-  ref_id: number | null;
-  metadata: string;
-  created_at: string;
-  updated_at: string;
-}
+import { mapNodeRow, type GraphNodeRawRow, type GraphStmts } from "./graph-ops-shared";
 
 interface UpsertNodeResult {
   id: number;

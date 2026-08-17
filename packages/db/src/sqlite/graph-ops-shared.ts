@@ -21,23 +21,28 @@ export interface GraphStmts {
   insertEdgeWithId?: ReturnType<NativeDatabase["prepare"]>;
 }
 
+export interface GraphNodeRawRow {
+  id: number;
+  type: string;
+  label: string;
+  ref_id?: number | null;
+  metadata?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 /**
  * Maps a raw graph node row into the normalized shape returned by the
  * repository. Shared by node and traversal operations.
  */
-export function mapNodeRow(row: Record<string, unknown>) {
+export function mapNodeRow(row: GraphNodeRawRow) {
   return {
     id: Number(row.id),
     type: String(row.type),
     label: String(row.label),
-    refId:
-      row.ref_id !== null && row.ref_id !== undefined
-        ? typeof row.ref_id === "number"
-          ? row.ref_id
-          : String(row.ref_id)
-        : null,
+    refId: row.ref_id !== null && row.ref_id !== undefined ? Number(row.ref_id) : null,
     metadata: String(row.metadata ?? "{}"),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
   };
 }
