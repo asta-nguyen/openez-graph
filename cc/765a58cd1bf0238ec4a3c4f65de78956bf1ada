@@ -1,0 +1,19 @@
+landing/src/app/page.tsx
+  s_19bfa3a68969eb::t_7e84f7efd7bd68 67-74,85,116,429-430
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "cc765a58cd1bf0238ec4a3c4f65de78956bf1ada",
+  "prompts": {},
+  "sessions": {
+    "s_19bfa3a68969eb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a008d8-104c-7d13-a58c-19eca9b4caa7",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
