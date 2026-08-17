@@ -56,7 +56,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
-      "oxlint",
+      "oxlint --fix",
       "prettier --write"
     ],
     "*.{json,md,yml,yaml}": [

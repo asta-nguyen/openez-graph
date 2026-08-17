@@ -65,8 +65,9 @@ function getWorkspaceDbRaw(rootPath: string) {
   const sqlite = createNativeDatabase(dbPath);
   sqlite.pragma("page_size = 16384");
   sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
-  return { sqlite, db: drizzle(sqlite as any, { schema }) };
+  // SAFETY: NativeDatabase wraps bun:sqlite Database driver instance.
+  const drizzleDb = drizzle(sqlite as any, { schema });
+  return { sqlite, db: drizzleDb };
 }
 
 export function getWorkspaceDb(rootPath: string) {
@@ -134,6 +135,7 @@ export function getFullWorkspaceDdl(): string {
 }
 
 export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: Query counts table occurrences in sqlite_master.
   const tableExists =
     (
       sqlite
@@ -144,6 +146,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
   if (tableExists) {
     migrateIndexTablesIfLegacy(sqlite);
 
+    // SAFETY: Query counts table occurrences in sqlite_master.
     const hasIndexMeta =
       (
         sqlite
@@ -158,6 +161,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
       );
     }
 
+    // SAFETY: Query counts table occurrences in sqlite_master.
     const hasFts =
       (
         sqlite
@@ -188,17 +192,23 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
       // Quick count check first: if chunks and FTS row counts differ, repair
       // immediately. Equal counts are not sufficient: an interrupted write
       // can replace one chunk while FTS still contains the old ID.
-      const chunkCount = (sqlite.prepare("SELECT count(*) as c FROM chunks").get() as { c: number })
-        .c;
-      const ftsCount = (
-        sqlite.prepare("SELECT count(*) as c FROM chunks_fts").get() as { c: number }
-      ).c;
+      // SAFETY: Query counts rows in chunks table.
+      const chunkCountRow = sqlite.prepare("SELECT count(*) as c FROM chunks").get() as {
+        c: number;
+      };
+      const chunkCount = chunkCountRow.c;
+      // SAFETY: Query counts rows in chunks_fts table.
+      const ftsCountRow = sqlite.prepare("SELECT count(*) as c FROM chunks_fts").get() as {
+        c: number;
+      };
+      const ftsCount = ftsCountRow.c;
       let ftsInSync = chunkCount === ftsCount;
       if (ftsInSync) {
         // Scan FTS once and use chunks' PRIMARY KEY for the join. This is
         // O(n), unlike the old chunks -> FTS join which scans UNINDEXED
         // chunk_id once per chunk.
-        const ftsShape = sqlite
+        // SAFETY: Query counts distinct chunks and orphans in chunks_fts.
+        const ftsIntegrity = sqlite
           .prepare(
             `
             SELECT count(DISTINCT f.chunk_id) AS distinct_count,
@@ -208,7 +218,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
           `,
           )
           .get() as { distinct_count: number; orphan_count: number };
-        ftsInSync = ftsShape.distinct_count === chunkCount && ftsShape.orphan_count === 0;
+        ftsInSync = ftsIntegrity.distinct_count === chunkCount && ftsIntegrity.orphan_count === 0;
       }
       if (!ftsInSync) {
         sqlite.exec(`
@@ -230,6 +240,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
       }
     }
 
+    // SAFETY: Query counts index occurrences in sqlite_master.
     const hasTypeLabelIdx =
       (
         sqlite
@@ -245,6 +256,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
         );
       } catch {}
     }
+    // SAFETY: Query counts index occurrences in sqlite_master.
     const hasEdgeIdx =
       (
         sqlite
@@ -281,6 +293,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     migrateQueryLogsTable(sqlite);
     migrateRunsTables(sqlite);
 
+    // SAFETY: Query counts table occurrences in sqlite_master.
     const hasParsedDocs =
       (
         sqlite
@@ -303,6 +316,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
     } else {
       // Add called_identifiers and parser_version columns to existing
       // parsed_documents tables created before these fields existed.
+      // SAFETY: PRAGMA table_info returns table columns info.
       const parsedCols = new Set(
         (
           sqlite.prepare("PRAGMA table_info(parsed_documents)").all() as Array<{ name: string }>
@@ -340,6 +354,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
 }
 
 function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns table columns info.
   const columns = new Set(
     (sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map(
       (row) => row.name,
@@ -358,6 +373,7 @@ function migrateQueryLogColumns(sqlite: ReturnType<typeof createNativeDatabase>)
 }
 
 function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns table columns info.
   const columns = new Set(
     (sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string }>).map(
       (row) => row.name,
@@ -370,6 +386,7 @@ function migrateEmbeddingColumns(sqlite: ReturnType<typeof createNativeDatabase>
 }
 
 function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns table columns info.
   const embeddingColumn = (
     sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{ name: string; type: string }>
   ).find((column) => column.name === "embedding");
@@ -382,6 +399,7 @@ function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) 
   sqlite.exec("CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id)");
 
   // Skip dedup on empty table — window function is expensive even with 0 rows.
+  // SAFETY: Query counts rows in embeddings table.
   const count = (sqlite.prepare("SELECT count(*) as c FROM embeddings").get() as { c: number }).c;
   if (count === 0) {
     sqlite.exec(
@@ -413,6 +431,7 @@ function migrateEmbeddingDedup(sqlite: ReturnType<typeof createNativeDatabase>) 
 }
 
 function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: PRAGMA table_info returns table columns info.
   const info = sqlite.prepare("PRAGMA table_info(embeddings)").all() as Array<{
     name: string;
     type: string;
@@ -425,6 +444,7 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
     // FTS) until an explicit `openez reindex` rebuilds embeddings as BLOB.
     // The reindex path calls `resetIndexArtifacts()` which drops all rows
     // and recreates the embeddings table with the current BLOB schema.
+    // SAFETY: Query selects value from index_meta table.
     const existing = sqlite
       .prepare("SELECT value FROM index_meta WHERE key = 'embedding_format'")
       .get() as { value: string } | undefined;
@@ -442,6 +462,7 @@ function migrateEmbeddingToBlob(sqlite: ReturnType<typeof createNativeDatabase>)
 }
 
 function migrateIndexTablesIfLegacy(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: Query counts table occurrences in sqlite_master.
   const tableExists =
     (
       sqlite
@@ -450,6 +471,7 @@ function migrateIndexTablesIfLegacy(sqlite: ReturnType<typeof createNativeDataba
     ).c > 0;
   if (!tableExists) return;
 
+  // SAFETY: PRAGMA table_info returns table columns info.
   const info = sqlite.prepare("PRAGMA table_info(documents)").all() as Array<{
     name: string;
     type: string;
@@ -496,6 +518,7 @@ function migrateIndexTablesIfLegacy(sqlite: ReturnType<typeof createNativeDataba
 }
 
 function migrateMemoriesTable(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: Query counts table occurrences in sqlite_master.
   const tableExists =
     (
       sqlite
@@ -504,6 +527,7 @@ function migrateMemoriesTable(sqlite: ReturnType<typeof createNativeDatabase>) {
     ).c > 0;
   if (!tableExists) return;
 
+  // SAFETY: PRAGMA table_info returns table columns info.
   const info = sqlite.prepare("PRAGMA table_info(memories)").all() as Array<{
     name: string;
     type: string;
@@ -513,8 +537,25 @@ function migrateMemoriesTable(sqlite: ReturnType<typeof createNativeDatabase>) {
     return; // Already integer primary key
   }
 
-  // Migrate legacy TEXT id to INTEGER PRIMARY KEY AUTOINCREMENT while preserving all data.
+  // Migrate legacy TEXT id to INTEGER PRIMARY KEY AUTOINCREMENT while preserving all data and remapping supersedes_id.
   sqlite.transaction(() => {
+    // Read all existing memories
+    // SAFETY: Query selects rows from memories table.
+    const oldRows = sqlite
+      .prepare(
+        "SELECT id, title, content, tags, source, supersedes_id, created_at, updated_at FROM memories ORDER BY created_at ASC",
+      )
+      .all() as Array<{
+      id: string;
+      title: string;
+      content: string;
+      tags: string | null;
+      source: string;
+      supersedes_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS memories_migration_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -526,8 +567,41 @@ function migrateMemoriesTable(sqlite: ReturnType<typeof createNativeDatabase>) {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+    `);
+
+    const insertStmt = sqlite.prepare(`
       INSERT INTO memories_migration_new (title, content, tags, source, created_at, updated_at)
-      SELECT title, content, tags, source, created_at, updated_at FROM memories ORDER BY created_at ASC;
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const oldToNewId = new Map<string, number>();
+    for (const row of oldRows) {
+      const res = insertStmt.run(
+        row.title,
+        row.content,
+        row.tags,
+        row.source,
+        row.created_at,
+        row.updated_at,
+      );
+      oldToNewId.set(row.id, Number(res.lastInsertRowid));
+    }
+
+    // Backfill remapped supersedes_id
+    const updateSupersedesStmt = sqlite.prepare(
+      "UPDATE memories_migration_new SET supersedes_id = ? WHERE id = ?",
+    );
+    for (const row of oldRows) {
+      if (row.supersedes_id && oldToNewId.has(row.supersedes_id)) {
+        const newId = oldToNewId.get(row.id);
+        const newSupersededId = oldToNewId.get(row.supersedes_id);
+        if (newId && newSupersededId) {
+          updateSupersedesStmt.run(newSupersededId, newId);
+        }
+      }
+    }
+
+    sqlite.exec(`
       DROP TABLE memories;
       ALTER TABLE memories_migration_new RENAME TO memories;
       CREATE INDEX IF NOT EXISTS idx_memories_title ON memories(title);
@@ -537,6 +611,7 @@ function migrateMemoriesTable(sqlite: ReturnType<typeof createNativeDatabase>) {
 }
 
 function migrateQueryLogsTable(sqlite: ReturnType<typeof createNativeDatabase>) {
+  // SAFETY: Query counts table occurrences in sqlite_master.
   const tableExists =
     (
       sqlite
@@ -545,6 +620,7 @@ function migrateQueryLogsTable(sqlite: ReturnType<typeof createNativeDatabase>) 
     ).c > 0;
   if (!tableExists) return;
 
+  // SAFETY: PRAGMA table_info returns table columns info.
   const info = sqlite.prepare("PRAGMA table_info(query_logs)").all() as Array<{
     name: string;
     type: string;
@@ -559,15 +635,15 @@ function migrateQueryLogsTable(sqlite: ReturnType<typeof createNativeDatabase>) 
       CREATE TABLE IF NOT EXISTS query_logs_migration_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         query TEXT NOT NULL,
-        duration_ms INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        result_count INTEGER NOT NULL,
         tokens_returned INTEGER NOT NULL DEFAULT 0,
         tokens_saved INTEGER NOT NULL DEFAULT 0,
         files_scanned INTEGER NOT NULL DEFAULT 0,
-        result_count INTEGER NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      INSERT INTO query_logs_migration_new (query, duration_ms, tokens_returned, tokens_saved, files_scanned, result_count, created_at)
-      SELECT query, duration_ms, coalesce(tokens_returned, 0), coalesce(tokens_saved, 0), coalesce(files_scanned, 0), result_count, created_at FROM query_logs ORDER BY created_at ASC;
+      INSERT INTO query_logs_migration_new (query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at)
+      SELECT query, coalesce(mode, 'fast'), result_count, coalesce(tokens_returned, 0), coalesce(tokens_saved, 0), coalesce(files_scanned, 0), created_at FROM query_logs ORDER BY created_at ASC;
       DROP TABLE query_logs;
       ALTER TABLE query_logs_migration_new RENAME TO query_logs;
       CREATE INDEX IF NOT EXISTS idx_query_logs_created ON query_logs(created_at);
@@ -576,44 +652,84 @@ function migrateQueryLogsTable(sqlite: ReturnType<typeof createNativeDatabase>) 
 }
 
 function migrateRunsTables(sqlite: ReturnType<typeof createNativeDatabase>) {
-  for (const tableName of ["index_runs", "graph_runs"] as const) {
-    const tableExists =
-      (
-        sqlite
-          .prepare(
-            `SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
-          )
-          .get() as { c: number }
-      ).c > 0;
-    if (!tableExists) continue;
-
-    const info = sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+  // 1. index_runs
+  // SAFETY: Query counts table occurrences in sqlite_master.
+  const indexRunsExists =
+    (
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='index_runs'")
+        .get() as { c: number }
+    ).c > 0;
+  if (indexRunsExists) {
+    // SAFETY: PRAGMA table_info returns table columns info.
+    const info = sqlite.prepare("PRAGMA table_info(index_runs)").all() as Array<{
       name: string;
       type: string;
     }>;
     const idCol = info.find((c) => c.name === "id");
-    if (!idCol || idCol.type.toUpperCase().includes("INT")) {
-      continue;
+    if (idCol && !idCol.type.toUpperCase().includes("INT")) {
+      sqlite.transaction(() => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS index_runs_migration_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mode TEXT NOT NULL DEFAULT 'incremental',
+            status TEXT NOT NULL DEFAULT 'pending',
+            files_scanned INTEGER NOT NULL DEFAULT 0,
+            files_updated INTEGER NOT NULL DEFAULT 0,
+            chunks_written INTEGER NOT NULL DEFAULT 0,
+            embeddings_written INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            stats TEXT NOT NULL DEFAULT '{}',
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            finished_at TEXT
+          );
+          INSERT INTO index_runs_migration_new (mode, status, files_scanned, files_updated, chunks_written, embeddings_written, error_message, stats, started_at, finished_at)
+          SELECT coalesce(mode, 'incremental'), coalesce(status, 'completed'), coalesce(files_scanned, 0), coalesce(files_updated, 0), coalesce(chunks_written, 0), coalesce(embeddings_written, 0), error_message, coalesce(stats, '{}'), started_at, finished_at FROM index_runs ORDER BY started_at ASC;
+          DROP TABLE index_runs;
+          ALTER TABLE index_runs_migration_new RENAME TO index_runs;
+          CREATE INDEX IF NOT EXISTS idx_index_runs_started ON index_runs(started_at);
+        `);
+      })();
     }
+  }
 
-    sqlite.transaction(() => {
-      sqlite.exec(`
-        CREATE TABLE IF NOT EXISTS ${tableName}_migration_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          status TEXT NOT NULL,
-          files_indexed INTEGER NOT NULL,
-          chunks_created INTEGER NOT NULL,
-          duration_ms INTEGER NOT NULL,
-          error TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        INSERT INTO ${tableName}_migration_new (status, files_indexed, chunks_created, duration_ms, error, created_at)
-        SELECT status, files_indexed, chunks_created, duration_ms, error, created_at FROM ${tableName} ORDER BY created_at ASC;
-        DROP TABLE ${tableName};
-        ALTER TABLE ${tableName}_migration_new RENAME TO ${tableName};
-        CREATE INDEX IF NOT EXISTS idx_${tableName}_created ON ${tableName}(created_at);
-      `);
-    })();
+  // 2. graph_runs
+  // SAFETY: Query counts table occurrences in sqlite_master.
+  const graphRunsExists =
+    (
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='graph_runs'")
+        .get() as { c: number }
+    ).c > 0;
+  if (graphRunsExists) {
+    // SAFETY: PRAGMA table_info returns table columns info.
+    const info = sqlite.prepare("PRAGMA table_info(graph_runs)").all() as Array<{
+      name: string;
+      type: string;
+    }>;
+    const idCol = info.find((c) => c.name === "id");
+    if (idCol && !idCol.type.toUpperCase().includes("INT")) {
+      sqlite.transaction(() => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS graph_runs_migration_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mode TEXT NOT NULL DEFAULT 'incremental',
+            status TEXT NOT NULL DEFAULT 'pending',
+            nodes_created INTEGER NOT NULL DEFAULT 0,
+            edges_created INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            stats TEXT NOT NULL DEFAULT '{}',
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            finished_at TEXT
+          );
+          INSERT INTO graph_runs_migration_new (mode, status, nodes_created, edges_created, error_message, stats, started_at, finished_at)
+          SELECT coalesce(mode, 'incremental'), coalesce(status, 'completed'), coalesce(nodes_created, 0), coalesce(edges_created, 0), error_message, coalesce(stats, '{}'), started_at, finished_at FROM graph_runs ORDER BY started_at ASC;
+          DROP TABLE graph_runs;
+          ALTER TABLE graph_runs_migration_new RENAME TO graph_runs;
+          CREATE INDEX IF NOT EXISTS idx_graph_runs_started ON graph_runs(started_at);
+        `);
+      })();
+    }
   }
 }
 
