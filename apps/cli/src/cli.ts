@@ -354,15 +354,25 @@ program
   .argument("[ref]", "Git ref or commit range (e.g. HEAD~1, origin/main)")
   .option("-s, --staged", "Inspect staged git changes")
   .option("-j, --json", "Output JSON review context bundle")
-  .option("-l, --limit <number>", "Maximum callers to display per symbol", "5")
+  .option("-l, --limit <number>", "Maximum callers and callees to display per symbol", "5")
   .action(async (ref, options) => {
+    if (ref && options.staged) {
+      console.error("Error: Cannot specify both a git ref and --staged.");
+      process.exit(1);
+    }
+
+    const parsedLimit = Number(options.limit);
+    if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {
+      console.error(`Error: --limit must be a positive integer, got '${options.limit}'`);
+      process.exit(1);
+    }
+
     const localConfig = await findLocalWorkspaceConfig(process.cwd());
     const rootPath = localConfig ? localConfig.rootPath : process.cwd();
-    const limit = Math.max(1, parseInt(options.limit, 10) || 5);
     const report = await analyzeDiffContext(rootPath, {
       ref,
       staged: Boolean(options.staged),
-      limit,
+      limit: parsedLimit,
     });
 
     if (options.json) {

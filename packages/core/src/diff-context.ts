@@ -30,6 +30,7 @@ export interface ModifiedFileContext {
   status: "modified" | "added" | "deleted";
   changedLineRanges: ChangedHunkRange[];
   affectedSymbols: AffectedSymbol[];
+  imports?: string[];
 }
 
 export interface DiffContextReport {
@@ -49,14 +50,24 @@ export function parseGitDiffHunks(diffText: string): FileDiffHunks[] {
   let currentFile: FileDiffHunks | null = null;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i].trim();
 
     if (line.startsWith("diff --git ")) {
       if (currentFile) {
         files.push(currentFile);
       }
-      const match = line.match(/diff --git a\/(.+?) b\/(.+?)$/);
-      const targetPath = match ? match[2] : "";
+      let targetPath = "";
+      const match = line.match(
+        /^diff --git (?:a\/([^\s"]+)|"a\/(.+?)") (?:b\/([^\s"]+)|"b\/(.+?)")$/,
+      );
+      if (match) {
+        targetPath = match[3] || match[4] || match[1] || match[2] || "";
+      } else {
+        const parts = line.split(" ");
+        if (parts.length >= 4) {
+          targetPath = parts.slice(3).join(" ").replace(/^b\//, "").replace(/^"|"$/g, "");
+        }
+      }
       currentFile = {
         filePath: targetPath,
         status: "modified",
@@ -101,7 +112,7 @@ export async function analyzeDiffContext(
   const repo = createWorkspaceRepository(resolvedRoot);
   const callerLimit = options.limit ?? 5;
 
-  const gitArgs = ["diff"];
+  const gitArgs = ["diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
   if (options.staged) {
     gitArgs.push("--staged");
   } else if (options.ref) {
@@ -114,9 +125,13 @@ export async function analyzeDiffContext(
       cwd: resolvedRoot,
       encoding: "utf8",
       maxBuffer: 10 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
     });
-  } catch (err) {
-    diffOutput = "";
+  } catch (err: any) {
+    const stderr = err?.stderr?.toString()?.trim();
+    throw new Error(
+      `Failed to execute git diff${options.ref ? ` for ref '${options.ref}'` : ""}: ${stderr || err?.message || String(err)}`,
+    );
   }
 
   const parsedDiffs = parseGitDiffHunks(diffOutput);
@@ -125,10 +140,28 @@ export async function analyzeDiffContext(
 
   for (const fileDiff of parsedDiffs) {
     const affectedSymbols: AffectedSymbol[] = [];
+    const fileImports: string[] = [];
 
     // Query parsed_documents for file AST symbols
     const doc = await repo.getDocumentByPath(fileDiff.filePath);
     if (doc) {
+      // Query file-level imports dependencies
+      const fileEdges = (await repo.queryRaw(
+        `SELECT target.label
+         FROM graph_edges e
+         JOIN graph_nodes source ON source.id = e.from_node_id
+         JOIN graph_nodes target ON target.id = e.to_node_id
+         WHERE source.type = 'file'
+           AND source.label = ?
+           AND e.type = 'imports'
+         LIMIT ?`,
+        [doc.path, callerLimit],
+      )) as Array<{ label: string }>;
+
+      for (const edge of fileEdges) {
+        fileImports.push(edge.label);
+      }
+
       const parsed = await repo.queryRaw(
         "SELECT symbols FROM parsed_documents WHERE document_id = ?",
         [doc.id],
@@ -149,24 +182,19 @@ export async function analyzeDiffContext(
         const overlaps = fileDiff.ranges.some((r) => r.start <= symEnd && r.end >= symStart);
 
         if (overlaps) {
-          // Query callers and callees from graph scoped to this document
+          // Query callers and callees from graph scoped to this document & file path
           const callers: Array<{ name: string; filePath?: string }> = [];
           const callees: Array<{ name: string; filePath?: string }> = [];
+          const escapedName = String(s.name || "").replace(/[%_\\]/g, "\\$&");
 
-          let node = (await repo.queryRaw(
-            `SELECT gn.id FROM graph_nodes gn
-             JOIN chunks c ON c.id = gn.ref_id
-             WHERE (gn.label = ? OR gn.label LIKE ?) AND c.document_id = ?
+          const node = (await repo.queryRaw(
+            `SELECT id FROM graph_nodes
+             WHERE type = 'symbol'
+               AND json_extract(metadata, '$.filePath') = ?
+               AND (label = ? OR label LIKE ? ESCAPE '\\')
              LIMIT 1`,
-            [s.name, `%::${s.name}`, doc.id],
+            [fileDiff.filePath, s.name, `%::${escapedName}`],
           )) as Array<{ id: string }>;
-
-          if (!node[0]?.id) {
-            node = (await repo.queryRaw(
-              "SELECT id FROM graph_nodes WHERE label = ? OR label LIKE ? LIMIT 1",
-              [s.name, `%::${s.name}`],
-            )) as Array<{ id: string }>;
-          }
 
           if (node[0]?.id) {
             const incomingEdges = (await repo.queryRaw(
@@ -185,7 +213,11 @@ export async function analyzeDiffContext(
               } catch {}
               callers.push({
                 name: inEdge.label,
-                filePath: meta.path ? String(meta.path) : undefined,
+                filePath: meta.filePath
+                  ? String(meta.filePath)
+                  : meta.path
+                    ? String(meta.path)
+                    : undefined,
               });
             }
 
@@ -205,7 +237,11 @@ export async function analyzeDiffContext(
               } catch {}
               callees.push({
                 name: outEdge.label,
-                filePath: meta.path ? String(meta.path) : undefined,
+                filePath: meta.filePath
+                  ? String(meta.filePath)
+                  : meta.path
+                    ? String(meta.path)
+                    : undefined,
               });
             }
           }
@@ -230,6 +266,7 @@ export async function analyzeDiffContext(
       status: fileDiff.status,
       changedLineRanges: fileDiff.ranges,
       affectedSymbols,
+      imports: fileImports.length > 0 ? fileImports : undefined,
     });
   }
 
@@ -246,6 +283,9 @@ export async function analyzeDiffContext(
     for (const f of fileContexts) {
       const statusIcon = f.status === "added" ? "✨" : f.status === "deleted" ? "🗑️" : "📁";
       summaryLines.push(`\n${statusIcon} ${f.filePath} (${f.status})`);
+      if (f.imports && f.imports.length > 0) {
+        summaryLines.push(`  • 📦 Imports: ${f.imports.join(", ")}`);
+      }
       if (f.affectedSymbols.length === 0) {
         summaryLines.push("  • (No indexed symbols modified)");
       } else {
