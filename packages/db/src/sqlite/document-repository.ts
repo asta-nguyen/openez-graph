@@ -81,17 +81,36 @@ export function createDocumentOps(
     },
 
     async getFileOutline(filePath: string): Promise<FileOutlineResult | null> {
-      const normalized = filePath.replace(/^\.?\//, "");
+      const normalizedSlashes = filePath.replace(/\\/g, "/");
+      const normalized = normalizedSlashes.replace(/^\.?\//, "");
+
       let docRow = stmts.docByPathOrAbs.get(normalized, filePath) as
         | Record<string, unknown>
         | undefined;
 
-      if (!docRow && !filePath.startsWith("/")) {
-        const candidates = stmts.docBySuffix.all(normalized) as Array<Record<string, unknown>>;
-        if (candidates.length === 1) {
-          docRow = candidates[0];
-        } else if (candidates.length > 1) {
-          const exactSuffix = candidates.find((c) => String(c.path).endsWith("/" + normalized));
+      if (!docRow && normalizedSlashes !== filePath) {
+        docRow = stmts.docByPathOrAbs.get(normalizedSlashes, normalizedSlashes) as
+          | Record<string, unknown>
+          | undefined;
+      }
+
+      if (!docRow && !filePath.startsWith("/") && !filePath.match(/^[a-zA-Z]:[/\\]/)) {
+        const escapedSuffix = normalized.replace(/[%_\\]/g, "\\$&");
+        const candidates = stmts.docBySuffix.all(escapedSuffix, escapedSuffix) as Array<
+          Record<string, unknown>
+        >;
+        const validCandidates = candidates.filter((c) => {
+          const docPath = String(c.path).replace(/\\/g, "/");
+          return docPath === normalized || docPath.endsWith("/" + normalized);
+        });
+
+        if (validCandidates.length === 1) {
+          docRow = validCandidates[0];
+        } else if (validCandidates.length > 1) {
+          const exactSuffix = validCandidates.find((c) => {
+            const docPath = String(c.path).replace(/\\/g, "/");
+            return docPath.endsWith("/" + normalized);
+          });
           if (exactSuffix) {
             docRow = exactSuffix;
           }

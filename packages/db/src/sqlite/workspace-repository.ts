@@ -50,7 +50,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       "SELECT * FROM documents WHERE path = ? OR absolute_path = ? LIMIT 1",
     ),
     docBySuffix: native.prepare(
-      "SELECT * FROM documents WHERE path LIKE '%/' || ? ORDER BY length(path) ASC",
+      "SELECT * FROM documents WHERE (path LIKE '%/' || ? ESCAPE '\\' OR path LIKE '%\\' || ? ESCAPE '\\') ORDER BY length(path) ASC",
     ),
     parsedDocSymbols: native.prepare("SELECT symbols FROM parsed_documents WHERE document_id = ?"),
     chunksByDocOutline: native.prepare(
