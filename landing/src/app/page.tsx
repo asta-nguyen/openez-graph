@@ -356,7 +356,7 @@ export default async function LandingPage() {
 
         {/* ── PROBLEM ── */}
         <Reveal delay={100}>
-          <section className="px-6 py-24 section-full max-w-5xl mx-auto text-center">
+          <section className="px-6 py-20 max-w-5xl mx-auto text-center">
             <p className="font-mono text-xs tracking-widest text-accent-foreground uppercase mb-3">
               The Problem
             </p>
@@ -366,12 +366,12 @@ export default async function LandingPage() {
             >
               AI agents shouldn&apos;t have to re-read everything
             </h2>
-            <p className="text-base text-muted-foreground max-w-2xl mx-auto mb-10 text-pretty leading-relaxed">
+            <p className="text-base text-muted-foreground max-w-2xl mx-auto mb-8 text-pretty leading-relaxed">
               Every time an AI coding agent starts a conversation, it reads your source files from
               scratch — burning tokens, context, and time on the same code it already saw yesterday.
             </p>
 
-            <div className="grid sm:grid-cols-2 gap-5 text-left">
+            <div className="grid sm:grid-cols-2 gap-4 text-left">
               {[
                 {
                   icon: Terminal,
@@ -598,7 +598,7 @@ export default async function LandingPage() {
 
         {/* ── MCP SETUP ── */}
         <Reveal delay={100}>
-          <section id="agents" className="section-full px-6 py-20 text-center">
+          <section id="agents" className="px-6 py-16 max-w-5xl mx-auto text-center">
             <p className="font-mono text-xs tracking-widest text-accent-foreground uppercase mb-3">
               AI Integration
             </p>
@@ -608,12 +608,12 @@ export default async function LandingPage() {
             >
               A focused tool surface for agents
             </h2>
-            <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-10 text-pretty">
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-8 text-pretty">
               OpenEZ exposes seven workspace-aware tools over MCP. Read tools can search one or many
               workspaces; memory writes and indexing stay scoped to a single workspace.
             </p>
 
-            <div className="grid sm:grid-cols-5 gap-6">
+            <div className="grid sm:grid-cols-5 gap-5">
               {/* Config block */}
               <div
                 className="sm:col-span-3 text-left"
@@ -622,7 +622,7 @@ export default async function LandingPage() {
                   opacity: 0,
                 }}
               >
-                <p className="mb-3 font-mono text-xs uppercase tracking-wide text-muted-foreground">
+                <p className="mb-2 font-mono text-xs uppercase tracking-wide text-muted-foreground">
                   Choose one
                 </p>
                 <div className="agent-commands">
@@ -643,8 +643,8 @@ export default async function LandingPage() {
                   opacity: 0,
                 }}
               >
-                <h3 className="font-semibold text-sm mb-4">Works with:</h3>
-                <ul className="space-y-3">
+                <h3 className="font-semibold text-sm mb-3">Works with:</h3>
+                <ul className="space-y-2.5">
                   {[
                     {
                       name: "Retrieval",
