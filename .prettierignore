@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+.turbo/
+build/
+coverage/
+*.sqlite
+apps/cli/dist/
+apps/web/.tanstack/
+apps/web/src/routeTree.gen.ts
+pnpm-lock.yaml
+packages/native/target/
+packages/native/*.node
+.superpowers/
+.omo/
+.agents/
+sol-review.md

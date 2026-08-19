@@ -1,6 +1,6 @@
 import GithubSlugger from "github-slugger";
 
-import { countTokens } from "@openez-graph/core";
+import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
 import { hashContent } from "./hash";
 import type { IndexedChunk } from "./types";
@@ -10,14 +10,19 @@ interface HeadingState {
   depth: number;
 }
 
-function splitLargeChunk(content: string, targetTokens: number, overlapTokens: number): string[] {
+function splitLargeChunk(
+  content: string,
+  targetTokens: number,
+  overlapTokens: number,
+  counter: TokenCounter,
+): string[] {
   const paragraphs = content.split(/\n{2,}/).filter(Boolean);
   const chunks: string[] = [];
   let current = "";
 
   for (const paragraph of paragraphs) {
     const candidate = current ? `${current}\n\n${paragraph}` : paragraph;
-    if (countTokens(candidate) <= targetTokens) {
+    if (counter.count(candidate) <= targetTokens) {
       current = candidate;
       continue;
     }
@@ -30,7 +35,7 @@ function splitLargeChunk(content: string, targetTokens: number, overlapTokens: n
     let window = "";
     for (const word of words) {
       const next = window ? `${window} ${word}` : word;
-      if (countTokens(next) > targetTokens) {
+      if (counter.count(next) > targetTokens) {
         chunks.push(window);
         const overlap = window.split(/\s+/).slice(-overlapTokens).join(" ");
         window = overlap ? `${overlap} ${word}`.trim() : word;
@@ -52,10 +57,18 @@ export function indexMarkdown(input: {
   content: string;
   targetTokens: number;
   overlapTokens: number;
+  counter?: TokenCounter;
 }): { chunks: IndexedChunk[]; wikilinks: string[] } {
+  const counter = input.counter ?? exactTokenCounter;
   const lines = input.content.split("\n");
   const headingState: HeadingState = { path: [], depth: 0 };
-  const sections: Array<{ heading?: string; content: string; startLine: number; endLine: number; headingPath: string[] }> = [];
+  const sections: Array<{
+    heading?: string;
+    content: string;
+    startLine: number;
+    endLine: number;
+    headingPath: string[];
+  }> = [];
   const wikilinks = new Set<string>();
   const slugger = new GithubSlugger();
 
@@ -74,7 +87,7 @@ export function indexMarkdown(input: {
       content,
       startLine: sectionStartLine,
       endLine: lineNumber,
-      headingPath: [...headingState.path]
+      headingPath: [...headingState.path],
     });
     buffer = [];
   };
@@ -102,26 +115,31 @@ export function indexMarkdown(input: {
 
   const chunks: IndexedChunk[] = [];
   sections.forEach((section) => {
-    const split = splitLargeChunk(section.content, input.targetTokens, input.overlapTokens);
+    const split = splitLargeChunk(
+      section.content,
+      input.targetTokens,
+      input.overlapTokens,
+      counter,
+    );
     split.forEach((content, splitIndex) => {
       chunks.push({
         heading: section.heading,
         content,
-        tokenCount: countTokens(content),
+        tokenCount: counter.count(content),
         contentHash: hashContent(content),
         metadata: {
           kind: "markdown",
           headingPath: section.headingPath,
           startLine: section.startLine,
           endLine: section.endLine,
-          splitIndex
-        }
+          splitIndex,
+        },
       });
     });
   });
 
   return {
     chunks,
-    wikilinks: [...wikilinks]
+    wikilinks: [...wikilinks],
   };
 }

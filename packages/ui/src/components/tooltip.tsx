@@ -53,9 +53,19 @@ export function Tooltip({
             side === "bottom" && "top-full mt-2",
             side === "left" && "right-full mr-2",
             side === "right" && "left-full ml-2",
-            align === "start" && (side === "top" || side === "bottom" ? "left-0" : side === "left" || side === "right" ? "top-0" : ""),
+            align === "start" &&
+              (side === "top" || side === "bottom"
+                ? "left-0"
+                : side === "left" || side === "right"
+                  ? "top-0"
+                  : ""),
             align === "center" && "left-1/2 -translate-x-1/2",
-            align === "end" && (side === "top" || side === "bottom" ? "right-0" : side === "left" || side === "right" ? "bottom-0" : "")
+            align === "end" &&
+              (side === "top" || side === "bottom"
+                ? "right-0"
+                : side === "left" || side === "right"
+                  ? "bottom-0"
+                  : ""),
           )}
           role="tooltip"
         >

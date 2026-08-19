@@ -157,11 +157,7 @@ export type ParsedFile = {
 
 export interface CodeParser {
   canParse(path: string): boolean;
-  parse(input: {
-    path: string;
-    content: string;
-    workspaceRoot: string;
-  }): Promise<ParsedFile>;
+  parse(input: { path: string; content: string; workspaceRoot: string }): Promise<ParsedFile>;
 }
 ```
 
@@ -208,21 +204,21 @@ Can co config de override:
 export default {
   codeParsing: {
     tsStrategy: "ts-morph",
-    treeSitterLanguages: ["python", "go", "rust"]
-  }
+    treeSitterLanguages: ["python", "go", "rust"],
+  },
 };
 ```
 
 Sau nay co the doi:
 
 ```ts
-tsStrategy: "tree-sitter"
+tsStrategy: "tree-sitter";
 ```
 
 hoac:
 
 ```ts
-tsStrategy: "both"
+tsStrategy: "both";
 ```
 
 ---
@@ -575,7 +571,7 @@ Khong doi contract cua tools chinh.
 Tools van la:
 
 ```text
-memory_query
+code_query
 code_context
 graph_neighbors
 index_workspace

@@ -33,9 +33,7 @@ export function ThemeProvider({
     return (localStorage.getItem("theme") as Theme) ?? defaultTheme;
   });
 
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
-    resolveTheme(theme)
-  );
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => resolveTheme(theme));
 
   const setTheme = useCallback((value: Theme | ((prev: Theme) => Theme)) => {
     setThemeState((prev) => {

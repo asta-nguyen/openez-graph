@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@openez-graph/ui";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -25,25 +25,18 @@ import {
   Layers,
   Loader2,
   MessageSquare,
+  RefreshCw,
+  TrendingDown,
 } from "lucide-react";
 import { StatusBadge } from "../../../components/status-badge";
-import {
-  workspaceGraphQueryOptions,
-  workspaceQueryOptions,
-} from "../../../lib/queries";
+import { api } from "../../../lib/api";
+import { metricsQueryOptions, workspaceQueryOptions } from "../../../lib/queries";
 import { formatDate } from "../../../lib/utils";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/")({
   loader: async ({ context, params }) => {
     // Critical: Workspace detail (blocks render)
-    await context.queryClient.ensureQueryData(
-      workspaceQueryOptions(params.workspaceId)
-    );
-
-    // Secondary: Pre-warm Graph data in background
-    context.queryClient.prefetchQuery(
-      workspaceGraphQueryOptions(params.workspaceId)
-    );
+    await context.queryClient.ensureQueryData(workspaceQueryOptions(params.workspaceId));
   },
   component: WorkspaceDetailPage,
 });
@@ -51,17 +44,12 @@ export const Route = createFileRoute("/workspaces/$workspaceId/")({
 function RunStatusIcon({ status }: { status: string }) {
   if (status === "running")
     return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
-  if (status === "completed")
-    return <CheckCircle2 className="h-4 w-4 text-primary" />;
-  if (status === "failed")
-    return <AlertCircle className="h-4 w-4 text-destructive" />;
+  if (status === "completed") return <CheckCircle2 className="h-4 w-4 text-primary" />;
+  if (status === "failed") return <AlertCircle className="h-4 w-4 text-destructive" />;
   return <Clock className="h-4 w-4 text-muted-foreground" />;
 }
 
-function formatDuration(
-  start: Date | string,
-  end: Date | string | null | undefined
-): string {
+function formatDuration(start: Date | string, end: Date | string | null | undefined): string {
   if (!end) return "Running...";
   const ms = new Date(end).getTime() - new Date(start).getTime();
   if (ms < 1000) return "<1s";
@@ -72,18 +60,23 @@ function formatDuration(
 function WorkspaceDetailPage() {
   const { workspaceId } = useParams({ from: "/workspaces/$workspaceId" });
   const queryClient = useQueryClient();
-  const { data: result, isLoading } = useQuery(
-    workspaceQueryOptions(workspaceId)
-  );
+  const { data: result, isLoading } = useQuery(workspaceQueryOptions(workspaceId));
+  const { data: metrics } = useQuery(metricsQueryOptions(workspaceId));
+  const reindexMutation = useMutation({
+    mutationFn: () => api.startIndexRun(workspaceId, "full"),
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["workspace-graph", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["workspaces"] }),
+      ]);
+    },
+  });
 
   const handlePrefetchQuery = () => {
     // Prefetching a POST request is not possible via standard GET prefetch,
     // but we can prefetch the workspace data to ensure the page transitions smoothly.
     queryClient.prefetchQuery(workspaceQueryOptions(workspaceId));
-  };
-
-  const handlePrefetchGraph = () => {
-    queryClient.prefetchQuery(workspaceGraphQueryOptions(workspaceId));
   };
 
   if (isLoading)
@@ -100,13 +93,9 @@ function WorkspaceDetailPage() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
             <h2 className="text-lg font-medium mb-2">Registry unavailable</h2>
-            <p className="muted text-center mb-4 max-w-md">
-              Could not open the registry database.
-            </p>
+            <p className="muted text-center mb-4 max-w-md">Could not open the registry database.</p>
             <p className="text-sm text-destructive text-center max-w-md">
-              {result && "error" in result
-                ? (result as { error: string }).error
-                : "Unknown error"}
+              {result && "error" in result ? (result as { error: string }).error : "Unknown error"}
             </p>
           </CardContent>
         </Card>
@@ -134,6 +123,7 @@ function WorkspaceDetailPage() {
   }
 
   const hasGraphData = workspace.nodeCount > 0 || workspace.edgeCount > 0;
+  const canOpenGraph = workspace.indexingStatus === "completed";
 
   return (
     <div className="page">
@@ -158,9 +148,7 @@ function WorkspaceDetailPage() {
             <div className="flex items-center gap-3">
               <FileText className="h-5 w-5 text-muted-foreground" />
               <div>
-                <p className="text-2xl font-semibold">
-                  {workspace.documentCount}
-                </p>
+                <p className="text-2xl font-semibold">{workspace.documentCount}</p>
                 <p className="text-xs text-muted-foreground">Documents</p>
               </div>
             </div>
@@ -202,20 +190,17 @@ function WorkspaceDetailPage() {
       </div>
 
       <div className="flex flex-wrap gap-4 mb-6">
-        <Link
-          to="/query"
-          search={{ workspaceId }}
-          onMouseEnter={handlePrefetchQuery}>
+        <Link to="/query" search={{ workspaceId }} onMouseEnter={handlePrefetchQuery}>
           <Button variant="outline">
             <MessageSquare className="h-4 w-4" /> Try Query
           </Button>
         </Link>
-        {hasGraphData && (
-          <Link
-            to="/workspaces/$workspaceId/graph"
-            params={{ workspaceId }}
-            onMouseEnter={handlePrefetchGraph}>
-            <Button variant="secondary">Open Graph Explorer</Button>
+        {canOpenGraph && (
+          <Link to="/workspaces/$workspaceId/graph" params={{ workspaceId }}>
+            <Button variant="secondary">
+              <GitBranch className="h-4 w-4" />
+              {hasGraphData ? "Open Graph" : "Build & Open Graph"}
+            </Button>
           </Link>
         )}
       </div>
@@ -231,6 +216,23 @@ function WorkspaceDetailPage() {
           <div className="rounded-md border bg-muted/30 p-3 font-mono text-sm">
             <div>openez index {workspace.rootPath}</div>
             <div>openez status {workspace.rootPath}</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              disabled={reindexMutation.isPending}
+              onClick={() => reindexMutation.mutate()}
+            >
+              <RefreshCw className={`h-4 w-4 ${reindexMutation.isPending ? "animate-spin" : ""}`} />
+              {reindexMutation.isPending ? "Reindexing..." : "Reindex workspace"}
+            </Button>
+            {reindexMutation.isError && (
+              <span className="text-sm text-destructive">
+                {reindexMutation.error instanceof Error
+                  ? reindexMutation.error.message
+                  : "Reindex failed"}
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -249,31 +251,20 @@ function WorkspaceDetailPage() {
                 <div className="flex items-center gap-2">
                   <RunStatusIcon status={workspace.latestIndexRun.status} />
                   <span className="text-sm">
-                    {workspace.latestIndexRun.mode} —{" "}
-                    {workspace.latestIndexRun.status}
+                    {workspace.latestIndexRun.mode} — {workspace.latestIndexRun.status}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <span className="text-muted-foreground">
-                      Files scanned:
-                    </span>{" "}
-                    <span className="font-medium">
-                      {workspace.latestIndexRun.filesScanned}
-                    </span>
+                    <span className="text-muted-foreground">Files scanned:</span>{" "}
+                    <span className="font-medium">{workspace.latestIndexRun.filesScanned}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">
-                      Files updated:
-                    </span>{" "}
-                    <span className="font-medium">
-                      {workspace.latestIndexRun.filesUpdated}
-                    </span>
+                    <span className="text-muted-foreground">Files updated:</span>{" "}
+                    <span className="font-medium">{workspace.latestIndexRun.filesUpdated}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">
-                      Chunks written:
-                    </span>{" "}
+                    <span className="text-muted-foreground">Chunks written:</span>{" "}
                     <span className="font-medium">
                       {workspace.latestIndexRun.chunksWritten ?? 0}
                     </span>
@@ -293,7 +284,7 @@ function WorkspaceDetailPage() {
                       · Duration:{" "}
                       {formatDuration(
                         workspace.latestIndexRun.startedAt,
-                        workspace.latestIndexRun.finishedAt
+                        workspace.latestIndexRun.finishedAt,
                       )}
                     </>
                   )}
@@ -305,9 +296,7 @@ function WorkspaceDetailPage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                No indexing runs yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No indexing runs yet.</p>
             )}
           </CardContent>
         </Card>
@@ -325,8 +314,7 @@ function WorkspaceDetailPage() {
                 <div className="flex items-center gap-2">
                   <RunStatusIcon status={workspace.latestGraphRun.status} />
                   <span className="text-sm">
-                    {workspace.latestGraphRun.mode} —{" "}
-                    {workspace.latestGraphRun.status}
+                    {workspace.latestGraphRun.mode} — {workspace.latestGraphRun.status}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -351,7 +339,7 @@ function WorkspaceDetailPage() {
                       · Duration:{" "}
                       {formatDuration(
                         workspace.latestGraphRun.startedAt,
-                        workspace.latestGraphRun.finishedAt
+                        workspace.latestGraphRun.finishedAt,
                       )}
                     </>
                   )}
@@ -373,6 +361,71 @@ function WorkspaceDetailPage() {
         </Card>
       </div>
 
+      {metrics && metrics.totalQueries > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingDown className="h-4 w-4 text-emerald-600" />
+              Token Savings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 mb-4">
+              <div>
+                <div className="text-xs text-muted-foreground">Total queries</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">
+                  {metrics.totalQueries}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Tokens returned</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">
+                  {metrics.totalTokensReturned.toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Tokens saved</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums text-emerald-600">
+                  {metrics.totalTokensSaved.toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Avg tokens/query</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums">
+                  {metrics.avgTokensPerQuery.toLocaleString()}
+                </div>
+              </div>
+            </div>
+            {metrics.recentQueries.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Query</TableHead>
+                    <TableHead>Results</TableHead>
+                    <TableHead>Tokens</TableHead>
+                    <TableHead>Saved</TableHead>
+                    <TableHead>Files</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {metrics.recentQueries.map((q) => (
+                    <TableRow key={q.id}>
+                      <TableCell className="font-medium max-w-50 truncate">{q.query}</TableCell>
+                      <TableCell>{q.resultCount}</TableCell>
+                      <TableCell>{q.tokensReturned.toLocaleString()}</TableCell>
+                      <TableCell className="text-emerald-600">
+                        {q.tokensSaved.toLocaleString()}
+                      </TableCell>
+                      <TableCell>{q.filesScanned}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -380,9 +433,7 @@ function WorkspaceDetailPage() {
           </CardHeader>
           <CardContent>
             {workspace.recentIndexRuns.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No index runs yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No index runs yet.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -420,9 +471,7 @@ function WorkspaceDetailPage() {
           </CardHeader>
           <CardContent>
             {workspace.recentGraphRuns.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No graph runs yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No graph runs yet.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -459,12 +508,8 @@ function WorkspaceDetailPage() {
             <div className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 text-destructive mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-destructive">
-                  Last Error
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {workspace.lastError}
-                </p>
+                <p className="text-sm font-medium text-destructive">Last Error</p>
+                <p className="text-sm text-muted-foreground">{workspace.lastError}</p>
               </div>
             </div>
           </CardContent>

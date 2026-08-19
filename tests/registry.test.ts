@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,6 +8,7 @@ import {
   createRegistryRepository,
   resolveRegistryDbPath,
 } from "../packages/db/src/sqlite/index";
+import { createNativeDatabase } from "../packages/db/src/sqlite/database-loader";
 
 let tempDir: string;
 
@@ -30,6 +31,94 @@ describe("resolveRegistryDbPath", () => {
 });
 
 describe("createRegistryRepository", () => {
+  it("migrates legacy registries and invalidates pre-existing completed graphs", async () => {
+    const dbPath = resolveRegistryDbPath();
+    const legacy = createNativeDatabase(dbPath);
+    legacy.exec(`
+      CREATE TABLE workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        root_path TEXT NOT NULL UNIQUE,
+        include_globs TEXT NOT NULL DEFAULT '',
+        exclude_globs TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        indexing_status TEXT NOT NULL DEFAULT 'pending',
+        graph_status TEXT NOT NULL DEFAULT 'pending',
+        last_indexed_at TEXT,
+        last_graph_built_at TEXT,
+        document_count INTEGER NOT NULL DEFAULT 0,
+        chunk_count INTEGER NOT NULL DEFAULT 0,
+        node_count INTEGER NOT NULL DEFAULT 0,
+        edge_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO workspaces (
+        id, name, root_path, include_globs, exclude_globs, status, indexing_status, graph_status,
+        last_indexed_at, last_graph_built_at, document_count, chunk_count, node_count, edge_count,
+        last_error, created_at, updated_at
+      ) VALUES (
+        'legacy-ws', 'legacy workspace', '/tmp/legacy-workspace', '**/*.ts', 'node_modules',
+        'indexed', 'completed', 'completed', '2026-08-01T00:00:00.000Z',
+        '2026-08-01T01:00:00.000Z', 3, 7, 11, 13, NULL,
+        '2026-08-01T00:00:00.000Z', '2026-08-01T01:00:00.000Z'
+      );
+    `);
+    legacy.close();
+
+    const expectedWorkspace = {
+      id: "legacy-ws",
+      name: "legacy workspace",
+      rootPath: "/tmp/legacy-workspace",
+      includeGlobs: "**/*.ts",
+      excludeGlobs: "node_modules",
+      status: "indexed",
+      indexingStatus: "completed",
+      graphStatus: "completed",
+      lastIndexedAt: "2026-08-01T00:00:00.000Z",
+      lastGraphBuiltAt: "2026-08-01T01:00:00.000Z",
+      documentCount: 3,
+      chunkCount: 7,
+      nodeCount: 11,
+      edgeCount: 13,
+      lastError: undefined,
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T01:00:00.000Z",
+      indexGeneration: 0,
+      // Migration invalidates old completed graphs by setting graph_generation
+      // to -1, forcing a rebuild on next access (picks up parser changes).
+      graphGeneration: -1,
+    };
+    const repository = createRegistryRepository();
+    const migrated = await repository.getWorkspace("legacy-ws");
+    expect(migrated).toMatchObject(expectedWorkspace);
+    const firstInspection = createNativeDatabase(dbPath);
+    const columnsAfterFirstOpen = firstInspection
+      .prepare("PRAGMA table_info(workspaces)")
+      .all() as Array<{ name: string }>;
+    expect(columnsAfterFirstOpen.map((column) => column.name)).toEqual(
+      expect.arrayContaining(["index_generation", "graph_generation"]),
+    );
+    firstInspection
+      .prepare("UPDATE workspaces SET graph_generation = 0 WHERE id = ?")
+      .run("legacy-ws");
+    firstInspection.close();
+    closeRegistryDb();
+
+    const reopened = await createRegistryRepository().getWorkspace("legacy-ws");
+    expect(reopened).toMatchObject({ ...expectedWorkspace, graphGeneration: 0 });
+    expect(reopened?.graphGeneration).toBe(0);
+    const secondInspection = createNativeDatabase(dbPath);
+    const columnsAfterReopen = secondInspection
+      .prepare("PRAGMA table_info(workspaces)")
+      .all() as Array<{ name: string }>;
+    secondInspection.close();
+    expect(columnsAfterReopen.map((column) => column.name)).toEqual(
+      expect.arrayContaining(["index_generation", "graph_generation"]),
+    );
+  });
+
   it("creates and lists workspaces", async () => {
     const repo = createRegistryRepository();
 
@@ -68,6 +157,18 @@ describe("createRegistryRepository", () => {
 
     const notFound = await repo.getWorkspaceByPath("/tmp/xyz");
     expect(notFound).toBeNull();
+  });
+
+  it("resolves filesystem aliases to one workspace", async () => {
+    const repo = createRegistryRepository();
+    const actualRoot = path.join(tempDir, "actual-workspace");
+    const aliasRoot = path.join(tempDir, "workspace-alias");
+    fs.mkdirSync(actualRoot);
+    fs.symlinkSync(actualRoot, aliasRoot, "dir");
+
+    const created = await repo.ensureWorkspace({ rootPath: aliasRoot });
+    expect(created.rootPath).toBe(fs.realpathSync.native(actualRoot));
+    expect((await repo.getWorkspaceByPath(actualRoot))?.id).toBe(created.id);
   });
 
   it("ensureWorkspace is idempotent by path", async () => {
@@ -115,6 +216,114 @@ describe("createRegistryRepository", () => {
     expect(updated?.documentCount).toBe(42);
   });
 
+  it("atomically serializes workspace index claims", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+
+    const firstExpiry = new Date(Date.now() + 60_000).toISOString();
+    expect(await repo.tryClaimIndexing("ws1", "owner-a", firstExpiry)).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1", "owner-b", firstExpiry)).toBe(false);
+    expect(await repo.refreshIndexingLease("ws1", "owner-b", firstExpiry)).toBe(false);
+    expect(await repo.releaseIndexing("ws1", "owner-b", "aborted")).toBe(false);
+    expect(await repo.releaseIndexing("ws1", "owner-a", "aborted")).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1", "owner-b", firstExpiry)).toBe(true);
+  });
+
+  it("allows a new owner to take over an expired indexing lease", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+    const firstExpiry = new Date(Date.now() + 60_000).toISOString();
+
+    expect(
+      await repo.tryClaimIndexing("ws1", "owner-a", new Date(Date.now() - 1_000).toISOString()),
+    ).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1", "owner-b", firstExpiry)).toBe(true);
+    expect(await repo.refreshIndexingLease("ws1", "owner-a", firstExpiry)).toBe(false);
+  });
+
+  it("fences stale index completions and failures by owner token", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+
+    const expiredLease = new Date(Date.now() - 1_000).toISOString();
+    const futureLease = new Date(Date.now() + 60_000).toISOString();
+
+    expect(await repo.tryClaimIndexing("ws1", "owner-a", expiredLease)).toBe(true);
+    expect(await repo.tryClaimIndexing("ws1", "owner-b", futureLease)).toBe(true);
+
+    // Stale owner cannot complete or fail
+    expect(
+      await repo.completeIndexing("ws1", "owner-a", {
+        documentCount: 99,
+        chunkCount: 99,
+        nodeCount: 99,
+        edgeCount: 99,
+        completedAt: "2026-08-11T00:00:00.000Z",
+      }),
+    ).toBe(false);
+    expect(await repo.failIndexing("ws1", "owner-a", "stale error")).toBe(false);
+
+    // Current owner can complete
+    expect(
+      await repo.completeIndexing("ws1", "owner-b", {
+        documentCount: 2,
+        chunkCount: 5,
+        nodeCount: 3,
+        edgeCount: 1,
+        completedAt: "2026-08-11T00:00:00.000Z",
+      }),
+    ).toBe(true);
+
+    const ws = await repo.getWorkspace("ws1");
+    expect(ws?.status).toBe("indexed");
+    expect(ws?.indexingStatus).toBe("completed");
+    expect(ws?.documentCount).toBe(2);
+    expect(ws?.indexBuildOwner).toBeUndefined();
+  });
+
+  it("fences stale graph builders by owner token and monotonically increasing epoch", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+
+    const expiredLease = new Date(Date.now() - 1_000).toISOString();
+    const futureLease = new Date(Date.now() + 60_000).toISOString();
+    const firstEpoch = await repo.tryClaimGraphBuild("ws1", "owner-a", expiredLease);
+    const secondEpoch = await repo.tryClaimGraphBuild("ws1", "owner-b", futureLease);
+
+    expect(firstEpoch).toBe(1);
+    expect(secondEpoch).toBe(2);
+    expect(await repo.refreshGraphBuildLease("ws1", "owner-a", futureLease)).toBe(false);
+    expect(
+      await repo.completeGraphBuild("ws1", "owner-a", 0, {
+        nodeCount: 99,
+        edgeCount: 99,
+        completedAt: "2026-08-10T00:00:00.000Z",
+      }),
+    ).toBe(false);
+    expect(
+      await repo.completeGraphBuild("ws1", "owner-b", 0, {
+        nodeCount: 2,
+        edgeCount: 1,
+        completedAt: "2026-08-10T00:00:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps an active graph owner while indexing invalidates its generation", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+    await repo.tryClaimGraphBuild("ws1", "owner-a", "2099-08-10T00:00:00.000Z");
+
+    await repo.invalidateWorkspaceGraph("ws1");
+
+    const workspace = await repo.getWorkspace("ws1");
+    expect(workspace?.graphStatus).toBe("running");
+    expect(workspace?.indexGeneration).toBe(1);
+    expect(await repo.refreshGraphBuildLease("ws1", "owner-a", "2099-08-10T00:00:00.000Z")).toBe(
+      true,
+    );
+  });
+
   it("deleteWorkspace removes the workspace", async () => {
     const repo = createRegistryRepository();
     await repo.createWorkspace({
@@ -126,5 +335,31 @@ describe("createRegistryRepository", () => {
     await repo.deleteWorkspace("ws1");
     const list = await repo.listWorkspaces();
     expect(list).toHaveLength(0);
+  });
+
+  it("setPinned sets and clears pinnedAt", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "ws1", name: "ws1", rootPath: "/tmp/ws1" });
+
+    await repo.setPinned("ws1", true);
+    expect(typeof (await repo.getWorkspace("ws1"))?.pinnedAt).toBe("string");
+
+    await repo.setPinned("ws1", false);
+    expect((await repo.getWorkspace("ws1"))?.pinnedAt).toBeUndefined();
+  });
+
+  it("listWorkspaces sorts pinned first (newest pin on top)", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "a", name: "a", rootPath: "/tmp/a" });
+    await repo.createWorkspace({ id: "b", name: "b", rootPath: "/tmp/b" });
+    await repo.createWorkspace({ id: "c", name: "c", rootPath: "/tmp/c" });
+
+    await repo.setPinned("a", true);
+    await repo.setPinned("c", true);
+
+    expect((await repo.listWorkspaces()).map((w) => w.id)).toEqual(["c", "a", "b"]);
+
+    await repo.setPinned("c", false);
+    expect((await repo.listWorkspaces()).map((w) => w.id)[0]).toBe("a");
   });
 });

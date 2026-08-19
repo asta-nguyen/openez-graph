@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { blob, integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
 // ── Global Registry DB Schema ──
 
@@ -13,7 +13,14 @@ export const workspaces = sqliteTable(
     excludeGlobs: text("exclude_globs").notNull().default(""),
     status: text("status").notNull().default("pending"),
     indexingStatus: text("indexing_status").notNull().default("pending"),
+    indexBuildOwner: text("index_build_owner"),
+    indexLeaseExpiresAt: text("index_lease_expires_at"),
     graphStatus: text("graph_status").notNull().default("pending"),
+    indexGeneration: integer("index_generation").notNull().default(0),
+    graphGeneration: integer("graph_generation").notNull().default(0),
+    graphBuildOwner: text("graph_build_owner"),
+    graphBuildEpoch: integer("graph_build_epoch").notNull().default(0),
+    graphLeaseExpiresAt: text("graph_lease_expires_at"),
     lastIndexedAt: text("last_indexed_at"),
     lastGraphBuiltAt: text("last_graph_built_at"),
     documentCount: integer("document_count").notNull().default(0),
@@ -21,6 +28,8 @@ export const workspaces = sqliteTable(
     nodeCount: integer("node_count").notNull().default(0),
     edgeCount: integer("edge_count").notNull().default(0),
     lastError: text("last_error"),
+    pinnedAt: text("pinned_at"),
+    pinOrder: integer("pin_order"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(datetime('now'))`),
@@ -31,8 +40,16 @@ export const workspaces = sqliteTable(
   (table) => ({
     nameUnique: unique().on(table.name),
     rootPathUnique: unique().on(table.rootPath),
-  })
+  }),
 );
+
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
 
 // ── Per-Workspace DB Schema ──
 
@@ -56,7 +73,7 @@ export const documents = sqliteTable(
   },
   (table) => ({
     pathUnique: unique().on(table.path),
-  })
+  }),
 );
 
 export const chunks = sqliteTable("chunks", {
@@ -86,7 +103,8 @@ export const embeddings = sqliteTable("embeddings", {
   provider: text("provider").notNull(),
   model: text("model").notNull(),
   dimensions: integer("dimensions").notNull(),
-  embedding: text("embedding").notNull(),
+  embedding: blob("embedding", { mode: "buffer" }).notNull(),
+  inputHash: text("input_hash"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -157,6 +175,9 @@ export const queryLogs = sqliteTable("query_logs", {
   query: text("query").notNull(),
   mode: text("mode").notNull(),
   resultCount: integer("result_count").notNull().default(0),
+  tokensReturned: integer("tokens_returned").notNull().default(0),
+  tokensSaved: integer("tokens_saved").notNull().default(0),
+  filesScanned: integer("files_scanned").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

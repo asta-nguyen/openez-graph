@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { resolveCliInvocation } from "./resolve-cli";
+import { installAgentInstructions } from "./setup-instructions";
 
 function getOpenCodeConfigPath(): string {
   return path.join(os.homedir(), ".config", "opencode", "opencode.json");
@@ -48,17 +49,20 @@ export async function setupOpenCode(rootPath: string): Promise<void> {
   const mcp = config.mcp as Record<string, unknown>;
 
   mcp[label] = {
-    command,
-    args
+    type: "local",
+    command: [command, ...args],
+    enabled: true,
   };
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
   fs.chmodSync(configPath, 0o644);
+  const instructionsPath = installAgentInstructions(resolvedPath, "AGENTS.md");
 
   console.log(`OpenCode MCP server configured: '${label}'`);
   console.log("  Mode:    shared multi-workspace MCP");
   console.log(`  Repo:    ${repoRoot}`);
   console.log(`  Config:  ${configPath}`);
+  console.log(`  Rules:   ${instructionsPath}`);
   console.log("");
   console.log("Restart OpenCode or open a new session for the changes to take effect.");
 }
