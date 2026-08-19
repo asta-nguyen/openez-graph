@@ -61,9 +61,7 @@ export function GitHubStars({ repo, initialCount = null }: GitHubStarsProps) {
       </svg>
       <span>GitHub</span>
       {display !== null && (
-        <span className="tabular-nums text-primary/70 text-[11px] font-mono">
-          {display}
-        </span>
+        <span className="tabular-nums text-primary/70 text-[11px] font-mono">{display}</span>
       )}
     </a>
   );

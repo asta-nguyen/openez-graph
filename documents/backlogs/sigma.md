@@ -11,6 +11,7 @@ Goal:
 Add a graph visualization page for a workspace so the user can inspect the graph built for that workspace after indexing/graph generation.
 
 Use:
+
 - Next.js
 - TypeScript
 - Sigma.js
@@ -20,11 +21,13 @@ Use:
 - Existing workspace detail flow
 
 Install and use existing libraries via pnpm:
+
 - sigma
 - graphology
 - graphology-layout-forceatlas2
 
 User flow:
+
 - User opens `/workspaces/[workspaceId]`
 - There is a clear action to open the graph explorer
 - Graph explorer page is `/workspaces/[workspaceId]/graph`
@@ -32,6 +35,7 @@ User flow:
 - If graph data exists, render the workspace graph with pan/zoom and node interaction
 
 Functional requirements:
+
 - Fetch graph data scoped by workspaceId only
 - Render node and edge data from the backend using Graphology + Sigma.js
 - Support at least these node types:
@@ -62,6 +66,7 @@ Functional requirements:
 - Allow focusing/highlighting neighbors of the selected node
 
 Data/API requirements:
+
 - Add a backend endpoint or server action that returns graph data for a workspace
 - Response shape should be explicit and UI-friendly, for example:
   - nodes: id, label, type, degree, metadata, path, startLine, endLine
@@ -70,6 +75,7 @@ Data/API requirements:
 - Never mix nodes or edges from different workspaces
 
 Behavior rules:
+
 - The graph page must be disabled or show an empty state if the workspace has not been indexed or graph-built yet
 - If graph build is in progress, show current status
 - If graph build failed, show failure state and error summary if available
@@ -77,6 +83,7 @@ Behavior rules:
 - Keep the page usable on laptop-sized screens
 
 Design guidance:
+
 - This is an internal developer tool, not a marketing page
 - The graph should be the primary surface, with a side inspector panel
 - Use compact controls and clear filters
@@ -86,6 +93,7 @@ Design guidance:
 - Use existing design system/components where possible
 
 Implementation requirements:
+
 - Use Sigma.js directly with Graphology
 - Create a reusable graph component
 - Keep graph rendering logic separate from data fetching logic
@@ -94,6 +102,7 @@ Implementation requirements:
 - Avoid hardcoding assumptions that every workspace has the same graph density or shape
 
 Suggested implementation breakdown:
+
 1. Install Sigma.js + Graphology dependencies
 2. Add workspace graph API/backend loader
 3. Create graph data mappers from backend response to Graphology graph
@@ -105,6 +114,7 @@ Suggested implementation breakdown:
 9. Link graph page from workspace detail page
 
 Definition of done:
+
 - I can open `/workspaces/[workspaceId]/graph`
 - The page only shows graph data for that workspace
 - I can pan, zoom, search, filter, and click nodes

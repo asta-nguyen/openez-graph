@@ -1,9 +1,9 @@
-
-
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+
+import { getFullWorkspaceDdl, getRegistryDdl, migrateRegistrySchema } from "@openez-graph/db";
 
 function getRequireUrl(): string {
   try {
@@ -31,9 +31,14 @@ interface SqliteDb {
   close(): void;
 }
 
-type SqliteConstructor = new (filename: string, options?: { nativeBinding?: string }) => SqliteDb;
-
-const Database = require("better-sqlite3") as SqliteConstructor;
+const { Database: BunDatabase } = require("bun:sqlite");
+// Wrap to add .pragma() shim — bun:sqlite doesn't have it natively
+const Database = class extends BunDatabase {
+  constructor(filename: string, options?: any) {
+    super(filename, options);
+    (this as any).pragma = (cmd: string) => this.exec(`PRAGMA ${cmd}`);
+  }
+} as unknown as new (filename: string, options?: any) => SqliteDb;
 
 let registryDb: SqliteDb | null = null;
 const workspaceDbs = new Map<string, SqliteDb>();
@@ -54,6 +59,8 @@ export interface WebRegistryWorkspace {
   nodeCount: number;
   edgeCount: number;
   lastError?: string;
+  pinnedAt?: string;
+  pinOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -140,7 +147,7 @@ export function resolveRegistryDbPath(): string {
   }
 
   const homeDir = [os.homedir(), process.env.HOME, process.env.USERPROFILE, process.cwd()].find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
   );
 
   if (!homeDir) {
@@ -151,39 +158,48 @@ export function resolveRegistryDbPath(): string {
 }
 
 function initializeRegistrySchema(db: SqliteDb) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS workspaces (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      root_path TEXT NOT NULL UNIQUE,
-      include_globs TEXT NOT NULL DEFAULT '',
-      exclude_globs TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'pending',
-      indexing_status TEXT NOT NULL DEFAULT 'pending',
-      graph_status TEXT NOT NULL DEFAULT 'pending',
-      last_indexed_at TEXT,
-      last_graph_built_at TEXT,
-      document_count INTEGER NOT NULL DEFAULT 0,
-      chunk_count INTEGER NOT NULL DEFAULT 0,
-      node_count INTEGER NOT NULL DEFAULT 0,
-      edge_count INTEGER NOT NULL DEFAULT 0,
-      last_error TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_root_path ON workspaces(root_path);
-  `);
+  // Use the authoritative DDL and migration from @openez-graph/db so the
+  // web server never creates a schema that diverges from the CLI/MCP/indexer
+  // path. This includes column migrations, registry_meta, and the one-shot
+  // graph invalidation backfill.
+  db.exec(getRegistryDdl());
+  migrateRegistrySchema(db);
 }
 
 export function getRegistryDb(): SqliteDb {
   if (!registryDb) {
     const dbPath = resolveRegistryDbPath();
     ensureDirForFile(dbPath);
-    registryDb = openSqlite(dbPath);
-    initializeRegistrySchema(registryDb);
+    const db = openSqlite(dbPath);
+    try {
+      initializeRegistrySchema(db);
+      registryDb = db;
+    } catch (err) {
+      db.close();
+      registryDb = null;
+      throw err;
+    }
   }
 
   return registryDb;
+}
+
+export function closeRegistryDb() {
+  registryDb?.close();
+  registryDb = null;
+}
+
+export function closeWorkspaceDb(rootPath: string) {
+  const normalized = normalizeRootPath(rootPath);
+  const db = workspaceDbs.get(normalized);
+  if (db) {
+    try {
+      db.close();
+    } catch {
+      // Already closed or closing in progress
+    }
+    workspaceDbs.delete(normalized);
+  }
 }
 
 function resolveWorkspaceDbPath(rootPath: string): string {
@@ -191,113 +207,29 @@ function resolveWorkspaceDbPath(rootPath: string): string {
 }
 
 function initializeWorkspaceSchema(db: SqliteDb) {
-  const tables = [
-    `CREATE TABLE IF NOT EXISTS documents (
-      id TEXT PRIMARY KEY,
-      path TEXT NOT NULL UNIQUE,
-      absolute_path TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      language TEXT,
-      content_hash TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
-      mtime_ms INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS chunks (
-      id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-      chunk_index INTEGER NOT NULL,
-      heading TEXT,
-      content TEXT NOT NULL,
-      token_count INTEGER NOT NULL,
-      content_hash TEXT NOT NULL,
-      metadata TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS embeddings (
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL,
-      model TEXT NOT NULL,
-      dimensions INTEGER NOT NULL,
-      embedding TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS graph_nodes (
-      id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
-      label TEXT NOT NULL,
-      ref_id TEXT,
-      metadata TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS graph_edges (
-      id TEXT PRIMARY KEY,
-      from_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-      to_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-      type TEXT NOT NULL,
-      weight INTEGER NOT NULL DEFAULT 1,
-      metadata TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS index_runs (
-      id TEXT PRIMARY KEY,
-      mode TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      files_scanned INTEGER NOT NULL DEFAULT 0,
-      files_updated INTEGER NOT NULL DEFAULT 0,
-      chunks_written INTEGER NOT NULL DEFAULT 0,
-      embeddings_written INTEGER NOT NULL DEFAULT 0,
-      error_message TEXT,
-      stats TEXT DEFAULT '{}',
-      started_at TEXT NOT NULL DEFAULT (datetime('now')),
-      finished_at TEXT
-    )`,
-    `CREATE TABLE IF NOT EXISTS graph_runs (
-      id TEXT PRIMARY KEY,
-      mode TEXT NOT NULL DEFAULT 'incremental',
-      status TEXT NOT NULL DEFAULT 'pending',
-      nodes_created INTEGER NOT NULL DEFAULT 0,
-      edges_created INTEGER NOT NULL DEFAULT 0,
-      error_message TEXT,
-      stats TEXT DEFAULT '{}',
-      started_at TEXT NOT NULL DEFAULT (datetime('now')),
-      finished_at TEXT
-    )`,
-    `CREATE TABLE IF NOT EXISTS query_logs (
-      id TEXT PRIMARY KEY,
-      query TEXT NOT NULL,
-      mode TEXT NOT NULL,
-      result_count INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      content TEXT NOT NULL,
-      tags TEXT NOT NULL DEFAULT '',
-      source TEXT NOT NULL,
-      supersedes_id TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`
-  ];
-  for (const ddl of tables) {
-    db.exec(ddl);
+  // Use the authoritative DDL from @openez-graph/db so the web server
+  // creates the same schema as the CLI/MCP/indexer path, including FTS,
+  // parsed_documents, index_meta, BLOB embeddings, and all indexes.
+  db.exec(getFullWorkspaceDdl());
+  migrateQueryLogColumns(db);
+}
+
+function migrateQueryLogColumns(db: SqliteDb) {
+  const columns = new Set(
+    (db.prepare("PRAGMA table_info(query_logs)").all() as Array<{ name: string }>).map(
+      (row) => row.name,
+    ),
+  );
+
+  if (!columns.has("tokens_returned")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN tokens_returned INTEGER NOT NULL DEFAULT 0");
   }
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
-    CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
-    CREATE INDEX IF NOT EXISTS idx_graph_nodes_type ON graph_nodes(type);
-    CREATE INDEX IF NOT EXISTS idx_graph_nodes_label ON graph_nodes(label);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id);
-    CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(type);
-    CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
-  `);
+  if (!columns.has("tokens_saved")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN tokens_saved INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.has("files_scanned")) {
+    db.exec("ALTER TABLE query_logs ADD COLUMN files_scanned INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 function getWorkspaceDb(rootPath: string): SqliteDb {
@@ -338,18 +270,26 @@ function mapWorkspace(row: Record<string, unknown>): WebRegistryWorkspace {
     nodeCount: Number(row.node_count ?? 0),
     edgeCount: Number(row.edge_count ?? 0),
     lastError: row.last_error ? String(row.last_error) : undefined,
+    pinnedAt: row.pinned_at ? String(row.pinned_at) : undefined,
+    pinOrder: row.pin_order != null ? Number(row.pin_order) : undefined,
     createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at)
+    updatedAt: String(row.updated_at),
   };
 }
 
 export function listRegistryWorkspaces(): WebRegistryWorkspace[] {
-  const rows = getRegistryDb().prepare("SELECT * FROM workspaces ORDER BY created_at DESC").all() as Array<Record<string, unknown>>;
+  const rows = getRegistryDb()
+    .prepare(
+      "SELECT * FROM workspaces ORDER BY (pinned_at IS NULL), pin_order DESC, pinned_at DESC, created_at DESC",
+    )
+    .all() as Array<Record<string, unknown>>;
   return rows.map(mapWorkspace);
 }
 
 export function getRegistryWorkspace(id: string): WebRegistryWorkspace | null {
-  const row = getRegistryDb().prepare("SELECT * FROM workspaces WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+  const row = getRegistryDb().prepare("SELECT * FROM workspaces WHERE id = ?").get(id) as
+    | Record<string, unknown>
+    | undefined;
   return row ? mapWorkspace(row) : null;
 }
 
@@ -372,7 +312,11 @@ export function ensureRegistryWorkspace(input: {
   }
 
   const all = listRegistryWorkspaces();
-  const baseName = (input.name?.trim() || path.basename(normalizeRootPath(input.rootPath)) || "workspace").trim();
+  const baseName = (
+    input.name?.trim() ||
+    path.basename(normalizeRootPath(input.rootPath)) ||
+    "workspace"
+  ).trim();
   const baseId = slugify(baseName);
   const takenIds = new Set(all.map((workspace) => workspace.id));
   const takenNames = new Set(all.map((workspace) => workspace.name));
@@ -388,11 +332,21 @@ export function ensureRegistryWorkspace(input: {
   }
 
   const now = new Date().toISOString();
-  getRegistryDb().prepare(
-    `INSERT INTO workspaces
+  getRegistryDb()
+    .prepare(
+      `INSERT INTO workspaces
       (id, name, root_path, include_globs, exclude_globs, status, indexing_status, graph_status, document_count, chunk_count, node_count, edge_count, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 0, 0, 0, ?, ?)`
-  ).run(nextId, nextName, normalizeRootPath(input.rootPath), input.includeGlobs ?? "", input.excludeGlobs ?? "", now, now);
+     VALUES (?, ?, ?, ?, ?, 'pending', 'pending', 'pending', 0, 0, 0, 0, ?, ?)`,
+    )
+    .run(
+      nextId,
+      nextName,
+      normalizeRootPath(input.rootPath),
+      input.includeGlobs ?? "",
+      input.excludeGlobs ?? "",
+      now,
+      now,
+    );
 
   return getRegistryWorkspace(nextId)!;
 }
@@ -410,28 +364,73 @@ export function updateRegistryWorkspace(
     nodeCount: number;
     edgeCount: number;
     lastError: string | null;
-  }>
+  }>,
 ) {
   const sets: string[] = ["updated_at = ?"];
   const values: unknown[] = [new Date().toISOString()];
 
-  if (updates.status !== undefined) { sets.push("status = ?"); values.push(updates.status); }
-  if (updates.indexingStatus !== undefined) { sets.push("indexing_status = ?"); values.push(updates.indexingStatus); }
-  if (updates.graphStatus !== undefined) { sets.push("graph_status = ?"); values.push(updates.graphStatus); }
-  if (updates.lastIndexedAt !== undefined) { sets.push("last_indexed_at = ?"); values.push(updates.lastIndexedAt); }
-  if (updates.lastGraphBuiltAt !== undefined) { sets.push("last_graph_built_at = ?"); values.push(updates.lastGraphBuiltAt); }
-  if (updates.documentCount !== undefined) { sets.push("document_count = ?"); values.push(updates.documentCount); }
-  if (updates.chunkCount !== undefined) { sets.push("chunk_count = ?"); values.push(updates.chunkCount); }
-  if (updates.nodeCount !== undefined) { sets.push("node_count = ?"); values.push(updates.nodeCount); }
-  if (updates.edgeCount !== undefined) { sets.push("edge_count = ?"); values.push(updates.edgeCount); }
-  if (updates.lastError !== undefined) { sets.push("last_error = ?"); values.push(updates.lastError); }
+  if (updates.status !== undefined) {
+    sets.push("status = ?");
+    values.push(updates.status);
+  }
+  if (updates.indexingStatus !== undefined) {
+    sets.push("indexing_status = ?");
+    values.push(updates.indexingStatus);
+  }
+  if (updates.graphStatus !== undefined) {
+    sets.push("graph_status = ?");
+    values.push(updates.graphStatus);
+  }
+  if (updates.lastIndexedAt !== undefined) {
+    sets.push("last_indexed_at = ?");
+    values.push(updates.lastIndexedAt);
+  }
+  if (updates.lastGraphBuiltAt !== undefined) {
+    sets.push("last_graph_built_at = ?");
+    values.push(updates.lastGraphBuiltAt);
+  }
+  if (updates.documentCount !== undefined) {
+    sets.push("document_count = ?");
+    values.push(updates.documentCount);
+  }
+  if (updates.chunkCount !== undefined) {
+    sets.push("chunk_count = ?");
+    values.push(updates.chunkCount);
+  }
+  if (updates.nodeCount !== undefined) {
+    sets.push("node_count = ?");
+    values.push(updates.nodeCount);
+  }
+  if (updates.edgeCount !== undefined) {
+    sets.push("edge_count = ?");
+    values.push(updates.edgeCount);
+  }
+  if (updates.lastError !== undefined) {
+    sets.push("last_error = ?");
+    values.push(updates.lastError);
+  }
 
   values.push(id);
-  getRegistryDb().prepare(`UPDATE workspaces SET ${sets.join(", ")} WHERE id = ?`).run(...values);
+  getRegistryDb()
+    .prepare(`UPDATE workspaces SET ${sets.join(", ")} WHERE id = ?`)
+    .run(...values);
 }
 
-export function deleteRegistryWorkspace(id: string) {
-  getRegistryDb().prepare("DELETE FROM workspaces WHERE id = ?").run(id);
+export function setRegistryWorkspacePinned(id: string, pinned: boolean) {
+  const db = getRegistryDb();
+  if (pinned) {
+    const maxRow = db
+      .prepare("SELECT MAX(pin_order) AS max_order FROM workspaces WHERE pin_order IS NOT NULL")
+      .get() as { max_order: number | null } | undefined;
+    const nextOrder = (maxRow?.max_order ?? 0) + 1;
+    db.prepare("UPDATE workspaces SET pinned_at = ?, pin_order = ? WHERE id = ?").run(
+      new Date().toISOString(),
+      nextOrder,
+      id,
+    );
+  } else {
+    db.prepare("UPDATE workspaces SET pinned_at = NULL, pin_order = NULL WHERE id = ?").run(id);
+  }
 }
 
 function mapRunRow(row: Record<string, unknown>, kind: "index" | "graph"): WebRunRow {
@@ -447,17 +446,32 @@ function mapRunRow(row: Record<string, unknown>, kind: "index" | "graph"): WebRu
     edgesCreated: kind === "graph" ? Number(row.edges_created ?? 0) : 0,
     errorMessage: row.error_message ? String(row.error_message) : null,
     startedAt: String(row.started_at),
-    finishedAt: row.finished_at ? String(row.finished_at) : null
+    finishedAt: row.finished_at ? String(row.finished_at) : null,
   };
 }
 
 export function getWorkspaceCounts(rootPath: string) {
   const db = getWorkspaceDb(rootPath);
-  const documents = Number((db.prepare("SELECT COUNT(*) AS count FROM documents").get() as { count: number } | undefined)?.count ?? 0);
-  const chunks = Number((db.prepare("SELECT COUNT(*) AS count FROM chunks").get() as { count: number } | undefined)?.count ?? 0);
-  const nodes = Number((db.prepare("SELECT COUNT(*) AS count FROM graph_nodes").get() as { count: number } | undefined)?.count ?? 0);
-  const edges = Number((db.prepare("SELECT COUNT(*) AS count FROM graph_edges").get() as { count: number } | undefined)?.count ?? 0);
-  const memories = Number((db.prepare("SELECT COUNT(*) AS count FROM memories").get() as { count: number } | undefined)?.count ?? 0);
+  const documents = Number(
+    (db.prepare("SELECT COUNT(*) AS count FROM documents").get() as { count: number } | undefined)
+      ?.count ?? 0,
+  );
+  const chunks = Number(
+    (db.prepare("SELECT COUNT(*) AS count FROM chunks").get() as { count: number } | undefined)
+      ?.count ?? 0,
+  );
+  const nodes = Number(
+    (db.prepare("SELECT COUNT(*) AS count FROM graph_nodes").get() as { count: number } | undefined)
+      ?.count ?? 0,
+  );
+  const edges = Number(
+    (db.prepare("SELECT COUNT(*) AS count FROM graph_edges").get() as { count: number } | undefined)
+      ?.count ?? 0,
+  );
+  const memories = Number(
+    (db.prepare("SELECT COUNT(*) AS count FROM memories").get() as { count: number } | undefined)
+      ?.count ?? 0,
+  );
   return { documents, chunks, nodes, edges, memories };
 }
 
@@ -470,14 +484,14 @@ export function listWorkspaceDocuments(rootPath: string, limit = 50, offset = 0)
     path: String(row.path),
     kind: String(row.kind),
     language: row.language ? String(row.language) : undefined,
-    updatedAt: row.updated_at ? String(row.updated_at) : undefined
+    updatedAt: row.updated_at ? String(row.updated_at) : undefined,
   }));
 }
 
 export function countWorkspaceDocuments(rootPath: string): number {
-  const row = getWorkspaceDb(rootPath)
-    .prepare("SELECT COUNT(*) as count FROM documents")
-    .get() as { count: number } | undefined;
+  const row = getWorkspaceDb(rootPath).prepare("SELECT COUNT(*) as count FROM documents").get() as
+    | { count: number }
+    | undefined;
   return row?.count ?? 0;
 }
 
@@ -518,7 +532,7 @@ export function listGraphNodes(rootPath: string, limit = 500): WebGraphNode[] {
     label: String(row.label),
     type: String(row.type),
     refId: row.ref_id ? String(row.ref_id) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
+    metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
   }));
 }
 
@@ -539,29 +553,29 @@ const CURATED_TYPE_ORDER = [
   "method",
   "variable",
   "chunk",
-  "memory"
+  "memory",
 ];
 
-const typeOrderCase = CURATED_TYPE_ORDER
-  .map((t, i) => `WHEN '${t}' THEN ${i}`)
-  .join(" ");
+const typeOrderCase = CURATED_TYPE_ORDER.map((t, i) => `WHEN '${t}' THEN ${i}`).join(" ");
 
 export function listGraphNodesCurated(rootPath: string, limit = 300): WebGraphNode[] {
   const rows = getWorkspaceDb(rootPath)
-    .prepare(`
+    .prepare(
+      `
       SELECT * FROM graph_nodes
       ORDER BY
         CASE type ${typeOrderCase} ELSE 999 END,
         created_at DESC
       LIMIT ?
-    `)
+    `,
+    )
     .all(limit) as Array<Record<string, unknown>>;
   return rows.map((row) => ({
     id: String(row.id),
     label: String(row.label),
     type: String(row.type),
     refId: row.ref_id ? String(row.ref_id) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
+    metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
   }));
 }
 
@@ -574,7 +588,7 @@ export function listGraphEdges(rootPath: string, limit = 1000): WebGraphEdge[] {
     source: String(row.from_node_id),
     target: String(row.to_node_id),
     type: String(row.type),
-    weight: Number(row.weight ?? 1)
+    weight: Number(row.weight ?? 1),
   }));
 }
 
@@ -590,21 +604,29 @@ export function getGraphNodeById(rootPath: string, nodeId: string): WebGraphNode
     label: String(row.label),
     type: String(row.type),
     refId: row.ref_id ? String(row.ref_id) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
+    metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
   };
 }
 
-export function searchGraphNodesByLabel(rootPath: string, query: string, nodeTypes?: string[]): WebGraphNode[] {
+export function searchGraphNodesByLabel(
+  rootPath: string,
+  query: string,
+  nodeTypes?: string[],
+): WebGraphNode[] {
   const db = getWorkspaceDb(rootPath);
   const likeQuery = `%${query.toLowerCase()}%`;
 
   let rows: Array<Record<string, unknown>>;
   if (nodeTypes && nodeTypes.length > 0) {
     const placeholders = nodeTypes.map(() => "?").join(",");
-    rows = db.prepare(`SELECT * FROM graph_nodes WHERE lower(label) LIKE ? AND type IN (${placeholders}) LIMIT 50`)
+    rows = db
+      .prepare(
+        `SELECT * FROM graph_nodes WHERE lower(label) LIKE ? AND type IN (${placeholders}) LIMIT 50`,
+      )
       .all(likeQuery, ...nodeTypes) as Array<Record<string, unknown>>;
   } else {
-    rows = db.prepare("SELECT * FROM graph_nodes WHERE lower(label) LIKE ? LIMIT 50")
+    rows = db
+      .prepare("SELECT * FROM graph_nodes WHERE lower(label) LIKE ? LIMIT 50")
       .all(likeQuery) as Array<Record<string, unknown>>;
   }
 
@@ -613,20 +635,211 @@ export function searchGraphNodesByLabel(rootPath: string, query: string, nodeTyp
     label: String(row.label),
     type: String(row.type),
     refId: row.ref_id ? String(row.ref_id) : null,
-    metadata: safeParseJson(String(row.metadata ?? "{}"), {})
+    metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
   }));
+}
+
+export interface WebMemoryRow {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  source: string;
+  supersedesId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapMemoryRow(row: Record<string, unknown>): WebMemoryRow {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    content: String(row.content),
+    tags: String(row.tags ?? "")
+      .split(",")
+      .filter(Boolean),
+    source: String(row.source ?? "agent"),
+    supersedesId: row.supersedes_id ? String(row.supersedes_id) : null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export function listWorkspaceMemories(rootPath: string, limit = 50, offset = 0): WebMemoryRow[] {
+  const rows = getWorkspaceDb(rootPath)
+    .prepare(
+      `SELECT m.* FROM memories m
+       WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
+       ORDER BY m.updated_at DESC, m.created_at DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(limit, offset) as Array<Record<string, unknown>>;
+  return rows.map(mapMemoryRow);
+}
+
+export function countWorkspaceMemories(rootPath: string): number {
+  const row = getWorkspaceDb(rootPath)
+    .prepare(
+      `SELECT COUNT(*) AS count FROM memories m
+       WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)`,
+    )
+    .get() as { count: number } | undefined;
+  return row?.count ?? 0;
+}
+
+export function searchWorkspaceMemories(
+  rootPath: string,
+  query: string,
+  limit = 50,
+): WebMemoryRow[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return listWorkspaceMemories(rootPath, limit);
+
+  const terms = [...new Set(normalized.split(/\s+/).filter(Boolean))].slice(0, 8);
+  if (terms.length === 0) return listWorkspaceMemories(rootPath, limit);
+
+  const clauses = terms.map(() => "(lower(m.title) LIKE ? OR lower(m.content) LIKE ?)");
+  const termParams = terms.flatMap((t) => [`%${t}%`, `%${t}%`]);
+  const phrasePattern = `%${normalized}%`;
+
+  const rows = getWorkspaceDb(rootPath)
+    .prepare(
+      `SELECT m.* FROM memories m
+       WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
+         AND (${clauses.join(" AND ")})
+       ORDER BY
+         CASE WHEN lower(m.title) = ? THEN 0
+              WHEN lower(m.title) LIKE ? THEN 1
+              ELSE 2
+         END,
+         m.updated_at DESC
+       LIMIT ?`,
+    )
+    .all(...termParams, normalized, phrasePattern, limit) as Array<Record<string, unknown>>;
+  return rows.map(mapMemoryRow);
+}
+
+export function getWorkspaceMemory(rootPath: string, id: string): WebMemoryRow | null {
+  const row = getWorkspaceDb(rootPath).prepare("SELECT * FROM memories WHERE id = ?").get(id) as
+    | Record<string, unknown>
+    | undefined;
+  return row ? mapMemoryRow(row) : null;
+}
+
+export function insertWorkspaceMemory(input: {
+  rootPath: string;
+  title: string;
+  content: string;
+  tags?: string[];
+  source?: string;
+  supersedesId?: string;
+}): string {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  getWorkspaceDb(input.rootPath)
+    .prepare(
+      "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .run(
+      id,
+      input.title,
+      input.content,
+      (input.tags ?? []).join(","),
+      input.source ?? "user",
+      input.supersedesId ?? null,
+      now,
+      now,
+    );
+  return id;
+}
+
+export function deleteWorkspaceMemory(rootPath: string, id: string): boolean {
+  const result = getWorkspaceDb(rootPath).prepare("DELETE FROM memories WHERE id = ?").run(id);
+  return result.changes > 0;
+}
+
+export interface WebQueryMetrics {
+  metricMethod: "selected-full-files-minus-serialized-response";
+  totalQueries: number;
+  totalTokensReturned: number;
+  totalTokensSaved: number;
+  totalFilesScanned: number;
+  avgTokensPerQuery: number;
+  recentQueries: Array<{
+    id: string;
+    query: string;
+    mode: string;
+    resultCount: number;
+    tokensReturned: number;
+    tokensSaved: number;
+    filesScanned: number;
+    createdAt: string;
+  }>;
+}
+
+export function getWorkspaceQueryMetrics(rootPath: string, recentLimit = 10): WebQueryMetrics {
+  const db = getWorkspaceDb(rootPath);
+  const totals = db
+    .prepare(
+      `SELECT
+      COUNT(*) AS totalQueries,
+      COALESCE(SUM(tokens_returned), 0) AS totalTokensReturned,
+      COALESCE(SUM(tokens_saved), 0) AS totalTokensSaved,
+      COALESCE(SUM(files_scanned), 0) AS totalFilesScanned
+     FROM query_logs`,
+    )
+    .get() as Record<string, number> | undefined;
+
+  const recentRows = db
+    .prepare(
+      `SELECT id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at
+     FROM query_logs
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    )
+    .all(recentLimit) as Array<Record<string, unknown>>;
+
+  const totalQueries = Number(totals?.totalQueries ?? 0);
+  const totalTokensReturned = Number(totals?.totalTokensReturned ?? 0);
+  const totalTokensSaved = Number(totals?.totalTokensSaved ?? 0);
+  const totalFilesScanned = Number(totals?.totalFilesScanned ?? 0);
+
+  return {
+    metricMethod: "selected-full-files-minus-serialized-response",
+    totalQueries,
+    totalTokensReturned,
+    totalTokensSaved,
+    totalFilesScanned,
+    avgTokensPerQuery: totalQueries > 0 ? Math.round(totalTokensReturned / totalQueries) : 0,
+    recentQueries: recentRows.map((row) => ({
+      id: String(row.id),
+      query: String(row.query),
+      mode: String(row.mode),
+      resultCount: Number(row.result_count ?? 0),
+      tokensReturned: Number(row.tokens_returned ?? 0),
+      tokensSaved: Number(row.tokens_saved ?? 0),
+      filesScanned: Number(row.files_scanned ?? 0),
+      createdAt: String(row.created_at),
+    })),
+  };
 }
 
 // Optimized combined query for graph page - fetches nodes and edges in parallel
 export function getWorkspaceGraphOptimized(
   rootPath: string,
   maxNodes: number,
-  maxEdges: number
-): { nodes: WebGraphNode[]; edges: WebGraphEdge[]; totalNodeCount: number } {
+  maxEdges: number,
+): {
+  nodes: WebGraphNode[];
+  edges: WebGraphEdge[];
+  totalNodeCount: number;
+  totalEdgeCount: number;
+} {
   const db = getWorkspaceDb(rootPath);
 
   // Use prepared statements for better performance
   const countStmt = db.prepare("SELECT COUNT(*) AS count FROM graph_nodes");
+  const edgeCountStmt = db.prepare("SELECT COUNT(*) AS count FROM graph_edges");
   const nodesStmt = db.prepare(`
     SELECT * FROM graph_nodes
     ORDER BY
@@ -634,28 +847,47 @@ export function getWorkspaceGraphOptimized(
       created_at DESC
     LIMIT ?
   `);
-  const edgesStmt = db.prepare("SELECT * FROM graph_edges LIMIT ?");
+  const edgesStmt = db.prepare(`
+    SELECT ge.* FROM graph_edges ge
+    WHERE ge.from_node_id IN (
+      SELECT id FROM graph_nodes
+      ORDER BY
+        CASE type ${typeOrderCase} ELSE 999 END,
+        created_at DESC
+      LIMIT ?
+    )
+    AND ge.to_node_id IN (
+      SELECT id FROM graph_nodes
+      ORDER BY
+        CASE type ${typeOrderCase} ELSE 999 END,
+        created_at DESC
+      LIMIT ?
+    )
+    LIMIT ?
+  `);
 
   // Execute all queries
   const countResult = countStmt.get() as { count: number };
+  const edgeCountResult = edgeCountStmt.get() as { count: number };
   const nodeRows = nodesStmt.all(maxNodes) as Array<Record<string, unknown>>;
-  const edgeRows = edgesStmt.all(maxEdges) as Array<Record<string, unknown>>;
+  const edgeRows = edgesStmt.all(maxNodes, maxNodes, maxEdges) as Array<Record<string, unknown>>;
 
   return {
     totalNodeCount: countResult.count,
+    totalEdgeCount: edgeCountResult.count,
     nodes: nodeRows.map((row) => ({
       id: String(row.id),
       label: String(row.label),
       type: String(row.type),
       refId: row.ref_id ? String(row.ref_id) : null,
-      metadata: safeParseJson(String(row.metadata ?? "{}"), {})
+      metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
     })),
     edges: edgeRows.map((row) => ({
       id: String(row.id),
       source: String(row.from_node_id),
       target: String(row.to_node_id),
       type: String(row.type),
-      weight: Number(row.weight ?? 1)
-    }))
+      weight: Number(row.weight ?? 1),
+    })),
   };
 }

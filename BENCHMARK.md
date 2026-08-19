@@ -1,69 +1,50 @@
-# Retrieval Benchmark
+# Retrieval benchmark
 
-Date: 2026-07-22 (v0.4.0 — FTS5 + cosine similarity)
+Date: 2026-08-10  
+Commit: working tree based on `36722f9` (`feat/enhance`)
 
 ## Scope
 
 - Workspace: `openez`
-- Index: 118 files, 640 chunks
-- Evaluation set: 18 queries in `tests/fixtures/retrieval-eval.json`
-- FTS: SQLite FTS5 BM25, porter unicode61 tokenizer, prefix matching
-- Embedding: optional (Ollama `nomic-embed-text`), cosine similarity
-- Retrieval: FTS5 + graph expansion + RRF fusion (k=60)
+- Corpus: 180 files, 979 chunks
+- Evaluation set: 17 fixture-backed queries
+- Retrieval: SQLite FTS5, graph expansion excluded from the FTS quality comparison
+- Embeddings: disabled for this baseline
 
-## Commands
-
-Without embedding:
+## Command
 
 ```bash
-EMBEDDING_PROVIDER=none pnpm benchmark:retrieval --fail-on-quality
+pnpm benchmark:retrieval
 ```
 
-With Ollama embedding:
+The command indexes the selected workspace incrementally, rejects stale expected paths, runs real
+queries, and enforces Recall@5 and MRR floors.
+
+## Result
+
+| Metric              | FTS only |
+| ------------------- | -------: |
+| Recall@5            |   76.47% |
+| MRR                 |   0.6564 |
+| Queries hit         |    13/17 |
+| Duplicate path rate |       0% |
+| Average latency     |  12.1 ms |
+
+Quality floors: Recall@5 ≥ 70%, MRR ≥ 0.45.
+
+The normal test suite also copies the fixture's expected files into an isolated workspace and runs
+the same FTS quality gates. A separate graph-enabled case verifies that a call edge can add a
+related file to retrieval results.
+
+## Optional embedding comparison
+
+Embedding comparison is intentionally opt-in because it may download/use a configured provider. Indexing and embedding are separate commands:
 
 ```bash
-EMBEDDING_PROVIDER=ollama \
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text \
-pnpm benchmark:retrieval --fail-on-quality
+openez config set embedding.provider local
+openez embed .
+OPENEZ_BENCHMARK_EMBEDDINGS=1 pnpm benchmark:retrieval:embeddings
 ```
 
-Reindex embeddings before benchmarking if model or embedding format changed:
-
-```bash
-EMBEDDING_PROVIDER=ollama \
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text \
-pnpm reindex /path/to/workspace
-```
-
-## Results
-
-| Metric | v0.3.2 (old) | v0.4.0 (new) |
-| --- | ---: | ---: |
-| Recall@5 | 83.33% | 94.44% |
-| MRR | 0.6176 | 0.6565 |
-| Duplicate path rate | 0% | 0% |
-| Avg latency | 126.13 ms | 38.68 ms |
-| p50 latency | 123.44 ms | 18.65 ms |
-| p95 latency | 195.64 ms | 316.63 ms |
-| Avg context tokens | 2,381.5 | 2,944.6 |
-| Avg sources | 9.89 | 12.00 |
-| Quality gate | PASS | PASS |
-| Queries hit | 15/18 | 17/18 |
-
-Quality gate:
-
-- Recall@5 >= 0.80
-- MRR >= 0.60
-- Duplicate path rate <= 0.20
-
-## Key improvements
-
-1. **FTS5 instead of LIKE** — FTS5 virtual table with BM25 ranking, porter tokenizer, prefix matching. Replaced `LIKE '%query%'` (full table scan, hardcoded score 0.1).
-2. **Cosine similarity instead of string-length comparison** — Vector search uses `dot(a,b) / (norm(a) * norm(b))` instead of `ORDER BY abs(length(embedding) - ?)`.
-3. **Removed Postgres dead code** — Dropped `pg`, `drizzle-orm/node-postgres`, Postgres schema. SQLite-only.
-
-## Conclusion
-
-FTS5 + BM25 ranking improved Recall@5 from 83.33% to 94.44% (17/18 hit) and reduced average latency from 126ms to 39ms (3.3x faster). Only 1/18 query misses ("where are TypeScript symbols extracted?" — FTS5 does not match because the query is natural language, while `code.ts` uses `ts-morph` and does not contain the words "TypeScript symbols extracted").
-
-Embedding remains optional. FTS-only is sufficient for most queries. Enable Ollama when semantic fallback is needed for queries without direct keyword overlap.
+Raw task queries are embedded without hard-coded synonym expansion. Publish a new FTS+embedding
+table only after running this command against a named provider/model.

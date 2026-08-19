@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useState,
-  useCallback,
-  useEffect,
-  useMemo,
-  lazy,
-  Suspense,
-} from "react";
+import { useState, useCallback, useEffect, useMemo, lazy, Suspense } from "react";
 import { GraphLegend } from "./GraphLegend";
 import { Badge, Input, Label } from "@openez-graph/ui";
 import { Loader2, Search, X } from "lucide-react";
@@ -45,6 +38,8 @@ interface GraphData {
   edgeTypes: string[];
   totalNodes: number;
   totalEdges: number;
+  displayedNodes: number;
+  displayedEdges: number;
 }
 
 interface GraphClientProps {
@@ -56,15 +51,13 @@ export function GraphClient({ graphData }: GraphClientProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(
-    () => new Set(graphData.nodeTypes.includes("file") ? ["file"] : []),
+    () => new Set(graphData.nodeTypes),
   );
   const [selectedEdgeTypes, setSelectedEdgeTypes] = useState<Set<string>>(
-    () => new Set(graphData.edgeTypes.includes("imports") ? ["imports"] : []),
+    () => new Set(graphData.edgeTypes),
   );
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const [inspectorNode, setInspectorNode] = useState<GraphNodeData | null>(
-    null,
-  );
+  const [inspectorNode, setInspectorNode] = useState<GraphNodeData | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -105,10 +98,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
 
   const filteredNodes = useMemo(() => {
     return graphData.nodes.filter((node) => {
-      if (
-        searchQuery &&
-        !node.label.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      if (searchQuery && !node.label.toLowerCase().includes(searchQuery.toLowerCase()))
         return false;
       if (selectedTypes.size > 0 && !selectedTypes.has(node.type)) return false;
       return true;
@@ -118,13 +108,8 @@ export function GraphClient({ graphData }: GraphClientProps) {
   const filteredEdges = useMemo(() => {
     const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
     return graphData.edges.filter((edge) => {
-      if (
-        !filteredNodeIds.has(edge.source) ||
-        !filteredNodeIds.has(edge.target)
-      )
-        return false;
-      if (selectedEdgeTypes.size > 0 && !selectedEdgeTypes.has(edge.type))
-        return false;
+      if (!filteredNodeIds.has(edge.source) || !filteredNodeIds.has(edge.target)) return false;
+      if (selectedEdgeTypes.size > 0 && !selectedEdgeTypes.has(edge.type)) return false;
       return true;
     });
   }, [graphData.edges, filteredNodes, selectedEdgeTypes]);
@@ -172,8 +157,8 @@ export function GraphClient({ graphData }: GraphClientProps) {
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      <div className="w-64 border-r bg-background/50 py-4 pr-4 overflow-y-auto">
+    <div className="relative flex-1 min-h-0 overflow-hidden bg-[#171717]">
+      <div className="absolute left-3 top-3 z-10 max-h-[calc(100%-1.5rem)] w-64 overflow-y-auto rounded-lg border border-white/10 bg-[#202020]/95 p-3 shadow-2xl backdrop-blur-xl">
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="search" className="text-xs">
@@ -190,7 +175,9 @@ export function GraphClient({ graphData }: GraphClientProps) {
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
                   className="absolute right-2 top-1/2 -translate-y-1/2"
                 >
                   <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
@@ -204,8 +191,10 @@ export function GraphClient({ graphData }: GraphClientProps) {
             <div className="flex flex-wrap gap-1">
               {graphData.nodeTypes.map((type) => (
                 <button
+                  type="button"
                   key={type}
                   onClick={() => toggleType(type)}
+                  aria-pressed={selectedTypes.has(type)}
                   className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                     selectedTypes.has(type)
                       ? "bg-primary text-primary-foreground border-primary"
@@ -221,10 +210,12 @@ export function GraphClient({ graphData }: GraphClientProps) {
           <div className="space-y-2">
             <Label className="text-xs">Edge Types</Label>
             <div className="flex flex-wrap gap-1">
-              {graphData.edgeTypes.slice(0, 8).map((type) => (
+              {graphData.edgeTypes.map((type) => (
                 <button
+                  type="button"
                   key={type}
                   onClick={() => toggleEdgeType(type)}
+                  aria-pressed={selectedEdgeTypes.has(type)}
                   className={`px-2 py-0.5 text-xs rounded border transition-colors ${
                     selectedEdgeTypes.has(type)
                       ? "bg-primary text-primary-foreground border-primary"
@@ -239,26 +230,30 @@ export function GraphClient({ graphData }: GraphClientProps) {
 
           <div className="pt-2 border-t">
             <p className="text-xs text-muted-foreground">
-              Showing {filteredNodes.length} of {graphData.totalNodes} nodes
+              Showing {filteredNodes.length.toLocaleString()} of{" "}
+              {graphData.totalNodes.toLocaleString()} nodes
             </p>
             <p className="text-xs text-muted-foreground">
-              {filteredEdges.length} edges
+              {filteredEdges.length.toLocaleString()} of {graphData.totalEdges.toLocaleString()}{" "}
+              edges
             </p>
+            {graphData.totalNodes > graphData.nodes.length && (
+              <p className="text-xs text-amber-500/80 mt-1">
+                {graphData.nodes.length.toLocaleString()} nodes loaded (limit)
+              </p>
+            )}
           </div>
 
           <div className="pt-2 border-t">
-            <GraphLegend
-              nodeTypes={graphData.nodeTypes}
-              edgeTypes={graphData.edgeTypes}
-            />
+            <GraphLegend nodeTypes={graphData.nodeTypes} edgeTypes={graphData.edgeTypes} />
           </div>
         </div>
       </div>
 
-      <div className="flex-1 relative">
+      <div className="absolute inset-0">
         <Suspense
           fallback={
-            <div className="absolute inset-0 flex items-center justify-center bg-[#0a0f1a]">
+            <div className="absolute inset-0 flex items-center justify-center bg-[#171717]">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Loading graph renderer...</span>
@@ -282,7 +277,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
             const node = nodeById.get(hoveredNodeId);
             if (!node) return null;
             return (
-              <div className="absolute bottom-4 left-4 bg-background/95 border rounded-md px-3 py-2 shadow-lg">
+              <div className="pointer-events-none absolute bottom-4 left-4 max-w-sm rounded-md border border-white/10 bg-[#202020]/95 px-3 py-2 shadow-xl backdrop-blur-xl">
                 <p className="text-sm font-medium">{node.label}</p>
                 <p className="text-xs text-muted-foreground">{node.type}</p>
               </div>
@@ -291,10 +286,12 @@ export function GraphClient({ graphData }: GraphClientProps) {
       </div>
 
       {inspectorNode && (
-        <div className="w-80 border-l bg-background overflow-y-auto">
+        <div className="absolute bottom-3 right-3 top-3 z-20 w-[min(20rem,calc(100%-1.5rem))] overflow-y-auto rounded-lg border border-white/10 bg-[#202020]/95 shadow-2xl backdrop-blur-xl">
           <div className="p-4 border-b flex items-center justify-between">
             <h3 className="font-medium text-sm">Inspector</h3>
             <button
+              type="button"
+              aria-label="Close inspector"
               onClick={() => {
                 setSelectedNodeId(null);
                 setInspectorNode(null);
@@ -308,9 +305,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
             <div className="space-y-2">
               <div>
                 <Label className="text-xs text-muted-foreground">Label</Label>
-                <p className="text-sm font-mono break-all">
-                  {inspectorNode.label}
-                </p>
+                <p className="text-sm font-mono break-all">{inspectorNode.label}</p>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">Type</Label>
@@ -325,17 +320,14 @@ export function GraphClient({ graphData }: GraphClientProps) {
               {inspectorNode.path && (
                 <div>
                   <Label className="text-xs text-muted-foreground">Path</Label>
-                  <p className="text-sm font-mono text-xs break-all">
-                    {inspectorNode.path}
-                  </p>
+                  <p className="text-sm font-mono text-xs break-all">{inspectorNode.path}</p>
                 </div>
               )}
               {(inspectorNode.startLine || inspectorNode.endLine) && (
                 <div>
                   <Label className="text-xs text-muted-foreground">Lines</Label>
                   <p className="text-sm font-mono">
-                    {inspectorNode.startLine ?? "?"}-
-                    {inspectorNode.endLine ?? "?"}
+                    {inspectorNode.startLine ?? "?"}-{inspectorNode.endLine ?? "?"}
                   </p>
                 </div>
               )}
@@ -343,25 +335,21 @@ export function GraphClient({ graphData }: GraphClientProps) {
             {neighbors && (
               <div className="space-y-2 pt-2 border-t">
                 <Label className="text-xs text-muted-foreground">
-                  Connections (
-                  {neighbors.incoming.length + neighbors.outgoing.length})
+                  Connections ({neighbors.incoming.length + neighbors.outgoing.length})
                 </Label>
                 {neighbors.incoming.length > 0 && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Incoming
-                    </p>
+                    <p className="text-xs text-muted-foreground mb-1">Incoming</p>
                     {neighbors.incoming.slice(0, 5).map((edge) => {
                       const sourceNode = nodeById.get(edge.source);
                       return (
                         <button
+                          type="button"
                           key={edge.id}
                           onClick={() => handleNodeClick(edge.source)}
                           className="block w-full text-left px-2 py-1 text-xs rounded hover:bg-muted"
                         >
-                          <span className="text-muted-foreground">
-                            {edge.type}:
-                          </span>{" "}
+                          <span className="text-muted-foreground">{edge.type}:</span>{" "}
                           <span className="font-mono truncate">
                             {sourceNode?.label ?? edge.source}
                           </span>
@@ -372,20 +360,17 @@ export function GraphClient({ graphData }: GraphClientProps) {
                 )}
                 {neighbors.outgoing.length > 0 && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Outgoing
-                    </p>
+                    <p className="text-xs text-muted-foreground mb-1">Outgoing</p>
                     {neighbors.outgoing.slice(0, 5).map((edge) => {
                       const targetNode = nodeById.get(edge.target);
                       return (
                         <button
+                          type="button"
                           key={edge.id}
                           onClick={() => handleNodeClick(edge.target)}
                           className="block w-full text-left px-2 py-1 text-xs rounded hover:bg-muted"
                         >
-                          <span className="text-muted-foreground">
-                            {edge.type}:
-                          </span>{" "}
+                          <span className="text-muted-foreground">{edge.type}:</span>{" "}
                           <span className="font-mono truncate">
                             {targetNode?.label ?? edge.target}
                           </span>
@@ -398,9 +383,7 @@ export function GraphClient({ graphData }: GraphClientProps) {
             )}
             {Object.keys(inspectorNode.metadata ?? {}).length > 0 && (
               <div className="space-y-2 pt-2 border-t">
-                <Label className="text-xs text-muted-foreground">
-                  Metadata
-                </Label>
+                <Label className="text-xs text-muted-foreground">Metadata</Label>
                 <pre className="text-xs bg-muted rounded p-2 overflow-auto max-h-40">
                   {JSON.stringify(inspectorNode.metadata, null, 2)}
                 </pre>

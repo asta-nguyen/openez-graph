@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { resolveCliInvocation } from "./resolve-cli";
+import { installAgentInstructions } from "./setup-instructions";
 import { parse, stringify } from "smol-toml";
 
 function getCodexConfigPath(): string {
@@ -51,7 +52,7 @@ export async function setupCodex(rootPath: string): Promise<void> {
   const entry = {
     command,
     args,
-    startup_timeout_sec: 120
+    startup_timeout_sec: 120,
   };
 
   mcpServers[label] = entry;
@@ -60,11 +61,13 @@ export async function setupCodex(rootPath: string): Promise<void> {
 
   fs.writeFileSync(configPath, output, "utf-8");
   fs.chmodSync(configPath, 0o644);
+  const instructionsPath = installAgentInstructions(resolvedPath, "AGENTS.md");
 
   console.log(`Codex MCP server configured: '${label}'`);
   console.log("  Mode:    shared multi-workspace MCP");
   console.log(`  Repo:    ${repoRoot}`);
   console.log(`  Config:  ${configPath}`);
+  console.log(`  Rules:   ${instructionsPath}`);
   console.log("");
   console.log("Restart Codex or open a new session for the changes to take effect.");
 }

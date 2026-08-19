@@ -1,8 +1,7 @@
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import crypto from "node:crypto";
-import { existsSync, promises as fs, readFileSync } from "node:fs";
+import { existsSync, promises as fs, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 
 function getDirname(): string {
@@ -24,26 +23,35 @@ const serverDir = getDirname();
 
 import {
   countWorkspaceDocuments,
-  deleteRegistryWorkspace,
+  countWorkspaceMemories,
+  deleteWorkspaceMemory,
   ensureRegistryWorkspace,
   getLatestGraphRun,
   getLatestIndexRun,
+  getWorkspaceQueryMetrics,
   getRecentGraphRuns,
   getRecentIndexRuns,
   getRegistryWorkspace,
   getWorkspaceCounts,
   getWorkspaceGraphOptimized,
+  getWorkspaceMemory,
+  insertWorkspaceMemory,
   listRegistryWorkspaces,
+  closeWorkspaceDb,
   listWorkspaceDocuments,
+  listWorkspaceMemories,
   resolveRegistryDbPath,
-  updateRegistryWorkspace,
+  searchWorkspaceMemories,
+  setRegistryWorkspacePinned,
 } from "./sqlite";
 
-import { memoryQuery } from "@openez-graph/core";
+import { LOCAL_EMBEDDING_MODELS, codeQuery } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
+  removeWorkspace,
 } from "@openez-graph/db";
+import { ensureGraphReady, indexWorkspace } from "@openez-graph/indexer";
 
 const app = new Hono();
 app.use(
@@ -56,7 +64,7 @@ app.use(
       "http://127.0.0.1:11368",
     ],
     credentials: true,
-  })
+  }),
 );
 
 const DEFAULT_INCLUDE_GLOBS = [
@@ -78,6 +86,8 @@ const DEFAULT_EXCLUDE_GLOBS = [
   "**/.turbo/**",
 ];
 
+const activeIndexRuns = new Set<string>();
+
 function mapWorkspace(ws: {
   id: string;
   name: string;
@@ -94,6 +104,7 @@ function mapWorkspace(ws: {
   nodeCount: number;
   edgeCount: number;
   lastError?: string;
+  pinnedAt?: string;
   createdAt: string;
   updatedAt: string;
 }) {
@@ -101,44 +112,22 @@ function mapWorkspace(ws: {
     id: ws.id,
     name: ws.name,
     rootPath: ws.rootPath,
-    includeGlobs: ws.includeGlobs
-      ? ws.includeGlobs.split("\n").filter(Boolean)
-      : [],
-    excludeGlobs: ws.excludeGlobs
-      ? ws.excludeGlobs.split("\n").filter(Boolean)
-      : [],
+    includeGlobs: ws.includeGlobs ? ws.includeGlobs.split("\n").filter(Boolean) : [],
+    excludeGlobs: ws.excludeGlobs ? ws.excludeGlobs.split("\n").filter(Boolean) : [],
     status: ws.status,
     indexingStatus: ws.indexingStatus,
     graphStatus: ws.graphStatus,
     lastIndexedAt: ws.lastIndexedAt ? new Date(ws.lastIndexedAt) : null,
-    lastGraphBuiltAt: ws.lastGraphBuiltAt
-      ? new Date(ws.lastGraphBuiltAt)
-      : null,
+    lastGraphBuiltAt: ws.lastGraphBuiltAt ? new Date(ws.lastGraphBuiltAt) : null,
     documentCount: ws.documentCount,
     chunkCount: ws.chunkCount,
     nodeCount: ws.nodeCount,
     edgeCount: ws.edgeCount,
     lastError: ws.lastError ?? null,
+    pinnedAt: ws.pinnedAt ?? null,
     createdAt: new Date(ws.createdAt),
     updatedAt: new Date(ws.updatedAt),
   };
-}
-
-function toRunShim(run: {
-  id: string;
-  mode: string;
-  status: string;
-  filesScanned: number;
-  filesUpdated: number;
-  chunksWritten: number;
-  embeddingsWritten: number;
-  nodesCreated: number;
-  edgesCreated: number;
-  errorMessage: string | null;
-  startedAt: string;
-  finishedAt: string | null;
-}) {
-  return run;
 }
 
 // Dashboard
@@ -183,11 +172,11 @@ app.get("/api/dashboard", (c) => {
       },
       recentRuns: run ? [run] : [],
       recentDocuments: listWorkspaceDocuments(target.rootPath, 10),
-      recentMemories: [] as Array<{
-        id: string;
-        title: string;
-        source: string;
-      }>,
+      recentMemories: listWorkspaceMemories(target.rootPath, 10).map((m) => ({
+        id: m.id,
+        title: m.title,
+        source: m.source,
+      })),
       databaseAvailable: true,
     });
   } catch (err) {
@@ -225,20 +214,6 @@ app.get("/api/documents", (c) => {
   }
 });
 
-// Jobs
-app.get("/api/jobs", (c) => {
-  const workspaces = listRegistryWorkspaces();
-  const runs: Array<ReturnType<typeof toRunShim>> = [];
-  for (const ws of workspaces) {
-    const workspaceRuns = getRecentIndexRuns(ws.rootPath, 100);
-    runs.push(...workspaceRuns);
-  }
-  runs.sort(
-    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-  );
-  return c.json(runs);
-});
-
 // Validate path
 app.post("/api/validate-path", async (c) => {
   const body = await c.req.json<{ rootPath?: string }>();
@@ -246,8 +221,7 @@ app.post("/api/validate-path", async (c) => {
   if (!rootPath) return c.json({ valid: false, error: "Path is required" });
   try {
     const stats = await fs.stat(rootPath);
-    if (!stats.isDirectory())
-      return c.json({ valid: false, error: "Path is not a directory" });
+    if (!stats.isDirectory()) return c.json({ valid: false, error: "Path is not a directory" });
     return c.json({ valid: true });
   } catch {
     return c.json({
@@ -320,12 +294,10 @@ app.post("/api/workspaces", async (c) => {
       excludeGlobs?: string[];
     }>();
     const rootPath = body.rootPath;
-    if (!rootPath)
-      return c.json({ success: false, error: "rootPath is required" });
+    if (!rootPath) return c.json({ success: false, error: "rootPath is required" });
     try {
       const stats = await fs.stat(rootPath);
-      if (!stats.isDirectory())
-        return c.json({ success: false, error: "Path is not a directory" });
+      if (!stats.isDirectory()) return c.json({ success: false, error: "Path is not a directory" });
     } catch {
       return c.json({
         success: false,
@@ -352,14 +324,37 @@ app.post("/api/workspaces", async (c) => {
   }
 });
 
-app.delete("/api/workspaces/:id", (c) => {
+app.delete("/api/workspaces/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    deleteRegistryWorkspace(id);
-    return c.json({ success: true });
+    // Close the web server's cached workspace DB handle before removing,
+    // so the native connection doesn't keep the SQLite files locked.
+    const ws = getRegistryWorkspace(id);
+    if (ws) closeWorkspaceDb(ws.rootPath);
+    const report = await removeWorkspace({ id });
+    if (!report) return c.json({ success: false, error: "Workspace not found" }, 404);
+    return c.json({ success: true, report });
   } catch (err) {
     console.error("Failed to delete workspace:", err);
-    return c.json({ success: false, error: "Failed to delete workspace" });
+    return c.json({ success: false, error: "Failed to delete workspace" }, 500);
+  }
+});
+
+app.patch("/api/workspaces/:id/pin", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json<{ pinned?: boolean }>().catch(() => null);
+    if (typeof body?.pinned !== "boolean") {
+      return c.json({ success: false, error: "pinned (boolean) is required" }, 400);
+    }
+    if (!getRegistryWorkspace(id)) {
+      return c.json({ success: false, error: "Workspace not found" }, 404);
+    }
+    setRegistryWorkspacePinned(id, body.pinned);
+    return c.json({ success: true });
+  } catch (err) {
+    console.error("Failed to pin workspace:", err);
+    return c.json({ success: false, error: "Failed to pin workspace" });
   }
 });
 
@@ -374,96 +369,111 @@ app.get("/api/workspaces/:id/index", (c) => {
 app.post("/api/workspaces/:id/index", async (c) => {
   const id = c.req.param("id");
   const ws = getRegistryWorkspace(id);
-  if (!ws)
+  if (!ws) return c.json({ status: "failed", error: "Workspace not found" }, 404);
+  const body = await c.req.json<{ mode?: string }>().catch(() => ({ mode: "incremental" }));
+  const mode = body.mode ?? "incremental";
+  if (mode !== "incremental" && mode !== "full") {
+    return c.json({ status: "failed", error: "Mode must be 'incremental' or 'full'" }, 400);
+  }
+
+  if (activeIndexRuns.has(id)) {
+    return c.json({ status: "running", error: `Workspace '${id}' is already being indexed` }, 409);
+  }
+
+  activeIndexRuns.add(id);
+  try {
+    const summary = await indexWorkspace({ workspaceId: id, mode });
+    return c.json({ ...summary, status: "completed" });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("already being indexed")) {
+      return c.json({ status: "running", error: error.message }, 409);
+    }
     return c.json(
-      { jobId: null, status: "error", error: "Workspace not found" },
-      404
+      {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      },
+      500,
     );
-  const body = await c.req
-    .json<{ mode?: string }>()
-    .catch(() => ({ mode: "incremental" }));
-  updateRegistryWorkspace(id, {
-    indexingStatus: "running",
-    status: "indexing",
-    lastError: null,
-  });
-  return c.json({ jobId: crypto.randomUUID(), status: "running" });
-});
-
-// Workspace jobs
-app.get("/api/workspaces/:id/jobs", (c) => {
-  const id = c.req.param("id");
-  const ws = getRegistryWorkspace(id);
-  if (!ws) return c.json([]);
-  return c.json(getRecentIndexRuns(ws.rootPath, 100));
-});
-
-app.delete("/api/workspaces/:id/jobs/:jobId", (c) => {
-  return c.json({ ok: true });
+  } finally {
+    activeIndexRuns.delete(id);
+  }
 });
 
 // Workspace graph
-app.get("/api/workspaces/:id/graph", (c) => {
+app.get("/api/workspaces/:id/graph", async (c) => {
   const id = c.req.param("id");
   const workspace = getRegistryWorkspace(id);
   if (!workspace) return c.json(null);
 
-  const { nodes: nodeRows, edges: edgeRows } = getWorkspaceGraphOptimized(
-    workspace.rootPath,
-    300,
-    1000
-  );
+  try {
+    await ensureGraphReady(id);
 
-  const degreeMap = new Map<string, number>();
-  for (const edge of edgeRows) {
-    degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
-    degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
-  }
+    // ponytail: canvas-first ceiling; move to WebGL/streaming for larger full graphs.
+    const maxNodes = Math.min(parseInt(c.req.query("limit") ?? "25000", 10) || 25000, 25000);
+    const maxEdges = Math.min(parseInt(c.req.query("edgeLimit") ?? "75000", 10) || 75000, 75000);
 
-  const validIds = new Set(nodeRows.map((n) => n.id));
+    const {
+      nodes: nodeRows,
+      edges: edgeRows,
+      totalNodeCount,
+      totalEdgeCount,
+    } = getWorkspaceGraphOptimized(workspace.rootPath, maxNodes, maxEdges);
 
-  const nodes = nodeRows.map((node) => ({
-    id: node.id,
-    label: node.label,
-    type: node.type,
-    degree: degreeMap.get(node.id) ?? 0,
-    metadata: node.metadata,
-    path:
-      typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
-    startLine:
-      typeof node.metadata?.startLine === "number"
-        ? node.metadata.startLine
-        : undefined,
-    endLine:
-      typeof node.metadata?.endLine === "number"
-        ? node.metadata.endLine
-        : undefined,
-    refId: node.refId,
-  }));
+    const degreeMap = new Map<string, number>();
+    for (const edge of edgeRows) {
+      degreeMap.set(edge.source, (degreeMap.get(edge.source) ?? 0) + 1);
+      degreeMap.set(edge.target, (degreeMap.get(edge.target) ?? 0) + 1);
+    }
 
-  const edges = edgeRows
-    .filter((e) => validIds.has(e.source) && validIds.has(e.target))
-    .map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      type: edge.type,
-      weight: edge.weight,
+    const validIds = new Set(nodeRows.map((n) => n.id));
+
+    const nodes = nodeRows.map((node) => ({
+      id: node.id,
+      label: node.label,
+      type: node.type,
+      degree: degreeMap.get(node.id) ?? 0,
+      metadata: node.metadata,
+      path: typeof node.metadata?.path === "string" ? node.metadata.path : undefined,
+      startLine: typeof node.metadata?.startLine === "number" ? node.metadata.startLine : undefined,
+      endLine: typeof node.metadata?.endLine === "number" ? node.metadata.endLine : undefined,
+      refId: node.refId,
     }));
 
-  const nodeTypes = [...new Set(nodes.map((n) => n.type))].sort();
-  const edgeTypes = [...new Set(edges.map((e) => e.type))].sort();
+    const edges = edgeRows
+      .filter((e) => validIds.has(e.source) && validIds.has(e.target))
+      .map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type,
+        weight: edge.weight,
+      }));
 
-  return c.json({
-    workspaceId: id,
-    workspaceName: workspace.name,
-    nodes,
-    edges,
-    nodeTypes,
-    edgeTypes,
-    totalNodes: nodes.length,
-    totalEdges: edges.length,
-  });
+    const nodeTypes = [...new Set(nodes.map((n) => n.type))].sort();
+    const edgeTypes = [...new Set(edges.map((e) => e.type))].sort();
+
+    return c.json({
+      workspaceId: id,
+      workspaceName: workspace.name,
+      nodes,
+      edges,
+      nodeTypes,
+      edgeTypes,
+      totalNodes: totalNodeCount,
+      totalEdges: totalEdgeCount,
+      displayedNodes: nodes.length,
+      displayedEdges: edges.length,
+    });
+  } catch (error) {
+    return c.json(
+      {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      },
+      500,
+    );
+  }
 });
 
 // Query
@@ -494,9 +504,10 @@ app.post("/api/query", async (c) => {
   try {
     const registry = createRegistryRepository();
     const workspace = await registry.getWorkspace(workspaceId);
+    await ensureGraphReady(workspaceId);
 
     const [result, neighborResults] = await Promise.all([
-      memoryQuery({ workspaceId, query, skipGraphExpand: true }),
+      codeQuery({ workspaceId, query, skipGraphExpand: true }),
       (async () => {
         if (!workspace) return [];
         const repo = createWorkspaceRepository(workspace.rootPath);
@@ -566,15 +577,247 @@ app.post("/api/query", async (c) => {
   }
 });
 
+app.get("/api/settings/embedding", async (c) => {
+  try {
+    const { getEmbeddingConfig, LOCAL_EMBEDDING_MODELS } = await import("@openez-graph/core");
+    const config = await getEmbeddingConfig();
+    const registry = createRegistryRepository();
+    const dbSettings = await registry.getAllSettings();
+    return c.json({
+      provider: config.provider,
+      openaiApiKey: config.openaiApiKey ? "****" : "",
+      openaiBaseUrl: config.openaiBaseUrl ?? "",
+      openaiModel: config.openaiModel,
+      ollamaBaseUrl: config.ollamaBaseUrl,
+      ollamaModel: config.ollamaModel,
+      localModel: config.localModel,
+      localModels: Object.keys(LOCAL_EMBEDDING_MODELS),
+      dbOverrides: Object.keys(dbSettings).filter((k) => k.startsWith("embedding.")),
+    });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+app.put("/api/settings/embedding", async (c) => {
+  try {
+    const body = await c.req.json();
+    const VALID_KEYS: Record<string, boolean> = {
+      "embedding.provider": true,
+      "embedding.openai_api_key": true,
+      "embedding.openai_base_url": true,
+      "embedding.openai_model": true,
+      "embedding.ollama_base_url": true,
+      "embedding.ollama_model": true,
+      "embedding.local_model": true,
+    };
+    const VALID_PROVIDERS = new Set(["none", "openai", "ollama", "local"]);
+    const registry = createRegistryRepository();
+    const updated: string[] = [];
+    for (const [key, value] of Object.entries(body)) {
+      if (!VALID_KEYS[key]) continue;
+      if (typeof value !== "string") continue;
+      if (value.trim() === "") {
+        await registry.deleteSetting(key);
+        updated.push(key);
+        continue;
+      }
+      if (key === "embedding.provider" && !VALID_PROVIDERS.has(value.trim())) {
+        return c.json(
+          {
+            error: `Invalid embedding provider '${value}'. Must be one of: none, openai, ollama, local.`,
+          },
+          400,
+        );
+      }
+      if (
+        key === "embedding.local_model" &&
+        !Object.prototype.hasOwnProperty.call(LOCAL_EMBEDDING_MODELS, value.trim())
+      ) {
+        return c.json(
+          {
+            error: `Unsupported local embedding model '${value}'. Must be one of: ${Object.keys(LOCAL_EMBEDDING_MODELS).join(", ")}.`,
+          },
+          400,
+        );
+      }
+      await registry.setSetting(key, key === "embedding.local_model" ? value.trim() : value);
+      updated.push(key);
+    }
+    return c.json({ ok: true, updated });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
 app.get("/api/settings/env", (c) => {
   return c.json({
-    EMBEDDING_PROVIDER: process.env.EMBEDDING_PROVIDER ?? "ollama",
+    EMBEDDING_PROVIDER: process.env.EMBEDDING_PROVIDER ?? "none",
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL ?? undefined,
-    OPENAI_EMBEDDING_MODEL:
-      process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
-    OLLAMA_EMBEDDING_MODEL:
-      process.env.OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text",
+    OPENAI_EMBEDDING_MODEL: process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
+    OLLAMA_EMBEDDING_MODEL: process.env.OLLAMA_EMBEDDING_MODEL ?? "bge-m3",
   });
+});
+
+// ── Memories ──
+
+function resolveActiveWorkspace() {
+  const all = listRegistryWorkspaces();
+  if (all.length === 0) return null;
+  // Prefer workspace whose rootPath exists on disk
+  const valid = all.find((w) => existsSync(w.rootPath));
+  return valid ?? all[0];
+}
+
+app.get("/api/memories", (c) => {
+  try {
+    const q = c.req.query("q") ?? "";
+    const limit = Number(c.req.query("limit") ?? 50);
+    const offset = Number(c.req.query("offset") ?? 0);
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ items: [], totalCount: 0 });
+    if (q.trim()) {
+      const items = searchWorkspaceMemories(ws.rootPath, q, limit);
+      return c.json({ items, totalCount: items.length });
+    }
+    const items = listWorkspaceMemories(ws.rootPath, limit, offset);
+    const totalCount = countWorkspaceMemories(ws.rootPath);
+    return c.json({ items, totalCount });
+  } catch (err) {
+    console.error("Memories list error:", err);
+    return c.json({ items: [], totalCount: 0 });
+  }
+});
+
+app.get("/api/memories/:id", (c) => {
+  try {
+    const id = c.req.param("id");
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ ok: false, error: "No workspace" }, 404);
+    const memory = getWorkspaceMemory(ws.rootPath, id);
+    if (!memory) return c.json({ ok: false, error: "Memory not found" }, 404);
+    return c.json({ ok: true, data: memory });
+  } catch (err) {
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+app.post("/api/memories", async (c) => {
+  try {
+    const body = await c.req.json<{
+      title?: string;
+      content?: string;
+      tags?: string[];
+      source?: string;
+      supersedesId?: string;
+    }>();
+    if (!body.title?.trim()) return c.json({ ok: false, error: "title is required" }, 400);
+    if (!body.content?.trim()) return c.json({ ok: false, error: "content is required" }, 400);
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ ok: false, error: "No workspace registered" }, 400);
+    const id = insertWorkspaceMemory({
+      rootPath: ws.rootPath,
+      title: body.title.trim(),
+      content: body.content.trim(),
+      tags: body.tags ?? [],
+      source: body.source ?? "user",
+      supersedesId: body.supersedesId,
+    });
+    const memory = getWorkspaceMemory(ws.rootPath, id);
+    return c.json({ ok: true, data: memory });
+  } catch (err) {
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+app.delete("/api/memories/:id", (c) => {
+  try {
+    const id = c.req.param("id");
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ ok: false, error: "No workspace" }, 404);
+    const deleted = deleteWorkspaceMemory(ws.rootPath, id);
+    if (!deleted) return c.json({ ok: false, error: "Memory not found" }, 404);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+  }
+});
+
+// ── Metrics ──
+
+function resolveMetricsWorkspace(c: Context) {
+  const workspaceId = c.req.query("workspaceId");
+  const all = listRegistryWorkspaces();
+  if (workspaceId) {
+    return all.find((w) => w.id === workspaceId) ?? null;
+  }
+  // Default: same logic as dashboard — first workspace with valid root path
+  return (
+    all.find((w) => {
+      try {
+        return w.rootPath && w.rootPath !== "/" && existsSync(w.rootPath);
+      } catch {
+        return false;
+      }
+    }) ?? all[0]
+  );
+}
+
+app.get("/api/metrics", (c) => {
+  try {
+    const ws = resolveMetricsWorkspace(c);
+    if (!ws) {
+      return c.json({ error: "Workspace not found" }, 404);
+    }
+    const metrics = getWorkspaceQueryMetrics(ws.rootPath, 10);
+    return c.json({ ...metrics, workspaceId: ws.id });
+  } catch {
+    return c.json({
+      metricMethod: "selected-full-files-minus-serialized-response",
+      totalQueries: 0,
+      totalTokensReturned: 0,
+      totalTokensSaved: 0,
+      totalFilesScanned: 0,
+      avgTokensPerQuery: 0,
+      recentQueries: [],
+      workspaceId: null,
+    });
+  }
+});
+
+// ── Changelog ──
+
+function findChangelogPath(): string | null {
+  const candidates = [
+    path.resolve(serverDir, "CHANGELOG.md"),
+    path.resolve(serverDir, "..", "..", "..", "..", "CHANGELOG.md"),
+    path.resolve(serverDir, "..", "..", "..", "CHANGELOG.md"),
+    path.resolve(serverDir, "..", "CHANGELOG.md"),
+    path.resolve(process.cwd(), "CHANGELOG.md"),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  let dir = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, "CHANGELOG.md");
+    if (existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+app.get("/api/changelog", (c) => {
+  try {
+    const filePath = findChangelogPath();
+    if (!filePath) return c.json({ content: "" }, 404);
+    const content = readFileSync(filePath, "utf-8");
+    return c.json({ content });
+  } catch {
+    return c.json({ content: "" }, 500);
+  }
 });
 
 // ── Static frontend serving ──
@@ -585,8 +828,10 @@ function resolveWebDist(): string | null {
   if (existsSync(path.join(sourceDist, "index.html"))) return sourceDist;
 
   // When running from CLI bundle (dist/web copied alongside)
-  const cliDist = path.resolve(serverDir, "web");
-  if (existsSync(path.join(cliDist, "index.html"))) return cliDist;
+  if (process.env.OPENEZ_CLI_BUNDLE === "true" && process.argv[1]) {
+    const cliDist = path.resolve(path.dirname(realpathSync(process.argv[1])), "web");
+    if (existsSync(path.join(cliDist, "index.html"))) return cliDist;
+  }
 
   return null;
 }

@@ -6,7 +6,15 @@ export {
   getLocalWorkspaceConfigPath,
   getLocalWorkspaceDir,
   readLocalWorkspaceConfig,
-  writeLocalWorkspaceConfig
+  writeLocalWorkspaceConfig,
 } from "./sqlite/local-workspace";
-export type { RegistryWorkspace, RegistryRepository, WorkspaceRepository, WorkspaceSettings } from "./sqlite/types";
+export { removeWorkspace } from "./sqlite/remove-workspace";
+export type { RemoveWorkspaceReport, RemoveWorkspaceSelector } from "./sqlite/remove-workspace";
+export type {
+  RegistryWorkspace,
+  RegistryRepository,
+  StoredMemory,
+  WorkspaceRepository,
+  WorkspaceSettings,
+} from "./sqlite/types";
 export type { LocalWorkspaceConfig } from "./sqlite/local-workspace";

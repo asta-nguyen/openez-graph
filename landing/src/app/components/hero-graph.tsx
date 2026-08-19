@@ -10,7 +10,9 @@ function makeNodeTexture(color: string): THREE.CanvasTexture {
   c.width = 32;
   c.height = 32;
   const ctx = c.getContext("2d")!;
-  const cx = 16, cy = 16, r = 14;
+  const cx = 16,
+    cy = 16,
+    r = 14;
   const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   g.addColorStop(0, "#ffffff");
   g.addColorStop(0.15, color);
@@ -116,11 +118,7 @@ export function HeroGraph() {
       const sprite = new THREE.Sprite(mat);
       const size = 1.2 + Math.random() * 1.5;
       sprite.scale.set(size, size, 1);
-      sprite.position.set(
-        positions[i * 3],
-        positions[i * 3 + 1],
-        positions[i * 3 + 2],
-      );
+      sprite.position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
       nodeGroup.add(sprite);
     }
     scene.add(nodeGroup);
@@ -138,10 +136,7 @@ export function HeroGraph() {
         edgePositions.push(sx, sy, sz, tx, ty, tz);
       }
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(edgePositions, 3),
-      );
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(edgePositions, 3));
       const mat = new THREE.LineBasicMaterial({
         color: 0x5cc9c2,
         transparent: true,

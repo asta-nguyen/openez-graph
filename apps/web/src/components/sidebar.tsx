@@ -4,15 +4,16 @@ import {
   LayoutDashboard,
   FolderKanban,
   Settings,
-  Database,
   FileText,
   ScrollText,
   Gauge,
+  History,
+  Brain,
 } from "lucide-react";
 import {
   dashboardQueryOptions,
   documentsQueryOptions,
-  jobsQueryOptions,
+  memoriesQueryOptions,
   settingsEnvQueryOptions,
   workspacesQueryOptions,
 } from "../lib/queries";
@@ -61,10 +62,20 @@ const debugNav = [
     icon: FileText,
     query: () => documentsQueryOptions(1, PAGE_SIZE),
   },
-  { href: "/jobs", label: "Jobs", icon: Database, query: jobsQueryOptions },
+  {
+    href: "/memories",
+    label: "Memories",
+    icon: Brain,
+    query: () => memoriesQueryOptions(1, PAGE_SIZE),
+  },
 ];
 
 const secondaryNav = [
+  {
+    href: "/changelog",
+    label: "Changelog",
+    icon: History,
+  },
   {
     href: "/settings",
     label: "Settings",
@@ -115,11 +126,7 @@ export function AppSidebar() {
             <div className="flex items-center gap-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
               <SidebarMenuButton asChild size="lg" tooltip="OpenEZ Graph">
                 <Link to="/" className="flex items-center gap-3">
-                  <img
-                    src="/logo.png"
-                    alt="OpenEZ Graph"
-                    className="h-8 w-8 rounded-lg"
-                  />
+                  <img src="/logo.png" alt="OpenEZ Graph" className="h-8 w-8 rounded-lg" />
                   <div className="flex flex-col gap-0 group-data-[collapsible=icon]:hidden">
                     <span
                       className="text-sm font-black tracking-tight"
