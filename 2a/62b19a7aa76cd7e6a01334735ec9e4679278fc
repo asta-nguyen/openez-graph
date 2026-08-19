@@ -1,0 +1,51 @@
+apps/mcp/src/mcp-core.ts
+  s_5e217552d7bfea::t_b7b72cc3db7a70 862-865
+apps/cli/README.md
+  s_0e2f30f05d0c7e::t_14cfac99490a63 22
+tests/code-outline.test.ts
+  s_5e217552d7bfea::t_9fc2ad3204568e 172-253
+apps/cli/src/setup-instructions.ts
+  s_5e217552d7bfea::t_f2eae6cf0c5610 11
+tests/mcp-tools.test.ts
+  s_0e2f30f05d0c7e::t_76191dcb5c2173 313-315
+  s_0e2f30f05d0c7e::t_b1ab82763e11b3 291-312,316-357
+packages/indexer/src/index-workspace.ts
+  s_5e217552d7bfea::t_798d3c67d3df7d 594
+  s_5e217552d7bfea::t_96892a2fd847d8 655
+  s_5e217552d7bfea::t_c8ee9b59694b6c 598,601
+  s_0e2f30f05d0c7e::t_8c46ea8321e682 656-657,698-700,775-777,789,792,826,887
+packages/db/src/sqlite/document-repository.ts
+  s_5e217552d7bfea::t_9c56ecae066f43 90-100
+  s_5e217552d7bfea::t_7490c09271e1cb 2
+  s_0e2f30f05d0c7e::t_a2c4b0433bf658 215
+landing/src/app/layout.tsx
+  s_0e2f30f05d0c7e::t_b43db81ccbef8a 98
+AGENTS.md
+  s_0e2f30f05d0c7e::t_44aecf9284e55b 108
+  s_0e2f30f05d0c7e::t_759dc28e7d2002 67-71
+  s_0e2f30f05d0c7e::t_eb9fab596e0490 87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2a62b19a7aa76cd7e6a01334735ec9e4679278fc",
+  "prompts": {},
+  "sessions": {
+    "s_0e2f30f05d0c7e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "celestial-yoke",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_5e217552d7bfea": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "5efd5282-47ff-446e-8375-188a0ed488d6",
+        "model": "GLM-5.2 High"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
