@@ -169,6 +169,88 @@ Example code here.
     expect(outlineB?.symbols[0]?.name).toBe("funcB");
   });
 
+  test("returns null for ambiguous suffix when multiple files match", async () => {
+    const pkgA = path.join(workspaceRoot, "packages/a");
+    const pkgB = path.join(workspaceRoot, "packages/b");
+    fs.mkdirSync(pkgA, { recursive: true });
+    fs.mkdirSync(pkgB, { recursive: true });
+
+    fs.writeFileSync(path.join(pkgA, "utils.ts"), "export function funcA() { return 'a'; }\n");
+    fs.writeFileSync(path.join(pkgB, "utils.ts"), "export function funcB() { return 'b'; }\n");
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "outline-ambig" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const outline = await repo.getFileOutline("utils.ts");
+    expect(outline).toBeNull();
+  });
+
+  test("extracts nested class methods in TypeScript", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const tsFile = path.join(srcDir, "auth.ts");
+
+    fs.writeFileSync(
+      tsFile,
+      `export class AuthService {
+  async authenticate(token: string): Promise<boolean> {
+    return token.length > 0;
+  }
+
+  private hashSecret(secret: string): string {
+    return secret;
+  }
+}
+`,
+    );
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "outline-methods" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const outline = await repo.getFileOutline("src/auth.ts");
+
+    expect(outline).not.toBeNull();
+    const names = outline!.symbols.map((s) => s.name);
+    expect(names).toContain("AuthService");
+    expect(names).toContain("AuthService.authenticate");
+    expect(names).toContain("AuthService.hashSecret");
+  });
+
+  test("extracts Python function and class symbols via tree-sitter", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const pyFile = path.join(srcDir, "calculator.py");
+
+    fs.writeFileSync(
+      pyFile,
+      `class Calculator:
+    def add(self, a, b):
+        return a + b
+
+    def subtract(self, a, b):
+        return a - b
+
+def multiply(a, b):
+    return a * b
+`,
+    );
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "outline-py" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const outline = await repo.getFileOutline("src/calculator.py");
+
+    expect(outline).not.toBeNull();
+    expect(outline?.language).toBe("python");
+    expect(outline?.symbols.length).toBeGreaterThanOrEqual(1);
+  });
+
   test("handles Windows backslashes and prevents LIKE wildcard mismatches", async () => {
     const srcDir = path.join(workspaceRoot, "src");
     fs.mkdirSync(srcDir, { recursive: true });

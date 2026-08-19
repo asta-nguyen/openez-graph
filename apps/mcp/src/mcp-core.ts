@@ -859,14 +859,10 @@ export function createMcpServer(options?: McpServerOptions) {
         const outline = await repo.getFileOutline(targetPath);
 
         if (!outline) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `File not found in index: '${targetPath}'. Ensure the file exists and is indexed.`,
-              },
-            ],
-          };
+          return jsonResponse({
+            error: `File not found in index: '${targetPath}'. Ensure the file exists and is indexed.`,
+            path: targetPath,
+          });
         }
 
         return jsonResponse(outline);

@@ -8,6 +8,7 @@ const MANAGED_BLOCK = `${START_MARKER}
 ## OpenEZ workflow
 
 - Before code work in a new session, call \`memory_recall\` with 1–3 keywords from the current task.
+- Use \`code_outline\` for a cheap AST-level outline of a single file (functions, classes, exports with line numbers) before reading the full file.
 - Use \`code_query\` before filesystem search and \`code_context\` for symbol or file follow-up.
 - Use \`graph_neighbors\` for relationship lookups between symbols, files, and edges.
 - Call \`memory_write\` after an architectural decision or non-obvious constraint is confirmed.
