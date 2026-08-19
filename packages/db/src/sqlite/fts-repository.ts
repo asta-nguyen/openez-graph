@@ -278,6 +278,19 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
     // ── Reset ──
 
     resetIndexArtifacts(): void {
+      // Drop FTS triggers before deleting chunks. Without this, each chunk
+      // deletion fires the FTS delete trigger which does a full scan of the
+      // FTS shadow tables (chunk_id is UNINDEXED in FTS5). On a 92K-chunk
+      // workspace this turned a ~1s reset into >5 minutes.
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_insert");
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_delete");
+      native.exec("DROP TRIGGER IF EXISTS chunks_fts_update");
+      // Drop and recreate the FTS table directly — cheaper than 92K triggered
+      // row deletes and avoids rebuilding the FTS index incrementally.
+      native.exec("DROP TABLE IF EXISTS chunks_fts");
+      native.exec(
+        "CREATE VIRTUAL TABLE chunks_fts USING fts5(chunk_id UNINDEXED, path, heading, language, search_text, tokenize = 'unicode61')",
+      );
       native.exec("DELETE FROM graph_edges");
       native.exec("DELETE FROM graph_nodes");
       native.exec("DELETE FROM chunks");

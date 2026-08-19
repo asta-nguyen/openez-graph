@@ -237,7 +237,7 @@ html {
 .agent-commands > div {
   display: flex;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 1rem;
   border-bottom: 1px solid oklch(1 0 0 / 5%);
 }
 
@@ -376,7 +376,7 @@ html {
 
 .problem-block {
   position: relative;
-  padding: 3rem 2rem;
+  padding: 1.5rem;
   border-radius: var(--radius-lg);
   background: linear-gradient(
     135deg,
