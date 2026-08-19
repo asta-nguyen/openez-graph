@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 
 import { createChunkOps, type ChunkStmts } from "./chunk-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
@@ -59,8 +60,6 @@ export function createDocumentOps(
   const chunkOps = createChunkOps(native, stmts, streamNow);
 
   return {
-    ...chunkOps,
-
     async getDocumentCount(): Promise<number> {
       const row = native.prepare("SELECT count(*) AS count FROM documents").get() as {
         count: number;
@@ -88,6 +87,17 @@ export function createDocumentOps(
         | Record<string, unknown>
         | undefined;
 
+      if (!docRow && filePath.startsWith("/")) {
+        try {
+          const resolved = fs.realpathSync(filePath);
+          if (resolved !== filePath) {
+            docRow = stmts.docByPathOrAbs.get(resolved.replace(/^\.?\//, ""), resolved) as
+              | Record<string, unknown>
+              | undefined;
+          }
+        } catch {}
+      }
+
       if (!docRow && normalizedSlashes !== filePath) {
         docRow = stmts.docByPathOrAbs.get(normalizedSlashes, normalizedSlashes) as
           | Record<string, unknown>
@@ -106,14 +116,6 @@ export function createDocumentOps(
 
         if (validCandidates.length === 1) {
           docRow = validCandidates[0];
-        } else if (validCandidates.length > 1) {
-          const exactSuffix = validCandidates.find((c) => {
-            const docPath = String(c.path).replace(/\\/g, "/");
-            return docPath.endsWith("/" + normalized);
-          });
-          if (exactSuffix) {
-            docRow = exactSuffix;
-          }
         }
       }
 
@@ -210,7 +212,7 @@ export function createDocumentOps(
       symbols.sort((a, b) => a.startLine - b.startLine);
 
       const lines: string[] = [
-        `📄 ${doc.path} (${doc.language || doc.kind}, ${doc.sizeBytes.toLocaleString()} bytes)`,
+        `📄 ${doc.path} (${doc.language || doc.kind}, ${String(doc.sizeBytes)} bytes)`,
       ];
 
       for (let i = 0; i < symbols.length; i++) {

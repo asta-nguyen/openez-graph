@@ -95,7 +95,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <Script
           defer
           src="https://umami.n2q.site/script.js"
-          data-website-id="70a553f9-b5d9-4185-8409-471bb8b5ae6a"
+          data-website-id="9c2e69ba-5f6f-49f0-8813-2753fccefd4b"
           strategy="afterInteractive"
         />
       </head>

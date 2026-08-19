@@ -19,7 +19,7 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 - **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
 - **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
 - **Vector search** — optional OpenAI/Ollama/local embeddings with cosine similarity
-- **MCP-first** — exposes `code_query`, `code_context`, `graph_neighbors`, `memory_recall`, `memory_write`, `index_workspace`, `list_workspaces` tools
+- **MCP-first** — exposes `code_query`, `code_outline`, `code_context`, `graph_neighbors`, `memory_recall`, `memory_write`, `index_workspace`, `list_workspaces` tools
 - **Multi-workspace** — register and query across multiple codebases
 - **Code graph** — symbols, files, chunks, and edges (calls, imports, contains)
 - **Web dashboard** — built-in graph explorer and workspace management UI
