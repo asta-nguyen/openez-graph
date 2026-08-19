@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 import { createChunkOps, type ChunkStmts } from "./chunk-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
+import type { FileOutlineResult, FileOutlineSymbol } from "./types";
 
 /**
  * Prepared statements used by the document operations.
@@ -15,6 +18,10 @@ export interface DocumentStmts {
   docByPath: ReturnType<NativeDatabase["prepare"]>;
   docById: ReturnType<NativeDatabase["prepare"]>;
   insertDoc: ReturnType<NativeDatabase["prepare"]>;
+  docByPathOrAbs: ReturnType<NativeDatabase["prepare"]>;
+  docBySuffix: ReturnType<NativeDatabase["prepare"]>;
+  parsedDocSymbols: ReturnType<NativeDatabase["prepare"]>;
+  chunksByDocOutline: ReturnType<NativeDatabase["prepare"]>;
 }
 
 function mapDocumentRow(row: Record<string, unknown>) {
@@ -44,7 +51,7 @@ function mapDocumentRow(row: Record<string, unknown>) {
  * methods that live in `chunk-repository.ts`.
  *
  * Chunk operations are composed in from `createChunkOps()` so callers of
- * `createDocumentOps()` continue to receive a single merged ops object.
+ * `createDocumentOps()` get both document and chunk methods on the same object.
  */
 export function createDocumentOps(
   native: NativeDatabase,
@@ -71,6 +78,172 @@ export function createDocumentOps(
     async getDocumentByPath(path: string) {
       const row = stmts.docByPath.get(path) as Record<string, unknown> | undefined;
       return row ? mapDocumentRow(row) : null;
+    },
+
+    async getFileOutline(filePath: string): Promise<FileOutlineResult | null> {
+      const normalizedSlashes = filePath.replace(/\\/g, "/");
+      const normalized = normalizedSlashes.replace(/^\.?\//, "");
+
+      let docRow = stmts.docByPathOrAbs.get(normalized, filePath) as
+        | Record<string, unknown>
+        | undefined;
+
+      if (!docRow && path.isAbsolute(filePath)) {
+        try {
+          const resolved = await fs.promises.realpath(filePath);
+          if (resolved !== filePath) {
+            docRow = stmts.docByPathOrAbs.get(resolved.replace(/^\.?\//, ""), resolved) as
+              | Record<string, unknown>
+              | undefined;
+          }
+        } catch {}
+      }
+
+      if (!docRow && normalizedSlashes !== filePath) {
+        docRow = stmts.docByPathOrAbs.get(normalizedSlashes, normalizedSlashes) as
+          | Record<string, unknown>
+          | undefined;
+      }
+
+      if (!docRow && !filePath.startsWith("/") && !filePath.match(/^[a-zA-Z]:[/\\]/)) {
+        const escapedSuffix = normalized.replace(/[%_\\]/g, "\\$&");
+        const candidates = stmts.docBySuffix.all(escapedSuffix, escapedSuffix) as Array<
+          Record<string, unknown>
+        >;
+        const validCandidates = candidates.filter((c) => {
+          const docPath = String(c.path).replace(/\\/g, "/");
+          return docPath === normalized || docPath.endsWith("/" + normalized);
+        });
+
+        if (validCandidates.length === 1) {
+          docRow = validCandidates[0];
+        }
+      }
+
+      if (!docRow) return null;
+
+      const doc = mapDocumentRow(docRow);
+      const symbols: FileOutlineSymbol[] = [];
+
+      const chunkRows = stmts.chunksByDocOutline.all(doc.id) as Array<{
+        chunk_index: number;
+        heading: string | null;
+        metadata: string;
+      }>;
+
+      const chunkMetaMap = new Map<string, { startLine: number; endLine: number }>();
+      for (const c of chunkRows) {
+        try {
+          const meta = JSON.parse(c.metadata || "{}");
+          const sName = meta.symbolName || c.heading;
+          if (sName && meta.startLine) {
+            chunkMetaMap.set(String(sName), {
+              startLine: Number(meta.startLine),
+              endLine: Number(meta.endLine || meta.startLine),
+            });
+          }
+        } catch {}
+      }
+
+      const parsedRow = stmts.parsedDocSymbols.get(doc.id) as
+        | { symbols: string | null }
+        | undefined;
+
+      if (parsedRow?.symbols) {
+        try {
+          const rawSymbols = JSON.parse(parsedRow.symbols);
+          if (Array.isArray(rawSymbols)) {
+            for (const s of rawSymbols) {
+              const name = String(s.name || "");
+              let startLine = Number(s.startLine || 0);
+              let endLine = Number(s.endLine || 0);
+
+              if (startLine <= 0) {
+                const fromChunk =
+                  chunkMetaMap.get(name) ||
+                  chunkMetaMap.get(name.split(".").pop() || "") ||
+                  chunkMetaMap.get(name.split("::").pop() || "");
+                if (fromChunk) {
+                  startLine = fromChunk.startLine;
+                  endLine = fromChunk.endLine;
+                } else {
+                  startLine = 1;
+                  endLine = 1;
+                }
+              } else if (endLine <= 0) {
+                endLine = startLine;
+              }
+
+              symbols.push({
+                name,
+                kind: String(s.symbolType || s.kind || s.type || "symbol"),
+                startLine,
+                endLine,
+                exported: Boolean(s.exported),
+                parentSymbol: s.parentSymbol ? String(s.parentSymbol) : undefined,
+              });
+            }
+          }
+        } catch {}
+      }
+
+      if (symbols.length === 0) {
+        for (const c of chunkRows) {
+          let meta: Record<string, unknown> = {};
+          try {
+            meta = JSON.parse(c.metadata || "{}");
+          } catch {}
+
+          const name =
+            c.heading || (meta.symbolName ? String(meta.symbolName) : `Chunk ${c.chunk_index + 1}`);
+          const kind = meta.symbolType ? String(meta.symbolType) : c.heading ? "section" : "chunk";
+          const startLine = Number(meta.startLine || 1);
+          const endLine = Number(meta.endLine || startLine);
+
+          symbols.push({
+            name,
+            kind,
+            startLine,
+            endLine,
+            exported: Boolean(meta.exported),
+          });
+        }
+      }
+
+      symbols.sort((a, b) => a.startLine - b.startLine);
+
+      const lines: string[] = [
+        `📄 ${doc.path} (${doc.language || doc.kind}, ${String(doc.sizeBytes)} bytes)`,
+      ];
+
+      for (let i = 0; i < symbols.length; i++) {
+        const s = symbols[i];
+        const isLast = i === symbols.length - 1;
+        const prefix = isLast ? "  └── " : "  ├── ";
+        const kindIcon =
+          s.kind === "function" || s.kind === "method"
+            ? "🔹"
+            : s.kind === "class" || s.kind === "struct" || s.kind === "interface"
+              ? "📦"
+              : s.kind === "section"
+                ? "📑"
+                : "🔸";
+        const exportedBadge = s.exported ? " (exported)" : "";
+        const parentPrefix = s.parentSymbol ? `${s.parentSymbol}::` : "";
+        lines.push(
+          `${prefix}${kindIcon} ${s.kind} ${parentPrefix}${s.name} [L${s.startLine}-L${s.endLine}]${exportedBadge}`,
+        );
+      }
+
+      return {
+        path: doc.path,
+        absolutePath: doc.absolutePath,
+        language: doc.language,
+        kind: doc.kind,
+        sizeBytes: doc.sizeBytes,
+        symbols,
+        outlineText: lines.join("\n"),
+      };
     },
 
     async insertDocument(input: {
