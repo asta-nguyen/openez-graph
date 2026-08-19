@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 
 import { createChunkOps, type ChunkStmts } from "./chunk-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
@@ -87,9 +88,9 @@ export function createDocumentOps(
         | Record<string, unknown>
         | undefined;
 
-      if (!docRow && filePath.startsWith("/")) {
+      if (!docRow && path.isAbsolute(filePath)) {
         try {
-          const resolved = fs.realpathSync(filePath);
+          const resolved = await fs.promises.realpath(filePath);
           if (resolved !== filePath) {
             docRow = stmts.docByPathOrAbs.get(resolved.replace(/^\.?\//, ""), resolved) as
               | Record<string, unknown>

@@ -248,7 +248,11 @@ def multiply(a, b):
 
     expect(outline).not.toBeNull();
     expect(outline?.language).toBe("python");
-    expect(outline?.symbols.length).toBeGreaterThanOrEqual(1);
+    const names = outline!.symbols.map((s) => s.name);
+    expect(names).toContain("Calculator");
+    expect(names).toContain("Calculator::add");
+    expect(names).toContain("Calculator::subtract");
+    expect(names).toContain("multiply");
   });
 
   test("handles Windows backslashes and prevents LIKE wildcard mismatches", async () => {
