@@ -5,6 +5,14 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-08-16
+
+### Fixed
+
+- **Reindex and DB open performance on large workspaces** — `openez status` and `openez reindex` on a 92K-chunk workspace (e.g. Zed) went from >8 minutes (100% CPU, never completing) to ~0.15s (status) and ~25s (reindex). Two root causes fixed:
+  - **FTS repair scan on every DB open** — `initializeWorkspaceSchema` ran an O(n²) `LEFT JOIN chunks_fts` (chunk_id is UNINDEXED in FTS5) plus an orphan-cleanup `DELETE ... NOT IN` on every open, even when FTS was fully in sync. Now skips the expensive repair when a count + shape check confirms FTS is in sync, and only runs the full repair when counts diverge or orphaned rows are detected.
+  - **FTS trigger storm during full reindex** — `resetIndexArtifacts` deleted 92K chunks with FTS triggers active, firing 92K triggered `DELETE FROM chunks_fts WHERE chunk_id = old.id` (each a full FTS shadow-table scan). Now drops FTS triggers and the FTS table before deleting chunks, then recreates an empty FTS table for the reindex to populate via `bulkInsertFts`.
+
 ## [1.3.0] - 2026-08-15
 
 ### Added
@@ -299,6 +307,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[1.3.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.0...v1.3.1
 [1.2.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.1.0...v1.2.0
 [1.3.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.2.0...v1.3.0
 [1.1.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.3...v1.1.0
