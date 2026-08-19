@@ -1,0 +1,22 @@
+apps/cli/package.json
+  s_0e2f30f05d0c7e::t_62f87a2927dcfa 3
+CHANGELOG.md
+  s_0e2f30f05d0c7e::t_43739fb6086e9b 8-28
+  s_0e2f30f05d0c7e::t_0873cdf50a34af 331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f8a44f49c00a71338ba1dae57239d86f170850d3",
+  "prompts": {},
+  "sessions": {
+    "s_0e2f30f05d0c7e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "celestial-yoke",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
