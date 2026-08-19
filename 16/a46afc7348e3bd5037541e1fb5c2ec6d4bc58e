@@ -1,0 +1,24 @@
+AGENTS.md
+  s_0e2f30f05d0c7e::t_30d937ee4554b3 115
+tests/code-outline.test.ts
+  s_0e2f30f05d0c7e::t_44831d9fb2c95f 251-255
+packages/db/src/sqlite/document-repository.ts
+  s_0e2f30f05d0c7e::t_c2ede945712330 3
+  s_0e2f30f05d0c7e::t_e34c7a2025952d 91,93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "16a46afc7348e3bd5037541e1fb5c2ec6d4bc58e",
+  "prompts": {},
+  "sessions": {
+    "s_0e2f30f05d0c7e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "celestial-yoke",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
