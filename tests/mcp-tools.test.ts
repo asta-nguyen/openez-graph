@@ -288,6 +288,73 @@ function toolJson(result: unknown): Record<string, unknown> {
   return JSON.parse(content[0]!.text) as Record<string, unknown>;
 }
 
+describe("code_outline", () => {
+  it("returns symbols and outlineText for an indexed file", async () => {
+    const workspace = await createIndexedWorkspace("outline-success", tempRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const result = await client.callTool({
+        name: "code_outline",
+        arguments: { path: "src/target.ts" },
+      });
+      const body = toolJson(result) as {
+        path: string;
+        language: string;
+        symbols: Array<{ name: string }>;
+        outlineText: string;
+      };
+
+      expect(body.path).toBe("src/target.ts");
+      expect(body.language).toBe("typescript");
+      expect(Array.isArray(body.symbols)).toBe(true);
+      expect(body.symbols.length).toBeGreaterThan(0);
+      expect(body.symbols.map((s) => s.name)).toContain("target");
+      expect(body.outlineText).toContain("target");
+      expect(await createRegistryRepository().getWorkspace(workspace.id)).not.toBeNull();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns { error, path } when the file is not in the index", async () => {
+    await createIndexedWorkspace("outline-missing", tempRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const result = await client.callTool({
+        name: "code_outline",
+        arguments: { path: "src/does-not-exist.ts" },
+      });
+      const body = toolJson(result) as { error: string; path: string };
+
+      expect(body.error).toBeTruthy();
+      expect(body.error).toContain("src/does-not-exist.ts");
+      expect(body.path).toBe("src/does-not-exist.ts");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("resolves an explicit workspaceId instead of defaulting to cwd", async () => {
+    const workspace = await createIndexedWorkspace("outline-explicit", tempRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const result = await client.callTool({
+        name: "code_outline",
+        arguments: { workspaceId: workspace.id, path: "src/target.ts" },
+      });
+      const body = toolJson(result) as { path: string; symbols: Array<{ name: string }> };
+
+      expect(body.path).toBe("src/target.ts");
+      expect(body.symbols.map((s) => s.name)).toContain("target");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
+
 describe("remove_workspace", () => {
   it("refuses when confirm is not true", async () => {
     const rootPath = path.join(tempRoot, "victim");
