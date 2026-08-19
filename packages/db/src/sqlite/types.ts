@@ -41,6 +41,25 @@ export interface StoredMemory {
   updatedAt: string;
 }
 
+export interface FileOutlineSymbol {
+  name: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+  exported: boolean;
+  parentSymbol?: string;
+}
+
+export interface FileOutlineResult {
+  path: string;
+  absolutePath: string;
+  language: string | null;
+  kind: string;
+  sizeBytes: number;
+  symbols: FileOutlineSymbol[];
+  outlineText: string;
+}
+
 export interface RegistryRepository {
   listWorkspaces(): Promise<RegistryWorkspace[]>;
   getWorkspace(id: string): Promise<RegistryWorkspace | null>;
@@ -168,6 +187,8 @@ export interface WorkspaceRepository {
     createdAt: string;
     updatedAt: string;
   } | null>;
+
+  getFileOutline(filePath: string): Promise<FileOutlineResult | null>;
 
   insertDocument(input: {
     id?: string;
