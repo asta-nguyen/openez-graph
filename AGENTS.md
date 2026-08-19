@@ -112,7 +112,7 @@ This configures MCP server access. After setup, the agent automatically sees `co
 MCP should be multi-workspace aware.
 
 - `code_query`, `code_context`, `graph_neighbors`, and `memory_recall` should support one or many workspaces
-- `memory_write`, `index_workspace`, and `remove_workspace` remain single-workspace operations
+- `code_outline`, `memory_write`, `index_workspace`, and `remove_workspace` remain single-workspace operations
 - `list_workspaces` should expose the registered workspace inventory
 - `workspaceId` is the canonical internal key
 
