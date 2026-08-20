@@ -13,7 +13,7 @@ OpenEZ Graph is a local-first code intelligence system with:
 
 Treat the repo as SQLite-first, multi-workspace, and CLI/MCP-first, with the web app as a management layer rather than the center of the system.
 
-## Storage Model
+## Storage Model & Primary Key Architecture
 
 Use SQLite in WAL mode as the default storage model.
 
@@ -22,6 +22,50 @@ Use SQLite in WAL mode as the default storage model.
 - project-local workspace hint under `<root>/.openez/workspace.json`
 
 Do not assume Postgres, `pgvector`, Redis, or BullMQ are part of the default path.
+
+### Primary Keys & ID Rules
+
+- **ALWAYS** use SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` for all table primary keys and foreign keys (`documents`, `chunks`, `graph_nodes`, `graph_edges`, `embeddings`, `memories`, `query_logs`, `index_runs`, `graph_runs`, `parsed_documents`).
+- **NEVER** use `crypto.randomUUID()` or random strings for database entity IDs.
+- In Bun SQLite, retrieve inserted row IDs using monotonic `Number(res.lastInsertRowid)` from `native.prepare(...).run()`.
+- **Legacy Migration Safety**: `initializeWorkspaceSchema` must non-destructively migrate legacy `TEXT` primary keys (`memories`, `query_logs`, `index_runs`) into `INTEGER PRIMARY KEY AUTOINCREMENT`. Reindexing (`resetIndexArtifacts`) only resets ephemeral search index artifacts and **must never drop or erase user memories or query logs**.
+
+## Code Quality & Anti-Slop Standards (MANDATORY)
+
+This repository enforces opinionated [anti-slop](https://github.com/dmmulroy/anti-slop) Oxlint rules. Violations will fail CI and pre-commit hooks (`lint-staged`).
+
+### 1. No Type Laundering or Bluffing
+
+- **NEVER** use chained type assertions (`x as unknown as T`).
+- **NEVER** discard established TypeScript compiler type evidence by casting to `any` or broad dictionary types (`Record<string, unknown>`), only to assert it back later (`anti-slop/no-widen-then-assert`).
+- Prefer exact domain types, interfaces, schema validation (`zod`), or TypeScript `satisfies`.
+
+### 2. Safety Invariant Comments Required
+
+- Whenever an `as T` type assertion is strictly necessary (e.g. SQLite driver return mapping), it **MUST** be immediately preceded by a `// SAFETY: <explanation>` comment explaining the checked invariant:
+  ```ts
+  // SAFETY: Checked by PRAGMA table_info query that column exists.
+  const info = stmt.get() as TableInfo;
+  ```
+
+### 3. No Empty Catch Blocks
+
+- **NEVER** write empty catch blocks (`try { ... } catch {}`).
+- Always handle errors explicitly, log them (`console.error`, logger), or rethrow. When inspecting errors, use `catch (err: unknown)` with proper `err instanceof Error` narrowing.
+
+### 4. No Module Mocking in Implementation
+
+- Avoid runtime module monkey-patching (`jest.mock`, `vi.mock`). Prefer interface-based dependency injection.
+
+### 5. Dependency & Monorepo Hygiene
+
+- **Avoid Redundant Dependencies**: Do not introduce dead or legacy packages (e.g., `server-only`, `better-sqlite3`, unused ORM dependencies in core).
+- Monorepo packages (`packages/*`, `apps/*`) must declare their own direct runtime dependencies. Root `package.json` is strictly for monorepo dev tooling (`turbo`, `oxlint`, `prettier`, `typescript`).
+
+### 6. Linting & Verification
+
+- Run `pnpm lint` (`oxlint`) and `pnpm typecheck` before finishing tasks.
+- `lint-staged` automatically runs `oxlint` on staged TypeScript/JavaScript files during commit.
 
 ## Workspace Bootstrap
 

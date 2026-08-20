@@ -8,7 +8,7 @@ describe("parseRuby regex fallback", () => {
 module MyApp
   class User
     def greet(name)
-      puts "Hello, \#{name}"
+      puts "Hello, #{name}"
     end
 
     def self.admin?
