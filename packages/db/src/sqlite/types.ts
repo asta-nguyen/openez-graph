@@ -41,6 +41,19 @@ export interface StoredMemory {
   updatedAt: string;
 }
 
+export interface SymbolDefinitionMatch {
+  name: string;
+  kind: string;
+  filePath: string;
+  startLine?: number;
+  endLine?: number;
+  exported: boolean;
+  parentSymbol?: string;
+  sourceCode?: string;
+  callerCount?: number;
+  calleeCount?: number;
+}
+
 export interface RegistryRepository {
   listWorkspaces(): Promise<RegistryWorkspace[]>;
   getWorkspace(id: string): Promise<RegistryWorkspace | null>;
@@ -168,6 +181,8 @@ export interface WorkspaceRepository {
     createdAt: string;
     updatedAt: string;
   } | null>;
+
+  getSymbolDefinitions(symbolName: string): Promise<SymbolDefinitionMatch[]>;
 
   insertDocument(input: {
     id?: string;

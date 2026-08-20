@@ -11,7 +11,7 @@ import { createGraphOps } from "./graph-repository";
 import type { GraphStmts } from "./graph-repository";
 import { createMemoryOps } from "./memory-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
-import type { WorkspaceRepository } from "./types";
+import type { SymbolDefinitionMatch, WorkspaceRepository } from "./types";
 import { getWorkspaceDb, getWorkspaceNativeDb } from "./workspace-db";
 
 function getNativeWorkspaceDb(rootPath: string): {
@@ -182,6 +182,184 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           new Date().toISOString(),
         );
       return id;
+    },
+
+    async getSymbolDefinitions(symbolName: string): Promise<SymbolDefinitionMatch[]> {
+      const trimmed = symbolName.trim();
+      if (!trimmed) return [];
+
+      const matches: SymbolDefinitionMatch[] = [];
+      const escaped = trimmed.replace(/[%_\\]/g, "\\$&");
+
+      const parsedRows = native
+        .prepare(
+          `SELECT d.id as doc_id, d.path, p.symbols
+           FROM parsed_documents p
+           JOIN documents d ON d.id = p.document_id
+           WHERE p.symbols LIKE ? ESCAPE '\\'`,
+        )
+        .all(`%"name":"%${escaped}%`) as Array<{ doc_id: string; path: string; symbols: string }>;
+
+      const nodeStmt = native.prepare(
+        "SELECT id, ref_id FROM graph_nodes WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ? AND (label = ? OR label LIKE ? ESCAPE '\\') LIMIT 1",
+      );
+      const chunkByIdStmt = native.prepare("SELECT content FROM chunks WHERE id = ?");
+      const chunkByHeadingStmt = native.prepare(
+        "SELECT content FROM chunks WHERE document_id = ? AND (heading = ? OR heading LIKE ? ESCAPE '\\') LIMIT 1",
+      );
+      const chunksByDocStmt = native.prepare(
+        "SELECT heading, metadata FROM chunks WHERE document_id = ? ORDER BY chunk_index ASC",
+      );
+      const callersStmt = native.prepare(
+        "SELECT COUNT(*) as c FROM graph_edges WHERE to_node_id = ? AND type = 'calls'",
+      );
+      const calleesStmt = native.prepare(
+        "SELECT COUNT(*) as c FROM graph_edges WHERE from_node_id = ? AND type = 'calls'",
+      );
+
+      for (const row of parsedRows) {
+        try {
+          const rawSymbols = JSON.parse(row.symbols);
+          if (Array.isArray(rawSymbols)) {
+            let chunkMetaMap: Map<string, { startLine: number; endLine: number }> | null = null;
+
+            for (const s of rawSymbols) {
+              const sName = String(s.name || "");
+              if (
+                sName === trimmed ||
+                sName.endsWith(`::${trimmed}`) ||
+                sName.endsWith(`.${trimmed}`)
+              ) {
+                let sourceCode: string | undefined;
+                let callerCount = 0;
+                let calleeCount = 0;
+
+                const escapedSName = sName.replace(/[%_\\]/g, "\\$&");
+                const node = nodeStmt.get(row.path, sName, `%::${escapedSName}`) as
+                  | { id: string; ref_id: string | null }
+                  | undefined;
+
+                if (node?.ref_id) {
+                  const chunkRow = chunkByIdStmt.get(node.ref_id) as
+                    | { content: string }
+                    | undefined;
+                  if (chunkRow?.content) sourceCode = chunkRow.content;
+                }
+
+                if (!sourceCode) {
+                  const chunkHeadingRow = chunkByHeadingStmt.get(
+                    row.doc_id,
+                    sName,
+                    `%${escapedSName}%`,
+                  ) as { content: string } | undefined;
+                  if (chunkHeadingRow?.content) sourceCode = chunkHeadingRow.content;
+                }
+
+                if (node?.id) {
+                  const callers = callersStmt.get(node.id) as { c: number } | undefined;
+                  const callees = calleesStmt.get(node.id) as { c: number } | undefined;
+                  callerCount = Number(callers?.c ?? 0);
+                  calleeCount = Number(callees?.c ?? 0);
+                }
+
+                let startLine = Number(s.startLine || 0);
+                let endLine = Number(s.endLine || 0);
+
+                if (startLine <= 0) {
+                  if (!chunkMetaMap) {
+                    chunkMetaMap = new Map();
+                    const docChunks = chunksByDocStmt.all(row.doc_id) as Array<{
+                      heading: string | null;
+                      metadata: string;
+                    }>;
+                    for (const dc of docChunks) {
+                      try {
+                        const meta = JSON.parse(dc.metadata || "{}");
+                        const name = meta.symbolName || dc.heading;
+                        if (name && meta.startLine) {
+                          chunkMetaMap.set(String(name), {
+                            startLine: Number(meta.startLine),
+                            endLine: Number(meta.endLine || meta.startLine),
+                          });
+                        }
+                      } catch {}
+                    }
+                  }
+                  const fromChunk =
+                    chunkMetaMap.get(sName) ||
+                    chunkMetaMap.get(sName.split(".").pop() || "") ||
+                    chunkMetaMap.get(sName.split("::").pop() || "");
+                  if (fromChunk) {
+                    startLine = fromChunk.startLine;
+                    endLine = fromChunk.endLine;
+                  }
+                } else if (endLine <= 0) {
+                  endLine = startLine;
+                }
+
+                matches.push({
+                  name: sName,
+                  kind: String(s.symbolType || s.kind || s.type || "symbol"),
+                  filePath: row.path,
+                  startLine: startLine > 0 ? startLine : undefined,
+                  endLine: endLine > 0 ? endLine : undefined,
+                  exported: Boolean(s.exported),
+                  parentSymbol: s.parentSymbol ? String(s.parentSymbol) : undefined,
+                  sourceCode,
+                  callerCount,
+                  calleeCount,
+                });
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (matches.length === 0) {
+        const nodes = native
+          .prepare(
+            `SELECT n.id, n.type, n.label, n.ref_id, n.metadata
+             FROM graph_nodes n
+             WHERE n.label = ? OR n.label LIKE ? OR n.label LIKE ?`,
+          )
+          .all(trimmed, `%::${trimmed}`, `%.${trimmed}`) as Array<{
+          id: string;
+          type: string;
+          label: string;
+          ref_id: string | null;
+          metadata: string;
+        }>;
+
+        for (const n of nodes) {
+          let meta: Record<string, unknown> = {};
+          try {
+            meta = JSON.parse(n.metadata || "{}");
+          } catch {}
+
+          let sourceCode: string | undefined;
+          if (n.ref_id) {
+            const chunkRow = chunkByIdStmt.get(n.ref_id) as { content: string } | undefined;
+            if (chunkRow?.content) sourceCode = chunkRow.content;
+          }
+
+          const callers = callersStmt.get(n.id) as { c: number } | undefined;
+          const callees = calleesStmt.get(n.id) as { c: number } | undefined;
+
+          matches.push({
+            name: n.label,
+            kind: n.type,
+            filePath: String(meta.path || meta.filePath || ""),
+            startLine: Number(meta.startLine || 1),
+            endLine: Number(meta.endLine || meta.startLine || 1),
+            exported: Boolean(meta.exported),
+            sourceCode,
+            callerCount: Number(callers?.c ?? 0),
+            calleeCount: Number(callees?.c ?? 0),
+          });
+        }
+      }
+
+      return matches;
     },
 
     // ── Raw SQL queries ──
