@@ -1,0 +1,23 @@
+AGENTS.md
+  s_73cac05a7f57fb::t_bb66013a484cc4 66
+README.md
+  s_73cac05a7f57fb::t_bb66013a484cc4 86
+apps/cli/README.md
+  s_73cac05a7f57fb::t_bb66013a484cc4 87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9e8ccccd0ec1e5b4c45ccafbb20441ea2a81e908",
+  "prompts": {},
+  "sessions": {
+    "s_73cac05a7f57fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01fa2-04bf-7aa2-9ec2-d2773ffebc80",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
