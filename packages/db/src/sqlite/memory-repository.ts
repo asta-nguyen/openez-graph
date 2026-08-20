@@ -105,7 +105,7 @@ export function createMemoryOps(
         return [pattern, pattern, pattern];
       });
       const phrasePattern = `%${escapeLikePattern(normalized)}%`;
-      // SAFETY: Query selects m.* from memories table matching MemoryRawRow shape.
+      // SAFETY: Query explicitly projects columns matching MemoryRawRow shape.
       const rows = native
         .prepare(
           `SELECT
