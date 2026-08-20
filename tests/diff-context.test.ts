@@ -72,6 +72,94 @@ index 0000000..1234567
     expect(parsed[1].ranges[0].end).toBe(15);
   });
 
+  test("retains old and working-tree ranges for insertions", () => {
+    const parsed = parseGitDiffHunks(`diff --git a/src/added.ts b/src/added.ts
+new file mode 100644
+--- /dev/null
++++ b/src/added.ts
+@@ -0,0 +1,2 @@
++export const added = true;
++`);
+
+    expect(parsed).toEqual([
+      {
+        filePath: "src/added.ts",
+        status: "added",
+        ranges: [{ start: 1, end: 2 }],
+        oldRanges: [],
+      },
+    ]);
+  });
+
+  test("retains deleted-file metadata without current line ranges", () => {
+    const parsed = parseGitDiffHunks(`diff --git a/src/deleted.ts b/src/deleted.ts
+deleted file mode 100644
+--- a/src/deleted.ts
++++ /dev/null
+@@ -3,2 +0,0 @@
+-export const removed = true;
+-`);
+
+    expect(parsed).toEqual([
+      {
+        filePath: "src/deleted.ts",
+        oldPath: "src/deleted.ts",
+        status: "deleted",
+        ranges: [],
+        oldRanges: [{ start: 3, end: 4 }],
+      },
+    ]);
+  });
+
+  test("parses rename metadata using old and new paths", () => {
+    const parsed = parseGitDiffHunks(`diff --git a/src/old-name.ts b/src/new-name.ts
+similarity index 100%
+rename from src/old-name.ts
+rename to src/new-name.ts
+`);
+
+    expect(parsed).toEqual([
+      {
+        filePath: "src/new-name.ts",
+        oldPath: "src/old-name.ts",
+        status: "modified",
+        ranges: [],
+        oldRanges: [],
+      },
+    ]);
+  });
+
+  test("keeps binary and mode-only files without fabricated hunks", () => {
+    const parsed = parseGitDiffHunks(`diff --git a/assets/logo.png b/assets/logo.png
+index 1111111..2222222 100644
+Binary files a/assets/logo.png and b/assets/logo.png differ
+diff --git a/scripts/run.sh b/scripts/run.sh
+old mode 100644
+new mode 100755
+`);
+
+    expect(parsed).toEqual([
+      {
+        filePath: "assets/logo.png",
+        oldPath: "assets/logo.png",
+        status: "modified",
+        ranges: [],
+        oldRanges: [],
+      },
+      {
+        filePath: "scripts/run.sh",
+        oldPath: "scripts/run.sh",
+        status: "modified",
+        ranges: [],
+        oldRanges: [],
+      },
+    ]);
+  });
+
+  test("returns no files for an empty diff", () => {
+    expect(parseGitDiffHunks("")).toEqual([]);
+  });
+
   test("analyzes workspace git diff and identifies affected symbols and callers", async () => {
     const srcDir = path.join(workspaceRoot, "src");
     fs.mkdirSync(srcDir, { recursive: true });
@@ -215,5 +303,119 @@ export function formatCurrency(amount: number): string {
     expect(report.totalFilesChanged).toBe(1);
     expect(report.files[0].affectedSymbols.length).toBeGreaterThan(0);
     expect(report.files[0].affectedSymbols[0].name).toBe("calculateTax");
+  });
+
+  test("maps a staged hunk through separate unstaged hunks in working-tree coordinates", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const utilsPath = path.join(srcDir, "utils.ts");
+
+    fs.writeFileSync(
+      utilsPath,
+      `// 1
+// 2
+// 3
+// 4
+// 5
+// 6
+// 7
+// 8
+// 9
+
+export function target(): number {
+  const one = 1;
+  const two = 2;
+  const three = 3;
+  const four = 4;
+  return one + two + three + four;
+}
+
+// spacer 1
+// spacer 2
+// spacer 3
+
+export function after(): string {
+  return "before";
+}
+`,
+    );
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+
+    fs.writeFileSync(
+      utilsPath,
+      `// 1
+// 2
+// 3
+// 4
+// 5
+// 6
+// 7
+// 8
+// 9
+
+export function target(): number {
+  const one = 1;
+  const two = 20;
+  const three = 3;
+  const four = 4;
+  return one + two + three + four;
+}
+
+// spacer 1
+// spacer 2
+// spacer 3
+
+export function after(): string {
+  return "before";
+}
+`,
+    );
+    execSync("git add src/utils.ts", { cwd: workspaceRoot, stdio: "ignore" });
+
+    fs.writeFileSync(
+      utilsPath,
+      `// one
+// two
+// three
+// four
+// five
+// six
+// 1
+// 2
+// 3
+// 4
+// 5
+// 6
+// 7
+// 8
+// 9
+
+export function target(): number {
+  const one = 1;
+  const two = 20;
+  const three = 3;
+  const four = 4;
+  return one + two + three + four;
+}
+
+// spacer 1
+// spacer 2
+// spacer 3
+
+export function after(): string {
+  return "after";
+}
+`,
+    );
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "multi-hunk-test" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const report = await analyzeDiffContext(workspaceRoot, { staged: true });
+
+    expect(report.files[0].changedLineRanges).toEqual([{ start: 16, end: 22 }]);
+    expect(report.files[0].affectedSymbols.map((symbol) => symbol.name)).toEqual(["target"]);
   });
 });

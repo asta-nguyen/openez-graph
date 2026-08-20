@@ -10,8 +10,12 @@ export interface ChangedHunkRange {
 
 export interface FileDiffHunks {
   filePath: string;
+  oldPath?: string;
   status: "modified" | "added" | "deleted";
+  /** Ranges in the current working tree (the `+` side of each hunk). */
   ranges: ChangedHunkRange[];
+  /** Ranges in the old file (the `-` side of each hunk). */
+  oldRanges: ChangedHunkRange[];
 }
 
 export interface AffectedSymbol {
@@ -56,36 +60,50 @@ export function parseGitDiffHunks(diffText: string): FileDiffHunks[] {
       if (currentFile) {
         files.push(currentFile);
       }
+      let oldPath = "";
       let targetPath = "";
       const match = line.match(
         /^diff --git (?:a\/([^\s"]+)|"a\/(.+?)") (?:b\/([^\s"]+)|"b\/(.+?)")$/,
       );
       if (match) {
+        oldPath = match[1] || match[2] || "";
         targetPath = match[3] || match[4] || match[1] || match[2] || "";
       } else {
         const parts = line.split(" ");
         if (parts.length >= 4) {
+          oldPath = parts[2].replace(/^a\//, "").replace(/^"|"$/g, "");
           targetPath = parts.slice(3).join(" ").replace(/^b\//, "").replace(/^"|"$/g, "");
         }
       }
       currentFile = {
         filePath: targetPath,
+        ...(oldPath ? { oldPath } : {}),
         status: "modified",
         ranges: [],
+        oldRanges: [],
       };
     } else if (line.startsWith("new file mode")) {
-      if (currentFile) currentFile.status = "added";
+      if (currentFile) {
+        currentFile.status = "added";
+        delete currentFile.oldPath;
+      }
     } else if (line.startsWith("deleted file mode")) {
       if (currentFile) currentFile.status = "deleted";
+    } else if (line.startsWith("rename from ")) {
+      if (currentFile) currentFile.oldPath = line.slice("rename from ".length);
+    } else if (line.startsWith("rename to ")) {
+      if (currentFile) currentFile.filePath = line.slice("rename to ".length);
     } else if (line.startsWith("@@ ")) {
-      const hunkMatch = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+      const hunkMatch = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
       if (hunkMatch && currentFile) {
-        const start = parseInt(hunkMatch[1], 10);
-        const count = hunkMatch[2] ? parseInt(hunkMatch[2], 10) : 1;
-        currentFile.ranges.push({
-          start,
-          end: count === 0 ? start : start + count - 1,
-        });
+        const oldStart = parseInt(hunkMatch[1], 10);
+        const oldCount = hunkMatch[2] !== undefined ? parseInt(hunkMatch[2], 10) : 1;
+        const newStart = parseInt(hunkMatch[3], 10);
+        const newCount = hunkMatch[4] !== undefined ? parseInt(hunkMatch[4], 10) : 1;
+        if (oldCount > 0)
+          currentFile.oldRanges.push({ start: oldStart, end: oldStart + oldCount - 1 });
+        if (newCount > 0)
+          currentFile.ranges.push({ start: newStart, end: newStart + newCount - 1 });
       }
     }
   }
@@ -105,7 +123,7 @@ export function mapStagedRangesToWorkingTree(
   stagedRanges: ChangedHunkRange[],
   unstagedDiffText: string,
 ): ChangedHunkRange[] {
-  if (!unstagedDiffText.trim()) return stagedRanges;
+  if (!unstagedDiffText.trim()) return stagedRanges.map(({ start, end }) => ({ start, end }));
 
   const lines = unstagedDiffText.split("\n");
   const hunks: Array<{
@@ -135,7 +153,7 @@ export function mapStagedRangesToWorkingTree(
     }
   }
 
-  if (hunks.length === 0) return stagedRanges;
+  if (hunks.length === 0) return stagedRanges.map(({ start, end }) => ({ start, end }));
 
   return stagedRanges.map((range) => {
     let start = range.start;
@@ -144,10 +162,12 @@ export function mapStagedRangesToWorkingTree(
     for (const h of hunks) {
       const aEnd = h.aCount === 0 ? h.aStart : h.aStart + h.aCount - 1;
 
-      if (end < h.aStart) {
+      // Compare every hunk with immutable index coordinates. `start` and `end`
+      // below are working-tree coordinates after earlier hunks have been applied.
+      if (range.end < h.aStart) {
         // Range is before this hunk, unaffected
         continue;
-      } else if (start > aEnd) {
+      } else if (range.start > aEnd) {
         // Range is after this hunk, shift by delta
         start += h.delta;
         end += h.delta;
@@ -211,9 +231,27 @@ export async function analyzeDiffContext(
   for (const fileDiff of parsedDiffs) {
     const affectedSymbols: AffectedSymbol[] = [];
     const fileImports: string[] = [];
+    let rangesToMatch = fileDiff.status === "deleted" ? [] : fileDiff.ranges;
+
+    if (options.staged && fileDiff.status !== "deleted") {
+      try {
+        const unstagedDiff = execFileSync(
+          "git",
+          ["diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--", fileDiff.filePath],
+          {
+            cwd: resolvedRoot,
+            encoding: "utf8",
+            maxBuffer: 5 * 1024 * 1024,
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        rangesToMatch = mapStagedRangesToWorkingTree(fileDiff.ranges, unstagedDiff);
+      } catch {}
+    }
 
     // Query parsed_documents for file AST symbols
-    const doc = await repo.getDocumentByPath(fileDiff.filePath);
+    const doc =
+      fileDiff.status === "deleted" ? undefined : await repo.getDocumentByPath(fileDiff.filePath);
     if (doc) {
       // Query file-level imports dependencies
       const fileEdges = (await repo.queryRaw(
@@ -241,24 +279,6 @@ export async function analyzeDiffContext(
       if (parsed[0]?.symbols) {
         try {
           symbolsList = JSON.parse(String(parsed[0].symbols));
-        } catch {}
-      }
-
-      // Map staged hunk ranges to working tree line coordinates if unstaged changes exist
-      let rangesToMatch = fileDiff.ranges;
-      if (options.staged) {
-        try {
-          const unstagedDiff = execFileSync(
-            "git",
-            ["diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--", fileDiff.filePath],
-            {
-              cwd: resolvedRoot,
-              encoding: "utf8",
-              maxBuffer: 5 * 1024 * 1024,
-              stdio: ["ignore", "pipe", "pipe"],
-            },
-          );
-          rangesToMatch = mapStagedRangesToWorkingTree(fileDiff.ranges, unstagedDiff);
         } catch {}
       }
 
@@ -352,7 +372,7 @@ export async function analyzeDiffContext(
     fileContexts.push({
       filePath: fileDiff.filePath,
       status: fileDiff.status,
-      changedLineRanges: fileDiff.ranges,
+      changedLineRanges: rangesToMatch,
       affectedSymbols,
       imports: fileImports.length > 0 ? fileImports : undefined,
     });
