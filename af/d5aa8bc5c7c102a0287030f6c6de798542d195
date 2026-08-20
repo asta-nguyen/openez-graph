@@ -1,0 +1,28 @@
+apps/cli/src/cli.ts
+  s_73cac05a7f57fb::t_aa084ffb5ee03a 18,367-378
+tests/cli-diff.test.ts
+  s_73cac05a7f57fb::t_e3420e8525415b 1-65
+  s_73cac05a7f57fb::t_df06e2fed13aa6 66-71
+tests/diff-context.test.ts
+  s_73cac05a7f57fb::t_e3420e8525415b 10,106,126
+tests/mcp-tools.test.ts
+  s_73cac05a7f57fb::t_e3420e8525415b 4,105-121
+  s_73cac05a7f57fb::t_3fbbb025e6c3cd 122-124
+  s_73cac05a7f57fb::t_298e5bf39c45d2 125-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "afd5aa8bc5c7c102a0287030f6c6de798542d195",
+  "prompts": {},
+  "sessions": {
+    "s_73cac05a7f57fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01fa2-04bf-7aa2-9ec2-d2773ffebc80",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
