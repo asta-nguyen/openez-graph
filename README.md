@@ -83,6 +83,7 @@ Run `openez --help` or `openez <command> --help` for all options.
 
 ```bash
 openez diff          # tracked staged + unstaged changes
+git diff HEAD        # equivalent Git default: tracked staged + unstaged changes
 openez diff --staged # staged changes only
 openez diff HEAD~1   # diff against the supplied Git ref
 ```
