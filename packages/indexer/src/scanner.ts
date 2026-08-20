@@ -71,6 +71,15 @@ function loadGitignore(rootPath: string): string[] {
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#"))
       .flatMap((pattern) => {
+        if (pattern.startsWith("!")) {
+          const raw = pattern.slice(1).trim();
+          const hasSlash = raw.replace(/\/$/, "").includes("/");
+          const clean = raw.replace(/^\//, "").replace(/\/$/, "");
+          if (hasSlash) {
+            return [`!${clean}`, `!${clean}/**`];
+          }
+          return [`!${clean}`, `!${clean}/**`, `!**/${clean}`, `!**/${clean}/**`];
+        }
         const hasSlash = pattern.replace(/\/$/, "").includes("/");
         const clean = pattern.replace(/^\//, "").replace(/\/$/, "");
         if (hasSlash) {
@@ -83,8 +92,39 @@ function loadGitignore(rootPath: string): string[] {
   }
 }
 
-function baseName(filePath: string): string {
-  return path.basename(filePath);
+interface IgnoreRule {
+  isNegation: boolean;
+  match: (path: string) => boolean;
+}
+
+export function compileIgnoreMatcher(
+  ignorePatterns: string[],
+  hardExcludePatterns: string[] = DEFAULT_EXCLUDE_PATTERNS,
+) {
+  const hardMatcher = picomatch(hardExcludePatterns, { dot: true });
+
+  const rules: IgnoreRule[] = ignorePatterns.map((pat) => {
+    const isNegation = pat.startsWith("!");
+    const cleanPat = isNegation ? pat.slice(1) : pat;
+    return {
+      isNegation,
+      match: picomatch(cleanPat, { dot: true }),
+    };
+  });
+
+  return (filePath: string) => {
+    // 1. Hard excludes always win (cannot be bypassed by user .gitignore negations)
+    if (hardMatcher(filePath)) return true;
+
+    // 2. Sequential gitignore rules: last match wins
+    let ignored = false;
+    for (const rule of rules) {
+      if (rule.match(filePath)) {
+        ignored = !rule.isNegation;
+      }
+    }
+    return ignored;
+  };
 }
 
 export async function scanWorkspaceFiles(input: {
@@ -96,7 +136,6 @@ export async function scanWorkspaceFiles(input: {
   const gitignorePatterns = loadGitignore(rootPath);
 
   const ignorePatterns = [
-    ...DEFAULT_EXCLUDE_PATTERNS,
     ...gitignorePatterns,
     ...(input.exclude
       ? input.exclude
@@ -112,6 +151,8 @@ export async function scanWorkspaceFiles(input: {
         .filter(Boolean)
         .map((p) => p.trim())
     : DEFAULT_INCLUDE_PATTERNS;
+
+  const isIgnored = compileIgnoreMatcher(ignorePatterns, DEFAULT_EXCLUDE_PATTERNS);
 
   // Native Rust scanner (rayon parallel walk) — fast path for default includes
   if (!input.include) {
@@ -130,9 +171,8 @@ export async function scanWorkspaceFiles(input: {
           relativePath: string;
           sizeBytes: number;
           mtimeMs: number;
-        }> = nativeBinding.scanWorkspaceFast(rootPath, ALLOWED_EXTENSIONS);
+        }> = nativeBinding.scanWorkspaceFast(rootPath, Array.from(ALLOWED_EXTENSIONS));
         if (rawFiles && rawFiles.length > 0) {
-          const isIgnored = picomatch(ignorePatterns, { dot: true });
           const results: FileToIndex[] = [];
           for (const f of rawFiles) {
             if (!isIgnored(f.relativePath)) {
@@ -154,19 +194,24 @@ export async function scanWorkspaceFiles(input: {
 
   const entries = await fg(includePatterns, {
     cwd: rootPath,
-    ignore: ignorePatterns,
+    ignore: DEFAULT_EXCLUDE_PATTERNS,
     onlyFiles: true,
     absolute: true,
     followSymbolicLinks: false,
     dot: false,
   });
 
+  const filteredEntries = entries.filter((absPath) => {
+    const rel = path.relative(rootPath, absPath).replace(/\\/g, "/");
+    return !isIgnored(rel);
+  });
+
   const results = await Promise.all(
-    entries.map(async (absolutePath) => {
+    filteredEntries.map(async (absolutePath) => {
       const stat = await fsAsync.stat(absolutePath);
       return {
         absolutePath,
-        relativePath: path.relative(rootPath, absolutePath),
+        relativePath: path.relative(rootPath, absolutePath).replace(/\\/g, "/"),
         sizeBytes: stat.size,
         mtimeMs: Math.trunc(stat.mtimeMs),
       } satisfies FileToIndex;

@@ -71,31 +71,38 @@ export function createChunkOps(
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
       const ids: string[] = inputs.map(() => crypto.randomUUID());
-      const BATCH = 2000;
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
-          params.push(
-            ids[i + j],
-            item.documentId,
-            item.chunkIndex,
-            item.heading ?? null,
-            item.content,
-            item.tokenCount,
-            item.contentHash,
-            item.metadata,
-            now,
-            now,
-          );
+      const BATCH = 500;
+      const runInsert = () => {
+        for (let i = 0; i < inputs.length; i += BATCH) {
+          const batch = inputs.slice(i, i + BATCH);
+          const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
+          const params: unknown[] = [];
+          for (let j = 0; j < batch.length; j++) {
+            const item = batch[j];
+            params.push(
+              ids[i + j],
+              item.documentId,
+              item.chunkIndex,
+              item.heading ?? null,
+              item.content,
+              item.tokenCount,
+              item.contentHash,
+              item.metadata,
+              now,
+              now,
+            );
+          }
+          native
+            .prepare(
+              `INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
+            )
+            .run(...params);
         }
-        native
-          .prepare(
-            `INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
-          )
-          .run(...params);
+      };
+      if (typeof native.transaction === "function") {
+        native.transaction(runInsert)();
+      } else {
+        runInsert();
       }
       return ids;
     },

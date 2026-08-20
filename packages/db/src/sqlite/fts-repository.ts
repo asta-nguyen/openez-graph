@@ -74,20 +74,33 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
       }>,
     ): Promise<void> {
       if (inputs.length === 0) return;
-      const BATCH = 2000;
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const item of batch) {
-          const searchText = composeFtsSearchText(item.content, item.metadata);
-          params.push(item.chunkId, item.path, item.heading ?? "", item.language ?? "", searchText);
+      const BATCH = 500;
+      const runBulkFts = () => {
+        for (let i = 0; i < inputs.length; i += BATCH) {
+          const batch = inputs.slice(i, i + BATCH);
+          const placeholders = batch.map(() => "(?, ?, ?, ?, ?)").join(",");
+          const params: unknown[] = [];
+          for (const item of batch) {
+            const searchText = composeFtsSearchText(item.content, item.metadata);
+            params.push(
+              item.chunkId,
+              item.path,
+              item.heading ?? "",
+              item.language ?? "",
+              searchText,
+            );
+          }
+          native
+            .prepare(
+              `INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES ${placeholders}`,
+            )
+            .run(...params);
         }
-        native
-          .prepare(
-            `INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES ${placeholders}`,
-          )
-          .run(...params);
+      };
+      if (typeof native.transaction === "function") {
+        native.transaction(runBulkFts)();
+      } else {
+        runBulkFts();
       }
     },
 

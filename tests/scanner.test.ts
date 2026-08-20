@@ -4,7 +4,28 @@ import path from "node:path";
 
 import { describe, expect, it } from "bun:test";
 
-import { scanWorkspaceFiles } from "../packages/indexer/src/scanner";
+import { compileIgnoreMatcher, scanWorkspaceFiles } from "../packages/indexer/src/scanner";
+
+describe("compileIgnoreMatcher", () => {
+  it("enforces hard excludes even when user specifies negation", () => {
+    const matcher = compileIgnoreMatcher(["!node_modules", "!node_modules/**"]);
+    expect(matcher("node_modules/pkg/index.js")).toBe(true);
+    expect(matcher(".git/config")).toBe(true);
+    expect(matcher(".openez/db.sqlite")).toBe(true);
+  });
+
+  it("evaluates sequential rules where last matching rule wins", () => {
+    // Negate then re-ignore
+    const reIgnored = compileIgnoreMatcher(["docs/*", "!docs/a.md", "docs/a.md"]);
+    expect(reIgnored("docs/a.md")).toBe(true);
+    expect(reIgnored("docs/b.md")).toBe(true);
+
+    // Ignore then un-ignore
+    const unIgnored = compileIgnoreMatcher(["docs/*", "!docs/a.md"]);
+    expect(unIgnored("docs/a.md")).toBe(false);
+    expect(unIgnored("docs/b.md")).toBe(true);
+  });
+});
 
 describe("scanWorkspaceFiles", () => {
   it("includes Ruby, CoffeeScript, CSS, SCSS, Slim, Haml files", async () => {
@@ -38,6 +59,62 @@ describe("scanWorkspaceFiles", () => {
         ]),
       );
       expect(relativePaths).not.toContain("node_modules/ignored.js");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("respects .gitignore negation rules in fallback scan", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-scan-neg-"));
+    try {
+      fs.mkdirSync(path.join(root, "temp"), { recursive: true });
+      fs.writeFileSync(path.join(root, "temp", "ignored.js"), "console.log('ignored')\n");
+      fs.writeFileSync(path.join(root, "temp", "special.js"), "console.log('special')\n");
+      fs.writeFileSync(path.join(root, ".gitignore"), "temp/*\n!temp/special.js\n");
+
+      // include option forces fallback JS path
+      const files = await scanWorkspaceFiles({ rootPath: root, include: "**/*.js" });
+      const relativePaths = files.map((f) => f.relativePath).sort();
+
+      expect(relativePaths).toContain("temp/special.js");
+      expect(relativePaths).not.toContain("temp/ignored.js");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not allow gitignore negations to bypass hard DEFAULT_EXCLUDE_PATTERNS in fallback scan", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-scan-hard-"));
+    try {
+      fs.mkdirSync(path.join(root, "node_modules", "pkg"), { recursive: true });
+      fs.writeFileSync(path.join(root, "node_modules", "pkg", "index.js"), "export const a = 1;\n");
+      fs.writeFileSync(path.join(root, ".gitignore"), "!node_modules\n!node_modules/**\n");
+
+      // include option forces fallback JS path
+      const files = await scanWorkspaceFiles({ rootPath: root, include: "**/*.js" });
+      const relativePaths = files.map((f) => f.relativePath);
+
+      expect(relativePaths).not.toContain("node_modules/pkg/index.js");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("evaluates gitignore rules in sequential order where last matching rule wins in fallback scan", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-scan-seq-"));
+    try {
+      fs.mkdirSync(path.join(root, "docs"), { recursive: true });
+      fs.writeFileSync(path.join(root, "docs", "a.md"), "# A\n");
+      fs.writeFileSync(path.join(root, "docs", "b.md"), "# B\n");
+      // Rule 1 ignores all docs, Rule 2 un-ignores docs/a.md, Rule 3 re-ignores docs/a.md
+      fs.writeFileSync(path.join(root, ".gitignore"), "docs/*\n!docs/a.md\ndocs/a.md\n");
+
+      // include option forces fallback JS path
+      const files = await scanWorkspaceFiles({ rootPath: root, include: "**/*.md" });
+      const relativePaths = files.map((f) => f.relativePath);
+
+      expect(relativePaths).not.toContain("docs/a.md");
+      expect(relativePaths).not.toContain("docs/b.md");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

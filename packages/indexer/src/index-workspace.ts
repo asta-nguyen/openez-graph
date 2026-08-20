@@ -444,7 +444,7 @@ async function parseInline(
     }
   }
 
-  // Parse remaining files (TS/JS, markdown, config) sequentially
+  // Parse remaining files (TS/JS, markdown, config)
   for (const task of otherTasks) {
     const indexed = await chunkDocument({
       relativePath: task.relativePath,
@@ -591,14 +591,14 @@ export async function indexWorkspace(input: {
 
     const existingDocuments = await repo.listDocuments();
     const existingDocumentsByPath = new Map(
-      existingDocuments.map((document) => [document.path, document]),
+      existingDocuments.map((document) => [normalizeRelativePath(document.path), document]),
     );
 
     if (runMode === "incremental") {
-      const scannedPaths = new Set(files.map((file) => file.relativePath));
+      const scannedPaths = new Set(files.map((file) => normalizeRelativePath(file.relativePath)));
       let deletedAny = false;
       for (const document of existingDocuments) {
-        if (!scannedPaths.has(document.path)) {
+        if (!scannedPaths.has(normalizeRelativePath(document.path))) {
           await resetDocumentArtifacts(repo, document.id);
           await repo.deleteDocument(document.id);
           deletedAny = true;
@@ -652,7 +652,9 @@ export async function indexWorkspace(input: {
       const filesToRead: typeof files = [];
 
       for (const file of files) {
-        const existingDocument = existingDocumentsByPath.get(file.relativePath);
+        const existingDocument = existingDocumentsByPath.get(
+          normalizeRelativePath(file.relativePath),
+        );
         // Fast path: skip file read if mtime and size match (incremental only)
         const statUnchanged =
           runMode === "incremental" &&
@@ -693,7 +695,9 @@ export async function indexWorkspace(input: {
       for (const file of filesToRead) {
         const content = fileContents.get(file.relativePath)!;
         const contentHash = hashContent(content);
-        const existingDocument = existingDocumentsByPath.get(file.relativePath);
+        const existingDocument = existingDocumentsByPath.get(
+          normalizeRelativePath(file.relativePath),
+        );
         const unchanged =
           runMode === "incremental" &&
           !forceRechunk &&
@@ -768,7 +772,9 @@ export async function indexWorkspace(input: {
         for (const file of parseTasks) {
           const indexed = parseResults.get(file.id)!;
           const contentHash = hashContent(file.content);
-          const existingDocument = existingDocumentsByPath.get(file.relativePath);
+          const existingDocument = existingDocumentsByPath.get(
+            normalizeRelativePath(file.relativePath),
+          );
 
           if (existingDocument) {
             await resetChangedFileArtifacts(repo, existingDocument.id, file.relativePath);
@@ -780,10 +786,10 @@ export async function indexWorkspace(input: {
               sizeBytes: file.sizeBytes,
               mtimeMs: file.mtimeMs,
             });
-            docIdMap.set(file.relativePath, existingDocument.id);
+            docIdMap.set(normalizeRelativePath(file.relativePath), existingDocument.id);
           } else {
             newDocs.push({
-              path: file.relativePath,
+              path: normalizeRelativePath(file.relativePath),
               absolutePath: file.absolutePath,
               kind: indexed.kind,
               language: indexed.language,
@@ -817,7 +823,7 @@ export async function indexWorkspace(input: {
         const chunkFileMap: Array<{ fileRelativePath: string; chunkIndex: number }> = [];
         for (const file of parseTasks) {
           const indexed = parseResults.get(file.id)!;
-          const documentId = docIdMap.get(file.relativePath)!;
+          const documentId = docIdMap.get(normalizeRelativePath(file.relativePath))!;
           for (let ci = 0; ci < indexed.chunks.length; ci++) {
             const chunk = indexed.chunks[ci];
             allChunkInputs.push({
@@ -878,7 +884,7 @@ export async function indexWorkspace(input: {
         for (let fi = 0; fi < parseTasks.length; fi++) {
           const file = parseTasks[fi];
           const indexed = parseResults.get(file.id)!;
-          const documentId = docIdMap.get(file.relativePath)!;
+          const documentId = docIdMap.get(normalizeRelativePath(file.relativePath))!;
           const contentHash = hashContent(file.content);
           repo.insertParsedDocument({
             documentId,

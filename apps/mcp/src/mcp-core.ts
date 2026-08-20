@@ -89,6 +89,11 @@ const indexWorkspaceSchema = z.object({
   mode: z.enum(["incremental", "full"]).optional(),
 });
 
+const codeOutlineSchema = z.object({
+  workspaceId: z.string().optional(),
+  path: z.string().trim().min(1),
+});
+
 const removeWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
@@ -547,6 +552,22 @@ export function createMcpServer(options?: McpServerOptions) {
         },
       },
       {
+        name: "code_outline",
+        description:
+          "Inspect the AST structure, functions, classes, and exported symbols of a file with line numbers (50 tokens vs 3,000 for reading the whole file).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceId: { type: "string", description: "ID of a registered workspace" },
+            path: {
+              type: "string",
+              description: "Relative or absolute path to the file inside the workspace",
+            },
+          },
+          required: ["path"],
+        },
+      },
+      {
         name: "remove_workspace",
         description:
           "Remove a workspace from the registry and delete its .openez data directory. Destructive and irreversible: call only with confirm: true after explicit user approval.",
@@ -822,6 +843,30 @@ export function createMcpServer(options?: McpServerOptions) {
         stopWatcherForWorkspace(report.workspaceId);
         return jsonResponse(report);
       }
+      case "code_outline": {
+        const input = codeOutlineSchema.parse(request.params.arguments ?? {});
+        const targetPath = input.path;
+
+        const workspaces = await resolver.resolveReadWorkspaces({
+          workspaceId: input.workspaceId,
+        });
+        const workspace = workspaces[0];
+        if (!workspace) {
+          return jsonResponse({ error: "No registered workspace found." });
+        }
+        await catchUpWorkspaceIndex(workspace.id);
+        const repo = createWorkspaceRepository(workspace.rootPath);
+        const outline = await repo.getFileOutline(targetPath);
+
+        if (!outline) {
+          return jsonResponse({
+            error: `File not found in index: '${targetPath}'. Ensure the file exists and is indexed.`,
+            path: targetPath,
+          });
+        }
+
+        return jsonResponse(outline);
+      }
       default:
         throw new Error(`Unknown tool: ${request.params.name}`);
     }
@@ -831,9 +876,17 @@ export function createMcpServer(options?: McpServerOptions) {
 }
 
 export async function createAndStartMcpServer(options?: McpServerOptions) {
-  // ── Auto-index + optional auto-sync watcher ──
-  const searchRoot = options?.defaultPath ?? process.cwd();
-  await autoIndexAndSync(searchRoot);
+  // Auto-index only when an explicit workspace path was provided via --path.
+  // Falling back to process.cwd() is dangerous: when the MCP host (e.g. Devin,
+  // Claude Code) spawns this server from $HOME or /, autoIndexAndSync would
+  // recursively walk the entire home filesystem, holding ASTs and graph nodes
+  // for hundreds of thousands of files in memory — observed at 5.7GB RSS in
+  // under 3 minutes, triggering systemd-oomd kills.
+  // Without --path, the server starts clean; callers use the index_workspace
+  // MCP tool to explicitly index a specific workspace.
+  if (options?.defaultPath) {
+    await autoIndexAndSync(options.defaultPath);
+  }
 
   const server = createMcpServer(options);
   const transport = new StdioServerTransport();
