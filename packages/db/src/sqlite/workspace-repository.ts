@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import { eq } from "drizzle-orm";
 
 import type { ChunkStmts } from "./chunk-repository";
 import { createDocumentOps } from "./document-repository";
@@ -10,34 +10,36 @@ import type { FtsStmts } from "./fts-repository";
 import { createGraphOps } from "./graph-repository";
 import type { GraphStmts } from "./graph-repository";
 import { createMemoryOps } from "./memory-repository";
+import * as schema from "./schema";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
-import type { WorkspaceRepository } from "./types";
+import type { SqliteRow, SymbolDefinitionMatch, WorkspaceRepository } from "./types";
 import { getWorkspaceDb, getWorkspaceNativeDb } from "./workspace-db";
 
-function getNativeWorkspaceDb(rootPath: string): {
+interface WorkspaceDbPair {
   db: ReturnType<typeof getWorkspaceDb>;
   native: NativeDatabase;
-} {
+}
+
+function getNativeWorkspaceDb(rootPath: string): WorkspaceDbPair {
   const db = getWorkspaceDb(rootPath);
   const native = getWorkspaceNativeDb(rootPath);
   return { db, native };
 }
 
 export function createWorkspaceRepository(rootPath: string): WorkspaceRepository {
-  const { native } = getNativeWorkspaceDb(rootPath);
+  const { db, native } = getNativeWorkspaceDb(rootPath);
 
   // Legacy TEXT-embedding DBs intentionally lack the
   // idx_embeddings_chunk_provider_model unique index (migrateEmbeddingDedup
   // skips it for TEXT columns), so ON CONFLICT(chunk_id, provider, model)
   // would fail at prepare() time. Detect once and pick the right SQL.
-  const hasEmbeddingUniqueIdx =
-    (
-      native
-        .prepare(
-          "SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_embeddings_chunk_provider_model'",
-        )
-        .get() as { c: number }
-    ).c > 0;
+  // SAFETY: Query selects count(*) from sqlite_master to check index existence.
+  const countRow = native
+    .prepare(
+      "SELECT count(*) as c FROM sqlite_master WHERE type='index' AND name='idx_embeddings_chunk_provider_model'",
+    )
+    .get() as { c: number };
+  const hasEmbeddingUniqueIdx = countRow.c > 0;
 
   // ── Cached prepared statements (prepared once, reused thousands of times) ──
   const stmts: DocumentStmts & ChunkStmts & GraphStmts & FtsStmts & EmbeddingStmts = {
@@ -108,9 +110,10 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
   const streamNow: StreamTimestampHolder = { value: new Date().toISOString() };
 
-  const documentOps = createDocumentOps(native, stmts, streamNow);
+  const documentOps = createDocumentOps(db, native, stmts, streamNow);
 
   const getMeta = (key: string): string | null => {
+    // SAFETY: index_meta table returns { value: string } when row exists.
     const row = native.prepare("SELECT value FROM index_meta WHERE key = ?").get(key) as
       | { value: string }
       | undefined;
@@ -123,7 +126,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
   const graphOps = createGraphOps(native, stmts, streamNow);
   const ftsOps = createFtsOps(native, stmts, { getMeta, setMeta });
   const embeddingOps = createEmbeddingOps(native, stmts);
-  const memoryOps = createMemoryOps(native, stmts);
+  const memoryOps = createMemoryOps(db, native, stmts);
 
   return {
     rootPath,
@@ -137,78 +140,279 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     async createIndexRun(input): Promise<number> {
       const now = new Date().toISOString();
-      const res = native
-        .prepare(
-          "INSERT INTO index_runs (mode, status, files_scanned, files_updated, chunks_written, embeddings_written, started_at) VALUES (?, 'running', 0, 0, 0, 0, ?)",
-        )
-        .run(input.mode, now);
-      return Number(res.lastInsertRowid);
+      const res = db
+        .insert(schema.indexRuns)
+        .values({
+          mode: input.mode,
+          status: "running",
+          filesScanned: 0,
+          filesUpdated: 0,
+          chunksWritten: 0,
+          embeddingsWritten: 0,
+          startedAt: now,
+        })
+        .returning({ id: schema.indexRuns.id })
+        .get();
+      return res.id;
     },
 
     async completeIndexRun(id, updates) {
-      const sets: string[] = ["finished_at = ?"];
-      const params: unknown[] = [new Date().toISOString()];
+      const setValues: Partial<typeof schema.indexRuns.$inferInsert> = {
+        finishedAt: new Date().toISOString(),
+      };
       if (updates.status !== undefined) {
-        sets.push("status = ?");
-        params.push(updates.status);
+        setValues.status = updates.status;
       }
       if (updates.filesScanned !== undefined) {
-        sets.push("files_scanned = ?");
-        params.push(updates.filesScanned);
+        setValues.filesScanned = updates.filesScanned;
       }
       if (updates.filesUpdated !== undefined) {
-        sets.push("files_updated = ?");
-        params.push(updates.filesUpdated);
+        setValues.filesUpdated = updates.filesUpdated;
       }
       if (updates.chunksWritten !== undefined) {
-        sets.push("chunks_written = ?");
-        params.push(updates.chunksWritten);
+        setValues.chunksWritten = updates.chunksWritten;
       }
       if (updates.embeddingsWritten !== undefined) {
-        sets.push("embeddings_written = ?");
-        params.push(updates.embeddingsWritten);
+        setValues.embeddingsWritten = updates.embeddingsWritten;
       }
       if (updates.errorMessage !== undefined) {
-        sets.push("error_message = ?");
-        params.push(updates.errorMessage);
+        setValues.errorMessage = updates.errorMessage;
       }
-      params.push(id);
-      native.prepare(`UPDATE index_runs SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+      db.update(schema.indexRuns).set(setValues).where(eq(schema.indexRuns.id, id)).run();
     },
 
     // ── Query Log Operations ──
 
     async insertQueryLog(input): Promise<number> {
-      const res = native
+      const res = db
+        .insert(schema.queryLogs)
+        .values({
+          query: input.query,
+          mode: input.mode,
+          resultCount: input.resultCount,
+          tokensReturned: input.tokensReturned ?? 0,
+          tokensSaved: input.tokensSaved ?? 0,
+          filesScanned: input.filesScanned ?? 0,
+          createdAt: new Date().toISOString(),
+        })
+        .returning({ id: schema.queryLogs.id })
+        .get();
+      return res.id;
+    },
+
+    async getSymbolDefinitions(symbolName: string): Promise<SymbolDefinitionMatch[]> {
+      const trimmed = symbolName.trim();
+      if (!trimmed) return [];
+
+      const matches: SymbolDefinitionMatch[] = [];
+      const escaped = trimmed.replace(/[%_\\]/g, "\\$&");
+
+      // SAFETY: Query fetches parsed document symbol JSON strings and paths.
+      const parsedRows = native
         .prepare(
-          "INSERT INTO query_logs (query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          `SELECT d.id as doc_id, d.path, p.symbols
+           FROM parsed_documents p
+           JOIN documents d ON d.id = p.document_id
+           WHERE p.symbols LIKE ? ESCAPE '\\'`,
         )
-        .run(
-          input.query,
-          input.mode,
-          input.resultCount,
-          input.tokensReturned ?? 0,
-          input.tokensSaved ?? 0,
-          input.filesScanned ?? 0,
-          new Date().toISOString(),
-        );
-      return Number(res.lastInsertRowid);
+        .all(`%"name":"%${escaped}%`) as Array<{ doc_id: number; path: string; symbols: string }>;
+
+      const nodeStmt = native.prepare(
+        "SELECT id, ref_id FROM graph_nodes WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ? AND (label = ? OR label LIKE ? ESCAPE '\\') LIMIT 1",
+      );
+      const chunkByIdStmt = native.prepare("SELECT content FROM chunks WHERE id = ?");
+      const chunkByHeadingStmt = native.prepare(
+        "SELECT content FROM chunks WHERE document_id = ? AND (heading = ? OR heading LIKE ? ESCAPE '\\') LIMIT 1",
+      );
+      const chunksByDocStmt = native.prepare(
+        "SELECT heading, metadata FROM chunks WHERE document_id = ? ORDER BY chunk_index ASC",
+      );
+      const callersStmt = native.prepare(
+        "SELECT COUNT(*) as c FROM graph_edges WHERE to_node_id = ? AND type = 'calls'",
+      );
+      const calleesStmt = native.prepare(
+        "SELECT COUNT(*) as c FROM graph_edges WHERE from_node_id = ? AND type = 'calls'",
+      );
+
+      for (const row of parsedRows) {
+        try {
+          const rawSymbols = JSON.parse(row.symbols);
+          if (Array.isArray(rawSymbols)) {
+            let chunkMetaMap: Map<string, { startLine: number; endLine: number }> | null = null;
+
+            for (const s of rawSymbols) {
+              const sName = String(s.name || "");
+              if (
+                sName === trimmed ||
+                sName.endsWith(`::${trimmed}`) ||
+                sName.endsWith(`.${trimmed}`)
+              ) {
+                let sourceCode: string | undefined;
+                let callerCount = 0;
+                let calleeCount = 0;
+
+                const escapedSName = sName.replace(/[%_\\]/g, "\\$&");
+                // SAFETY: Query fetches node id and ref_id.
+                const node = nodeStmt.get(row.path, sName, `%::${escapedSName}`) as
+                  | { id: number; ref_id: number | null }
+                  | undefined;
+
+                if (node?.ref_id) {
+                  // SAFETY: Query fetches chunk content by id.
+                  const chunkRow = chunkByIdStmt.get(node.ref_id) as
+                    | { content: string }
+                    | undefined;
+                  if (chunkRow?.content) sourceCode = chunkRow.content;
+                }
+
+                if (!sourceCode) {
+                  // SAFETY: Query fetches chunk content by heading.
+                  const chunkHeadingRow = chunkByHeadingStmt.get(
+                    row.doc_id,
+                    sName,
+                    `%${escapedSName}%`,
+                  ) as { content: string } | undefined;
+                  if (chunkHeadingRow?.content) sourceCode = chunkHeadingRow.content;
+                }
+
+                if (node?.id) {
+                  // SAFETY: Query counts incoming callers.
+                  const callers = callersStmt.get(node.id) as { c: number } | undefined;
+                  // SAFETY: Query counts outgoing callees.
+                  const callees = calleesStmt.get(node.id) as { c: number } | undefined;
+                  callerCount = Number(callers?.c ?? 0);
+                  calleeCount = Number(callees?.c ?? 0);
+                }
+
+                let startLine = Number(s.startLine || 0);
+                let endLine = Number(s.endLine || 0);
+
+                if (startLine <= 0) {
+                  if (!chunkMetaMap) {
+                    chunkMetaMap = new Map();
+                    // SAFETY: Query fetches doc chunks heading and metadata.
+                    const docChunks = chunksByDocStmt.all(row.doc_id) as Array<{
+                      heading: string | null;
+                      metadata: string;
+                    }>;
+                    for (const dc of docChunks) {
+                      try {
+                        const meta = JSON.parse(dc.metadata || "{}");
+                        const name = meta.symbolName || dc.heading;
+                        if (name && meta.startLine) {
+                          chunkMetaMap.set(String(name), {
+                            startLine: Number(meta.startLine),
+                            endLine: Number(meta.endLine || meta.startLine),
+                          });
+                        }
+                      } catch {}
+                    }
+                  }
+                  const fromChunk =
+                    chunkMetaMap.get(sName) ||
+                    chunkMetaMap.get(sName.split(".").pop() || "") ||
+                    chunkMetaMap.get(sName.split("::").pop() || "");
+                  if (fromChunk) {
+                    startLine = fromChunk.startLine;
+                    endLine = fromChunk.endLine;
+                  }
+                } else if (endLine <= 0) {
+                  endLine = startLine;
+                }
+
+                matches.push({
+                  name: sName,
+                  kind: String(s.symbolType || s.kind || s.type || "symbol"),
+                  filePath: row.path,
+                  startLine: startLine > 0 ? startLine : undefined,
+                  endLine: endLine > 0 ? endLine : undefined,
+                  exported: Boolean(s.exported),
+                  parentSymbol: s.parentSymbol ? String(s.parentSymbol) : undefined,
+                  sourceCode,
+                  callerCount,
+                  calleeCount,
+                });
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (matches.length === 0) {
+        // SAFETY: Query fetches matching nodes from graph_nodes.
+        const nodes = native
+          .prepare(
+            `SELECT n.id, n.type, n.label, n.ref_id, n.metadata
+             FROM graph_nodes n
+             WHERE n.label = ? OR n.label LIKE ? OR n.label LIKE ?`,
+          )
+          .all(trimmed, `%::${trimmed}`, `%.${trimmed}`) as Array<{
+          id: number;
+          type: string;
+          label: string;
+          ref_id: number | null;
+          metadata: string;
+        }>;
+
+        for (const n of nodes) {
+          interface NodeMetaPayload {
+            path?: string;
+            filePath?: string;
+            startLine?: number;
+            endLine?: number;
+            exported?: boolean;
+          }
+          let meta: NodeMetaPayload = {};
+          try {
+            meta = JSON.parse(n.metadata || "{}");
+          } catch {}
+
+          let sourceCode: string | undefined;
+          if (n.ref_id) {
+            // SAFETY: Query fetches chunk content by id.
+            const chunkRow = chunkByIdStmt.get(n.ref_id) as { content: string } | undefined;
+            if (chunkRow?.content) sourceCode = chunkRow.content;
+          }
+
+          // SAFETY: Query counts incoming callers.
+          const callers = callersStmt.get(n.id) as { c: number } | undefined;
+          // SAFETY: Query counts outgoing callees.
+          const callees = calleesStmt.get(n.id) as { c: number } | undefined;
+
+          matches.push({
+            name: n.label,
+            kind: n.type,
+            filePath: String(meta.path || meta.filePath || ""),
+            startLine: Number(meta.startLine || 1),
+            endLine: Number(meta.endLine || meta.startLine || 1),
+            exported: Boolean(meta.exported),
+            sourceCode,
+            callerCount: Number(callers?.c ?? 0),
+            calleeCount: Number(callees?.c ?? 0),
+          });
+        }
+      }
+
+      return matches;
     },
 
     // ── Raw SQL queries ──
 
     async executeRaw(sqlQuery: string, params?: unknown[]) {
       if (params) {
-        return native.prepare(sqlQuery).run(...params);
+        native.prepare(sqlQuery).run(...params);
+        return;
       }
-      return native.prepare(sqlQuery).run();
+      native.prepare(sqlQuery).run();
     },
 
-    async queryRaw(sqlQuery: string, params?: unknown[]) {
+    async queryRaw<T = SqliteRow>(sqlQuery: string, params?: unknown[]): Promise<T[]> {
       if (params) {
-        return native.prepare(sqlQuery).all(...params) as Array<Record<string, unknown>>;
+        // SAFETY: Raw query interface returns rows matching generic T.
+        return native.prepare(sqlQuery).all(...params) as T[];
       }
-      return native.prepare(sqlQuery).all() as Array<Record<string, unknown>>;
+      // SAFETY: Raw query interface returns rows matching generic T.
+      return native.prepare(sqlQuery).all() as T[];
     },
 
     async transaction<T>(fn: () => T | Promise<T>): Promise<T> {
@@ -241,10 +445,8 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
         // left in MEMORY by the old code), and checkpoint so the WAL doesn't
         // grow unbounded.
         native.pragma("synchronous = NORMAL");
-        const journalMode = String(native.pragma("journal_mode = WAL")).toLowerCase();
-        if (journalMode === "wal") {
-          native.pragma("wal_checkpoint(PASSIVE)");
-        }
+        native.pragma("journal_mode = WAL");
+        native.exec("PRAGMA wal_checkpoint(PASSIVE)");
         native.pragma("cache_size = -2000");
         native.pragma("temp_store = DEFAULT");
       }
@@ -261,6 +463,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     },
 
     getMeta(key: string): string | null {
+      // SAFETY: index_meta table returns { value: string } when row exists.
       const row = native.prepare("SELECT value FROM index_meta WHERE key = ?").get(key) as
         | { value: string }
         | undefined;

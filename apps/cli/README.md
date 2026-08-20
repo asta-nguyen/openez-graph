@@ -83,15 +83,16 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 
 ## MCP Tools
 
-| Tool              | Description                                                                                         |
-| ----------------- | --------------------------------------------------------------------------------------------------- |
-| `list_workspaces` | List all registered workspaces                                                                      |
-| `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
-| `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
-| `graph_neighbors` | Traverse graph edges from a node or label                                                           |
-| `memory_recall`   | Recall active memory entries and technical decisions                                                |
-| `memory_write`    | Write a memory entry (notes, decisions, patterns)                                                   |
-| `index_workspace` | Trigger indexing for a workspace                                                                    |
+| Tool                | Description                                                                                         |
+| ------------------- | --------------------------------------------------------------------------------------------------- |
+| `list_workspaces`   | List all registered workspaces                                                                      |
+| `code_query`        | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
+| `symbol_definition` | Targeted "Go to Definition" lookup for functions, classes, and types in <2ms                        |
+| `code_context`      | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
+| `graph_neighbors`   | Traverse graph edges from a node or label                                                           |
+| `memory_recall`     | Recall active memory entries and technical decisions                                                |
+| `memory_write`      | Write a memory entry (notes, decisions, patterns)                                                   |
+| `index_workspace`   | Trigger indexing for a workspace                                                                    |
 
 `memory_query` is accepted as a deprecated compatibility alias for `code_query`, but is not advertised to new clients.
 

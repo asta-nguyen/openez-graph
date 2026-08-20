@@ -92,25 +92,38 @@ function loadGitignore(rootPath: string): string[] {
   }
 }
 
-function compileIgnoreMatcher(ignorePatterns: string[]) {
-  const positiveExcludes: string[] = [];
-  const negationIncludes: string[] = [];
+interface IgnoreRule {
+  isNegation: boolean;
+  match: (path: string) => boolean;
+}
 
-  for (const pat of ignorePatterns) {
-    if (pat.startsWith("!")) {
-      negationIncludes.push(pat.slice(1));
-    } else {
-      positiveExcludes.push(pat);
-    }
-  }
+export function compileIgnoreMatcher(
+  ignorePatterns: string[],
+  hardExcludePatterns: string[] = DEFAULT_EXCLUDE_PATTERNS,
+) {
+  const hardMatcher = picomatch(hardExcludePatterns, { dot: true });
 
-  const isExcluded = picomatch(positiveExcludes, { dot: true });
-  const isNegated =
-    negationIncludes.length > 0 ? picomatch(negationIncludes, { dot: true }) : () => false;
+  const rules: IgnoreRule[] = ignorePatterns.map((pat) => {
+    const isNegation = pat.startsWith("!");
+    const cleanPat = isNegation ? pat.slice(1) : pat;
+    return {
+      isNegation,
+      match: picomatch(cleanPat, { dot: true }),
+    };
+  });
 
   return (filePath: string) => {
-    if (isNegated(filePath)) return false; // Explicitly re-included via !
-    return isExcluded(filePath); // True if matched an exclusion pattern
+    // 1. Hard excludes always win (cannot be bypassed by user .gitignore negations)
+    if (hardMatcher(filePath)) return true;
+
+    // 2. Sequential gitignore rules: last match wins
+    let ignored = false;
+    for (const rule of rules) {
+      if (rule.match(filePath)) {
+        ignored = !rule.isNegation;
+      }
+    }
+    return ignored;
   };
 }
 
@@ -123,7 +136,6 @@ export async function scanWorkspaceFiles(input: {
   const gitignorePatterns = loadGitignore(rootPath);
 
   const ignorePatterns = [
-    ...DEFAULT_EXCLUDE_PATTERNS,
     ...gitignorePatterns,
     ...(input.exclude
       ? input.exclude
@@ -140,7 +152,7 @@ export async function scanWorkspaceFiles(input: {
         .map((p) => p.trim())
     : DEFAULT_INCLUDE_PATTERNS;
 
-  const isIgnored = compileIgnoreMatcher(ignorePatterns);
+  const isIgnored = compileIgnoreMatcher(ignorePatterns, DEFAULT_EXCLUDE_PATTERNS);
 
   // Native Rust scanner (rayon parallel walk) — fast path for default includes
   if (!input.include) {

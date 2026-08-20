@@ -21,23 +21,44 @@ export interface GraphStmts {
   insertEdgeWithId?: ReturnType<NativeDatabase["prepare"]>;
 }
 
+export interface GraphNodeRawRow {
+  id: number | string;
+  type: string;
+  label: string;
+  ref_id?: number | string | null;
+  metadata?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 /**
  * Maps a raw graph node row into the normalized shape returned by the
  * repository. Shared by node and traversal operations.
  */
-export function mapNodeRow(row: Record<string, unknown>) {
+export function mapNodeRow(row: GraphNodeRawRow) {
+  const refIdRaw = row.ref_id;
+  let refId: string | number | null = null;
+  if (refIdRaw !== null && refIdRaw !== undefined) {
+    if (Number.isSafeInteger(refIdRaw)) {
+      // SAFETY: Checked as safe integer number.
+      refId = refIdRaw as number;
+    } else {
+      const str = String(refIdRaw).trim();
+      if (/^\d+$/.test(str)) {
+        const parsed = Number(str);
+        refId = Number.isSafeInteger(parsed) ? parsed : str;
+      } else if (str.length > 0) {
+        refId = str;
+      }
+    }
+  }
   return {
     id: Number(row.id),
     type: String(row.type),
     label: String(row.label),
-    refId:
-      row.ref_id !== null && row.ref_id !== undefined
-        ? typeof row.ref_id === "number"
-          ? row.ref_id
-          : String(row.ref_id)
-        : null,
+    refId,
     metadata: String(row.metadata ?? "{}"),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
   };
 }

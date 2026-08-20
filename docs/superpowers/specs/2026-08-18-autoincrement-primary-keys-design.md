@@ -63,24 +63,32 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 CREATE TABLE IF NOT EXISTS graph_nodes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  document_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
-  chunk_id INTEGER REFERENCES chunks(id) ON DELETE SET NULL,
-  symbol_name TEXT NOT NULL,
-  symbol_type TEXT NOT NULL,
-  path TEXT NOT NULL,
-  start_line INTEGER NOT NULL,
-  end_line INTEGER NOT NULL,
-  is_exported INTEGER NOT NULL DEFAULT 0,
+  type TEXT NOT NULL,
+  label TEXT NOT NULL,
+  ref_id INTEGER,
+  metadata TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS graph_edges (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  source_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-  target_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-  edge_type TEXT NOT NULL,
-  metadata TEXT NOT NULL DEFAULT '{}',
+  from_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+  to_node_id INTEGER NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  weight REAL NOT NULL DEFAULT 1.0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS parsed_documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+  content_hash TEXT NOT NULL,
+  language TEXT,
+  symbols TEXT NOT NULL DEFAULT '[]',
+  call_expressions TEXT NOT NULL DEFAULT '[]',
+  called_identifiers TEXT NOT NULL DEFAULT '[]',
+  wikilinks TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -109,8 +117,8 @@ CREATE TABLE IF NOT EXISTS memories (
 CREATE TABLE IF NOT EXISTS query_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   query TEXT NOT NULL,
-  mode TEXT NOT NULL,
-  result_count INTEGER NOT NULL,
+  mode TEXT NOT NULL DEFAULT 'hybrid',
+  result_count INTEGER NOT NULL DEFAULT 0,
   tokens_returned INTEGER NOT NULL DEFAULT 0,
   tokens_saved INTEGER NOT NULL DEFAULT 0,
   files_scanned INTEGER NOT NULL DEFAULT 0,
@@ -125,10 +133,22 @@ CREATE TABLE IF NOT EXISTS index_runs (
   files_updated INTEGER NOT NULL DEFAULT 0,
   chunks_written INTEGER NOT NULL DEFAULT 0,
   embeddings_written INTEGER NOT NULL DEFAULT 0,
-  embedding_failures INTEGER NOT NULL DEFAULT 0,
   error_message TEXT,
-  started_at TEXT NOT NULL,
-  completed_at TEXT
+  stats TEXT,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS graph_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  nodes_created INTEGER NOT NULL DEFAULT 0,
+  edges_created INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  stats TEXT,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
 );
 ```
 

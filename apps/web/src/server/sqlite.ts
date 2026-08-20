@@ -732,25 +732,35 @@ export function insertWorkspaceMemory(input: {
   content: string;
   tags?: string[];
   source?: string;
-  supersedesId?: string;
+  supersedesId?: string | number | null;
 }): string {
-  const id = crypto.randomUUID();
+  const db = getWorkspaceDb(input.rootPath);
+  let supersedesIntId: number | null = null;
+  if (input.supersedesId !== null && input.supersedesId !== undefined) {
+    const parsed = Number(input.supersedesId);
+    if (Number.isSafeInteger(parsed) && parsed > 0) {
+      const exists = db.prepare("SELECT 1 FROM memories WHERE id = ?").get(parsed);
+      if (exists) {
+        supersedesIntId = parsed;
+      }
+    }
+  }
+
   const now = new Date().toISOString();
-  getWorkspaceDb(input.rootPath)
+  const res = db
     .prepare(
-      "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO memories (title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
-      id,
       input.title,
       input.content,
       (input.tags ?? []).join(","),
       input.source ?? "user",
-      input.supersedesId ?? null,
+      supersedesIntId,
       now,
       now,
     );
-  return id;
+  return String(res.lastInsertRowid);
 }
 
 export function deleteWorkspaceMemory(rootPath: string, id: string): boolean {

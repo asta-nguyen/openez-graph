@@ -1,5 +1,11 @@
+import { asc, count, eq, inArray } from "drizzle-orm";
+import type { drizzle } from "drizzle-orm/bun-sqlite";
+
+import * as schema from "./schema";
 import { createChunkOps, type ChunkStmts } from "./chunk-repository";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
+
+export type WorkspaceDrizzleDb = ReturnType<typeof drizzle>;
 
 /**
  * Prepared statements used by the document operations.
@@ -16,42 +22,18 @@ export interface DocumentStmts {
   insertDocWithId: ReturnType<NativeDatabase["prepare"]>;
 }
 
-interface DocumentRow {
-  id: number;
-  path: string;
-  absolute_path: string;
-  kind: string;
-  language: string | null;
-  content_hash: string;
-  size_bytes: number;
-  mtime_ms: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface ParsedDocumentRow {
-  document_id: number;
-  content_hash: string;
-  symbols: string | null;
-  imports: string | null;
-  calls: string | null;
-  called_identifiers: string | null;
-  parser_version: string | null;
-  parsed_at: number;
-}
-
-function mapDocumentRow(row: DocumentRow) {
+function mapDocumentRow(row: typeof schema.documents.$inferSelect) {
   return {
-    id: Number(row.id),
-    path: String(row.path),
-    absolutePath: String(row.absolute_path),
-    kind: String(row.kind),
-    language: row.language ? String(row.language) : null,
-    contentHash: String(row.content_hash),
-    sizeBytes: Number(row.size_bytes),
-    mtimeMs: Number(row.mtime_ms),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    id: row.id,
+    path: row.path,
+    absolutePath: row.absolutePath,
+    kind: row.kind,
+    language: row.language,
+    contentHash: row.contentHash,
+    sizeBytes: row.sizeBytes,
+    mtimeMs: row.mtimeMs,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -70,32 +52,28 @@ function mapDocumentRow(row: DocumentRow) {
  * `createDocumentOps()` continue to receive a single merged ops object.
  */
 export function createDocumentOps(
+  db: WorkspaceDrizzleDb,
   native: NativeDatabase,
   stmts: DocumentStmts & ChunkStmts,
   streamNow: StreamTimestampHolder,
 ) {
-  const chunkOps = createChunkOps(native, stmts, streamNow);
+  const chunkOps = createChunkOps(db, native, stmts, streamNow);
 
   return {
     async getDocumentCount(): Promise<number> {
-      // SAFETY: Query selects count(*) from documents table.
-      const row = native.prepare("SELECT count(*) AS count FROM documents").get() as {
-        count: number;
-      };
-      return row?.count ?? 0;
+      const res = db.select({ count: count() }).from(schema.documents).get();
+      return res?.count ?? 0;
     },
 
     // ── Document Operations ──
 
     async getDocument(id: number) {
-      // SAFETY: stmts.docById queries documents table matching DocumentRow schema.
-      const row = stmts.docById.get(id) as DocumentRow | undefined;
+      const row = db.select().from(schema.documents).where(eq(schema.documents.id, id)).get();
       return row ? mapDocumentRow(row) : null;
     },
 
     async getDocumentByPath(path: string) {
-      // SAFETY: stmts.docByPath queries documents table matching DocumentRow schema.
-      const row = stmts.docByPath.get(path) as DocumentRow | undefined;
+      const row = db.select().from(schema.documents).where(eq(schema.documents.path, path)).get();
       return row ? mapDocumentRow(row) : null;
     },
 
@@ -216,14 +194,12 @@ export function createDocumentOps(
     },
 
     async deleteDocument(id: number) {
-      native.prepare("DELETE FROM documents WHERE id = ?").run(id);
+      db.delete(schema.parsedDocuments).where(eq(schema.parsedDocuments.documentId, id)).run();
+      db.delete(schema.documents).where(eq(schema.documents.id, id)).run();
     },
 
     async listDocuments() {
-      // SAFETY: Query selects all columns from documents table matching DocumentRow schema.
-      const rows = native
-        .prepare("SELECT * FROM documents ORDER BY path")
-        .all() as Array<DocumentRow>;
+      const rows = db.select().from(schema.documents).orderBy(asc(schema.documents.path)).all();
       return rows.map(mapDocumentRow);
     },
 
@@ -311,20 +287,21 @@ export function createDocumentOps(
       parserVersion: string | null;
       parsedAt: number;
     } | null {
-      // SAFETY: Query selects from parsed_documents table matching ParsedDocumentRow schema.
-      const row = native
-        .prepare("SELECT * FROM parsed_documents WHERE document_id = ?")
-        .get(documentId) as ParsedDocumentRow | undefined;
+      const row = db
+        .select()
+        .from(schema.parsedDocuments)
+        .where(eq(schema.parsedDocuments.documentId, documentId))
+        .get();
       if (!row) return null;
       return {
-        documentId: Number(row.document_id),
-        contentHash: String(row.content_hash),
-        symbols: row.symbols ? String(row.symbols) : null,
-        imports: row.imports ? String(row.imports) : null,
-        calls: row.calls ? String(row.calls) : null,
-        calledIdentifiers: row.called_identifiers ? String(row.called_identifiers) : null,
-        parserVersion: row.parser_version ? String(row.parser_version) : null,
-        parsedAt: Number(row.parsed_at),
+        documentId: row.documentId,
+        contentHash: row.contentHash,
+        symbols: row.symbols,
+        imports: row.imports,
+        calls: row.calls,
+        calledIdentifiers: row.calledIdentifiers,
+        parserVersion: row.parserVersion,
+        parsedAt: row.parsedAt,
       };
     },
 
@@ -335,10 +312,9 @@ export function createDocumentOps(
      */
     deleteParsedDocumentsByDocumentIds(documentIds: number[]): void {
       if (documentIds.length === 0) return;
-      const placeholders = documentIds.map(() => "?").join(",");
-      native
-        .prepare(`DELETE FROM parsed_documents WHERE document_id IN (${placeholders})`)
-        .run(...documentIds);
+      db.delete(schema.parsedDocuments)
+        .where(inArray(schema.parsedDocuments.documentId, documentIds))
+        .run();
     },
 
     // ── Chunk operations (composed from chunk-repository.ts) ──
