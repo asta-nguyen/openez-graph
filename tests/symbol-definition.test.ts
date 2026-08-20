@@ -4,8 +4,9 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { createMcpServer } from "../apps/mcp/src/mcp-core";
 import { createRegistryRepository, createWorkspaceRepository } from "../packages/db/src/sqlite";
-import { indexWorkspace } from "../packages/indexer/src";
+import { buildGraphGeneration, indexWorkspace } from "../packages/indexer/src";
 
 describe("symbol_definition MCP & DB functionality", () => {
   let tmpDir: string;
@@ -28,7 +29,7 @@ describe("symbol_definition MCP & DB functionality", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test("resolves exact function definitions with line ranges, export status, and source chunks", async () => {
+  test("resolves exact function definitions with line ranges, export status, source chunks, and caller counts", async () => {
     const srcDir = path.join(workspaceRoot, "src");
     fs.mkdirSync(srcDir, { recursive: true });
     const tsFile = path.join(srcDir, "token.ts");
@@ -48,6 +49,7 @@ export function verifyToken(token: string): boolean {
     const registry = createRegistryRepository();
     const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "symbol-sample" });
     await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+    await buildGraphGeneration(ws.id, workspaceRoot, 1, 1);
 
     const repo = createWorkspaceRepository(workspaceRoot);
     const matches = await repo.getSymbolDefinitions("generateToken");
@@ -57,23 +59,41 @@ export function verifyToken(token: string): boolean {
     expect(matches[0].kind).toBe("function");
     expect(matches[0].filePath).toBe("src/token.ts");
     expect(matches[0].startLine).toBe(1);
-    expect(matches[0].endLine).toBeGreaterThanOrEqual(1);
+    expect(matches[0].endLine).toBeGreaterThanOrEqual(3);
     expect(matches[0].exported).toBe(true);
     expect(typeof matches[0].sourceCode).toBe("string");
     expect(matches[0].sourceCode).toContain("generateToken");
+    expect(matches[0].callerCount).toBe(1);
+    expect(matches[0].calleeCount).toBe(0);
+
+    const verifyMatches = await repo.getSymbolDefinitions("verifyToken");
+    expect(verifyMatches.length).toBe(1);
+    expect(verifyMatches[0].callerCount).toBe(0);
+    expect(verifyMatches[0].calleeCount).toBe(1);
   });
 
-  test("resolves class methods and caller relationships", async () => {
+  test("resolves class methods with caller relationships across files", async () => {
     const srcDir = path.join(workspaceRoot, "src");
     fs.mkdirSync(srcDir, { recursive: true });
-    const tsFile = path.join(srcDir, "auth.ts");
+    const authFile = path.join(srcDir, "auth.ts");
+    const appFile = path.join(srcDir, "app.ts");
 
     fs.writeFileSync(
-      tsFile,
+      authFile,
       `export class AuthService {
   validateUser(id: string): boolean {
     return id.length > 0;
   }
+}
+`,
+    );
+
+    fs.writeFileSync(
+      appFile,
+      `import { AuthService } from "./auth";
+export function login(id: string): boolean {
+  const auth = new AuthService();
+  return auth.validateUser(id);
 }
 `,
     );
@@ -88,7 +108,8 @@ export function verifyToken(token: string): boolean {
     expect(matches.length).toBe(1);
     expect(matches[0].name).toContain("validateUser");
     expect(matches[0].filePath).toBe("src/auth.ts");
-    expect(matches[0].startLine).toBeDefined();
+    expect(matches[0].startLine).toBeGreaterThan(0);
+    expect(matches[0].endLine).toBeGreaterThanOrEqual(matches[0].startLine!);
     expect(matches[0].sourceCode).toContain("validateUser");
   });
 
@@ -100,5 +121,39 @@ export function verifyToken(token: string): boolean {
     const repo = createWorkspaceRepository(workspaceRoot);
     const matches = await repo.getSymbolDefinitions("nonExistentFunction");
     expect(matches).toEqual([]);
+  });
+
+  test("executes symbol_definition via MCP server handler with name alias and token limits", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, "math.ts"),
+      `export function add(a: number, b: number): number { return a + b; }\n`,
+    );
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "symbol-mcp" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const server = createMcpServer({ defaultPath: workspaceRoot });
+    // Call tool via internal handler
+    const response = await (server as any)._requestHandlers.get("tools/call")({
+      method: "tools/call",
+      params: {
+        name: "symbol_definition",
+        arguments: {
+          name: "add",
+          workspaceId: ws.id,
+          maxTokens: 500,
+        },
+      },
+    });
+
+    expect(response.content).toBeDefined();
+    expect(response.content[0].type).toBe("text");
+    const parsed = JSON.parse(response.content[0].text);
+    expect(parsed.symbol).toBe("add");
+    expect(parsed.matchCount).toBe(1);
+    expect(parsed.matches[0].filePath).toBe("src/math.ts");
   });
 });

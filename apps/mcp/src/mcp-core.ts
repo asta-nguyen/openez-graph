@@ -89,16 +89,20 @@ const indexWorkspaceSchema = z.object({
   mode: z.enum(["incremental", "full"]).optional(),
 });
 
-const symbolDefinitionSchema = z.object({
-  workspaceIds: z.array(z.string()).optional(),
-  workspaceId: z.string().optional(),
-  paths: z.array(z.string()).optional(),
-  path: z.string().optional(),
-  symbol: z.string().trim().min(1).optional(),
-  name: z.string().trim().optional(),
-  limit: z.number().int().positive().optional(),
-  maxTokens: z.number().int().positive().optional(),
-});
+const symbolDefinitionSchema = z
+  .object({
+    workspaceIds: z.array(z.string()).optional(),
+    workspaceId: z.string().optional(),
+    paths: z.array(z.string()).optional(),
+    path: z.string().optional(),
+    symbol: z.string().trim().min(1).optional(),
+    name: z.string().trim().min(1).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+    maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
+  })
+  .refine((data) => Boolean(data.symbol || data.name), {
+    message: "Either 'symbol' or 'name' must be provided",
+  });
 
 const removeWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
@@ -578,10 +582,17 @@ export function createMcpServer(options?: McpServerOptions) {
             },
             limit: {
               type: "integer",
-              description: "Maximum number of definition matches to return",
+              minimum: 1,
+              maximum: 50,
+              description: "Maximum number of definition matches to return (1-50)",
+            },
+            maxTokens: {
+              type: "integer",
+              minimum: 200,
+              maximum: 100000,
+              description: "Maximum tokens in the response envelope",
             },
           },
-          required: ["symbol"],
         },
       },
       {
@@ -893,7 +904,7 @@ export function createMcpServer(options?: McpServerOptions) {
 
         for (const ws of workspaces) {
           await catchUpWorkspaceIndex(ws.id);
-          await ensureGraphReady(ws.rootPath);
+          await ensureGraphReady(ws.id);
           const repo = createWorkspaceRepository(ws.rootPath);
           const matches = await repo.getSymbolDefinitions(targetSymbol);
           for (const m of matches) {
@@ -927,9 +938,10 @@ export function createMcpServer(options?: McpServerOptions) {
 }
 
 export async function createAndStartMcpServer(options?: McpServerOptions) {
-  // ── Auto-index + optional auto-sync watcher ──
-  const searchRoot = options?.defaultPath ?? process.cwd();
-  await autoIndexAndSync(searchRoot);
+  // Auto-index only when an explicit workspace path was provided via --path.
+  if (options?.defaultPath) {
+    await autoIndexAndSync(options.defaultPath);
+  }
 
   const server = createMcpServer(options);
   const transport = new StdioServerTransport();
