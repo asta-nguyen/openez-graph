@@ -70,7 +70,11 @@ openez diff HEAD~1   # diff against the supplied Git ref
 
 For the `diff_context` MCP tool, `path`/`paths` select registered workspace
 roots, not changed files. Untracked files are not included in this Git-diff
-phase.
+phase. The response is always `{ workspaces: [{ workspaceId, workspaceName, report }] }`,
+even for a single workspace. `maxTokens` bounds the response; `formattedSummary`
+is dropped before structured symbols/files. Git/index/graph failures return a
+structured `{ error, workspaceId?, ref?, staged? }` entry instead of an empty
+success report.
 
 ## MCP-First Workflow
 
