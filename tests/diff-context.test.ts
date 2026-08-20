@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { analyzeDiffContext, parseGitDiffHunks } from "../packages/core/src/diff-context";
 import { closeRegistryDb, createRegistryRepository } from "../packages/db/src/sqlite";
 import { ensureGraphReady, indexWorkspace } from "../packages/indexer/src";
+import { parseDocument } from "../packages/indexer/src/parsers";
 
 describe("diff-context analyzer", () => {
   let tmpDir: string;
@@ -417,5 +418,136 @@ export function after(): string {
 
     expect(report.files[0].changedLineRanges).toEqual([{ start: 16, end: 22 }]);
     expect(report.files[0].affectedSymbols.map((symbol) => symbol.name)).toEqual(["target"]);
+  });
+
+  // Helper: wrap the indexer's parseDocument into the BlobParser shape that
+  // analyzeDiffContext accepts. Parses source content in memory without writing
+  // anything to the workspace DB.
+  async function parseBlob(input: { relativePath: string; content: string }): Promise<
+    Array<{
+      name: string;
+      symbolType: string;
+      exported: boolean;
+      startLine: number;
+      endLine: number;
+      parentSymbol?: string;
+    }>
+  > {
+    const parsed = await parseDocument({
+      relativePath: input.relativePath,
+      absolutePath: input.relativePath,
+      content: input.content,
+      targetTokens: 800,
+      overlapTokens: 100,
+    });
+    return parsed.definedSymbols.map((s) => ({
+      name: s.name,
+      symbolType: s.symbolType,
+      exported: s.exported,
+      startLine: s.startLine ?? 1,
+      endLine: s.endLine ?? s.startLine ?? 1,
+      ...(s.receiver ? { parentSymbol: s.receiver } : {}),
+    }));
+  }
+
+  test("returns deletedSymbols for a deleted file when parseBlob is provided", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const deletedPath = path.join(srcDir, "deleted.ts");
+    fs.writeFileSync(
+      deletedPath,
+      `export function removedFunction(value: string): string {
+  return value.trim();
+}
+
+export function alsoRemoved(): number {
+  return 42;
+}
+`,
+    );
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+
+    // Delete the file
+    fs.unlinkSync(deletedPath);
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "deleted-test" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+    await ensureGraphReady(ws.id);
+
+    const report = await analyzeDiffContext(workspaceRoot, { parseBlob });
+
+    expect(report.totalFilesChanged).toBe(1);
+    expect(report.files[0].status).toBe("deleted");
+    expect(report.files[0].deletedSymbols).toBeDefined();
+    expect(report.files[0].deletedSymbols?.map((s) => s.name)).toEqual(
+      expect.arrayContaining(["removedFunction", "alsoRemoved"]),
+    );
+    // No current affected symbols for a deleted file
+    expect(report.files[0].affectedSymbols).toEqual([]);
+  });
+
+  test("returns oldSymbols for a historical ref diff when parseBlob is provided", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const targetPath = path.join(srcDir, "target.ts");
+    fs.writeFileSync(
+      targetPath,
+      `export function originalFunction(value: string): string {
+  return value.toLowerCase();
+}
+`,
+    );
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+
+    // Modify the function (unstaged working-tree change, default diff is HEAD)
+    fs.writeFileSync(
+      targetPath,
+      `export function renamedFunction(value: string): string {
+  return value.toUpperCase();
+}
+`,
+    );
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "historical-test" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+    await ensureGraphReady(ws.id);
+
+    const report = await analyzeDiffContext(workspaceRoot, { parseBlob });
+
+    expect(report.totalFilesChanged).toBe(1);
+    expect(report.files[0].status).toBe("modified");
+    // oldSymbols from the HEAD blob (the old side of `git diff HEAD`)
+    expect(report.files[0].oldSymbols).toBeDefined();
+    expect(report.files[0].oldSymbols?.map((s) => s.name)).toContain("originalFunction");
+    // Current affected symbols from the working tree
+    expect(report.files[0].affectedSymbols.map((s) => s.name)).toContain("renamedFunction");
+  });
+
+  test("does not return oldSymbols when parseBlob is not provided", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const deletedPath = path.join(srcDir, "deleted.ts");
+    fs.writeFileSync(
+      deletedPath,
+      `export function removedFunction(): number { return 42; }
+`,
+    );
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+    fs.unlinkSync(deletedPath);
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "no-parse-blob" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const report = await analyzeDiffContext(workspaceRoot);
+
+    expect(report.files[0].status).toBe("deleted");
+    expect(report.files[0].deletedSymbols).toBeUndefined();
+    expect(report.files[0].oldSymbols).toBeUndefined();
   });
 });

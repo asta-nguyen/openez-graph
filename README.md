@@ -96,6 +96,14 @@ is dropped before structured symbols/files. Git/index/graph failures return a
 structured `{ error, workspaceId?, ref?, staged? }` entry instead of an empty
 success report.
 
+When a blob parser is provided, `diff_context` also returns `oldSymbols` and
+`deletedSymbols` for modified and deleted files. Old source is loaded with
+`git show <rev>:<path>` and parsed in memory — historical blobs are never
+written to the workspace DB. Caller/callee edges for historical symbols use
+the current graph only (a historical graph is not reconstructed); a historical
+symbol appears with caller/callee data only when a matching current graph node
+exists.
+
 ### Indexing ownership and lease fencing
 
 Indexing and graph builds use lease-based ownership to prevent concurrent processes from clobbering each other. When a process starts indexing, it claims a 60-second lease with a heartbeat every 15 seconds. If the lease expires (e.g. the process crashes), another process can take over. Completion and failure writes are fenced by owner token — a stale owner cannot overwrite the status set by the new owner.
