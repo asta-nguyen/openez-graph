@@ -566,10 +566,10 @@ describe("createWorkspaceRepository", () => {
       )
     `);
     await repo.executeRaw(
-      "INSERT INTO memories (id, title, content, tags, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
       [
         "uuid-mem-1",
-        "Legacy Architecture",
+        "Legacy Architecture v1",
         "Use SQLite WAL mode",
         "arch,sqlite",
         "agent",
@@ -578,16 +578,58 @@ describe("createWorkspaceRepository", () => {
       ],
     );
     await repo.executeRaw(
-      "INSERT INTO memories (id, title, content, tags, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       [
         "uuid-mem-2",
-        "Parser Choice",
-        "Oxc parser for TS/JS",
-        "oxc,parser",
+        "Legacy Architecture v2",
+        "Use SQLite WAL mode with 16k page size",
+        "arch,sqlite",
         "agent",
+        "uuid-mem-1",
         "2026-01-02T00:00:00.000Z",
         "2026-01-02T00:00:00.000Z",
       ],
+    );
+
+    // Simulate legacy query_logs table with TEXT id
+    await repo.executeRaw("DROP TABLE IF EXISTS query_logs");
+    await repo.executeRaw(`
+      CREATE TABLE query_logs (
+        id TEXT PRIMARY KEY,
+        query TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'hybrid',
+        result_count INTEGER NOT NULL DEFAULT 0,
+        tokens_returned INTEGER NOT NULL DEFAULT 0,
+        tokens_saved INTEGER NOT NULL DEFAULT 0,
+        files_scanned INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    await repo.executeRaw(
+      "INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ["uuid-log-1", "test query", "fts", 3, 100, 500, 10],
+    );
+
+    // Simulate legacy index_runs and graph_runs with TEXT id
+    await repo.executeRaw("DROP TABLE IF EXISTS index_runs");
+    await repo.executeRaw(`
+      CREATE TABLE index_runs (
+        id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        files_scanned INTEGER NOT NULL DEFAULT 0,
+        files_updated INTEGER NOT NULL DEFAULT 0,
+        chunks_written INTEGER NOT NULL DEFAULT 0,
+        embeddings_written INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT,
+        stats TEXT,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        finished_at TEXT
+      )
+    `);
+    await repo.executeRaw(
+      "INSERT INTO index_runs (id, mode, status, files_scanned, files_updated, chunks_written, embeddings_written) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ["uuid-run-1", "full", "completed", 50, 50, 100, 100],
     );
 
     // Reopen the database to trigger automatic schema migration
@@ -599,24 +641,45 @@ describe("createWorkspaceRepository", () => {
     const idCol = info.find((c: any) => c.name === "id");
     expect(idCol?.type?.toUpperCase()).toContain("INT");
 
-    // Verify all legacy memories are preserved with valid integer IDs and original content
-    const memories = await reopened.searchMemories("SQLite", 10);
-    expect(memories).toHaveLength(1);
-    expect(memories[0]?.title).toBe("Legacy Architecture");
-    expect(memories[0]?.content).toBe("Use SQLite WAL mode");
-    expect(typeof memories[0]?.id).toBe("number");
+    // Verify all legacy memories are preserved and supersedes_id was remapped from UUID to integer
+    const mem1 = await reopened.getMemory(1);
+    expect(mem1).not.toBeNull();
+    expect(mem1?.title).toBe("Legacy Architecture v1");
 
-    const allMemories = await reopened.searchMemories("parser", 10);
-    expect(allMemories).toHaveLength(1);
-    expect(allMemories[0]?.title).toBe("Parser Choice");
+    const mem2 = await reopened.getMemory(2);
+    expect(mem2).not.toBeNull();
+    expect(mem2?.title).toBe("Legacy Architecture v2");
+    expect(mem2?.supersedesId).toBe(1);
+
+    // searchMemories should only return the newest version (mem2), not superseded mem1
+    const activeMemories = await reopened.searchMemories("SQLite", 10);
+    expect(activeMemories).toHaveLength(1);
+    expect(activeMemories[0].id).toBe(2);
+    expect(activeMemories[0].title).toBe("Legacy Architecture v2");
+
+    // Verify query_logs migrated to integer PK with data intact
+    const queryLogInfo = await reopened.queryRaw("PRAGMA table_info(query_logs)");
+    const queryLogIdCol = queryLogInfo.find((c: any) => c.name === "id");
+    expect(queryLogIdCol?.type?.toUpperCase()).toContain("INT");
+    const queryLogs = await reopened.queryRaw("SELECT * FROM query_logs");
+    expect(queryLogs).toHaveLength(1);
+    expect(queryLogs[0].query).toBe("test query");
+    expect(queryLogs[0].tokens_saved).toBe(500);
+
+    // Verify index_runs migrated to integer PK with data intact
+    const indexRunInfo = await reopened.queryRaw("PRAGMA table_info(index_runs)");
+    const indexRunIdCol = indexRunInfo.find((c: any) => c.name === "id");
+    expect(indexRunIdCol?.type?.toUpperCase()).toContain("INT");
+    const indexRuns = await reopened.queryRaw("SELECT * FROM index_runs");
+    expect(indexRuns).toHaveLength(1);
+    expect(indexRuns[0].files_scanned).toBe(50);
 
     // Perform a full reindex reset (resetIndexArtifacts)
     reopened.resetIndexArtifacts();
 
     // Verify memories were NOT deleted or lost during reindex
-    const preservedAfterReindex = await reopened.searchMemories("SQLite", 10);
-    expect(preservedAfterReindex).toHaveLength(1);
-    expect(preservedAfterReindex[0]?.title).toBe("Legacy Architecture");
+    const preservedAfterReindex = await reopened.getMemory(2);
+    expect(preservedAfterReindex?.title).toBe("Legacy Architecture v2");
 
     // Verify new memories can be inserted with autoincrement integer IDs
     const newMemId = await reopened.insertMemory({

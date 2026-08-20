@@ -513,8 +513,23 @@ function migrateMemoriesTable(sqlite: ReturnType<typeof createNativeDatabase>) {
     return; // Already integer primary key
   }
 
-  // Migrate legacy TEXT id to INTEGER PRIMARY KEY AUTOINCREMENT while preserving all data.
+  // Migrate legacy TEXT id to INTEGER PRIMARY KEY AUTOINCREMENT while preserving all data and supersedes_id links.
   sqlite.transaction(() => {
+    const legacyRows = sqlite
+      .prepare(
+        "SELECT id, title, content, tags, source, supersedes_id, created_at, updated_at FROM memories ORDER BY created_at ASC",
+      )
+      .all() as Array<{
+      id: string;
+      title: string;
+      content: string;
+      tags: string | null;
+      source: string;
+      supersedes_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS memories_migration_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -526,8 +541,39 @@ function migrateMemoriesTable(sqlite: ReturnType<typeof createNativeDatabase>) {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      INSERT INTO memories_migration_new (title, content, tags, source, created_at, updated_at)
-      SELECT title, content, tags, source, created_at, updated_at FROM memories ORDER BY created_at ASC;
+    `);
+
+    const insertStmt = sqlite.prepare(
+      "INSERT INTO memories_migration_new (title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, ?)",
+    );
+    const legacyToNewId = new Map<string, number>();
+
+    for (const row of legacyRows) {
+      const res = insertStmt.run(
+        row.title,
+        row.content,
+        row.tags,
+        row.source,
+        row.created_at,
+        row.updated_at,
+      );
+      legacyToNewId.set(row.id, Number(res.lastInsertRowid));
+    }
+
+    const updateSupersedesStmt = sqlite.prepare(
+      "UPDATE memories_migration_new SET supersedes_id = ? WHERE id = ?",
+    );
+    for (const row of legacyRows) {
+      if (row.supersedes_id && legacyToNewId.has(row.supersedes_id)) {
+        const newId = legacyToNewId.get(row.id);
+        const newSupersedesId = legacyToNewId.get(row.supersedes_id);
+        if (newId !== undefined && newSupersedesId !== undefined) {
+          updateSupersedesStmt.run(newSupersedesId, newId);
+        }
+      }
+    }
+
+    sqlite.exec(`
       DROP TABLE memories;
       ALTER TABLE memories_migration_new RENAME TO memories;
       CREATE INDEX IF NOT EXISTS idx_memories_title ON memories(title);
@@ -559,15 +605,15 @@ function migrateQueryLogsTable(sqlite: ReturnType<typeof createNativeDatabase>) 
       CREATE TABLE IF NOT EXISTS query_logs_migration_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         query TEXT NOT NULL,
-        duration_ms INTEGER NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'hybrid',
+        result_count INTEGER NOT NULL DEFAULT 0,
         tokens_returned INTEGER NOT NULL DEFAULT 0,
         tokens_saved INTEGER NOT NULL DEFAULT 0,
         files_scanned INTEGER NOT NULL DEFAULT 0,
-        result_count INTEGER NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
-      INSERT INTO query_logs_migration_new (query, duration_ms, tokens_returned, tokens_saved, files_scanned, result_count, created_at)
-      SELECT query, duration_ms, coalesce(tokens_returned, 0), coalesce(tokens_saved, 0), coalesce(files_scanned, 0), result_count, created_at FROM query_logs ORDER BY created_at ASC;
+      INSERT INTO query_logs_migration_new (query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at)
+      SELECT query, coalesce(mode, 'hybrid'), coalesce(result_count, 0), coalesce(tokens_returned, 0), coalesce(tokens_saved, 0), coalesce(files_scanned, 0), created_at FROM query_logs ORDER BY created_at ASC;
       DROP TABLE query_logs;
       ALTER TABLE query_logs_migration_new RENAME TO query_logs;
       CREATE INDEX IF NOT EXISTS idx_query_logs_created ON query_logs(created_at);
@@ -576,44 +622,80 @@ function migrateQueryLogsTable(sqlite: ReturnType<typeof createNativeDatabase>) 
 }
 
 function migrateRunsTables(sqlite: ReturnType<typeof createNativeDatabase>) {
-  for (const tableName of ["index_runs", "graph_runs"] as const) {
-    const tableExists =
-      (
-        sqlite
-          .prepare(
-            `SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
-          )
-          .get() as { c: number }
-      ).c > 0;
-    if (!tableExists) continue;
-
-    const info = sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+  // Index runs
+  const indexRunsExists =
+    (
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='index_runs'")
+        .get() as { c: number }
+    ).c > 0;
+  if (indexRunsExists) {
+    const info = sqlite.prepare("PRAGMA table_info(index_runs)").all() as Array<{
       name: string;
       type: string;
     }>;
     const idCol = info.find((c) => c.name === "id");
-    if (!idCol || idCol.type.toUpperCase().includes("INT")) {
-      continue;
+    if (idCol && !idCol.type.toUpperCase().includes("INT")) {
+      sqlite.transaction(() => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS index_runs_migration_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mode TEXT NOT NULL,
+            status TEXT NOT NULL,
+            files_scanned INTEGER NOT NULL DEFAULT 0,
+            files_updated INTEGER NOT NULL DEFAULT 0,
+            chunks_written INTEGER NOT NULL DEFAULT 0,
+            embeddings_written INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            stats TEXT,
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            finished_at TEXT
+          );
+          INSERT INTO index_runs_migration_new (mode, status, files_scanned, files_updated, chunks_written, embeddings_written, error_message, stats, started_at, finished_at)
+          SELECT mode, status, coalesce(files_scanned, 0), coalesce(files_updated, 0), coalesce(chunks_written, 0), coalesce(embeddings_written, 0), error_message, stats, started_at, finished_at FROM index_runs ORDER BY started_at ASC;
+          DROP TABLE index_runs;
+          ALTER TABLE index_runs_migration_new RENAME TO index_runs;
+          CREATE INDEX IF NOT EXISTS idx_index_runs_started ON index_runs(started_at);
+        `);
+      })();
     }
+  }
 
-    sqlite.transaction(() => {
-      sqlite.exec(`
-        CREATE TABLE IF NOT EXISTS ${tableName}_migration_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          status TEXT NOT NULL,
-          files_indexed INTEGER NOT NULL,
-          chunks_created INTEGER NOT NULL,
-          duration_ms INTEGER NOT NULL,
-          error TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        INSERT INTO ${tableName}_migration_new (status, files_indexed, chunks_created, duration_ms, error, created_at)
-        SELECT status, files_indexed, chunks_created, duration_ms, error, created_at FROM ${tableName} ORDER BY created_at ASC;
-        DROP TABLE ${tableName};
-        ALTER TABLE ${tableName}_migration_new RENAME TO ${tableName};
-        CREATE INDEX IF NOT EXISTS idx_${tableName}_created ON ${tableName}(created_at);
-      `);
-    })();
+  // Graph runs
+  const graphRunsExists =
+    (
+      sqlite
+        .prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='graph_runs'")
+        .get() as { c: number }
+    ).c > 0;
+  if (graphRunsExists) {
+    const info = sqlite.prepare("PRAGMA table_info(graph_runs)").all() as Array<{
+      name: string;
+      type: string;
+    }>;
+    const idCol = info.find((c) => c.name === "id");
+    if (idCol && !idCol.type.toUpperCase().includes("INT")) {
+      sqlite.transaction(() => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS graph_runs_migration_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mode TEXT NOT NULL,
+            status TEXT NOT NULL,
+            nodes_created INTEGER NOT NULL DEFAULT 0,
+            edges_created INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            stats TEXT,
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            finished_at TEXT
+          );
+          INSERT INTO graph_runs_migration_new (mode, status, nodes_created, edges_created, error_message, stats, started_at, finished_at)
+          SELECT mode, status, coalesce(nodes_created, 0), coalesce(edges_created, 0), error_message, stats, started_at, finished_at FROM graph_runs ORDER BY started_at ASC;
+          DROP TABLE graph_runs;
+          ALTER TABLE graph_runs_migration_new RENAME TO graph_runs;
+          CREATE INDEX IF NOT EXISTS idx_graph_runs_started ON graph_runs(started_at);
+        `);
+      })();
+    }
   }
 }
 
