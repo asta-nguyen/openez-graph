@@ -12,16 +12,13 @@ import type { GraphStmts } from "./graph-repository";
 import { createMemoryOps } from "./memory-repository";
 import * as schema from "./schema";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
-import type { SymbolDefinitionMatch, WorkspaceRepository } from "./types";
+import type { SqliteRow, SymbolDefinitionMatch, WorkspaceRepository } from "./types";
 import { getWorkspaceDb, getWorkspaceNativeDb } from "./workspace-db";
 
 interface WorkspaceDbPair {
   db: ReturnType<typeof getWorkspaceDb>;
   native: NativeDatabase;
 }
-
-type RawSqlValue = string | number | boolean | Uint8Array | null;
-type RawSqlRow = Record<string, RawSqlValue>;
 
 function getNativeWorkspaceDb(rootPath: string): WorkspaceDbPair {
   const db = getWorkspaceDb(rootPath);
@@ -403,18 +400,19 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     async executeRaw(sqlQuery: string, params?: unknown[]) {
       if (params) {
-        return native.prepare(sqlQuery).run(...params);
+        native.prepare(sqlQuery).run(...params);
+        return;
       }
-      return native.prepare(sqlQuery).run();
+      native.prepare(sqlQuery).run();
     },
 
-    async queryRaw(sqlQuery: string, params?: unknown[]) {
+    async queryRaw<T = SqliteRow>(sqlQuery: string, params?: unknown[]): Promise<T[]> {
       if (params) {
-        // SAFETY: Raw query interface returns rows matching generic RawSqlRow map.
-        return native.prepare(sqlQuery).all(...params) as Array<RawSqlRow>;
+        // SAFETY: Raw query interface returns rows matching generic T.
+        return native.prepare(sqlQuery).all(...params) as T[];
       }
-      // SAFETY: Raw query interface returns rows matching generic RawSqlRow map.
-      return native.prepare(sqlQuery).all() as Array<RawSqlRow>;
+      // SAFETY: Raw query interface returns rows matching generic T.
+      return native.prepare(sqlQuery).all() as T[];
     },
 
     async transaction<T>(fn: () => T | Promise<T>): Promise<T> {

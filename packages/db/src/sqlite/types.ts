@@ -390,6 +390,13 @@ export interface WorkspaceRepository {
   ): Promise<void>;
 
   deleteEmbeddingsByChunkIds(chunkIds: number[]): Promise<void>;
+}
+
+export type SqliteValue = string | number | boolean | Uint8Array | null;
+export type SqliteRow = Record<string, SqliteValue>;
+
+export interface WorkspaceRepository {
+  readonly rootPath: string;
 
   fullTextSearch(
     query: string,
@@ -401,7 +408,7 @@ export interface WorkspaceRepository {
       content: string;
       score: number;
       heading: string | null;
-      metadata: Record<string, string | number | boolean | null>;
+      metadata: SqliteRow;
     }>
   >;
 
@@ -410,8 +417,8 @@ export interface WorkspaceRepository {
     depth: number,
     limit?: number,
   ): Promise<{
-    nodes: Array<Record<string, string | number | boolean | null>>;
-    edges: Array<Record<string, string | number | boolean | null>>;
+    nodes: Array<SqliteRow>;
+    edges: Array<SqliteRow>;
   }>;
 
   insertMemory(input: {
@@ -446,11 +453,8 @@ export interface WorkspaceRepository {
     filesScanned?: number;
   }): Promise<number>;
 
-  executeRaw(sqlQuery: string, params?: (string | number | null | boolean)[]): Promise<void>;
-  queryRaw<T = Record<string, string | number | null | boolean>>(
-    sqlQuery: string,
-    params?: (string | number | null | boolean)[],
-  ): Promise<T[]>;
+  executeRaw(sqlQuery: string, params?: unknown[]): Promise<void>;
+  queryRaw<T = SqliteRow>(sqlQuery: string, params?: unknown[]): Promise<T[]>;
 
   /** Run a function inside a single SQLite transaction (batch commit). */
   transaction<T>(fn: () => T | Promise<T>): Promise<T>;
