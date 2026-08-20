@@ -15,7 +15,7 @@ import {
   writeLocalWorkspaceConfig,
   readLocalWorkspaceConfig,
 } from "@openez-graph/db";
-import { embedWorkspace, indexWorkspace } from "@openez-graph/indexer";
+import { embedWorkspace, ensureGraphReady, indexWorkspace } from "@openez-graph/indexer";
 import {
   analyzeDiffContext,
   isLocalEmbeddingModel,
@@ -364,7 +364,18 @@ program
 
     const localConfig = await findLocalWorkspaceConfig(process.cwd());
     const rootPath = localConfig ? localConfig.rootPath : process.cwd();
-    const report = await analyzeDiffContext(rootPath, {
+    const registry = createRegistryRepository();
+    const workspace = localConfig
+      ? await registry.getWorkspace(localConfig.workspaceId)
+      : await registry.getWorkspaceByPath(rootPath);
+    if (!workspace) {
+      console.error(`Error: no workspace registered at ${rootPath}. Run 'openez init' first.`);
+      process.exit(1);
+    }
+
+    await indexWorkspace({ workspaceId: workspace.id, mode: "incremental" });
+    await ensureGraphReady(workspace.id);
+    const report = await analyzeDiffContext(workspace.rootPath, {
       ref,
       staged: Boolean(options.staged),
       limit: parsedLimit,

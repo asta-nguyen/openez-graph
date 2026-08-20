@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { analyzeDiffContext, parseGitDiffHunks } from "../packages/core/src/diff-context";
 import { closeRegistryDb, createRegistryRepository } from "../packages/db/src/sqlite";
-import { indexWorkspace } from "../packages/indexer/src";
+import { ensureGraphReady, indexWorkspace } from "../packages/indexer/src";
 
 describe("diff-context analyzer", () => {
   let tmpDir: string;
@@ -103,6 +103,7 @@ export function checkout(amount: number): number {
     const registry = createRegistryRepository();
     const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "diff-test" });
     await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+    await ensureGraphReady(ws.id);
 
     // Modify calculateTax in utils.ts
     fs.writeFileSync(
@@ -122,6 +123,7 @@ export function checkout(amount: number): number {
     expect(report.files[0].affectedSymbols.length).toBeGreaterThan(0);
     expect(report.files[0].affectedSymbols[0].name).toBe("calculateTax");
     expect(report.formattedSummary).toContain("calculateTax");
+    expect(report.formattedSummary).toContain("checkout");
   });
 
   test("uses HEAD by default, --staged for staged changes, and rejects mixed scopes", async () => {

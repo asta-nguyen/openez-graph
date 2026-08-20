@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -95,6 +96,29 @@ describe("MCP agent contracts", () => {
         ref: "HEAD",
         staged: true,
       });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("prepares caller graph context before analyzing a diff", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("diff-context", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(tempRoot, "src", "target.ts"),
+      "export function target(value: string) { return value.trim().toUpperCase(); }\n",
+    );
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const body = toolJson(await client.callTool({ name: "diff_context", arguments: {} })) as {
+        formattedSummary: string;
+      };
+      expect(body.formattedSummary).toContain("caller");
     } finally {
       await client.close();
       await server.close();
