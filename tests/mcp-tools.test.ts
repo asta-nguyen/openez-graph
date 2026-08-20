@@ -270,6 +270,46 @@ describe("MCP agent contracts", () => {
     }
   });
 
+  it("extracts oldSymbols and deletedSymbols via MCP diff_context", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("deleted-sym", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+
+    fs.writeFileSync(path.join(tempRoot, "src", "target.ts"), "// file cleared\n");
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const body = toolJson(
+        await client.callTool({
+          name: "diff_context",
+          arguments: {},
+        }),
+      ) as {
+        workspaces: Array<{
+          workspaceId: string;
+          report: {
+            files: Array<{
+              filePath: string;
+              oldSymbols?: Array<{ name: string; changeType: string }>;
+            }>;
+          };
+        }>;
+      };
+      expect(body.workspaces).toHaveLength(1);
+      const targetFile = body.workspaces[0]?.report.files.find(
+        (f) => f.filePath === "src/target.ts",
+      );
+      expect(targetFile).toBeDefined();
+      expect(targetFile?.oldSymbols?.length).toBeGreaterThan(0);
+      expect(targetFile?.oldSymbols?.[0]?.name).toBe("target");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("advertises when agents should recall and write memory", async () => {
     const { client, server } = await connectClient(tempRoot);
     try {

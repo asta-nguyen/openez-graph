@@ -15,7 +15,12 @@ import {
   writeLocalWorkspaceConfig,
   readLocalWorkspaceConfig,
 } from "@openez-graph/db";
-import { embedWorkspace, ensureGraphReady, indexWorkspace } from "@openez-graph/indexer";
+import {
+  embedWorkspace,
+  ensureGraphReady,
+  indexWorkspace,
+  parseDocument,
+} from "@openez-graph/indexer";
 import {
   analyzeDiffContext,
   isLocalEmbeddingModel,
@@ -379,6 +384,23 @@ program
       ref,
       staged: Boolean(options.staged),
       limit: parsedLimit,
+      parseBlob: async ({ relativePath, content }) => {
+        const parsed = await parseDocument({
+          relativePath,
+          absolutePath: path.join(workspace.rootPath, relativePath),
+          content,
+          targetTokens: 400,
+          overlapTokens: 50,
+        });
+        return (parsed.definedSymbols ?? []).map((s) => ({
+          name: s.name,
+          symbolType: s.symbolType,
+          exported: s.exported,
+          startLine: s.startLine ?? 1,
+          endLine: s.endLine ?? s.startLine ?? 1,
+          ...(s.receiver ? { parentSymbol: s.receiver } : {}),
+        }));
+      },
     });
 
     if (options.json) {

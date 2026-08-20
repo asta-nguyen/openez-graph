@@ -27,7 +27,7 @@ import {
   findLocalWorkspaceConfig,
   removeWorkspace,
 } from "@openez-graph/db";
-import { ensureGraphReady, indexWorkspace, waitForFts } from "@openez-graph/indexer";
+import { ensureGraphReady, indexWorkspace, parseDocument, waitForFts } from "@openez-graph/indexer";
 
 const MIN_RESPONSE_TOKENS = 32;
 
@@ -305,6 +305,7 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
         // structured sources stay paired — truncation drops whole result
         // entries rather than emptying their inner arrays.
         const minimum =
+          parentKey === "workspaces" ||
           parentKey === "nodes" ||
           parentKey === "results" ||
           parentKey === "callers" ||
@@ -940,6 +941,23 @@ export function createMcpServer(options?: McpServerOptions) {
               ref: input.ref,
               staged: input.staged,
               limit: input.limit ?? 5,
+              parseBlob: async ({ relativePath, content }) => {
+                const parsed = await parseDocument({
+                  relativePath,
+                  absolutePath: path.join(ws.rootPath, relativePath),
+                  content,
+                  targetTokens: 400,
+                  overlapTokens: 50,
+                });
+                return (parsed.definedSymbols ?? []).map((s) => ({
+                  name: s.name,
+                  symbolType: s.symbolType,
+                  exported: s.exported,
+                  startLine: s.startLine ?? 1,
+                  endLine: s.endLine ?? s.startLine ?? 1,
+                  ...(s.receiver ? { parentSymbol: s.receiver } : {}),
+                }));
+              },
             });
             reports.push({
               workspaceId: ws.id,
