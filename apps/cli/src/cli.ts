@@ -356,11 +356,6 @@ program
   .option("-j, --json", "Output JSON review context bundle")
   .option("-l, --limit <number>", "Maximum callers and callees to display per symbol", "5")
   .action(async (ref, options) => {
-    if (ref && options.staged) {
-      console.error("Error: Cannot specify both a git ref and --staged.");
-      process.exit(1);
-    }
-
     const parsedLimit = Number(options.limit);
     if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {
       console.error(`Error: --limit must be a positive integer, got '${options.limit}'`);

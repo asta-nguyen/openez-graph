@@ -82,6 +82,25 @@ function textResult(result: Awaited<ReturnType<Client["callTool"]>>) {
 }
 
 describe("MCP agent contracts", () => {
+  it("returns the core diff scope error for ref and staged changes", async () => {
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const result = await client.callTool({
+        name: "diff_context",
+        arguments: { ref: "HEAD", staged: true },
+      });
+
+      expect(toolJson(result)).toEqual({
+        error: "Cannot combine a git ref with staged changes",
+        ref: "HEAD",
+        staged: true,
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("advertises when agents should recall and write memory", async () => {
     const { client, server } = await connectClient(tempRoot);
     try {

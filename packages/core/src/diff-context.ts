@@ -173,15 +173,20 @@ export async function analyzeDiffContext(
     limit?: number;
   } = {},
 ): Promise<DiffContextReport> {
+  if (options.ref && options.staged) {
+    throw new Error("Cannot combine a git ref with staged changes");
+  }
+
   const resolvedRoot = path.resolve(rootPath);
   const repo = createWorkspaceRepository(resolvedRoot);
   const callerLimit = options.limit ?? 5;
 
   const gitArgs = ["diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"];
-  if (options.staged) {
-    gitArgs.push("--staged");
-  } else if (options.ref) {
+  if (options.staged) gitArgs.push("--staged");
+  else if (options.ref) {
     gitArgs.push(options.ref);
+  } else {
+    gitArgs.push("HEAD");
   }
 
   let diffOutput = "";
