@@ -1,0 +1,29 @@
+README.md
+  s_f95989056bd241::t_a0367c5dee3548 99-106
+tests/diff-context.test.ts
+  s_f95989056bd241::t_3dbdb49f614144 422-507,509-521,523-525,527-552
+  s_f95989056bd241::t_834c888bb9235a 508,522,526
+  s_f95989056bd241::t_bc2438f2130094 11
+packages/core/src/diff-context.ts
+  s_f95989056bd241::t_de6bacb2e1a50c 243-249,283-287,433-485,491-492,513-526
+  s_f95989056bd241::t_2ba377bd913eac 32-46,52-62,74-95
+  s_f95989056bd241::t_a355510ae31c01 96
+apps/cli/README.md
+  s_f95989056bd241::t_b6fa34e634481b 94-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3a902d7e926431ba8927442344c771f3cc19bbca",
+  "prompts": {},
+  "sessions": {
+    "s_f95989056bd241": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dawn-vertebra",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
