@@ -29,11 +29,37 @@ export interface AffectedSymbol {
   callees: Array<{ name: string; filePath?: string }>;
 }
 
+/**
+ * A symbol from the old revision of a file, parsed from a Git blob.
+ * Used to track deleted and historically renamed symbols.
+ */
+export interface HistoricalSymbol {
+  name: string;
+  kind: string;
+  startLine: number;
+  endLine: number;
+  exported: boolean;
+  parentSymbol?: string;
+  /** How this symbol changed relative to the current tree. */
+  changeType: "added" | "modified" | "deleted";
+}
+
 export interface ModifiedFileContext {
   filePath: string;
   status: "modified" | "added" | "deleted";
   changedLineRanges: ChangedHunkRange[];
   affectedSymbols: AffectedSymbol[];
+  /**
+   * Symbols from the old revision that overlap the old-side hunk ranges.
+   * Only populated when a `parseBlob` callback is provided.
+   */
+  oldSymbols?: HistoricalSymbol[];
+  /**
+   * Symbols that existed in the old revision but no longer exist in the
+   * current tree (deleted files or removed symbols).
+   * Only populated when a `parseBlob` callback is provided.
+   */
+  deletedSymbols?: HistoricalSymbol[];
   imports?: string[];
 }
 
@@ -44,6 +70,29 @@ export interface DiffContextReport {
   files: ModifiedFileContext[];
   formattedSummary: string;
 }
+
+/**
+ * Minimal symbol shape that a blob parser must return.
+ * The indexer's `ParsedSymbol` satisfies this interface.
+ */
+export interface BlobSymbol {
+  name: string;
+  symbolType: string;
+  exported: boolean;
+  startLine: number;
+  endLine: number;
+  parentSymbol?: string;
+}
+
+/**
+ * Callback that parses source content into symbols in memory.
+ * The caller (CLI/MCP) provides this by wrapping the indexer's `parseDocument`.
+ * Historical blobs are never written to the workspace DB.
+ */
+export type BlobParser = (input: {
+  relativePath: string;
+  content: string;
+}) => Promise<BlobSymbol[]>;
 
 /**
  * Parses raw `git diff` output into structured file paths and changed line ranges.
@@ -191,6 +240,13 @@ export async function analyzeDiffContext(
     ref?: string;
     staged?: boolean;
     limit?: number;
+    /**
+     * Optional callback to parse historical Git blobs into symbols.
+     * When provided, `oldSymbols` and `deletedSymbols` are populated for
+     * modified and deleted files. Historical blobs are parsed in memory
+     * and never written to the workspace DB.
+     */
+    parseBlob?: BlobParser;
   } = {},
 ): Promise<DiffContextReport> {
   if (options.ref && options.staged) {
@@ -223,6 +279,11 @@ export async function analyzeDiffContext(
       `Failed to execute git diff${options.ref ? ` for ref '${options.ref}'` : ""}: ${stderr || err?.message || String(err)}`,
     );
   }
+
+  // The old revision whose blobs we load for historical symbol parsing.
+  // For both default (HEAD) and --staged, the old side of the diff is HEAD.
+  // For an explicit ref, the old side is that ref.
+  const oldRev = options.ref ?? "HEAD";
 
   const parsedDiffs = parseGitDiffHunks(diffOutput);
   const fileContexts: ModifiedFileContext[] = [];
@@ -369,11 +430,66 @@ export async function analyzeDiffContext(
       }
     }
 
+    // Historical symbol support: parse old Git blob and map old ranges.
+    // Only when a parseBlob callback is provided.
+    let oldSymbols: HistoricalSymbol[] | undefined;
+    let deletedSymbols: HistoricalSymbol[] | undefined;
+
+    if (options.parseBlob) {
+      const oldBlobPath = fileDiff.oldPath ?? fileDiff.filePath;
+      try {
+        const oldContent = execFileSync("git", ["show", `${oldRev}:${oldBlobPath}`], {
+          cwd: resolvedRoot,
+          encoding: "utf8",
+          maxBuffer: 5 * 1024 * 1024,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        const oldBlobSymbols = await options.parseBlob({
+          relativePath: oldBlobPath,
+          content: oldContent,
+        });
+
+        if (fileDiff.status === "deleted") {
+          // All old symbols are deleted
+          deletedSymbols = oldBlobSymbols.map((s) => ({
+            name: s.name,
+            kind: s.symbolType,
+            startLine: s.startLine,
+            endLine: s.endLine,
+            exported: s.exported,
+            ...(s.parentSymbol ? { parentSymbol: s.parentSymbol } : {}),
+            changeType: "deleted" as const,
+          }));
+        } else if (fileDiff.oldRanges.length > 0) {
+          // Map old-side hunk ranges to old symbols
+          const currentNames = new Set(affectedSymbols.map((s) => s.name));
+          oldSymbols = oldBlobSymbols
+            .filter((s) =>
+              fileDiff.oldRanges.some((r) => r.start <= s.endLine && r.end >= s.startLine),
+            )
+            .map((s) => ({
+              name: s.name,
+              kind: s.symbolType,
+              startLine: s.startLine,
+              endLine: s.endLine,
+              exported: s.exported,
+              ...(s.parentSymbol ? { parentSymbol: s.parentSymbol } : {}),
+              changeType: currentNames.has(s.name) ? ("modified" as const) : ("deleted" as const),
+            }));
+        }
+      } catch {
+        // Blob may not exist at oldRev (e.g., added file) or git show may fail.
+        // Silently skip historical symbol extraction for this file.
+      }
+    }
+
     fileContexts.push({
       filePath: fileDiff.filePath,
       status: fileDiff.status,
       changedLineRanges: rangesToMatch,
       affectedSymbols,
+      ...(oldSymbols && oldSymbols.length > 0 ? { oldSymbols } : {}),
+      ...(deletedSymbols && deletedSymbols.length > 0 ? { deletedSymbols } : {}),
       imports: fileImports.length > 0 ? fileImports : undefined,
     });
   }
@@ -393,6 +509,20 @@ export async function analyzeDiffContext(
       summaryLines.push(`\n${statusIcon} ${f.filePath} (${f.status})`);
       if (f.imports && f.imports.length > 0) {
         summaryLines.push(`  • 📦 Imports: ${f.imports.join(", ")}`);
+      }
+      if (f.deletedSymbols && f.deletedSymbols.length > 0) {
+        summaryLines.push(`  • 📛 Deleted symbols (${f.deletedSymbols.length}):`);
+        for (const sym of f.deletedSymbols) {
+          summaryLines.push(`    └── 💀 ${sym.name} [L${sym.startLine}-L${sym.endLine}] (deleted)`);
+        }
+      }
+      if (f.oldSymbols && f.oldSymbols.length > 0) {
+        summaryLines.push(`  • 📜 Old symbols (${f.oldSymbols.length}):`);
+        for (const sym of f.oldSymbols) {
+          summaryLines.push(
+            `    ├── 📝 ${sym.name} [L${sym.startLine}-L${sym.endLine}] (${sym.changeType})`,
+          );
+        }
       }
       if (f.affectedSymbols.length === 0) {
         summaryLines.push("  • (No indexed symbols modified)");

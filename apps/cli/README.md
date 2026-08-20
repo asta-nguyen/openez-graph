@@ -91,7 +91,11 @@ openez diff HEAD~1   # diff against the supplied Git ref
 
 For the `diff_context` MCP tool, `path`/`paths` select registered workspace
 roots, not changed files. Untracked files are not included in this Git-diff
-phase.
+phase. When a blob parser is provided, `diff_context` also returns
+`oldSymbols` and `deletedSymbols` for modified and deleted files. Old source
+is loaded with `git show <rev>:<path>` and parsed in memory — historical blobs
+are never written to the workspace DB. Caller/callee edges for historical
+symbols use the current graph only (a historical graph is not reconstructed).
 
 Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.openai_base_url`, `embedding.openai_model`, `embedding.ollama_base_url`, `embedding.ollama_model`, `embedding.local_model`. API keys are encrypted at rest with AES-256-GCM.
 
