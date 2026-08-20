@@ -1,0 +1,19 @@
+docs/superpowers/plans/2026-08-20-cli-diff-context-correctness.md
+  s_73cac05a7f57fb::t_e7118e28619d33 1-250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0d3a0162673a429312320d26f1adc2fc953a1b9d",
+  "prompts": {},
+  "sessions": {
+    "s_73cac05a7f57fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01fa2-04bf-7aa2-9ec2-d2773ffebc80",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
