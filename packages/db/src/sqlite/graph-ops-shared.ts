@@ -39,8 +39,18 @@ export function mapNodeRow(row: GraphNodeRawRow) {
   const refIdRaw = row.ref_id;
   let refId: string | number | null = null;
   if (refIdRaw !== null && refIdRaw !== undefined) {
-    const num = Number(refIdRaw);
-    refId = Number.isNaN(num) ? String(refIdRaw) : num;
+    if (Number.isSafeInteger(refIdRaw)) {
+      // SAFETY: Checked as safe integer number.
+      refId = refIdRaw as number;
+    } else {
+      const str = String(refIdRaw).trim();
+      if (/^\d+$/.test(str)) {
+        const parsed = Number(str);
+        refId = Number.isSafeInteger(parsed) ? parsed : str;
+      } else if (str.length > 0) {
+        refId = str;
+      }
+    }
   }
   return {
     id: Number(row.id),

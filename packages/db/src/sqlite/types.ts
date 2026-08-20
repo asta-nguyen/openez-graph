@@ -41,6 +41,19 @@ export interface StoredMemory {
   updatedAt: string;
 }
 
+export interface SymbolDefinitionMatch {
+  name: string;
+  kind: string;
+  filePath: string;
+  startLine?: number;
+  endLine?: number;
+  exported: boolean;
+  parentSymbol?: string;
+  sourceCode?: string;
+  callerCount?: number;
+  calleeCount?: number;
+}
+
 export interface RegistryRepository {
   listWorkspaces(): Promise<RegistryWorkspace[]>;
   getWorkspace(id: string): Promise<RegistryWorkspace | null>;
@@ -168,6 +181,8 @@ export interface WorkspaceRepository {
     createdAt: string;
     updatedAt: string;
   } | null>;
+
+  getSymbolDefinitions(symbolName: string): Promise<SymbolDefinitionMatch[]>;
 
   insertDocument(input: {
     id?: number;
@@ -321,9 +336,7 @@ export interface WorkspaceRepository {
   } | null>;
 
   /** Get all symbol nodes whose metadata.filePath matches the given relative path. */
-  getSymbolNodesByFilePath(
-    filePath: string,
-  ): Promise<
+  getSymbolNodesByFilePath(filePath: string): Promise<
     Array<{
       id: number;
       type: string;
@@ -388,7 +401,7 @@ export interface WorkspaceRepository {
       content: string;
       score: number;
       heading: string | null;
-      metadata: Record<string, unknown>;
+      metadata: Record<string, string | number | boolean | null>;
     }>
   >;
 
@@ -397,8 +410,8 @@ export interface WorkspaceRepository {
     depth: number,
     limit?: number,
   ): Promise<{
-    nodes: Array<Record<string, unknown>>;
-    edges: Array<Record<string, unknown>>;
+    nodes: Array<Record<string, string | number | boolean | null>>;
+    edges: Array<Record<string, string | number | boolean | null>>;
   }>;
 
   insertMemory(input: {
@@ -433,8 +446,11 @@ export interface WorkspaceRepository {
     filesScanned?: number;
   }): Promise<number>;
 
-  executeRaw(sqlQuery: string, params?: unknown[]): Promise<unknown>;
-  queryRaw(sqlQuery: string, params?: unknown[]): Promise<Array<Record<string, unknown>>>;
+  executeRaw(sqlQuery: string, params?: (string | number | null | boolean)[]): Promise<void>;
+  queryRaw<T = Record<string, string | number | null | boolean>>(
+    sqlQuery: string,
+    params?: (string | number | null | boolean)[],
+  ): Promise<T[]>;
 
   /** Run a function inside a single SQLite transaction (batch commit). */
   transaction<T>(fn: () => T | Promise<T>): Promise<T>;

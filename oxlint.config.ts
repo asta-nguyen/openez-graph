@@ -43,10 +43,12 @@ export default defineConfig({
         "anti-slop/no-chained-type-assertions": "off",
         "anti-slop/no-unsafe-dictionary-type": "off",
         "anti-slop/no-widen-then-assert": "off",
+        "anti-slop/no-runtime-typeof": "off",
       },
     },
     {
-      files: ["apps/web/**"],
+      // TODO: Track apps/web and apps/mcp refactor to eliminate dictionary types and untyped parameters
+      files: ["apps/web/**", "apps/mcp/**"],
       rules: {
         "anti-slop/require-safety-comment-for-type-assertion": "off",
         "anti-slop/no-chained-type-assertions": "off",

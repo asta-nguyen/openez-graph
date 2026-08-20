@@ -65,6 +65,7 @@ function getWorkspaceDbRaw(rootPath: string) {
   const sqlite = createNativeDatabase(dbPath);
   sqlite.pragma("page_size = 16384");
   sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("foreign_keys = ON");
   // SAFETY: NativeDatabase wraps bun:sqlite Database driver instance.
   const drizzleDb = drizzle(sqlite as any, { schema });
   return { sqlite, db: drizzleDb };

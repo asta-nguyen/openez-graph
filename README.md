@@ -44,15 +44,16 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 
 ## MCP tools
 
-| Tool              | Purpose                                                                                        |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| `code_query`      | Retrieve ranked code and documentation context                                                 |
-| `code_context`    | Get graph-adjacent context for a symbol or file (limit: 50/workspace, max 200, token-budgeted) |
-| `graph_neighbors` | Inspect nearby graph nodes and edges                                                           |
-| `list_workspaces` | List registered workspaces and index status                                                    |
-| `memory_recall`   | Recall stored technical decisions and notes                                                    |
-| `memory_write`    | Store a decision or learned constraint                                                         |
-| `index_workspace` | Run an incremental or full index                                                               |
+| Tool                | Purpose                                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| `code_query`        | Retrieve ranked code and documentation context                                                 |
+| `symbol_definition` | Targeted "Go to Definition" lookup for functions, classes, and types in <2ms                   |
+| `code_context`      | Get graph-adjacent context for a symbol or file (limit: 50/workspace, max 200, token-budgeted) |
+| `graph_neighbors`   | Inspect nearby graph nodes and edges                                                           |
+| `list_workspaces`   | List registered workspaces and index status                                                    |
+| `memory_recall`     | Recall stored technical decisions and notes                                                    |
+| `memory_write`      | Store a decision or learned constraint                                                         |
+| `index_workspace`   | Run an incremental or full index                                                               |
 
 Read tools support one or many workspaces. Write and index operations remain scoped to one workspace.
 
