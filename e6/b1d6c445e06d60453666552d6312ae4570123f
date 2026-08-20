@@ -1,0 +1,23 @@
+packages/core/src/diff-context.ts
+  s_73cac05a7f57fb::t_7dd74d452d57dc 13,15,17-18,63,69,74,80,83,86-89,92-95,97,99-102,126,156,165-167,170,234-250,375
+  s_73cac05a7f57fb::t_16fb0105938271 103-106,253-254
+tests/diff-context.test.ts
+  s_73cac05a7f57fb::t_5f44e97ac4af49 75-162,307-314,326-332,337-346,358-363,368-383,394-400,405-417,419-420
+  s_73cac05a7f57fb::t_d29d635a80bd58 315-325,333-336,347-357,364-367,384-393,401-404,418
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e6b1d6c445e06d60453666552d6312ae4570123f",
+  "prompts": {},
+  "sessions": {
+    "s_73cac05a7f57fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01fa2-04bf-7aa2-9ec2-d2773ffebc80",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
