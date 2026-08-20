@@ -27,29 +27,28 @@ export function createGraphEdgeOps(
     // ── Graph Edge Operations ──
 
     async insertEdge(input: {
-      fromNodeId: string;
-      toNodeId: string;
+      fromNodeId: number;
+      toNodeId: number;
       type: string;
       weight?: number;
       metadata?: string;
-    }): Promise<string> {
-      const id = crypto.randomUUID();
-      stmts.insertEdge.run(
-        id,
+    }): Promise<number> {
+      const now = new Date().toISOString();
+      const res = stmts.insertEdge.run(
         input.fromNodeId,
         input.toNodeId,
         input.type,
         input.weight ?? 1,
         input.metadata ?? "{}",
-        new Date().toISOString(),
+        now,
       );
-      return id;
+      return Number(res.lastInsertRowid);
     },
 
     async insertEdges(
       inputs: Array<{
-        fromNodeId: string;
-        toNodeId: string;
+        fromNodeId: number;
+        toNodeId: number;
         type: string;
         weight?: number;
         metadata?: string;
@@ -57,14 +56,11 @@ export function createGraphEdgeOps(
     ): Promise<void> {
       if (inputs.length === 0) return;
       const now = new Date().toISOString();
-      const BATCH = 2000;
+      const BATCH = 500;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
         for (const item of batch) {
-          params.push(
-            crypto.randomUUID(),
+          stmts.insertEdge.run(
             item.fromNodeId,
             item.toNodeId,
             item.type,
@@ -73,15 +69,10 @@ export function createGraphEdgeOps(
             now,
           );
         }
-        native
-          .prepare(
-            `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders} ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
-          )
-          .run(...params);
       }
     },
 
-    async deleteEdgesByNodeIds(nodeIds: string[]) {
+    async deleteEdgesByNodeIds(nodeIds: number[]) {
       if (nodeIds.length === 0) return;
       const placeholders = nodeIds.map(() => "?").join(",");
       native
@@ -91,7 +82,7 @@ export function createGraphEdgeOps(
         .run(...nodeIds, ...nodeIds);
     },
 
-    deleteOutgoingEdges(nodeId: string, types?: string[]) {
+    deleteOutgoingEdges(nodeId: number, types?: string[]) {
       if (types && types.length > 0) {
         const placeholders = types.map(() => "?").join(",");
         native
@@ -106,23 +97,19 @@ export function createGraphEdgeOps(
 
     streamEdgesBatch(
       inputs: Array<{
-        id: string;
-        fromNodeId: string;
-        toNodeId: string;
+        id?: number;
+        fromNodeId: number;
+        toNodeId: number;
         type: string;
         weight?: number;
         metadata?: string;
       }>,
     ): void {
       if (inputs.length === 0) return;
-      const BATCH = 500;
       const now = streamNow.value;
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const e of batch) {
-          params.push(
+      for (const e of inputs) {
+        if (e.id !== undefined && stmts.insertEdgeWithId) {
+          stmts.insertEdgeWithId.run(
             e.id,
             e.fromNodeId,
             e.toNodeId,
@@ -131,32 +118,49 @@ export function createGraphEdgeOps(
             e.metadata ?? "{}",
             now,
           );
+        } else {
+          stmts.insertEdge.run(
+            e.fromNodeId,
+            e.toNodeId,
+            e.type,
+            e.weight ?? 1,
+            e.metadata ?? "{}",
+            now,
+          );
         }
-        native
-          .prepare(
-            `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at) VALUES ${placeholders}`,
-          )
-          .run(...params);
       }
     },
 
     streamEdge(input: {
-      id: string;
-      fromNodeId: string;
-      toNodeId: string;
+      id?: number;
+      fromNodeId: number;
+      toNodeId: number;
       type: string;
       weight?: number;
       metadata?: string;
-    }): void {
-      stmts.insertEdge.run(
-        input.id,
+    }): number {
+      const now = streamNow.value;
+      if (input.id !== undefined && stmts.insertEdgeWithId) {
+        stmts.insertEdgeWithId.run(
+          input.id,
+          input.fromNodeId,
+          input.toNodeId,
+          input.type,
+          input.weight ?? 1,
+          input.metadata ?? "{}",
+          now,
+        );
+        return input.id;
+      }
+      const res = stmts.insertEdge.run(
         input.fromNodeId,
         input.toNodeId,
         input.type,
         input.weight ?? 1,
         input.metadata ?? "{}",
-        streamNow.value,
+        now,
       );
+      return Number(res.lastInsertRowid);
     },
   };
 }

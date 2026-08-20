@@ -44,10 +44,16 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
     docByPath: native.prepare("SELECT * FROM documents WHERE path = ?"),
     docById: native.prepare("SELECT * FROM documents WHERE id = ?"),
     insertDoc: native.prepare(
+      "INSERT INTO documents (path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ),
+    insertDocWithId: native.prepare(
       "INSERT INTO documents (id, path, absolute_path, kind, language, content_hash, size_bytes, mtime_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ),
     chunksByDoc: native.prepare("SELECT * FROM chunks WHERE document_id = ? ORDER BY chunk_index"),
     insertChunk: native.prepare(
+      "INSERT INTO chunks (document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ),
+    insertChunkWithId: native.prepare(
       "INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ),
     deleteChunksByDoc: native.prepare("DELETE FROM chunks WHERE document_id = ?"),
@@ -56,13 +62,16 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       "SELECT * FROM graph_nodes WHERE type = ? AND label = ? AND ref_id = ?",
     ),
     insertNode: native.prepare(
+      "INSERT INTO graph_nodes (type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ),
+    insertNodeWithId: native.prepare(
       "INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     ),
     // Single-query upsert for non-symbol nodes (type, label is unique via partial index)
     upsertNodeByTypeLabel: native.prepare(
-      `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO graph_nodes (type, label, ref_id, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET ref_id = COALESCE(excluded.ref_id, graph_nodes.ref_id), metadata = excluded.metadata, updated_at = excluded.updated_at
-       RETURNING id`,
+       RETURNING id, label`,
     ),
     updateNode: native.prepare(
       "UPDATE graph_nodes SET ref_id = ?, metadata = ?, updated_at = ? WHERE id = ?",
@@ -71,21 +80,26 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
       "DELETE FROM graph_nodes WHERE ref_id = ? OR ref_id IN (SELECT id FROM chunks WHERE document_id = ?)",
     ),
     insertEdge: native.prepare(
+      `INSERT INTO graph_edges (from_node_id, to_node_id, type, weight, metadata, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
+    ),
+    insertEdgeWithId: native.prepare(
       `INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(from_node_id, to_node_id, type) DO NOTHING`,
     ),
     insertEmbedding: native.prepare(
       hasEmbeddingUniqueIdx
-        ? `INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ? `INSERT INTO embeddings (chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(chunk_id, provider, model) DO UPDATE SET
              dimensions = excluded.dimensions,
              embedding = excluded.embedding,
              input_hash = excluded.input_hash,
              created_at = excluded.created_at`
-        : `INSERT INTO embeddings (id, chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        : `INSERT INTO embeddings (chunk_id, provider, model, dimensions, embedding, input_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ),
     insertFtsRow: native.prepare(
       "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES (?, ?, ?, ?, ?)",
@@ -121,15 +135,14 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     // ── Index Run Operations ──
 
-    async createIndexRun(input) {
-      const id = crypto.randomUUID();
+    async createIndexRun(input): Promise<number> {
       const now = new Date().toISOString();
-      native
+      const res = native
         .prepare(
-          "INSERT INTO index_runs (id, mode, status, files_scanned, files_updated, chunks_written, embeddings_written, started_at) VALUES (?, ?, 'running', 0, 0, 0, 0, ?)",
+          "INSERT INTO index_runs (mode, status, files_scanned, files_updated, chunks_written, embeddings_written, started_at) VALUES (?, 'running', 0, 0, 0, 0, ?)",
         )
-        .run(id, input.mode, now);
-      return id;
+        .run(input.mode, now);
+      return Number(res.lastInsertRowid);
     },
 
     async completeIndexRun(id, updates) {
@@ -165,14 +178,12 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
 
     // ── Query Log Operations ──
 
-    async insertQueryLog(input) {
-      const id = crypto.randomUUID();
-      native
+    async insertQueryLog(input): Promise<number> {
+      const res = native
         .prepare(
-          "INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO query_logs (query, mode, result_count, tokens_returned, tokens_saved, files_scanned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .run(
-          id,
           input.query,
           input.mode,
           input.resultCount,
@@ -181,7 +192,7 @@ export function createWorkspaceRepository(rootPath: string): WorkspaceRepository
           input.filesScanned ?? 0,
           new Date().toISOString(),
         );
-      return id;
+      return Number(res.lastInsertRowid);
     },
 
     // ── Raw SQL queries ──

@@ -6,13 +6,18 @@
  * circular imports between the split modules and the original file.
  */
 
+export interface StatementResult {
+  changes: number;
+  lastInsertRowid: number | bigint;
+}
+
 export interface NativeDatabase {
   pragma(command: string): unknown;
   exec(sql: string): unknown;
   prepare(sql: string): {
     all(...params: unknown[]): unknown[];
     get(...params: unknown[]): unknown;
-    run(...params: unknown[]): unknown;
+    run(...params: unknown[]): StatementResult;
   };
   transaction?<T>(fn: () => T): () => T;
   close?(): void;

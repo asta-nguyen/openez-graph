@@ -18,10 +18,15 @@ const _require: typeof require =
     ? __non_webpack_require__
     : module.createRequire(getRequireUrl());
 
+export interface StatementResult {
+  changes: number;
+  lastInsertRowid: number | bigint;
+}
+
 interface NativeStatement {
   all(...params: unknown[]): unknown[];
   get(...params: unknown[]): unknown;
-  run(...params: unknown[]): unknown;
+  run(...params: unknown[]): StatementResult;
   values(...params: unknown[]): unknown[];
   bind(...params: unknown[]): NativeStatement;
 }

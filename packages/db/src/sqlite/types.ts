@@ -31,12 +31,12 @@ export interface WorkspaceSettings {
 }
 
 export interface StoredMemory {
-  id: string;
+  id: number;
   title: string;
   content: string;
   tags: string;
   source: string;
-  supersedesId: string | null;
+  supersedesId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -143,8 +143,8 @@ export interface WorkspaceRepository {
   getNodeCount(): Promise<number>;
   getEdgeCount(): Promise<number>;
 
-  getDocument(id: string): Promise<{
-    id: string;
+  getDocument(id: number): Promise<{
+    id: number;
     path: string;
     absolutePath: string;
     kind: string;
@@ -157,7 +157,7 @@ export interface WorkspaceRepository {
   } | null>;
 
   getDocumentByPath(path: string): Promise<{
-    id: string;
+    id: number;
     path: string;
     absolutePath: string;
     kind: string;
@@ -170,7 +170,7 @@ export interface WorkspaceRepository {
   } | null>;
 
   insertDocument(input: {
-    id?: string;
+    id?: number;
     path: string;
     absolutePath: string;
     kind: string;
@@ -178,7 +178,7 @@ export interface WorkspaceRepository {
     contentHash: string;
     sizeBytes: number;
     mtimeMs: number;
-  }): Promise<string>;
+  }): Promise<number>;
 
   insertDocumentsBatch(
     inputs: Array<{
@@ -190,10 +190,10 @@ export interface WorkspaceRepository {
       sizeBytes: number;
       mtimeMs: number;
     }>,
-  ): Promise<string[]>;
+  ): Promise<number[]>;
 
   updateDocument(
-    id: string,
+    id: number,
     updates: Partial<{
       absolutePath: string;
       kind: string;
@@ -204,10 +204,10 @@ export interface WorkspaceRepository {
     }>,
   ): Promise<void>;
 
-  deleteDocument(id: string): Promise<void>;
+  deleteDocument(id: number): Promise<void>;
   listDocuments(): Promise<
     Array<{
-      id: string;
+      id: number;
       path: string;
       absolutePath: string;
       kind: string;
@@ -220,10 +220,10 @@ export interface WorkspaceRepository {
     }>
   >;
 
-  getChunksByDocument(documentId: string): Promise<
+  getChunksByDocument(documentId: number): Promise<
     Array<{
-      id: string;
-      documentId: string;
+      id: number;
+      documentId: number;
       chunkIndex: number;
       heading: string | null;
       content: string;
@@ -237,7 +237,7 @@ export interface WorkspaceRepository {
 
   insertChunks(
     inputs: Array<{
-      documentId: string;
+      documentId: number;
       chunkIndex: number;
       heading?: string | null;
       content: string;
@@ -245,11 +245,11 @@ export interface WorkspaceRepository {
       contentHash: string;
       metadata: string;
     }>,
-  ): Promise<string[]>;
+  ): Promise<number[]>;
 
   bulkInsertFts(
     inputs: Array<{
-      chunkId: string;
+      chunkId: number;
       path: string;
       heading: string | null;
       language: string | null;
@@ -258,39 +258,39 @@ export interface WorkspaceRepository {
     }>,
   ): Promise<void>;
 
-  deleteChunksByDocument(documentId: string): Promise<void>;
+  deleteChunksByDocument(documentId: number): Promise<void>;
 
   upsertGraphNode(input: {
     type: string;
     label: string;
-    refId?: string;
+    refId?: number | string | null;
     metadata?: string;
-  }): Promise<string>;
+  }): Promise<number>;
 
   insertGraphNodesBatch(
     inputs: Array<{
       type: string;
       label: string;
-      refId?: string;
+      refId?: number | string | null;
       metadata?: string;
     }>,
-  ): Promise<string[]>;
+  ): Promise<number[]>;
 
   /** Batch upsert: non-symbol nodes use ON CONFLICT, symbol nodes are pre-resolved by caller. */
   upsertGraphNodesBatch(
     inputs: Array<{
       type: string;
       label: string;
-      refId?: string;
+      refId?: number | string | null;
       metadata?: string;
     }>,
-  ): Promise<Array<{ label: string; id: string }>>;
+  ): Promise<Array<{ label: string; id: number }>>;
 
-  getGraphNode(id: string): Promise<{
-    id: string;
+  getGraphNode(id: number): Promise<{
+    id: number;
     type: string;
     label: string;
-    refId: string | null;
+    refId: number | string | null;
     metadata: string;
     createdAt: string;
     updatedAt: string;
@@ -300,23 +300,23 @@ export interface WorkspaceRepository {
     type: string,
     label: string,
   ): Promise<{
-    id: string;
+    id: number;
     type: string;
     label: string;
-    refId: string | null;
+    refId: number | string | null;
     metadata: string;
     createdAt: string;
     updatedAt: string;
   } | null>;
 
-  deleteGraphNodesByRefId(refId: string): Promise<void>;
+  deleteGraphNodesByRefId(refId: number | string): Promise<void>;
 
   /** Find a file-type graph node by its label (relative path). */
   findFileNode(relativePath: string): Promise<{
-    id: string;
+    id: number;
     type: string;
     label: string;
-    refId: string | null;
+    refId: number | string | null;
     metadata: string;
   } | null>;
 
@@ -324,44 +324,50 @@ export interface WorkspaceRepository {
   getSymbolNodesByFilePath(
     filePath: string,
   ): Promise<
-    Array<{ id: string; type: string; label: string; refId: string | null; metadata: string }>
+    Array<{
+      id: number;
+      type: string;
+      label: string;
+      refId: number | string | null;
+      metadata: string;
+    }>
   >;
 
   /** Delete outgoing edges from a specific node, optionally filtered by edge types. */
-  deleteOutgoingEdges(nodeId: string, types?: string[]): void;
+  deleteOutgoingEdges(nodeId: number, types?: string[]): void;
 
   /** Update a symbol node's refId and metadata (for reuse when symbol still exists). */
-  updateSymbolNode(id: string, refId: string, metadata: string): void;
+  updateSymbolNode(id: number, refId: number | string, metadata: string): void;
 
   /** Delete specific graph nodes by id (used for stale symbols). */
-  deleteGraphNodesByIds(ids: string[]): void;
+  deleteGraphNodesByIds(ids: number[]): void;
 
   /** Delete only chunk-type graph nodes whose ref_id matches one of the given chunk IDs. */
-  deleteChunkNodesByChunkIds(chunkIds: string[]): void;
+  deleteChunkNodesByChunkIds(chunkIds: number[]): void;
 
   insertEdge(input: {
-    fromNodeId: string;
-    toNodeId: string;
+    fromNodeId: number;
+    toNodeId: number;
     type: string;
     weight?: number;
     metadata?: string;
-  }): Promise<string>;
+  }): Promise<number>;
 
   insertEdges(
     inputs: Array<{
-      fromNodeId: string;
-      toNodeId: string;
+      fromNodeId: number;
+      toNodeId: number;
       type: string;
       weight?: number;
       metadata?: string;
     }>,
   ): Promise<void>;
 
-  deleteEdgesByNodeIds(nodeIds: string[]): Promise<void>;
+  deleteEdgesByNodeIds(nodeIds: number[]): Promise<void>;
 
   insertEmbeddings(
     inputs: Array<{
-      chunkId: string;
+      chunkId: number;
       provider: string;
       model: string;
       dimensions: number;
@@ -370,14 +376,14 @@ export interface WorkspaceRepository {
     }>,
   ): Promise<void>;
 
-  deleteEmbeddingsByChunkIds(chunkIds: string[]): Promise<void>;
+  deleteEmbeddingsByChunkIds(chunkIds: number[]): Promise<void>;
 
   fullTextSearch(
     query: string,
     limit: number,
   ): Promise<
     Array<{
-      id: string;
+      id: number;
       path: string;
       content: string;
       score: number;
@@ -400,14 +406,14 @@ export interface WorkspaceRepository {
     content: string;
     tags?: string;
     source: string;
-    supersedesId?: string;
-  }): Promise<string>;
-  getMemory(id: string): Promise<StoredMemory | null>;
+    supersedesId?: number | null;
+  }): Promise<number>;
+  getMemory(id: number): Promise<StoredMemory | null>;
   searchMemories(query: string, limit: number): Promise<StoredMemory[]>;
 
-  createIndexRun(input: { mode: string }): Promise<string>;
+  createIndexRun(input: { mode: string }): Promise<number>;
   completeIndexRun(
-    id: string,
+    id: number,
     updates: {
       status: string;
       filesScanned: number;
@@ -425,7 +431,7 @@ export interface WorkspaceRepository {
     tokensReturned?: number;
     tokensSaved?: number;
     filesScanned?: number;
-  }): Promise<string>;
+  }): Promise<number>;
 
   executeRaw(sqlQuery: string, params?: unknown[]): Promise<unknown>;
   queryRaw(sqlQuery: string, params?: unknown[]): Promise<Array<Record<string, unknown>>>;
@@ -446,7 +452,7 @@ export interface WorkspaceRepository {
   /** Bulk insert FTS rows without triggers (used during optimized write phase). */
   insertFtsBatch(
     rows: Array<{
-      chunkId: string;
+      chunkId: number;
       path: string;
       heading: string;
       language: string;
@@ -461,7 +467,7 @@ export interface WorkspaceRepository {
 
   // ── Streaming inserts — cached prepared statements, no dynamic SQL ──
   streamDocument(input: {
-    id: string;
+    id?: number;
     path: string;
     absolutePath: string;
     kind: string;
@@ -471,8 +477,8 @@ export interface WorkspaceRepository {
     mtimeMs: number;
   }): void;
   streamChunk(input: {
-    id: string;
-    documentId: string;
+    id?: number;
+    documentId: number;
     chunkIndex: number;
     heading: string | null;
     content: string;
@@ -482,8 +488,8 @@ export interface WorkspaceRepository {
   }): void;
   streamChunksBatch(
     inputs: Array<{
-      id: string;
-      documentId: string;
+      id?: number;
+      documentId: number;
       chunkIndex: number;
       heading: string | null;
       content: string;
@@ -493,41 +499,41 @@ export interface WorkspaceRepository {
     }>,
   ): void;
   streamGraphNode(input: {
-    id: string;
+    id?: number;
     type: string;
     label: string;
-    refId?: string | null;
+    refId?: number | string | null;
     metadata?: string;
   }): void;
   streamGraphNodesBatch(
     inputs: Array<{
-      id: string;
+      id?: number;
       type: string;
       label: string;
-      refId?: string | null;
+      refId?: number | string | null;
       metadata?: string;
     }>,
   ): void;
   streamEdgesBatch(
     inputs: Array<{
-      id: string;
-      fromNodeId: string;
-      toNodeId: string;
+      id?: number;
+      fromNodeId: number;
+      toNodeId: number;
       type: string;
       weight?: number;
       metadata?: string;
     }>,
   ): void;
   streamEdge(input: {
-    id: string;
-    fromNodeId: string;
-    toNodeId: string;
+    id?: number;
+    fromNodeId: number;
+    toNodeId: number;
     type: string;
     weight?: number;
     metadata?: string;
   }): void;
   streamFtsRow(input: {
-    chunkId: string;
+    chunkId: number;
     path: string;
     heading: string;
     language: string;
@@ -546,7 +552,7 @@ export interface WorkspaceRepository {
   hasLegacyEmbeddings(): boolean;
 
   /** Load all symbol-type graph nodes into a Map<label, id> for batch call-edge resolution. */
-  loadAllSymbolNodes(): Promise<Map<string, string>>;
+  loadAllSymbolNodes(): Promise<Map<string, number>>;
 
   /** Delete only rebuildable index artifacts (documents, chunks, embeddings, graph_nodes, graph_edges).
    *  Preserves memories, query_logs, index_runs, and graph_runs. */
@@ -561,16 +567,16 @@ export interface WorkspaceRepository {
   replaceGraphArtifacts(input: {
     buildEpoch: number;
     nodes: Array<{
-      id: string;
+      id?: number;
       type: string;
       label: string;
-      refId?: string;
+      refId?: number | string;
       metadata?: string;
     }>;
     edges: Array<{
-      id: string;
-      fromNodeId: string;
-      toNodeId: string;
+      id?: number;
+      fromNodeId: number;
+      toNodeId: number;
       type: string;
       weight?: number;
       metadata?: string;
@@ -579,7 +585,7 @@ export interface WorkspaceRepository {
 
   /** Cache parsed symbols/imports/calls for graph build. */
   insertParsedDocument(input: {
-    documentId: string;
+    documentId: number;
     contentHash: string;
     symbols: string;
     imports: string;
@@ -588,8 +594,8 @@ export interface WorkspaceRepository {
     parserVersion: string;
   }): void;
 
-  getParsedDocument(documentId: string): {
-    documentId: string;
+  getParsedDocument(documentId: number): {
+    documentId: number;
     contentHash: string;
     symbols: string | null;
     imports: string | null;
@@ -599,5 +605,5 @@ export interface WorkspaceRepository {
     parsedAt: number;
   } | null;
 
-  deleteParsedDocumentsByDocumentIds(documentIds: string[]): void;
+  deleteParsedDocumentsByDocumentIds(documentIds: number[]): void;
 }

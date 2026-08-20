@@ -180,8 +180,8 @@ describe("createWorkspaceRepository", () => {
     await repo.executeRaw("DROP INDEX idx_graph_edges_from_to_type");
     const insertSql =
       "INSERT INTO graph_edges (id, from_node_id, to_node_id, type, weight, metadata) VALUES (?, ?, ?, 'calls', 1, '{}')";
-    await repo.executeRaw(insertSql, ["legacy-edge-1", nodeA, nodeB]);
-    await repo.executeRaw(insertSql, ["legacy-edge-2", nodeA, nodeB]);
+    await repo.executeRaw(insertSql, [1, nodeA, nodeB]);
+    await repo.executeRaw(insertSql, [2, nodeA, nodeB]);
     expect(await repo.getEdgeCount()).toBe(2);
 
     closeAllWorkspaceDbs();
@@ -332,10 +332,10 @@ describe("createWorkspaceRepository", () => {
     closeAllWorkspaceDbs();
     const reopened = createWorkspaceRepository(tempRoot);
     const ftsRows = await reopened.queryRaw("SELECT chunk_id FROM chunks_fts ORDER BY chunk_id");
-    expect(ftsRows.map((row) => String(row.chunk_id))).toEqual(
+    expect(ftsRows.map((row) => Number(row.chunk_id))).toEqual(
       expect.arrayContaining([newChunkId]),
     );
-    expect(ftsRows.map((row) => String(row.chunk_id))).not.toContain(oldChunkId);
+    expect(ftsRows.map((row) => Number(row.chunk_id))).not.toContain(oldChunkId);
   });
 
   it("keeps stale rebuild and backfill FTS text identical to application writes", async () => {
@@ -382,7 +382,7 @@ describe("createWorkspaceRepository", () => {
       chunkIds,
     );
     expect(
-      Object.fromEntries(rows.map((row) => [String(row.chunk_id), String(row.search_text)])),
+      Object.fromEntries(rows.map((row) => [Number(row.chunk_id), String(row.search_text)])),
     ).toEqual(
       Object.fromEntries(
         inputs.map((input, index) => [
@@ -392,7 +392,7 @@ describe("createWorkspaceRepository", () => {
       ),
     );
     const unicodeIndex = cases.findIndex((testCase) => testCase.name === "unicode");
-    expect(rows.find((row) => String(row.chunk_id) === chunkIds[unicodeIndex])?.search_text).toBe(
+    expect(rows.find((row) => Number(row.chunk_id) === chunkIds[unicodeIndex])?.search_text).toBe(
       `unicode needle\n${inputs[unicodeIndex].content}`,
     );
   });
@@ -546,5 +546,239 @@ describe("createWorkspaceRepository", () => {
     expect((await repo.searchMemories("SQLite storage", 10)).map((memory) => memory.id)).toEqual([
       memId,
     ]);
+  });
+
+  it("migrates legacy TEXT memories to autoincrement integer PK and preserves all data across reindex", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+
+    // Simulate a legacy database with TEXT primary key for memories
+    await repo.executeRaw("DROP TABLE memories");
+    await repo.executeRaw(`
+      CREATE TABLE memories (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        tags TEXT,
+        source TEXT NOT NULL,
+        supersedes_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    await repo.executeRaw(
+      "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+      [
+        "uuid-mem-1",
+        "Legacy Architecture v1",
+        "Use SQLite WAL mode",
+        "arch,sqlite",
+        "agent",
+        "2026-01-01T00:00:00.000Z",
+        "2026-01-01T00:00:00.000Z",
+      ],
+    );
+    await repo.executeRaw(
+      "INSERT INTO memories (id, title, content, tags, source, supersedes_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        "uuid-mem-2",
+        "Legacy Architecture v2",
+        "Use SQLite WAL mode with 16k page size",
+        "arch,sqlite",
+        "agent",
+        "uuid-mem-1",
+        "2026-01-02T00:00:00.000Z",
+        "2026-01-02T00:00:00.000Z",
+      ],
+    );
+
+    // Simulate legacy query_logs table with TEXT id
+    await repo.executeRaw("DROP TABLE IF EXISTS query_logs");
+    await repo.executeRaw(`
+      CREATE TABLE query_logs (
+        id TEXT PRIMARY KEY,
+        query TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'hybrid',
+        result_count INTEGER NOT NULL DEFAULT 0,
+        tokens_returned INTEGER NOT NULL DEFAULT 0,
+        tokens_saved INTEGER NOT NULL DEFAULT 0,
+        files_scanned INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    await repo.executeRaw(
+      "INSERT INTO query_logs (id, query, mode, result_count, tokens_returned, tokens_saved, files_scanned) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ["uuid-log-1", "test query", "fts", 3, 100, 500, 10],
+    );
+
+    // Simulate legacy index_runs and graph_runs with TEXT id
+    await repo.executeRaw("DROP TABLE IF EXISTS index_runs");
+    await repo.executeRaw(`
+      CREATE TABLE index_runs (
+        id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        files_scanned INTEGER NOT NULL DEFAULT 0,
+        files_updated INTEGER NOT NULL DEFAULT 0,
+        chunks_written INTEGER NOT NULL DEFAULT 0,
+        embeddings_written INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT,
+        stats TEXT,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        finished_at TEXT
+      )
+    `);
+    await repo.executeRaw(
+      "INSERT INTO index_runs (id, mode, status, files_scanned, files_updated, chunks_written, embeddings_written) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ["uuid-run-1", "full", "completed", 50, 50, 100, 100],
+    );
+
+    // Reopen the database to trigger automatic schema migration
+    closeAllWorkspaceDbs();
+    const reopened = createWorkspaceRepository(tempRoot);
+
+    // Verify memories table column is now INTEGER PRIMARY KEY
+    const info = await reopened.queryRaw("PRAGMA table_info(memories)");
+    const idCol = info.find((c: any) => c.name === "id");
+    expect(idCol?.type?.toUpperCase()).toContain("INT");
+
+    // Verify all legacy memories are preserved and supersedes_id was remapped from UUID to integer
+    const mem1 = await reopened.getMemory(1);
+    expect(mem1).not.toBeNull();
+    expect(mem1?.title).toBe("Legacy Architecture v1");
+
+    const mem2 = await reopened.getMemory(2);
+    expect(mem2).not.toBeNull();
+    expect(mem2?.title).toBe("Legacy Architecture v2");
+    expect(mem2?.supersedesId).toBe(1);
+
+    // searchMemories should only return the newest version (mem2), not superseded mem1
+    const activeMemories = await reopened.searchMemories("SQLite", 10);
+    expect(activeMemories).toHaveLength(1);
+    expect(activeMemories[0].id).toBe(2);
+    expect(activeMemories[0].title).toBe("Legacy Architecture v2");
+
+    // Verify query_logs migrated to integer PK with data intact
+    const queryLogInfo = await reopened.queryRaw("PRAGMA table_info(query_logs)");
+    const queryLogIdCol = queryLogInfo.find((c: any) => c.name === "id");
+    expect(queryLogIdCol?.type?.toUpperCase()).toContain("INT");
+    const queryLogs = await reopened.queryRaw("SELECT * FROM query_logs");
+    expect(queryLogs).toHaveLength(1);
+    expect(queryLogs[0].query).toBe("test query");
+    expect(queryLogs[0].tokens_saved).toBe(500);
+
+    // Verify index_runs migrated to integer PK with data intact
+    const indexRunInfo = await reopened.queryRaw("PRAGMA table_info(index_runs)");
+    const indexRunIdCol = indexRunInfo.find((c: any) => c.name === "id");
+    expect(indexRunIdCol?.type?.toUpperCase()).toContain("INT");
+    const indexRuns = await reopened.queryRaw("SELECT * FROM index_runs");
+    expect(indexRuns).toHaveLength(1);
+    expect(indexRuns[0].files_scanned).toBe(50);
+
+    // Perform a full reindex reset (resetIndexArtifacts)
+    reopened.resetIndexArtifacts();
+
+    // Verify memories were NOT deleted or lost during reindex
+    const preservedAfterReindex = await reopened.getMemory(2);
+    expect(preservedAfterReindex?.title).toBe("Legacy Architecture v2");
+
+    // Verify new memories can be inserted with autoincrement integer IDs
+    const newMemId = await reopened.insertMemory({
+      title: "New Decision",
+      content: "Autoincrement primary keys",
+      tags: "db,performance",
+      source: "agent",
+    });
+    expect(typeof newMemId).toBe("number");
+    expect((await reopened.getMemory(newMemId))?.title).toBe("New Decision");
+  });
+
+  it("reindexes cleanly on a legacy database with TEXT primary keys across all index tables", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+
+    // Recreate legacy tables with TEXT primary keys (simulating a database created 6 months ago)
+    await repo.executeRaw("DROP TABLE IF EXISTS chunks_fts");
+    await repo.executeRaw("DROP TABLE IF EXISTS embeddings");
+    await repo.executeRaw("DROP TABLE IF EXISTS graph_edges");
+    await repo.executeRaw("DROP TABLE IF EXISTS graph_nodes");
+    await repo.executeRaw("DROP TABLE IF EXISTS parsed_documents");
+    await repo.executeRaw("DROP TABLE IF EXISTS chunks");
+    await repo.executeRaw("DROP TABLE IF EXISTS documents");
+
+    await repo.executeRaw(`
+      CREATE TABLE documents (
+        id TEXT PRIMARY KEY,
+        path TEXT NOT NULL UNIQUE,
+        absolute_path TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        language TEXT,
+        content_hash TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        mtime_ms INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE chunks (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        chunk_index INTEGER NOT NULL,
+        heading TEXT,
+        content TEXT NOT NULL,
+        token_count INTEGER NOT NULL,
+        content_hash TEXT NOT NULL,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    // Add a memory that must be preserved
+    await repo.insertMemory({
+      title: "Critical Rule",
+      content: "Preserve memories across all migrations",
+      tags: "architecture",
+      source: "agent",
+    });
+
+    // Run resetIndexArtifacts (the full reindex reset)
+    repo.resetIndexArtifacts();
+
+    // Verify index tables are now INTEGER PRIMARY KEY
+    const docInfo = await repo.queryRaw("PRAGMA table_info(documents)");
+    const docIdCol = docInfo.find((c: any) => c.name === "id");
+    expect(docIdCol?.type?.toUpperCase()).toContain("INT");
+
+    const chunkInfo = await repo.queryRaw("PRAGMA table_info(chunks)");
+    const chunkIdCol = chunkInfo.find((c: any) => c.name === "id");
+    expect(chunkIdCol?.type?.toUpperCase()).toContain("INT");
+
+    // Insert new document and chunks with integer PKs
+    const docId = await repo.insertDocument({
+      path: "src/new.ts",
+      absolutePath: path.join(tempRoot, "src/new.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "hash-new",
+      sizeBytes: 42,
+      mtimeMs: 12345,
+    });
+    expect(typeof docId).toBe("number");
+
+    const [chunkId] = await repo.insertChunks([
+      {
+        documentId: docId,
+        chunkIndex: 0,
+        heading: "Heading",
+        content: "const x = 1;",
+        tokenCount: 4,
+        contentHash: "chunk-hash",
+        metadata: "{}",
+      },
+    ]);
+    expect(typeof chunkId).toBe("number");
+
+    // Memory is still preserved
+    const memories = await repo.searchMemories("Critical Rule", 5);
+    expect(memories).toHaveLength(1);
+    expect(memories[0]?.title).toBe("Critical Rule");
   });
 });

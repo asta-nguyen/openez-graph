@@ -29,11 +29,11 @@ export function createGraphNodeOps(
     async upsertGraphNode(input: {
       type: string;
       label: string;
-      refId?: string;
+      refId?: number | string | null;
       metadata?: string;
-    }): Promise<string> {
+    }): Promise<number> {
       if (input.type === "symbol") {
-        if (input.refId) {
+        if (input.refId !== undefined && input.refId !== null) {
           const existing = stmts.nodeByTypeLabelRef.get(input.type, input.label, input.refId) as
             | Record<string, unknown>
             | undefined;
@@ -47,13 +47,11 @@ export function createGraphNodeOps(
                 existing.id,
               );
             }
-            return String(existing.id);
+            return Number(existing.id);
           }
         }
-        const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        stmts.insertNode.run(
-          id,
+        const res = stmts.insertNode.run(
           input.type,
           input.label,
           input.refId ?? null,
@@ -61,39 +59,38 @@ export function createGraphNodeOps(
           now,
           now,
         );
-        return id;
+        return Number(res.lastInsertRowid);
       }
 
       // Non-symbol nodes: (type, label) is unique — use ON CONFLICT ... RETURNING (one query)
-      const id = crypto.randomUUID();
       const now = new Date().toISOString();
       const row = stmts.upsertNodeByTypeLabel.get(
-        id,
         input.type,
         input.label,
         input.refId ?? null,
         input.metadata ?? "{}",
         now,
         now,
-      ) as { id: string };
-      return String(row.id);
+      ) as { id: number | string };
+      return Number(row.id);
     },
 
     async insertGraphNodesBatch(
-      inputs: Array<{ type: string; label: string; refId?: string; metadata?: string }>,
-    ): Promise<string[]> {
+      inputs: Array<{
+        type: string;
+        label: string;
+        refId?: number | string | null;
+        metadata?: string;
+      }>,
+    ): Promise<number[]> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const ids: string[] = inputs.map(() => crypto.randomUUID());
-      const BATCH = 2000;
+      const ids: number[] = [];
+      const BATCH = 500;
       for (let i = 0; i < inputs.length; i += BATCH) {
         const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j];
-          params.push(
-            ids[i + j],
+        for (const item of batch) {
+          const res = stmts.insertNode.run(
             item.type,
             item.label,
             item.refId ?? null,
@@ -101,53 +98,39 @@ export function createGraphNodeOps(
             now,
             now,
           );
+          ids.push(Number(res.lastInsertRowid));
         }
-        native
-          .prepare(
-            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders} ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET metadata = excluded.metadata, updated_at = excluded.updated_at`,
-          )
-          .run(...params);
       }
       return ids;
     },
 
     async upsertGraphNodesBatch(
-      inputs: Array<{ type: string; label: string; refId?: string; metadata?: string }>,
-    ): Promise<Array<{ label: string; id: string }>> {
+      inputs: Array<{
+        type: string;
+        label: string;
+        refId?: number | string | null;
+        metadata?: string;
+      }>,
+    ): Promise<Array<{ label: string; id: number }>> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const BATCH = 500;
-      const results: Array<{ label: string; id: string }> = [];
+      const results: Array<{ label: string; id: number }> = [];
 
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const item of batch) {
-          const id = crypto.randomUUID();
-          params.push(
-            id,
-            item.type,
-            item.label,
-            item.refId ?? null,
-            item.metadata ?? "{}",
-            now,
-            now,
-          );
-        }
-        const rows = native
-          .prepare(
-            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders}
-             ON CONFLICT(type, label) WHERE type != 'symbol' DO UPDATE SET ref_id = COALESCE(excluded.ref_id, graph_nodes.ref_id), metadata = excluded.metadata, updated_at = excluded.updated_at
-             RETURNING id, label`,
-          )
-          .all(...params) as Array<{ id: string; label: string }>;
-        results.push(...rows.map((r) => ({ label: r.label, id: String(r.id) })));
+      for (const item of inputs) {
+        const row = stmts.upsertNodeByTypeLabel.get(
+          item.type,
+          item.label,
+          item.refId ?? null,
+          item.metadata ?? "{}",
+          now,
+          now,
+        ) as { id: number | string; label: string };
+        results.push({ label: row.label ?? item.label, id: Number(row.id) });
       }
       return results;
     },
 
-    async getGraphNode(id: string) {
+    async getGraphNode(id: number) {
       const row = native.prepare("SELECT * FROM graph_nodes WHERE id = ?").get(id) as
         | Record<string, unknown>
         | undefined;
@@ -159,7 +142,7 @@ export function createGraphNodeOps(
       return row ? mapNodeRow(row) : null;
     },
 
-    async deleteGraphNodesByRefId(refId: string) {
+    async deleteGraphNodesByRefId(refId: number | string) {
       stmts.deleteNodesByRefId.run(refId, refId);
     },
 
@@ -179,17 +162,17 @@ export function createGraphNodeOps(
       return rows.map(mapNodeRow);
     },
 
-    updateSymbolNode(id: string, refId: string, metadata: string) {
+    updateSymbolNode(id: number, refId: number | string, metadata: string) {
       stmts.updateNode.run(refId, metadata, new Date().toISOString(), id);
     },
 
-    deleteGraphNodesByIds(ids: string[]) {
+    deleteGraphNodesByIds(ids: number[]) {
       if (ids.length === 0) return;
       const placeholders = ids.map(() => "?").join(",");
       native.prepare(`DELETE FROM graph_nodes WHERE id IN (${placeholders})`).run(...ids);
     },
 
-    deleteChunkNodesByChunkIds(chunkIds: string[]) {
+    deleteChunkNodesByChunkIds(chunkIds: number[]) {
       if (chunkIds.length === 0) return;
       const placeholders = chunkIds.map(() => "?").join(",");
       native
@@ -197,13 +180,13 @@ export function createGraphNodeOps(
         .run(...chunkIds);
     },
 
-    async loadAllSymbolNodes(): Promise<Map<string, string>> {
+    async loadAllSymbolNodes(): Promise<Map<string, number>> {
       const rows = native
         .prepare("SELECT label, id FROM graph_nodes WHERE type = 'symbol'")
-        .all() as Array<{ label: string; id: string }>;
-      const map = new Map<string, string>();
+        .all() as Array<{ label: string; id: number }>;
+      const map = new Map<string, number>();
       for (const row of rows) {
-        if (!map.has(row.label)) map.set(row.label, String(row.id));
+        if (!map.has(row.label)) map.set(row.label, Number(row.id));
       }
       return map;
     },
@@ -211,15 +194,26 @@ export function createGraphNodeOps(
     // ── Streaming inserts (graph nodes) ──
 
     streamGraphNode(input: {
-      id: string;
+      id?: number;
       type: string;
       label: string;
-      refId?: string | null;
+      refId?: number | string | null;
       metadata?: string;
-    }): void {
+    }): number {
       const now = streamNow.value;
-      stmts.insertNode.run(
-        input.id,
+      if (input.id !== undefined && stmts.insertNodeWithId) {
+        stmts.insertNodeWithId.run(
+          input.id,
+          input.type,
+          input.label,
+          input.refId ?? null,
+          input.metadata ?? "{}",
+          now,
+          now,
+        );
+        return input.id;
+      }
+      const res = stmts.insertNode.run(
         input.type,
         input.label,
         input.refId ?? null,
@@ -227,33 +221,46 @@ export function createGraphNodeOps(
         now,
         now,
       );
+      return Number(res.lastInsertRowid);
     },
 
     streamGraphNodesBatch(
       inputs: Array<{
-        id: string;
+        id?: number;
         type: string;
         label: string;
-        refId?: string | null;
+        refId?: number | string | null;
         metadata?: string;
       }>,
-    ): void {
-      if (inputs.length === 0) return;
-      const BATCH = 500;
+    ): number[] {
+      if (inputs.length === 0) return [];
       const now = streamNow.value;
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const n of batch) {
-          params.push(n.id, n.type, n.label, n.refId ?? null, n.metadata ?? "{}", now, now);
+      const ids: number[] = [];
+      for (const n of inputs) {
+        if (n.id !== undefined && stmts.insertNodeWithId) {
+          stmts.insertNodeWithId.run(
+            n.id,
+            n.type,
+            n.label,
+            n.refId ?? null,
+            n.metadata ?? "{}",
+            now,
+            now,
+          );
+          ids.push(n.id);
+        } else {
+          const res = stmts.insertNode.run(
+            n.type,
+            n.label,
+            n.refId ?? null,
+            n.metadata ?? "{}",
+            now,
+            now,
+          );
+          ids.push(Number(res.lastInsertRowid));
         }
-        native
-          .prepare(
-            `INSERT INTO graph_nodes (id, type, label, ref_id, metadata, created_at, updated_at) VALUES ${placeholders}`,
-          )
-          .run(...params);
       }
+      return ids;
     },
   };
 }

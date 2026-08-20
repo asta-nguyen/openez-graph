@@ -13,13 +13,14 @@ import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 export interface ChunkStmts {
   chunksByDoc: ReturnType<NativeDatabase["prepare"]>;
   insertChunk: ReturnType<NativeDatabase["prepare"]>;
+  insertChunkWithId?: ReturnType<NativeDatabase["prepare"]>;
   deleteChunksByDoc: ReturnType<NativeDatabase["prepare"]>;
 }
 
 function mapChunkRow(row: Record<string, unknown>) {
   return {
-    id: String(row.id),
-    documentId: String(row.document_id),
+    id: Number(row.id),
+    documentId: Number(row.document_id),
     chunkIndex: Number(row.chunk_index),
     heading: row.heading ? String(row.heading) : null,
     content: String(row.content),
@@ -52,14 +53,14 @@ export function createChunkOps(
 
     // ── Chunk Operations ──
 
-    async getChunksByDocument(documentId: string) {
+    async getChunksByDocument(documentId: number) {
       const rows = stmts.chunksByDoc.all(documentId) as Array<Record<string, unknown>>;
       return rows.map(mapChunkRow);
     },
 
     async insertChunks(
       inputs: Array<{
-        documentId: string;
+        documentId: number;
         chunkIndex: number;
         heading?: string | null;
         content: string;
@@ -67,36 +68,24 @@ export function createChunkOps(
         contentHash: string;
         metadata: string;
       }>,
-    ): Promise<string[]> {
+    ): Promise<number[]> {
       if (inputs.length === 0) return [];
       const now = new Date().toISOString();
-      const ids: string[] = inputs.map(() => crypto.randomUUID());
-      const BATCH = 500;
+      const ids: number[] = [];
       const runInsert = () => {
-        for (let i = 0; i < inputs.length; i += BATCH) {
-          const batch = inputs.slice(i, i + BATCH);
-          const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
-          const params: unknown[] = [];
-          for (let j = 0; j < batch.length; j++) {
-            const item = batch[j];
-            params.push(
-              ids[i + j],
-              item.documentId,
-              item.chunkIndex,
-              item.heading ?? null,
-              item.content,
-              item.tokenCount,
-              item.contentHash,
-              item.metadata,
-              now,
-              now,
-            );
-          }
-          native
-            .prepare(
-              `INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
-            )
-            .run(...params);
+        for (const item of inputs) {
+          const res = stmts.insertChunk.run(
+            item.documentId,
+            item.chunkIndex,
+            item.heading ?? null,
+            item.content,
+            item.tokenCount,
+            item.contentHash,
+            item.metadata,
+            now,
+            now,
+          );
+          ids.push(Number(res.lastInsertRowid));
         }
       };
       if (typeof native.transaction === "function") {
@@ -107,25 +96,39 @@ export function createChunkOps(
       return ids;
     },
 
-    async deleteChunksByDocument(documentId: string) {
+    async deleteChunksByDocument(documentId: number) {
       stmts.deleteChunksByDoc.run(documentId);
     },
 
     // ── Streaming inserts (chunk) ──
 
     streamChunk(input: {
-      id: string;
-      documentId: string;
+      id?: number;
+      documentId: number;
       chunkIndex: number;
       heading: string | null;
       content: string;
       tokenCount: number;
       contentHash: string;
       metadata: string;
-    }): void {
+    }): number {
       const now = streamNow.value;
-      stmts.insertChunk.run(
-        input.id,
+      if (input.id !== undefined && stmts.insertChunkWithId) {
+        stmts.insertChunkWithId.run(
+          input.id,
+          input.documentId,
+          input.chunkIndex,
+          input.heading,
+          input.content,
+          input.tokenCount,
+          input.contentHash,
+          input.metadata,
+          now,
+          now,
+        );
+        return input.id;
+      }
+      const res = stmts.insertChunk.run(
         input.documentId,
         input.chunkIndex,
         input.heading,
@@ -136,12 +139,13 @@ export function createChunkOps(
         now,
         now,
       );
+      return Number(res.lastInsertRowid);
     },
 
     streamChunksBatch(
       inputs: Array<{
-        id: string;
-        documentId: string;
+        id?: number;
+        documentId: number;
         chunkIndex: number;
         heading: string | null;
         content: string;
@@ -149,16 +153,13 @@ export function createChunkOps(
         contentHash: string;
         metadata: string;
       }>,
-    ): void {
-      if (inputs.length === 0) return;
-      const BATCH = 100;
+    ): number[] {
+      if (inputs.length === 0) return [];
       const now = streamNow.value;
-      for (let i = 0; i < inputs.length; i += BATCH) {
-        const batch = inputs.slice(i, i + BATCH);
-        const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(",");
-        const params: unknown[] = [];
-        for (const c of batch) {
-          params.push(
+      const ids: number[] = [];
+      for (const c of inputs) {
+        if (c.id !== undefined && stmts.insertChunkWithId) {
+          stmts.insertChunkWithId.run(
             c.id,
             c.documentId,
             c.chunkIndex,
@@ -170,13 +171,23 @@ export function createChunkOps(
             now,
             now,
           );
+          ids.push(c.id);
+        } else {
+          const res = stmts.insertChunk.run(
+            c.documentId,
+            c.chunkIndex,
+            c.heading,
+            c.content,
+            c.tokenCount,
+            c.contentHash,
+            c.metadata,
+            now,
+            now,
+          );
+          ids.push(Number(res.lastInsertRowid));
         }
-        native
-          .prepare(
-            `INSERT INTO chunks (id, document_id, chunk_index, heading, content, token_count, content_hash, metadata, created_at, updated_at) VALUES ${placeholders}`,
-          )
-          .run(...params);
       }
+      return ids;
     },
   };
 }

@@ -13,10 +13,12 @@ export interface GraphStmts {
   nodeByTypeLabel: ReturnType<NativeDatabase["prepare"]>;
   nodeByTypeLabelRef: ReturnType<NativeDatabase["prepare"]>;
   insertNode: ReturnType<NativeDatabase["prepare"]>;
+  insertNodeWithId?: ReturnType<NativeDatabase["prepare"]>;
   upsertNodeByTypeLabel: ReturnType<NativeDatabase["prepare"]>;
   updateNode: ReturnType<NativeDatabase["prepare"]>;
   deleteNodesByRefId: ReturnType<NativeDatabase["prepare"]>;
   insertEdge: ReturnType<NativeDatabase["prepare"]>;
+  insertEdgeWithId?: ReturnType<NativeDatabase["prepare"]>;
 }
 
 /**
@@ -25,10 +27,15 @@ export interface GraphStmts {
  */
 export function mapNodeRow(row: Record<string, unknown>) {
   return {
-    id: String(row.id),
+    id: Number(row.id),
     type: String(row.type),
     label: String(row.label),
-    refId: row.ref_id ? String(row.ref_id) : null,
+    refId:
+      row.ref_id !== null && row.ref_id !== undefined
+        ? typeof row.ref_id === "number"
+          ? row.ref_id
+          : String(row.ref_id)
+        : null,
     metadata: String(row.metadata ?? "{}"),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),

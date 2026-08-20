@@ -39,7 +39,7 @@ afterEach(() => {
 async function insertTestDocument(
   repo: WorkspaceRepository,
   documentPath: string,
-): Promise<string> {
+): Promise<number> {
   return repo.insertDocument({
     path: documentPath,
     absolutePath: path.join(tempRoot, documentPath),
@@ -53,14 +53,14 @@ async function insertTestDocument(
 
 async function expectStoredSearchText(
   repo: WorkspaceRepository,
-  inputs: Array<{ chunkId: string; content: string; metadata: string }>,
+  inputs: Array<{ chunkId: number; content: string; metadata: string }>,
 ): Promise<void> {
   const rows = await repo.queryRaw(
     `SELECT chunk_id, search_text FROM chunks_fts WHERE chunk_id IN (${inputs.map(() => "?").join(", ")})`,
     inputs.map((input) => input.chunkId),
   );
   expect(
-    Object.fromEntries(rows.map((row) => [String(row.chunk_id), String(row.search_text)])),
+    Object.fromEntries(rows.map((row) => [Number(row.chunk_id), String(row.search_text)])),
   ).toEqual(
     Object.fromEntries(
       inputs.map((input) => [input.chunkId, composeFtsSearchText(input.content, input.metadata)]),
@@ -68,7 +68,7 @@ async function expectStoredSearchText(
   );
   const unicodeInput = inputs.find((input) => input.metadata.includes("unicode needle"));
   if (unicodeInput) {
-    expect(rows.find((row) => String(row.chunk_id) === unicodeInput.chunkId)?.search_text).toBe(
+    expect(rows.find((row) => Number(row.chunk_id) === unicodeInput.chunkId)?.search_text).toBe(
       `unicode needle\n${unicodeInput.content}`,
     );
   }
@@ -160,7 +160,7 @@ describe("FTS retrieval", () => {
 
     const streamDocumentId = await insertTestDocument(repo, "src/stream.ts");
     const streamInputs = ftsTextCases.map((testCase, chunkIndex) => ({
-      chunkId: `stream-chunk-${chunkIndex}`,
+      chunkId: chunkIndex + 100,
       documentId: streamDocumentId,
       chunkIndex,
       content: `stream content ${testCase.name}`,

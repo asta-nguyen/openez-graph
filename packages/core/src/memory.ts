@@ -5,7 +5,7 @@ export async function memoryWrite(input: {
   title: string;
   content: string;
   tags?: string[];
-  supersedesId?: string;
+  supersedesId?: number | string;
   source?: "user" | "agent" | "system";
 }) {
   const registry = createRegistryRepository();
@@ -15,7 +15,14 @@ export async function memoryWrite(input: {
   }
 
   const repo = createWorkspaceRepository(workspace.rootPath);
-  if (input.supersedesId && !(await repo.getMemory(input.supersedesId))) {
+  const numericSupersedesId =
+    input.supersedesId !== undefined && input.supersedesId !== null
+      ? Number(input.supersedesId)
+      : undefined;
+  if (
+    numericSupersedesId !== undefined &&
+    (!Number.isFinite(numericSupersedesId) || !(await repo.getMemory(numericSupersedesId)))
+  ) {
     throw new Error(`Memory '${input.supersedesId}' not found`);
   }
   const id = await repo.insertMemory({
@@ -23,7 +30,7 @@ export async function memoryWrite(input: {
     content: input.content,
     tags: (input.tags ?? []).join(","),
     source: input.source ?? "agent",
-    supersedesId: input.supersedesId,
+    supersedesId: numericSupersedesId,
   });
 
   return { id, ...input };
