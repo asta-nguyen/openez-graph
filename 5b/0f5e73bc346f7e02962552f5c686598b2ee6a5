@@ -1,0 +1,31 @@
+README.md
+  s_f95989056bd241::t_d59fa629dd3696 93-97
+apps/mcp/src/mcp-core.ts
+  s_f95989056bd241::t_e6f947ce36094f 908-922,925,929-933,936-957,960,964-966,972-973
+  s_f95989056bd241::t_76ba74ea6def17 101
+  s_f95989056bd241::t_5240c29d31b427 924
+  s_f95989056bd241::t_c4985d6a2035ae 928,961-963
+  s_f95989056bd241::t_126f26a34fa772 575-585,598-602
+  s_f95989056bd241::t_30439a04c4a489 967-971
+  s_f95989056bd241::t_215d59b1d7d36b 974,977
+AGENTS.md
+  s_f95989056bd241::t_d3731c6afb12ce 73-77
+tests/mcp-tools.test.ts
+  s_f95989056bd241::t_61793015a4bb1a 119-123,125-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5b0f5e73bc346f7e02962552f5c686598b2ee6a5",
+  "prompts": {},
+  "sessions": {
+    "s_f95989056bd241": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dawn-vertebra",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
