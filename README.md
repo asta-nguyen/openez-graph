@@ -46,6 +46,7 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 
 | Tool              | Purpose                                                                                        |
 | ----------------- | ---------------------------------------------------------------------------------------------- |
+| `code_outline`    | Inspect file AST structure, functions, classes, and symbols with line numbers (~50 tokens)     |
 | `code_query`      | Retrieve ranked code and documentation context                                                 |
 | `code_context`    | Get graph-adjacent context for a symbol or file (limit: 50/workspace, max 200, token-budgeted) |
 | `diff_context`    | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies        |

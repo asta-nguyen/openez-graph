@@ -19,6 +19,8 @@ export {
 export { removeWorkspace } from "./remove-workspace";
 export type { RemoveWorkspaceReport, RemoveWorkspaceSelector } from "./remove-workspace";
 export type {
+  FileOutlineResult,
+  FileOutlineSymbol,
   RegistryWorkspace,
   RegistryRepository,
   StoredMemory,

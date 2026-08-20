@@ -5,6 +5,35 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-08-19
+
+### Added
+
+- **`code_outline` MCP tool** — retrieves a compact AST symbol hierarchy (functions, classes, methods, types) with line numbers and export flags for a single file, reducing token consumption by ~95% compared to full file reads. Supports TypeScript (oxc-parser), Python/Go/Rust/Ruby (tree-sitter), and fallback section chunking for Markdown/YAML/JSON/TOML. Resolves files by relative path, absolute path, dot-slash prefix, or unambiguous suffix match.
+- **`code_outline` in agent setup instructions** — `openez setup codex/claude/opencode/windsurf/devin` now injects guidance to use `code_outline` before reading full files.
+
+### Changed
+
+- **`getFileOutline` path resolution** — uses `path.isAbsolute()` instead of `startsWith("/")` so Windows absolute paths (`C:\foo\bar.ts`) receive the same symlink realpath fallback as Unix absolute paths.
+- **`getFileOutline` async realpath** — replaced `fs.realpathSync` with `fs.promises.realpath` to avoid blocking the MCP event loop on absolute-path cache misses.
+- **AGENTS.md MCP Expectations** — `code_outline` classified as a single-workspace tool alongside `memory_write`, `index_workspace`, and `remove_workspace`.
+
+### Fixed
+
+- **Umami analytics ID** — reverted an unrelated `data-website-id` change introduced by the `code_outline` branch; main's Umami PRs (#27, #31) take precedence at merge time.
+- **`getFileOutline` suffix disambiguation** — returns `null` when multiple files share the same basename suffix, preventing ambiguous outline lookups.
+- **`getFileOutline` LIKE wildcard safety** — escapes `%` and `_` in suffix queries so wildcard characters in filenames don't cause false matches.
+- **`outlineText` size formatting** — uses `String(sizeBytes)` instead of `toLocaleString()` to avoid locale-dependent formatting in the outline header.
+- **Indexer `normalizeRelativePath`** — normalizes paths on document insert so Windows backslash paths are stored consistently.
+
+## [1.3.1] - 2026-08-16
+
+### Fixed
+
+- **Reindex and DB open performance on large workspaces** — `openez status` and `openez reindex` on a 92K-chunk workspace (e.g. Zed) went from >8 minutes (100% CPU, never completing) to ~0.15s (status) and ~25s (reindex). Two root causes fixed:
+  - **FTS repair scan on every DB open** — `initializeWorkspaceSchema` ran an O(n²) `LEFT JOIN chunks_fts` (chunk_id is UNINDEXED in FTS5) plus an orphan-cleanup `DELETE ... NOT IN` on every open, even when FTS was fully in sync. Now skips the expensive repair when a count + shape check confirms FTS is in sync, and only runs the full repair when counts diverge or orphaned rows are detected.
+  - **FTS trigger storm during full reindex** — `resetIndexArtifacts` deleted 92K chunks with FTS triggers active, firing 92K triggered `DELETE FROM chunks_fts WHERE chunk_id = old.id` (each a full FTS shadow-table scan). Now drops FTS triggers and the FTS table before deleting chunks, then recreates an empty FTS table for the reindex to populate via `bulkInsertFts`.
+
 ## [1.3.0] - 2026-08-15
 
 ### Added
@@ -299,6 +328,8 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[1.4.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.1...v1.4.0
+[1.3.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.0...v1.3.1
 [1.2.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.1.0...v1.2.0
 [1.3.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.2.0...v1.3.0
 [1.1.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.0.3...v1.1.0
