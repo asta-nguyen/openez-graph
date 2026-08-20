@@ -97,7 +97,7 @@ interface IgnoreRule {
   match: (path: string) => boolean;
 }
 
-function compileIgnoreMatcher(
+export function compileIgnoreMatcher(
   ignorePatterns: string[],
   hardExcludePatterns: string[] = DEFAULT_EXCLUDE_PATTERNS,
 ) {

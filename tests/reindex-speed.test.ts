@@ -75,6 +75,7 @@ export class Service${i} {
     expect(initialSummary.workspaceId).toBe(ws.id);
     expect(initialSummary.filesScanned).toBeGreaterThanOrEqual(51);
     expect(initialSummary.chunksWritten).toBeGreaterThanOrEqual(51);
+    expect(initialElapsed).toBeGreaterThan(0);
 
     const repo = createWorkspaceRepository(workspaceRoot);
     const docCount = await repo.getDocumentCount();
@@ -94,6 +95,9 @@ export class Service${i} {
 
     expect(reindexSummary.workspaceId).toBe(ws.id);
     expect(reindexSummary.filesScanned).toBeGreaterThanOrEqual(51);
+    expect(reindexElapsed).toBeGreaterThan(0);
+    // 51 files reindexed with native parser in < 3000ms
+    expect(reindexElapsed).toBeLessThan(3000);
 
     // Verify FTS works after reindex
     const ftsResults = await repo.fullTextSearch("computeModule0", 5);

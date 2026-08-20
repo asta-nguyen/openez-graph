@@ -876,9 +876,17 @@ export function createMcpServer(options?: McpServerOptions) {
 }
 
 export async function createAndStartMcpServer(options?: McpServerOptions) {
-  // ── Auto-index + optional auto-sync watcher ──
-  const searchRoot = options?.defaultPath ?? process.cwd();
-  await autoIndexAndSync(searchRoot);
+  // Auto-index only when an explicit workspace path was provided via --path.
+  // Falling back to process.cwd() is dangerous: when the MCP host (e.g. Devin,
+  // Claude Code) spawns this server from $HOME or /, autoIndexAndSync would
+  // recursively walk the entire home filesystem, holding ASTs and graph nodes
+  // for hundreds of thousands of files in memory — observed at 5.7GB RSS in
+  // under 3 minutes, triggering systemd-oomd kills.
+  // Without --path, the server starts clean; callers use the index_workspace
+  // MCP tool to explicitly index a specific workspace.
+  if (options?.defaultPath) {
+    await autoIndexAndSync(options.defaultPath);
+  }
 
   const server = createMcpServer(options);
   const transport = new StdioServerTransport();
