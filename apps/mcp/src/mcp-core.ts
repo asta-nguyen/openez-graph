@@ -98,6 +98,7 @@ const diffContextSchema = z.object({
   ref: z.string().optional(),
   staged: z.boolean().optional(),
   limit: z.number().int().positive().max(50).optional(),
+  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
 });
 
 const codeOutlineSchema = z.object({
@@ -571,8 +572,17 @@ export function createMcpServer(options?: McpServerOptions) {
           properties: {
             workspaceIds: { type: "array", items: { type: "string" } },
             workspaceId: { type: "string" },
-            paths: { type: "array", items: { type: "string" } },
-            path: { type: "string" },
+            paths: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Registered workspace root paths to scope the diff. Selects workspaces, not changed files.",
+            },
+            path: {
+              type: "string",
+              description:
+                "Registered workspace root path to scope the diff. Selects a workspace, not a changed file.",
+            },
             ref: {
               type: "string",
               description: "Git ref or commit range (e.g. 'HEAD~1', 'main', 'origin/main')",
@@ -584,6 +594,11 @@ export function createMcpServer(options?: McpServerOptions) {
             limit: {
               type: "number",
               description: "Max callers to include per symbol (default: 5)",
+            },
+            maxTokens: {
+              type: "number",
+              description:
+                "Positive integer token budget for the response. formattedSummary is dropped before structured symbols/files.",
             },
           },
           required: [],
@@ -890,41 +905,76 @@ export function createMcpServer(options?: McpServerOptions) {
             staged: input.staged,
           });
         }
-        const workspaces = await resolver.resolveReadWorkspaces({
-          workspaceIds: input.workspaceIds,
-          workspaceId: input.workspaceId,
-          paths: input.paths,
-          path: input.path,
-        });
-
-        const reports: Array<{
-          workspaceId: string;
-          workspaceName: string;
-          report: Awaited<ReturnType<typeof analyzeDiffContext>>;
-        }> = [];
-
-        for (const ws of workspaces) {
-          await catchUpWorkspaceIndex(ws.id);
-          await ensureGraphReady(ws.id);
-          const report = await analyzeDiffContext(ws.rootPath, {
+        let workspaces;
+        try {
+          workspaces = await resolver.resolveReadWorkspaces({
+            workspaceIds: input.workspaceIds,
+            workspaceId: input.workspaceId,
+            paths: input.paths,
+            path: input.path,
+          });
+        } catch (err) {
+          return jsonResponse({
+            error: err instanceof Error ? err.message : String(err),
             ref: input.ref,
             staged: input.staged,
-            limit: input.limit ?? 5,
-          });
-          reports.push({
-            workspaceId: ws.id,
-            workspaceName: ws.name,
-            report,
           });
         }
 
-        if (reports.length === 1) {
-          return jsonResponse(reports[0].report);
+        type DiffReport = Awaited<ReturnType<typeof analyzeDiffContext>>;
+        type DiffWorkspaceEntry = {
+          workspaceId: string;
+          workspaceName: string;
+          report?: DiffReport;
+          error?: string;
+          ref?: string;
+          staged?: boolean;
+        };
+        const reports: DiffWorkspaceEntry[] = [];
+
+        for (const ws of workspaces) {
+          try {
+            await catchUpWorkspaceIndex(ws.id);
+            await ensureGraphReady(ws.id);
+            const report = await analyzeDiffContext(ws.rootPath, {
+              ref: input.ref,
+              staged: input.staged,
+              limit: input.limit ?? 5,
+            });
+            reports.push({
+              workspaceId: ws.id,
+              workspaceName: ws.name,
+              report,
+            });
+          } catch (err) {
+            reports.push({
+              workspaceId: ws.id,
+              workspaceName: ws.name,
+              error: err instanceof Error ? err.message : String(err),
+              ref: input.ref,
+              staged: input.staged,
+            });
+          }
         }
 
-        return jsonResponse({
+        const responseBudget = input.maxTokens ?? 4000;
+        let payload: {
+          workspaces: Array<Omit<DiffWorkspaceEntry, "report"> & { report?: unknown }>;
+        } = {
           workspaces: reports,
-        });
+        };
+        // Drop formattedSummary before structured symbols/files when over budget.
+        if (countTokens(JSON.stringify(payload)) > responseBudget) {
+          payload = {
+            workspaces: reports.map((entry) => {
+              if (!entry.report) return entry;
+              const { formattedSummary: _drop, ...reportWithoutSummary } = entry.report;
+              return { ...entry, report: reportWithoutSummary };
+            }),
+          };
+        }
+
+        return jsonResponse(payload, responseBudget);
       }
       case "code_outline": {
         const input = codeOutlineSchema.parse(request.params.arguments ?? {});
