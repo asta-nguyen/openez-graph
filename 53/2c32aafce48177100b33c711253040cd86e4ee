@@ -1,0 +1,56 @@
+AGENTS.md
+  h_611058a46223af 67-71,87,108,115
+CHANGELOG.md
+  h_611058a46223af 8-36,331-332
+README.md
+  h_611058a46223af 47-56
+apps/cli/README.md
+  h_611058a46223af 22,86-95
+apps/cli/package.json
+  h_611058a46223af 3
+apps/cli/src/setup-instructions.ts
+  h_611058a46223af 11
+apps/mcp/src/mcp-core.ts
+  h_611058a46223af 11,103-107,592-607,942-965
+docs/superpowers/plans/2026-08-16-mcp-code-outline.md
+  h_611058a46223af 1-44
+docs/superpowers/specs/2026-08-16-mcp-code-outline-design.md
+  h_611058a46223af 1-95
+landing/src/app/globals.css
+  h_611058a46223af 240,379
+landing/src/app/layout.tsx
+  h_611058a46223af 94
+landing/src/app/page.tsx
+  h_611058a46223af 67-74,85,116,359,369,374,429-430,601,611,616,625,646-647
+packages/db/src/sqlite/document-repository.ts
+  h_611058a46223af 2-3,7,21-24,54,83-248
+packages/db/src/sqlite/fts-repository.ts
+  h_611058a46223af 281-293
+packages/db/src/sqlite/index.ts
+  h_611058a46223af 22-23
+packages/db/src/sqlite/types.ts
+  h_611058a46223af 57-75,205
+packages/db/src/sqlite/workspace-db.ts
+  h_611058a46223af 184-227
+packages/db/src/sqlite/workspace-repository.ts
+  h_611058a46223af 49-58
+packages/indexer/src/index-workspace.ts
+  h_611058a46223af 594,598,601,655-657,698-700,775-777,789,792,826,887
+tests/code-outline.test.ts
+  h_611058a46223af 1-284
+tests/mcp-tools.test.ts
+  h_611058a46223af 291-357
+tests/workspace-db.test.ts
+  h_611058a46223af 283-340
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "532c32aafce48177100b33c711253040cd86e4ee",
+  "prompts": {},
+  "humans": {
+    "h_611058a46223af": {
+      "author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
