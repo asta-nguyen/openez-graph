@@ -883,6 +883,13 @@ export function createMcpServer(options?: McpServerOptions) {
       }
       case "diff_context": {
         const input = diffContextSchema.parse(request.params.arguments ?? {});
+        if (input.ref && input.staged) {
+          return jsonResponse({
+            error: "Cannot combine a git ref with staged changes",
+            ref: input.ref,
+            staged: input.staged,
+          });
+        }
         const workspaces = await resolver.resolveReadWorkspaces({
           workspaceIds: input.workspaceIds,
           workspaceId: input.workspaceId,

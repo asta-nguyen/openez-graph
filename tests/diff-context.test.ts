@@ -124,6 +124,34 @@ export function checkout(amount: number): number {
     expect(report.formattedSummary).toContain("calculateTax");
   });
 
+  test("uses HEAD by default, --staged for staged changes, and rejects mixed scopes", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const stagedPath = path.join(srcDir, "staged.ts");
+    const unstagedPath = path.join(srcDir, "unstaged.ts");
+
+    fs.writeFileSync(stagedPath, "export const staged = 'before';\n");
+    fs.writeFileSync(unstagedPath, "export const unstaged = 'before';\n");
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+
+    fs.writeFileSync(stagedPath, "export const staged = 'after';\n");
+    execSync("git add src/staged.ts", { cwd: workspaceRoot, stdio: "ignore" });
+    fs.writeFileSync(unstagedPath, "export const unstaged = 'after';\n");
+
+    const defaultReport = await analyzeDiffContext(workspaceRoot);
+    const stagedReport = await analyzeDiffContext(workspaceRoot, { staged: true });
+
+    expect(defaultReport.files.map((file) => file.filePath).sort()).toEqual([
+      "src/staged.ts",
+      "src/unstaged.ts",
+    ]);
+    expect(stagedReport.files.map((file) => file.filePath)).toEqual(["src/staged.ts"]);
+    await expect(analyzeDiffContext(workspaceRoot, { ref: "HEAD", staged: true })).rejects.toThrow(
+      "Cannot combine a git ref with staged changes",
+    );
+  });
+
   test("correctly maps symbols when staged and unstaged edits coexist in the same file", async () => {
     const srcDir = path.join(workspaceRoot, "src");
     fs.mkdirSync(srcDir, { recursive: true });
