@@ -19,7 +19,7 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 - **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
 - **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
 - **Vector search** — optional OpenAI/Ollama/local embeddings with cosine similarity
-- **MCP-first** — exposes `code_query`, `code_context`, `graph_neighbors`, `memory_recall`, `memory_write`, `index_workspace`, `list_workspaces` tools
+- **MCP-first** — exposes `code_query`, `code_outline`, `code_context`, `graph_neighbors`, `memory_recall`, `memory_write`, `index_workspace`, `list_workspaces` tools
 - **Multi-workspace** — register and query across multiple codebases
 - **Code graph** — symbols, files, chunks, and edges (calls, imports, contains)
 - **Web dashboard** — built-in graph explorer and workspace management UI
@@ -68,6 +68,7 @@ openez serve --mcp              # start MCP server (auto-index; auto-sync opt-in
 openez serve --web              # start web dashboard (default port 17881)
 openez serve --web --port 8080  # start web dashboard on custom port
 openez status [path]            # show workspace status
+openez diff [ref]               # review git diff with affected AST symbols & callers (--staged, --json)
 openez list                     # list registered workspaces
 openez setup claude             # wire up Claude Code
 openez setup codex              # wire up Codex
@@ -79,6 +80,23 @@ openez config set <key> <value> # set embedding config value
 openez config list              # list all DB-stored config overrides
 ```
 
+### Diff scopes
+
+```bash
+openez diff          # tracked staged + unstaged changes
+git diff HEAD        # equivalent Git default: tracked staged + unstaged changes
+openez diff --staged # staged changes only
+openez diff HEAD~1   # diff against the supplied Git ref
+```
+
+For the `diff_context` MCP tool, `path`/`paths` select registered workspace
+roots, not changed files. Untracked files are not included in this Git-diff
+phase. When a blob parser is provided, `diff_context` also returns
+`oldSymbols` and `deletedSymbols` for modified and deleted files. Old source
+is loaded with `git show <rev>:<path>` and parsed in memory — historical blobs
+are never written to the workspace DB. Caller/callee edges for historical
+symbols use the current graph only (a historical graph is not reconstructed).
+
 Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.openai_base_url`, `embedding.openai_model`, `embedding.ollama_base_url`, `embedding.ollama_model`, `embedding.local_model`. API keys are encrypted at rest with AES-256-GCM.
 
 ## MCP Tools
@@ -86,8 +104,10 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 | Tool              | Description                                                                                         |
 | ----------------- | --------------------------------------------------------------------------------------------------- |
 | `list_workspaces` | List all registered workspaces                                                                      |
+| `code_outline`    | Inspect file AST structure, functions, classes, and exported symbols with line numbers (~50 tokens) |
 | `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
 | `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
+| `diff_context`    | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies             |
 | `graph_neighbors` | Traverse graph edges from a node or label                                                           |
 | `memory_recall`   | Recall active memory entries and technical decisions                                                |
 | `memory_write`    | Write a memory entry (notes, decisions, patterns)                                                   |

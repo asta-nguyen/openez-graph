@@ -46,8 +46,10 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 
 | Tool              | Purpose                                                                                        |
 | ----------------- | ---------------------------------------------------------------------------------------------- |
+| `code_outline`    | Inspect file AST structure, functions, classes, and symbols with line numbers (~50 tokens)     |
 | `code_query`      | Retrieve ranked code and documentation context                                                 |
 | `code_context`    | Get graph-adjacent context for a symbol or file (limit: 50/workspace, max 200, token-budgeted) |
+| `diff_context`    | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies        |
 | `graph_neighbors` | Inspect nearby graph nodes and edges                                                           |
 | `list_workspaces` | List registered workspaces and index status                                                    |
 | `memory_recall`   | Recall stored technical decisions and notes                                                    |
@@ -65,6 +67,7 @@ openez embed [path]         # create configured provider vectors
 openez reindex [path]       # rebuild the index (removes vectors; run embed after)
 openez watch [path]         # keep an index synchronized
 openez status [path]        # show workspace and graph counts
+openez diff [ref]           # review git diff with affected AST symbols & callers (--staged, --json)
 openez list                 # list registered workspaces
 openez serve --mcp          # start the MCP server
 openez serve --web          # start the management UI
@@ -75,6 +78,31 @@ openez config list          # list all DB-stored config overrides
 ```
 
 Run `openez --help` or `openez <command> --help` for all options.
+
+### Diff scopes
+
+```bash
+openez diff          # tracked staged + unstaged changes
+git diff HEAD        # equivalent Git default: tracked staged + unstaged changes
+openez diff --staged # staged changes only
+openez diff HEAD~1   # diff against the supplied Git ref
+```
+
+For the `diff_context` MCP tool, `path`/`paths` select registered workspace
+roots, not changed files. Untracked files are not included in this Git-diff
+phase. The response is always `{ workspaces: [{ workspaceId, workspaceName, report }] }`,
+even for a single workspace. `maxTokens` bounds the response; `formattedSummary`
+is dropped before structured symbols/files. Git/index/graph failures return a
+structured `{ error, workspaceId?, ref?, staged? }` entry instead of an empty
+success report.
+
+When a blob parser is provided, `diff_context` also returns `oldSymbols` and
+`deletedSymbols` for modified and deleted files. Old source is loaded with
+`git show <rev>:<path>` and parsed in memory — historical blobs are never
+written to the workspace DB. Caller/callee edges for historical symbols use
+the current graph only (a historical graph is not reconstructed); a historical
+symbol appears with caller/callee data only when a matching current graph node
+exists.
 
 ### Indexing ownership and lease fencing
 

@@ -50,6 +50,7 @@ openez index [path]
 openez reindex [path]
 openez watch [path]
 openez status [path]
+openez diff [ref]
 openez list
 openez remove [path]        remove workspace from registry and delete its .openez data dir (--id, -y; alias: rm)
 openez serve --mcp
@@ -58,16 +59,34 @@ openez setup codex
 
 Do not bias new work toward `--workspace`, `main-project`, or pinned single-workspace assumptions.
 
+`openez diff` scopes are:
+
+```bash
+openez diff          # tracked staged + unstaged changes
+git diff HEAD        # equivalent Git default: tracked staged + unstaged changes
+openez diff --staged # staged changes only
+openez diff HEAD~1   # diff against the supplied Git ref
+```
+
+For the `diff_context` MCP tool, `path`/`paths` select registered workspace
+roots, not changed files. Untracked files are not included in this Git-diff
+phase. The response is always `{ workspaces: [{ workspaceId, workspaceName, report }] }`,
+even for a single workspace. `maxTokens` bounds the response; `formattedSummary`
+is dropped before structured symbols/files. Git/index/graph failures return a
+structured `{ error, workspaceId?, ref?, staged? }` entry instead of an empty
+success report.
+
 ## MCP-First Workflow
 
 For questions about a codebase that has been indexed:
 
 1. Use MCP tools before reading files directly.
 2. Start with `code_query` for broad code/documentation questions.
-3. Use `code_context` for symbol- or file-specific follow-up.
-4. Use `graph_neighbors` when relationship inspection is needed.
-5. Use `memory_recall` for previously stored technical decisions and agent notes.
-6. Only fall back to direct file reads when MCP results are insufficient or need verification.
+3. Use `code_outline` for a cheap AST-level outline of a single file (functions, classes, exports with line numbers) before reading the full file.
+4. Use `code_context` for symbol- or file-specific follow-up.
+5. Use `graph_neighbors` when relationship inspection is needed.
+6. Use `memory_recall` for previously stored technical decisions and agent notes.
+7. Only fall back to direct file reads when MCP results are insufficient or need verification.
 
 When no explicit workspace scope is provided, MCP should default by reading `.openez/workspace.json` from the current project or one of its parent directories.
 
@@ -83,6 +102,7 @@ These rules apply to ALL agents working in this repository. Violating them waste
 ### When to use OpenEZ MCP tools
 
 - **ALWAYS** use `code_query` instead of `grep`/`ripgrep`/`find` when searching for code by concept, function name, or behavior. `code_query` returns ranked, token-budgeted chunks — not entire files.
+- **ALWAYS** use `code_outline` before reading a full file when you only need its structure (functions, classes, methods, exports with line numbers).
 - **ALWAYS** use `code_context` when you need to understand what calls/imports a specific symbol or file.
 - **ALWAYS** use `memory_recall` at the start of a session to load prior architectural decisions.
 - **ALWAYS** use `memory_write` when the user makes an architectural decision or you discover a non-obvious technical constraint.
@@ -103,14 +123,14 @@ Every `code_query` call logs `tokens_returned`, `tokens_saved`, and `files_scann
 openez setup codex    # or claude, opencode, windsurf
 ```
 
-This configures MCP server access. After setup, the agent automatically sees `code_query`, `code_context`, `graph_neighbors`, `memory_write`, `memory_recall`, `index_workspace`, `remove_workspace`, and `list_workspaces` as available tools. `remove_workspace` is destructive (deletes the registry entry and `<root>/.openez/`) and requires `confirm: true`.
+This configures MCP server access. After setup, the agent automatically sees `code_query`, `code_outline`, `code_context`, `graph_neighbors`, `memory_write`, `memory_recall`, `index_workspace`, `remove_workspace`, and `list_workspaces` as available tools. `remove_workspace` is destructive (deletes the registry entry and `<root>/.openez/`) and requires `confirm: true`.
 
 ## MCP Expectations
 
 MCP should be multi-workspace aware.
 
 - `code_query`, `code_context`, `graph_neighbors`, and `memory_recall` should support one or many workspaces
-- `memory_write`, `index_workspace`, and `remove_workspace` remain single-workspace operations
+- `code_outline`, `memory_write`, `index_workspace`, and `remove_workspace` remain single-workspace operations
 - `list_workspaces` should expose the registered workspace inventory
 - `workspaceId` is the canonical internal key
 

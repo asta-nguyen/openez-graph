@@ -8,14 +8,24 @@ import { Command } from "commander";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
+  findLocalWorkspaceConfig,
   getLocalWorkspaceDir,
   isSensitiveKey,
   removeWorkspace,
   writeLocalWorkspaceConfig,
   readLocalWorkspaceConfig,
 } from "@openez-graph/db";
-import { embedWorkspace, indexWorkspace } from "@openez-graph/indexer";
-import { isLocalEmbeddingModel, LOCAL_EMBEDDING_MODELS } from "@openez-graph/core";
+import {
+  embedWorkspace,
+  ensureGraphReady,
+  indexWorkspace,
+  parseDocument,
+} from "@openez-graph/indexer";
+import {
+  analyzeDiffContext,
+  isLocalEmbeddingModel,
+  LOCAL_EMBEDDING_MODELS,
+} from "@openez-graph/core";
 
 let cliDir: string;
 try {
@@ -339,6 +349,66 @@ program
     if (workspace.lastError) {
       console.log(`  Last error: ${workspace.lastError}`);
     }
+  });
+
+// ── openez diff [ref] ──
+
+program
+  .command("diff")
+  .description("Analyze git diff and extract affected AST symbols and caller graph context")
+  .argument("[ref]", "Git ref or commit range (e.g. HEAD~1, origin/main)")
+  .option("-s, --staged", "Inspect staged git changes")
+  .option("-j, --json", "Output JSON review context bundle")
+  .option("-l, --limit <number>", "Maximum callers and callees to display per symbol", "5")
+  .action(async (ref, options) => {
+    const parsedLimit = Number(options.limit);
+    if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {
+      console.error(`Error: --limit must be a positive integer, got '${options.limit}'`);
+      process.exit(1);
+    }
+
+    const localConfig = await findLocalWorkspaceConfig(process.cwd());
+    const rootPath = localConfig ? localConfig.rootPath : process.cwd();
+    const registry = createRegistryRepository();
+    const workspace = localConfig
+      ? await registry.getWorkspace(localConfig.workspaceId)
+      : await registry.getWorkspaceByPath(rootPath);
+    if (!workspace) {
+      console.error(`Error: no workspace registered at ${rootPath}. Run 'openez init' first.`);
+      process.exit(1);
+    }
+
+    await indexWorkspace({ workspaceId: workspace.id, mode: "incremental" });
+    await ensureGraphReady(workspace.id);
+    const report = await analyzeDiffContext(workspace.rootPath, {
+      ref,
+      staged: Boolean(options.staged),
+      limit: parsedLimit,
+      parseBlob: async ({ relativePath, content }) => {
+        const parsed = await parseDocument({
+          relativePath,
+          absolutePath: path.join(workspace.rootPath, relativePath),
+          content,
+          targetTokens: 400,
+          overlapTokens: 50,
+        });
+        return (parsed.definedSymbols ?? []).map((s) => ({
+          name: s.name,
+          symbolType: s.symbolType,
+          exported: s.exported,
+          startLine: s.startLine ?? 1,
+          endLine: s.endLine ?? s.startLine ?? 1,
+          ...(s.receiver ? { parentSymbol: s.receiver } : {}),
+        }));
+      },
+    });
+
+    if (options.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+
+    console.log(report.formattedSummary);
   });
 
 // ── openez list ──

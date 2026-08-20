@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 
 import {
+  analyzeDiffContext,
   codeContext,
   codeQuery,
   countTokens,
@@ -26,7 +27,7 @@ import {
   findLocalWorkspaceConfig,
   removeWorkspace,
 } from "@openez-graph/db";
-import { ensureGraphReady, indexWorkspace, waitForFts } from "@openez-graph/indexer";
+import { ensureGraphReady, indexWorkspace, parseDocument, waitForFts } from "@openez-graph/indexer";
 
 const MIN_RESPONSE_TOKENS = 32;
 
@@ -87,6 +88,22 @@ const indexWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
   mode: z.enum(["incremental", "full"]).optional(),
+});
+
+const diffContextSchema = z.object({
+  workspaceIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
+  paths: z.array(z.string()).optional(),
+  path: z.string().optional(),
+  ref: z.string().optional(),
+  staged: z.boolean().optional(),
+  limit: z.number().int().positive().max(50).optional(),
+  maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
+});
+
+const codeOutlineSchema = z.object({
+  workspaceId: z.string().optional(),
+  path: z.string().trim().min(1),
 });
 
 const removeWorkspaceSchema = z.object({
@@ -288,6 +305,7 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
         // structured sources stay paired — truncation drops whole result
         // entries rather than emptying their inner arrays.
         const minimum =
+          parentKey === "workspaces" ||
           parentKey === "nodes" ||
           parentKey === "results" ||
           parentKey === "callers" ||
@@ -544,6 +562,63 @@ export function createMcpServer(options?: McpServerOptions) {
             mode: { type: "string", enum: ["incremental", "full"] },
           },
           required: [],
+        },
+      },
+      {
+        name: "diff_context",
+        description:
+          "Analyze git diff changes and retrieve affected AST symbols and their caller/callee dependencies for intelligent code reviews.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceIds: { type: "array", items: { type: "string" } },
+            workspaceId: { type: "string" },
+            paths: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Registered workspace root paths to scope the diff. Selects workspaces, not changed files.",
+            },
+            path: {
+              type: "string",
+              description:
+                "Registered workspace root path to scope the diff. Selects a workspace, not a changed file.",
+            },
+            ref: {
+              type: "string",
+              description: "Git ref or commit range (e.g. 'HEAD~1', 'main', 'origin/main')",
+            },
+            staged: {
+              type: "boolean",
+              description: "Analyze only staged changes (git diff --staged)",
+            },
+            limit: {
+              type: "number",
+              description: "Max callers to include per symbol (default: 5)",
+            },
+            maxTokens: {
+              type: "number",
+              description:
+                "Positive integer token budget for the response. formattedSummary is dropped before structured symbols/files.",
+            },
+          },
+          required: [],
+        },
+      },
+      {
+        name: "code_outline",
+        description:
+          "Inspect the AST structure, functions, classes, and exported symbols of a file with line numbers (50 tokens vs 3,000 for reading the whole file).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceId: { type: "string", description: "ID of a registered workspace" },
+            path: {
+              type: "string",
+              description: "Relative or absolute path to the file inside the workspace",
+            },
+          },
+          required: ["path"],
         },
       },
       {
@@ -821,6 +896,127 @@ export function createMcpServer(options?: McpServerOptions) {
         // preventing stale reindex attempts against the deleted workspace.
         stopWatcherForWorkspace(report.workspaceId);
         return jsonResponse(report);
+      }
+      case "diff_context": {
+        const input = diffContextSchema.parse(request.params.arguments ?? {});
+        if (input.ref && input.staged) {
+          return jsonResponse({
+            error: "Cannot combine a git ref with staged changes",
+            ref: input.ref,
+            staged: input.staged,
+          });
+        }
+        let workspaces;
+        try {
+          workspaces = await resolver.resolveReadWorkspaces({
+            workspaceIds: input.workspaceIds,
+            workspaceId: input.workspaceId,
+            paths: input.paths,
+            path: input.path,
+          });
+        } catch (err) {
+          return jsonResponse({
+            error: err instanceof Error ? err.message : String(err),
+            ref: input.ref,
+            staged: input.staged,
+          });
+        }
+
+        type DiffReport = Awaited<ReturnType<typeof analyzeDiffContext>>;
+        type DiffWorkspaceEntry = {
+          workspaceId: string;
+          workspaceName: string;
+          report?: DiffReport;
+          error?: string;
+          ref?: string;
+          staged?: boolean;
+        };
+        const reports: DiffWorkspaceEntry[] = [];
+
+        for (const ws of workspaces) {
+          try {
+            await catchUpWorkspaceIndex(ws.id);
+            await ensureGraphReady(ws.id);
+            const report = await analyzeDiffContext(ws.rootPath, {
+              ref: input.ref,
+              staged: input.staged,
+              limit: input.limit ?? 5,
+              parseBlob: async ({ relativePath, content }) => {
+                const parsed = await parseDocument({
+                  relativePath,
+                  absolutePath: path.join(ws.rootPath, relativePath),
+                  content,
+                  targetTokens: 400,
+                  overlapTokens: 50,
+                });
+                return (parsed.definedSymbols ?? []).map((s) => ({
+                  name: s.name,
+                  symbolType: s.symbolType,
+                  exported: s.exported,
+                  startLine: s.startLine ?? 1,
+                  endLine: s.endLine ?? s.startLine ?? 1,
+                  ...(s.receiver ? { parentSymbol: s.receiver } : {}),
+                }));
+              },
+            });
+            reports.push({
+              workspaceId: ws.id,
+              workspaceName: ws.name,
+              report,
+            });
+          } catch (err) {
+            reports.push({
+              workspaceId: ws.id,
+              workspaceName: ws.name,
+              error: err instanceof Error ? err.message : String(err),
+              ref: input.ref,
+              staged: input.staged,
+            });
+          }
+        }
+
+        const responseBudget = input.maxTokens ?? 4000;
+        let payload: {
+          workspaces: Array<Omit<DiffWorkspaceEntry, "report"> & { report?: unknown }>;
+        } = {
+          workspaces: reports,
+        };
+        // Drop formattedSummary before structured symbols/files when over budget.
+        if (countTokens(JSON.stringify(payload)) > responseBudget) {
+          payload = {
+            workspaces: reports.map((entry) => {
+              if (!entry.report) return entry;
+              const { formattedSummary: _drop, ...reportWithoutSummary } = entry.report;
+              return { ...entry, report: reportWithoutSummary };
+            }),
+          };
+        }
+
+        return jsonResponse(payload, responseBudget);
+      }
+      case "code_outline": {
+        const input = codeOutlineSchema.parse(request.params.arguments ?? {});
+        const targetPath = input.path;
+
+        const workspaces = await resolver.resolveReadWorkspaces({
+          workspaceId: input.workspaceId,
+        });
+        const workspace = workspaces[0];
+        if (!workspace) {
+          return jsonResponse({ error: "No registered workspace found." });
+        }
+        await catchUpWorkspaceIndex(workspace.id);
+        const repo = createWorkspaceRepository(workspace.rootPath);
+        const outline = await repo.getFileOutline(targetPath);
+
+        if (!outline) {
+          return jsonResponse({
+            error: `File not found in index: '${targetPath}'. Ensure the file exists and is indexed.`,
+            path: targetPath,
+          });
+        }
+
+        return jsonResponse(outline);
       }
       default:
         throw new Error(`Unknown tool: ${request.params.name}`);

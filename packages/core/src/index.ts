@@ -1,3 +1,4 @@
+export * from "./diff-context";
 export * from "./embeddings";
 export * from "./local-embedding";
 export * from "./graph";

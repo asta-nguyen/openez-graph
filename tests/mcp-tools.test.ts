@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -82,6 +83,233 @@ function textResult(result: Awaited<ReturnType<Client["callTool"]>>) {
 }
 
 describe("MCP agent contracts", () => {
+  it("returns the core diff scope error for ref and staged changes", async () => {
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const result = await client.callTool({
+        name: "diff_context",
+        arguments: { ref: "HEAD", staged: true },
+      });
+
+      expect(toolJson(result)).toEqual({
+        error: "Cannot combine a git ref with staged changes",
+        ref: "HEAD",
+        staged: true,
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("prepares caller graph context before analyzing a diff", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("diff-context", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(tempRoot, "src", "target.ts"),
+      "export function target(value: string) { return value.trim().toUpperCase(); }\n",
+    );
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const body = toolJson(await client.callTool({ name: "diff_context", arguments: {} })) as {
+        workspaces: Array<{
+          workspaceId: string;
+          workspaceName: string;
+          report: { formattedSummary: string };
+        }>;
+      };
+      expect(body.workspaces).toHaveLength(1);
+      expect(body.workspaces[0]?.workspaceId).toBe("diff-context");
+      expect(body.workspaces[0]?.workspaceName).toBe("diff-context");
+      expect(body.workspaces[0]?.report.formattedSummary).toContain("caller");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("always wraps diff_context results in a workspaces array", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    const secondRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-mcp-second-"));
+    try {
+      const first = await createIndexedWorkspace("single", tempRoot);
+      const second = await createIndexedWorkspace("multi", secondRoot);
+      execSync("git init", { cwd: secondRoot, stdio: "ignore" });
+      execSync("git config user.name 'Tester'", { cwd: secondRoot, stdio: "ignore" });
+      execSync("git config user.email 'tester@example.com'", { cwd: secondRoot, stdio: "ignore" });
+      execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+      execSync("git add . && git commit -m initial", { cwd: secondRoot, stdio: "ignore" });
+      fs.writeFileSync(
+        path.join(tempRoot, "src", "target.ts"),
+        "export function target(value: string) { return value.trim().toUpperCase(); }\n",
+      );
+      fs.writeFileSync(
+        path.join(secondRoot, "src", "target.ts"),
+        "export function target(value: string) { return value.trim().toUpperCase(); }\n",
+      );
+
+      const { client, server } = await connectClient(tempRoot);
+      try {
+        const singleBody = toolJson(
+          await client.callTool({
+            name: "diff_context",
+            arguments: { workspaceId: first.id },
+          }),
+        ) as { workspaces: unknown[] };
+        expect(Array.isArray(singleBody.workspaces)).toBe(true);
+        expect(singleBody.workspaces).toHaveLength(1);
+
+        const multiBody = toolJson(
+          await client.callTool({
+            name: "diff_context",
+            arguments: { workspaceIds: [first.id, second.id] },
+          }),
+        ) as { workspaces: unknown[] };
+        expect(Array.isArray(multiBody.workspaces)).toBe(true);
+        expect(multiBody.workspaces).toHaveLength(2);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    } finally {
+      closeAllWorkspaceDbs();
+      fs.rmSync(secondRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("bounds diff_context responses to maxTokens and drops formattedSummary first", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("budget", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(tempRoot, "src", "target.ts"),
+      "export function target(value: string) { return value.trim().toUpperCase(); }\n",
+    );
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const text = textResult(
+        await client.callTool({
+          name: "diff_context",
+          arguments: { maxTokens: 200 },
+        }),
+      );
+      expect(countTokens(text)).toBeLessThanOrEqual(200);
+      const body = JSON.parse(text) as {
+        workspaces: Array<{
+          report: {
+            formattedSummary?: string;
+            files: Array<{ filePath: string; affectedSymbols: unknown[] }>;
+          };
+        }>;
+      };
+      // formattedSummary is dropped before structured files/symbols
+      expect(body.workspaces[0]?.report.formattedSummary).toBeUndefined();
+      expect(Array.isArray(body.workspaces[0]?.report.files)).toBe(true);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns a structured error for an unregistered diff_context path", async () => {
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const body = toolJson(
+        await client.callTool({
+          name: "diff_context",
+          arguments: { path: "/definitely/not/a/registered/workspace" },
+        }),
+      ) as { error: string };
+      expect(body.error).toBeTruthy();
+      expect(body.error).not.toBe("");
+      // Must not be an empty success report
+      expect((body as Record<string, unknown>).workspaces).toBeUndefined();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns a structured per-workspace error for an invalid git ref", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("bad-ref", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const body = toolJson(
+        await client.callTool({
+          name: "diff_context",
+          arguments: { ref: "not-a-real-ref" },
+        }),
+      ) as {
+        workspaces: Array<{
+          workspaceId: string;
+          error: string;
+          ref: string;
+        }>;
+      };
+      expect(body.workspaces).toHaveLength(1);
+      expect(body.workspaces[0]?.workspaceId).toBe("bad-ref");
+      expect(body.workspaces[0]?.error).toBeTruthy();
+      expect(body.workspaces[0]?.ref).toBe("not-a-real-ref");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("extracts oldSymbols and deletedSymbols via MCP diff_context", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("deleted-sym", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+
+    fs.writeFileSync(path.join(tempRoot, "src", "target.ts"), "// file cleared\n");
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const body = toolJson(
+        await client.callTool({
+          name: "diff_context",
+          arguments: {},
+        }),
+      ) as {
+        workspaces: Array<{
+          workspaceId: string;
+          report: {
+            files: Array<{
+              filePath: string;
+              oldSymbols?: Array<{ name: string; changeType: string }>;
+            }>;
+          };
+        }>;
+      };
+      expect(body.workspaces).toHaveLength(1);
+      const targetFile = body.workspaces[0]?.report.files.find(
+        (f) => f.filePath === "src/target.ts",
+      );
+      expect(targetFile).toBeDefined();
+      expect(targetFile?.oldSymbols?.length).toBeGreaterThan(0);
+      expect(targetFile?.oldSymbols?.[0]?.name).toBe("target");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("advertises when agents should recall and write memory", async () => {
     const { client, server } = await connectClient(tempRoot);
     try {
@@ -287,6 +515,73 @@ function toolJson(result: unknown): Record<string, unknown> {
   const content = (result as { content: Array<{ type: string; text: string }> }).content;
   return JSON.parse(content[0]!.text) as Record<string, unknown>;
 }
+
+describe("code_outline", () => {
+  it("returns symbols and outlineText for an indexed file", async () => {
+    const workspace = await createIndexedWorkspace("outline-success", tempRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const result = await client.callTool({
+        name: "code_outline",
+        arguments: { path: "src/target.ts" },
+      });
+      const body = toolJson(result) as {
+        path: string;
+        language: string;
+        symbols: Array<{ name: string }>;
+        outlineText: string;
+      };
+
+      expect(body.path).toBe("src/target.ts");
+      expect(body.language).toBe("typescript");
+      expect(Array.isArray(body.symbols)).toBe(true);
+      expect(body.symbols.length).toBeGreaterThan(0);
+      expect(body.symbols.map((s) => s.name)).toContain("target");
+      expect(body.outlineText).toContain("target");
+      expect(await createRegistryRepository().getWorkspace(workspace.id)).not.toBeNull();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns { error, path } when the file is not in the index", async () => {
+    await createIndexedWorkspace("outline-missing", tempRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const result = await client.callTool({
+        name: "code_outline",
+        arguments: { path: "src/does-not-exist.ts" },
+      });
+      const body = toolJson(result) as { error: string; path: string };
+
+      expect(body.error).toBeTruthy();
+      expect(body.error).toContain("src/does-not-exist.ts");
+      expect(body.path).toBe("src/does-not-exist.ts");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("resolves an explicit workspaceId instead of defaulting to cwd", async () => {
+    const workspace = await createIndexedWorkspace("outline-explicit", tempRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const result = await client.callTool({
+        name: "code_outline",
+        arguments: { workspaceId: workspace.id, path: "src/target.ts" },
+      });
+      const body = toolJson(result) as { path: string; symbols: Array<{ name: string }> };
+
+      expect(body.path).toBe("src/target.ts");
+      expect(body.symbols.map((s) => s.name)).toContain("target");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
 
 describe("remove_workspace", () => {
   it("refuses when confirm is not true", async () => {
