@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Git diff scope contract** — documented `openez diff` staged/ref behavior, clarified that MCP `path`/`paths` select registered workspace roots, and noted that untracked files are excluded from this Git-diff phase.
 - **`getFileOutline` path resolution** — uses `path.isAbsolute()` instead of `startsWith("/")` so Windows absolute paths (`C:\foo\bar.ts`) receive the same symlink realpath fallback as Unix absolute paths.
 - **`getFileOutline` async realpath** — replaced `fs.realpathSync` with `fs.promises.realpath` to avoid blocking the MCP event loop on absolute-path cache misses.
 - **AGENTS.md MCP Expectations** — `code_outline` classified as a single-workspace tool alongside `memory_write`, `index_workspace`, and `remove_workspace`.

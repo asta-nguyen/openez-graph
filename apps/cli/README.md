@@ -80,6 +80,18 @@ openez config set <key> <value> # set embedding config value
 openez config list              # list all DB-stored config overrides
 ```
 
+### Diff scopes
+
+```bash
+openez diff          # tracked staged + unstaged changes
+openez diff --staged # staged changes only
+openez diff HEAD~1   # diff against the supplied Git ref
+```
+
+For the `diff_context` MCP tool, `path`/`paths` select registered workspace
+roots, not changed files. Untracked files are not included in this Git-diff
+phase.
+
 Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.openai_base_url`, `embedding.openai_model`, `embedding.ollama_base_url`, `embedding.ollama_model`, `embedding.local_model`. API keys are encrypted at rest with AES-256-GCM.
 
 ## MCP Tools

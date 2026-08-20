@@ -79,6 +79,18 @@ openez config list          # list all DB-stored config overrides
 
 Run `openez --help` or `openez <command> --help` for all options.
 
+### Diff scopes
+
+```bash
+openez diff          # tracked staged + unstaged changes
+openez diff --staged # staged changes only
+openez diff HEAD~1   # diff against the supplied Git ref
+```
+
+For the `diff_context` MCP tool, `path`/`paths` select registered workspace
+roots, not changed files. Untracked files are not included in this Git-diff
+phase.
+
 ### Indexing ownership and lease fencing
 
 Indexing and graph builds use lease-based ownership to prevent concurrent processes from clobbering each other. When a process starts indexing, it claims a 60-second lease with a heartbeat every 15 seconds. If the lease expires (e.g. the process crashes), another process can take over. Completion and failure writes are fenced by owner token — a stale owner cannot overwrite the status set by the new owner.
