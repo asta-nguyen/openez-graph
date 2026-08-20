@@ -84,6 +84,7 @@ openez config list              # list all DB-stored config overrides
 
 ```bash
 openez diff          # tracked staged + unstaged changes
+git diff HEAD        # equivalent Git default: tracked staged + unstaged changes
 openez diff --staged # staged changes only
 openez diff HEAD~1   # diff against the supplied Git ref
 ```
