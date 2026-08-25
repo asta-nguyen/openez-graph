@@ -70,11 +70,13 @@ openez diff HEAD~1   # diff against the supplied Git ref
 
 For the `diff_context` MCP tool, `path`/`paths` select registered workspace
 roots, not changed files. Untracked files are not included in this Git-diff
-phase. The response is always `{ workspaces: [{ workspaceId, workspaceName, report }] }`,
-even for a single workspace. `maxTokens` bounds the response; `formattedSummary`
-is dropped before structured symbols/files. Git/index/graph failures return a
-structured `{ error, workspaceId?, ref?, staged? }` entry instead of an empty
-success report.
+phase. The response is always `{ workspaces: [...] }`, even for a single
+workspace or a top-level validation error. `maxTokens` bounds the response;
+`formattedSummary` is dropped before structured symbols/files. Each entry in
+the `workspaces` array is either a success `{ workspaceId, workspaceName, report }`
+or an error `{ error, workspaceId?, workspaceName?, ref?, staged? }`. Top-level
+errors (ref + staged, invalid ref, unregistered workspace) omit `workspaceId`
+and `workspaceName` since no workspace was resolved.
 
 ## MCP-First Workflow
 

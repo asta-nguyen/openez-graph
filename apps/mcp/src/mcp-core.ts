@@ -17,6 +17,7 @@ import {
   codeQuery,
   countTokens,
   graphNeighbors,
+  isValidGitRef,
   memoryRecall,
   memoryWrite,
   truncateToTokenLimit,
@@ -27,7 +28,12 @@ import {
   findLocalWorkspaceConfig,
   removeWorkspace,
 } from "@openez-graph/db";
-import { ensureGraphReady, indexWorkspace, waitForFts } from "@openez-graph/indexer";
+import {
+  createBlobParser,
+  ensureGraphReady,
+  indexWorkspace,
+  waitForFts,
+} from "@openez-graph/indexer";
 
 const MIN_RESPONSE_TOKENS = 32;
 
@@ -113,7 +119,16 @@ const removeWorkspaceSchema = z.object({
 });
 
 const MCP_CATCHUP_INTERVAL_MS = Number(process.env.OPENEZ_MCP_CATCHUP_INTERVAL_MS ?? 5000);
-const catchupState = new Map<string, { lastRunAt: number; inFlight?: Promise<void> }>();
+const catchupState = new Map<
+  string,
+  {
+    lastRunAt: number;
+    inFlight?: Promise<void>;
+    /** Stores the indexing error if the last inFlight failed, so strict
+     * callers can rethrow it even when the ordinary path swallowed it. */
+    lastError?: unknown;
+  }
+>();
 
 type WorkspaceLike = {
   id: string;
@@ -304,6 +319,8 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
         // within a result entry also get minimum 1 so context and
         // structured sources stay paired — truncation drops whole result
         // entries rather than emptying their inner arrays.
+        // workspaces is the top-level envelope for diff_context and must
+        // never be emptied — otherwise the client sees no workspace entries.
         const minimum =
           parentKey === "nodes" ||
           parentKey === "results" ||
@@ -311,7 +328,8 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
           parentKey === "callees" ||
           parentKey === "relatedChunks" ||
           parentKey === "sources" ||
-          parentKey === "files"
+          parentKey === "files" ||
+          parentKey === "workspaces"
             ? 1
             : 0;
         if (current.length > minimum) arrays.push({ items: current, minimum });
@@ -320,7 +338,10 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
       }
       if (!current || typeof current !== "object") return;
       for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
-        if (typeof child === "string" && key !== "method")
+        // Protect the `error` field from truncation — it is the actionable
+        // message the client needs. Truncating it to empty would leave the
+        // client with a workspace entry that has no error text.
+        if (typeof child === "string" && key !== "method" && key !== "error")
           strings.push({ owner: current as Record<string, unknown>, key, value: child });
         else visit(child, key);
       }
@@ -352,11 +373,108 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
     delete metrics.method;
   updateMetrics();
   if (serializedTokens() > maxTokens) {
+    // Last-resort minimal response. Preserve the workspaces envelope if it
+    // exists (diff_context contract requires { workspaces: [...] }) by
+    // keeping a single truncated error entry. Other tools fall back to
+    // metrics-only as before.
+    if (Array.isArray(value.workspaces) && value.workspaces.length > 0) {
+      const first = value.workspaces[0] as Record<string, unknown> | undefined;
+      // Build the minimal entry, progressively dropping non-essential fields
+      // and truncating the error until the serialized response fits.
+      const originalError =
+        first?.error === undefined ? undefined : String(first.error).slice(0, 200);
+      const variants = [
+        { includeWorkspaceId: true, includeName: true, includeRef: true, includeStaged: true },
+        { includeWorkspaceId: true, includeName: false, includeRef: true, includeStaged: true },
+        { includeWorkspaceId: true, includeName: false, includeRef: false, includeStaged: false },
+        { includeWorkspaceId: false, includeName: false, includeRef: false, includeStaged: false },
+      ];
+      const buildMinimal = (variant: (typeof variants)[number], errorTokens: number) => {
+        const entry: Record<string, unknown> = {};
+        if (variant.includeWorkspaceId && first?.workspaceId) entry.workspaceId = first.workspaceId;
+        if (variant.includeName && first?.workspaceName) entry.workspaceName = first.workspaceName;
+        if (originalError !== undefined) {
+          entry.error = truncateToTokenLimit(originalError, errorTokens);
+        }
+        if (variant.includeRef && first?.ref) entry.ref = String(first.ref).slice(0, 100);
+        if (variant.includeStaged && first?.staged !== undefined) entry.staged = first.staged;
+        const minimal = {
+          workspaces: [entry],
+          metrics: { responseTokens: 0, tokenBudget: maxTokens, truncated: true },
+        };
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const responseTokens = countTokens(JSON.stringify(minimal));
+          if (minimal.metrics.responseTokens === responseTokens) break;
+          minimal.metrics.responseTokens = responseTokens;
+        }
+        return minimal;
+      };
+      const errorBudget = originalError === undefined ? 0 : countTokens(originalError);
+      for (const variant of variants) {
+        for (let errorTokens = errorBudget; errorTokens >= 0; errorTokens -= 1) {
+          const minimal = buildMinimal(variant, errorTokens);
+          if (countTokens(JSON.stringify(minimal)) <= maxTokens) return minimal;
+        }
+      }
+      return buildMinimal(variants[variants.length - 1]!, 0);
+    }
     const minimal = { metrics: { responseTokens: 0, tokenBudget: maxTokens, truncated: true } };
     minimal.metrics.responseTokens = countTokens(JSON.stringify(minimal));
     return minimal;
   }
   return value;
+}
+
+/**
+ * Like catchUpWorkspaceIndex but rethrows indexing errors instead of
+ * swallowing them. Used by diff_context where stale-index analysis is worse
+ * than surfacing the error to the client.
+ *
+ * If an inFlight from the ordinary (lenient) catch-up path is already
+ * running, this function awaits it but checks `lastError` — if the ordinary
+ * path swallowed an error, the strict path rethrows it so the caller sees
+ * the failure instead of silently continuing with a stale index.
+ *
+ * Failed runs do NOT update `lastRunAt`, so subsequent calls are not
+ * throttled after a failure.
+ */
+async function catchUpWorkspaceIndexStrict(workspaceId: string): Promise<void> {
+  const now = Date.now();
+  const current = catchupState.get(workspaceId);
+
+  if (current?.inFlight) {
+    await current.inFlight;
+    // Re-read the state after await — the lenient path's .catch() may have
+    // replaced the map entry with a new object containing lastError. Reading
+    // `current.lastError` directly would miss it (stale reference).
+    const updated = catchupState.get(workspaceId);
+    if (updated?.lastError !== undefined) {
+      throw updated.lastError;
+    }
+    return;
+  }
+
+  if (
+    current &&
+    current.lastError === undefined &&
+    now - current.lastRunAt < MCP_CATCHUP_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  const inFlight = indexWorkspace({ workspaceId, mode: "incremental" })
+    .then(() => {
+      catchupState.set(workspaceId, { lastRunAt: Date.now() });
+    })
+    .catch((error) => {
+      // Store the error so strict callers can rethrow it. Do NOT update
+      // lastRunAt — failed runs should not throttle subsequent retries.
+      catchupState.set(workspaceId, { lastRunAt: current?.lastRunAt ?? 0, lastError: error });
+      throw error;
+    });
+
+  catchupState.set(workspaceId, { lastRunAt: current?.lastRunAt ?? 0, inFlight });
+  await inFlight;
 }
 
 async function catchUpWorkspaceIndex(workspaceId: string): Promise<void> {
@@ -368,19 +486,25 @@ async function catchUpWorkspaceIndex(workspaceId: string): Promise<void> {
     return;
   }
 
-  if (current && now - current.lastRunAt < MCP_CATCHUP_INTERVAL_MS) {
+  if (
+    current &&
+    current.lastError === undefined &&
+    now - current.lastRunAt < MCP_CATCHUP_INTERVAL_MS
+  ) {
     return;
   }
 
   const inFlight = indexWorkspace({ workspaceId, mode: "incremental" })
-    .then(() => undefined)
+    .then(() => {
+      catchupState.set(workspaceId, { lastRunAt: Date.now() });
+    })
     .catch((error) => {
       console.error(
         `OpenEZ MCP catch-up indexing failed: ${error instanceof Error ? error.message : String(error)}`,
       );
-    })
-    .finally(() => {
-      catchupState.set(workspaceId, { lastRunAt: Date.now() });
+      // Store the error so strict callers can rethrow it. Do NOT update
+      // lastRunAt — failed runs should not throttle subsequent retries.
+      catchupState.set(workspaceId, { lastRunAt: current?.lastRunAt ?? 0, lastError: error });
     });
 
   catchupState.set(workspaceId, { lastRunAt: current?.lastRunAt ?? 0, inFlight });
@@ -898,12 +1022,36 @@ export function createMcpServer(options?: McpServerOptions) {
       }
       case "diff_context": {
         const input = diffContextSchema.parse(request.params.arguments ?? {});
+
+        const responseBudget = input.maxTokens ?? 4000;
+
+        type DiffReport = Awaited<ReturnType<typeof analyzeDiffContext>>;
+        type DiffWorkspaceEntry = {
+          workspaceId?: string;
+          workspaceName?: string;
+          report?: DiffReport;
+          error?: string;
+          ref?: string;
+          staged?: boolean;
+        };
+
+        // Top-level validation errors are wrapped in { workspaces: [...] } so
+        // clients always see the same envelope shape. workspaceId is omitted
+        // when no workspace could be resolved. maxTokens is applied so the
+        // error response respects the same budget as success responses.
         if (input.ref && input.staged) {
-          return jsonResponse({
-            error: "Cannot combine a git ref with staged changes",
-            ref: input.ref,
-            staged: input.staged,
-          });
+          return jsonResponse(
+            {
+              workspaces: [
+                {
+                  error: "Cannot combine a git ref with staged changes",
+                  ref: input.ref,
+                  staged: input.staged,
+                },
+              ] satisfies DiffWorkspaceEntry[],
+            },
+            responseBudget,
+          );
         }
         let workspaces;
         try {
@@ -914,32 +1062,49 @@ export function createMcpServer(options?: McpServerOptions) {
             path: input.path,
           });
         } catch (err) {
-          return jsonResponse({
-            error: err instanceof Error ? err.message : String(err),
-            ref: input.ref,
-            staged: input.staged,
-          });
+          return jsonResponse(
+            {
+              workspaces: [
+                {
+                  error: err instanceof Error ? err.message : String(err),
+                  ref: input.ref,
+                  staged: input.staged,
+                },
+              ] satisfies DiffWorkspaceEntry[],
+            },
+            responseBudget,
+          );
         }
 
-        type DiffReport = Awaited<ReturnType<typeof analyzeDiffContext>>;
-        type DiffWorkspaceEntry = {
-          workspaceId: string;
-          workspaceName: string;
-          report?: DiffReport;
-          error?: string;
-          ref?: string;
-          staged?: boolean;
-        };
+        // Validate ref at top level so invalid refs return a top-level error
+        // entry (no workspaceId) per AGENTS.md, rather than a per-workspace
+        // error that incorrectly includes workspaceId.
+        if (input.ref && !isValidGitRef(input.ref)) {
+          return jsonResponse(
+            {
+              workspaces: [
+                {
+                  error: `Invalid git ref '${input.ref}': ref must not start with '-', must not contain shell metacharacters or control characters, and must be a valid rev expression (e.g. HEAD, HEAD~1, main, origin/main, main..HEAD).`,
+                  ref: input.ref,
+                  staged: input.staged,
+                },
+              ] satisfies DiffWorkspaceEntry[],
+            },
+            responseBudget,
+          );
+        }
+
         const reports: DiffWorkspaceEntry[] = [];
 
         for (const ws of workspaces) {
           try {
-            await catchUpWorkspaceIndex(ws.id);
+            await catchUpWorkspaceIndexStrict(ws.id);
             await ensureGraphReady(ws.id);
             const report = await analyzeDiffContext(ws.rootPath, {
               ref: input.ref,
               staged: input.staged,
               limit: input.limit ?? 5,
+              parseBlob: createBlobParser(),
             });
             reports.push({
               workspaceId: ws.id,
@@ -957,7 +1122,6 @@ export function createMcpServer(options?: McpServerOptions) {
           }
         }
 
-        const responseBudget = input.maxTokens ?? 4000;
         let payload: {
           workspaces: Array<Omit<DiffWorkspaceEntry, "report"> & { report?: unknown }>;
         } = {

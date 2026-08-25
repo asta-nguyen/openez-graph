@@ -91,11 +91,37 @@ describe("MCP agent contracts", () => {
         arguments: { ref: "HEAD", staged: true },
       });
 
-      expect(toolJson(result)).toEqual({
-        error: "Cannot combine a git ref with staged changes",
-        ref: "HEAD",
-        staged: true,
-      });
+      const body = toolJson(result) as {
+        workspaces: Array<{ error: string; ref: string; staged: boolean }>;
+        metrics?: unknown;
+      };
+      expect(body.workspaces).toEqual([
+        {
+          error: "Cannot combine a git ref with staged changes",
+          ref: "HEAD",
+          staged: true,
+        },
+      ]);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("keeps structured diff errors within the minimum response budget", async () => {
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const text = textResult(
+        await client.callTool({
+          name: "diff_context",
+          arguments: { ref: "HEAD", staged: true, maxTokens: 32 },
+        }),
+      );
+
+      expect(countTokens(text)).toBeLessThanOrEqual(32);
+      expect(
+        (JSON.parse(text) as { workspaces: Array<{ error?: string }> }).workspaces[0]?.error,
+      ).toContain("Cannot");
     } finally {
       await client.close();
       await server.close();
@@ -228,18 +254,18 @@ describe("MCP agent contracts", () => {
           name: "diff_context",
           arguments: { path: "/definitely/not/a/registered/workspace" },
         }),
-      ) as { error: string };
-      expect(body.error).toBeTruthy();
-      expect(body.error).not.toBe("");
-      // Must not be an empty success report
-      expect((body as Record<string, unknown>).workspaces).toBeUndefined();
+      ) as { workspaces: Array<{ error: string }> };
+      // Top-level errors are wrapped in { workspaces: [{ error }] }
+      expect(body.workspaces).toHaveLength(1);
+      expect(body.workspaces[0]?.error).toBeTruthy();
+      expect(body.workspaces[0]?.error).not.toBe("");
     } finally {
       await client.close();
       await server.close();
     }
   });
 
-  it("returns a structured per-workspace error for an invalid git ref", async () => {
+  it("returns a structured top-level error for a syntactically invalid git ref (no workspaceId)", async () => {
     execSync("git init", { cwd: tempRoot, stdio: "ignore" });
     execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
     execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
@@ -251,19 +277,88 @@ describe("MCP agent contracts", () => {
       const body = toolJson(
         await client.callTool({
           name: "diff_context",
+          arguments: { ref: "HEAD; echo pwned" },
+        }),
+      ) as {
+        workspaces: Array<{
+          workspaceId?: string;
+          error: string;
+          ref: string;
+        }>;
+        metrics?: unknown;
+      };
+      expect(body.workspaces).toHaveLength(1);
+      // Syntactically invalid ref is a top-level error — no workspace was
+      // resolved, so workspaceId must be absent per AGENTS.md contract.
+      expect(body.workspaces[0]?.workspaceId).toBeUndefined();
+      expect(body.workspaces[0]?.error).toBeTruthy();
+      expect(body.workspaces[0]?.ref).toBe("HEAD; echo pwned");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns a per-workspace error for a nonexistent but syntactically valid git ref", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("missing-ref", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const body = toolJson(
+        await client.callTool({
+          name: "diff_context",
           arguments: { ref: "not-a-real-ref" },
         }),
       ) as {
         workspaces: Array<{
-          workspaceId: string;
+          workspaceId?: string;
+          error: string;
+          ref: string;
+        }>;
+        metrics?: unknown;
+      };
+      expect(body.workspaces).toHaveLength(1);
+      // Nonexistent ref is a per-workspace error — workspace was resolved
+      // (workspaceId present) but git diff failed against the missing ref.
+      expect(body.workspaces[0]?.workspaceId).toBe("missing-ref");
+      expect(body.workspaces[0]?.error).toBeTruthy();
+      expect(body.workspaces[0]?.ref).toBe("not-a-real-ref");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns a structured error for an option-injection git ref", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("injection-ref", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const body = toolJson(
+        await client.callTool({
+          name: "diff_context",
+          arguments: { ref: "--output=/tmp/evil" },
+        }),
+      ) as {
+        workspaces: Array<{
+          workspaceId?: string;
           error: string;
           ref: string;
         }>;
       };
       expect(body.workspaces).toHaveLength(1);
-      expect(body.workspaces[0]?.workspaceId).toBe("bad-ref");
-      expect(body.workspaces[0]?.error).toBeTruthy();
-      expect(body.workspaces[0]?.ref).toBe("not-a-real-ref");
+      // Option-injection ref is a top-level validation error — no workspaceId
+      expect(body.workspaces[0]?.workspaceId).toBeUndefined();
+      expect(body.workspaces[0]?.error).toMatch(/invalid.*ref|ref.*invalid/i);
+      expect(body.workspaces[0]?.ref).toBe("--output=/tmp/evil");
     } finally {
       await client.close();
       await server.close();
