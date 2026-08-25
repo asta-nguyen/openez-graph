@@ -15,10 +15,16 @@ import {
   writeLocalWorkspaceConfig,
   readLocalWorkspaceConfig,
 } from "@openez-graph/db";
-import { embedWorkspace, ensureGraphReady, indexWorkspace } from "@openez-graph/indexer";
+import {
+  createBlobParser,
+  embedWorkspace,
+  ensureGraphReady,
+  indexWorkspace,
+} from "@openez-graph/indexer";
 import {
   analyzeDiffContext,
   isLocalEmbeddingModel,
+  isValidGitRef,
   LOCAL_EMBEDDING_MODELS,
 } from "@openez-graph/core";
 
@@ -362,6 +368,13 @@ program
       process.exit(1);
     }
 
+    if (ref && !isValidGitRef(ref)) {
+      console.error(
+        `Error: invalid git ref '${ref}'. Ref must not start with '-', must not contain shell metacharacters or control characters, and must be a valid rev expression (e.g. HEAD, HEAD~1, main, origin/main, main..HEAD).`,
+      );
+      process.exit(1);
+    }
+
     const localConfig = await findLocalWorkspaceConfig(process.cwd());
     const rootPath = localConfig ? localConfig.rootPath : process.cwd();
     const registry = createRegistryRepository();
@@ -379,6 +392,7 @@ program
       ref,
       staged: Boolean(options.staged),
       limit: parsedLimit,
+      parseBlob: createBlobParser(),
     });
 
     if (options.json) {
