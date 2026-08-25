@@ -1,0 +1,146 @@
+packages/indexer/src/blob-parser.ts
+  s_b1f7aef196ea4d::t_c0f90c4ae5b072 1-32
+tests/mcp-tools.test.ts
+  s_c65a210f6d20dc::t_d0517bcc305f95 111-121,124
+  s_b1f7aef196ea4d::t_32b1718c07b42a 352,358-359
+  s_b1f7aef196ea4d::t_5fd6961ec706ed 288
+  s_b1f7aef196ea4d::t_2a663475b2afcf 268,275-280,291-292,294-308,318,322,325-327
+  s_b1f7aef196ea4d::t_459f2e5844ecd6 257-261
+  s_b1f7aef196ea4d::t_7db2eb359b5334 284,293
+  s_c65a210f6d20dc::t_cd0b173ad0925a 122-123
+  s_b1f7aef196ea4d::t_2c9200f8a6ee05 94-104
+  s_b1f7aef196ea4d::t_49fab7d9a99f52 105-109,281-283,285-287,289-290,336-351,353-357,360-367
+AGENTS.md
+  s_b1f7aef196ea4d::t_12de70e3985948 73-79
+packages/core/src/diff-context.ts
+  s_b1f7aef196ea4d::t_1e895710c9eb84 529
+  s_b1f7aef196ea4d::t_89ed238a74d8f8 84-86,88-90,94-102,108-115
+  s_b1f7aef196ea4d::t_328c4b46b88a25 2-3
+  s_b1f7aef196ea4d::t_945194976084a2 92,103-107,705
+  s_b1f7aef196ea4d::t_208c2e1327e786 592-593,600-617,619-639,643,680
+  s_b1f7aef196ea4d::t_bb109b3d43ceee 139-145
+  s_c65a210f6d20dc::t_6e33abb33050d6 789-790,793
+  s_b1f7aef196ea4d::t_2203c073c30ce0 694
+  s_b1f7aef196ea4d::t_564a342686d690 665-673,683
+  s_b1f7aef196ea4d::t_844acc9fbad988 738-739
+  s_b1f7aef196ea4d::t_d4cacc73956510 297-302
+  s_b1f7aef196ea4d::t_4deb119a7f3e52 383,386-459,487,508,691,798
+  s_b1f7aef196ea4d::t_ba3bd85d31f5b6 654
+  s_b1f7aef196ea4d::t_2baa5e05c35023 525
+  s_b1f7aef196ea4d::t_13c590d69927a1 482
+  s_b1f7aef196ea4d::t_5f508797308133 509-513,515
+  s_b1f7aef196ea4d::t_b464b42262c705 195,204-208
+  s_b1f7aef196ea4d::t_4ac6c2ccc8cb31 13-26,30,32-35,38-70,76-78
+  s_b1f7aef196ea4d::t_f53ec57fd336cc 572-575,582
+  s_b1f7aef196ea4d::t_d9a896fe2281c7 724
+  s_b1f7aef196ea4d::t_079768029a9640 647,787,791-792,794-797
+  s_b1f7aef196ea4d::t_17c8cbd3b1f9cc 165-171,192
+  s_b1f7aef196ea4d::t_c5fb8214d3973e 805
+  s_b1f7aef196ea4d::t_de16af9843281d 640-642
+  s_b1f7aef196ea4d::t_725d84875005f1 522-524
+  s_b1f7aef196ea4d::t_c469e3b5e37a80 721-723,725-726,729-737,741-749,752-753,755-763
+  s_b1f7aef196ea4d::t_26bf880151e04e 535-545
+  s_b1f7aef196ea4d::t_1dbaa83621b91d 27,36-37
+  s_b1f7aef196ea4d::t_b62659197a71a9 769-774
+  s_b1f7aef196ea4d::t_b1c5b353127bf2 750
+  s_b1f7aef196ea4d::t_a7d05bce7c7fb5 79-83,87,91,93,385
+  s_b1f7aef196ea4d::t_737b084d30b8c9 71-75
+  s_b1f7aef196ea4d::t_bf09d72a914b28 28-29,31
+  s_b1f7aef196ea4d::t_a88ffc2a6ac9c7 740,764-768
+  s_b1f7aef196ea4d::t_b17134d0773cf6 645-646,776-783
+  s_b1f7aef196ea4d::t_d041897f791257 136-138
+  s_b1f7aef196ea4d::t_071a311c57d348 162-164
+  s_b1f7aef196ea4d::t_ca1fa7fe379f27 191
+  s_b1f7aef196ea4d::t_9da1bca6c43a04 193-194
+  s_b1f7aef196ea4d::t_2b1a29ae900fe3 294-296
+  s_b1f7aef196ea4d::t_70c1e945de2aa5 381-382
+  s_b1f7aef196ea4d::t_db4835ebd93338 384
+  s_b1f7aef196ea4d::t_da6c04080912b3 483-486
+  s_b1f7aef196ea4d::t_4600e0c9eec335 546-548
+  s_b1f7aef196ea4d::t_fb429cb6fb85b1 583-584
+  s_b1f7aef196ea4d::t_f4160746daafab 644
+  s_b1f7aef196ea4d::t_ed808609893848 648-653
+  s_b1f7aef196ea4d::t_0d945928f6f259 674-679
+  s_b1f7aef196ea4d::t_34d3ed7bc8bf21 681-682
+  s_b1f7aef196ea4d::t_a6591ace59b2e9 706
+  s_b1f7aef196ea4d::t_1c918b551ab89f 775
+  s_b1f7aef196ea4d::t_288f21d5bd165a 784-786
+  s_b1f7aef196ea4d::t_5f579855d9f80b 799-804
+  s_b1f7aef196ea4d::t_746ad8c0c49bb8 806
+apps/mcp/src/mcp-core.ts
+  s_b1f7aef196ea4d::t_fd6213b8808e81 379,387-390,396
+  s_b1f7aef196ea4d::t_d929fa3e20b563 1065-1074
+  s_b1f7aef196ea4d::t_8731f2aa69f07b 1079
+  s_c65a210f6d20dc::t_6e33abb33050d6 376-378,380-386,391-395,398-405,408,1078
+  s_b1f7aef196ea4d::t_8379f865a558e2 331
+  s_b1f7aef196ea4d::t_9720d29563cc43 418-420,439,443,448,450-455
+  s_b1f7aef196ea4d::t_2f049d08a8ba01 397,406
+  s_b1f7aef196ea4d::t_5b8468cf7ad682 20
+  s_b1f7aef196ea4d::t_5298120b4152c8 31
+  s_b1f7aef196ea4d::t_2cf94cdcdc27f9 433-438,468-469
+  s_b1f7aef196ea4d::t_27cb00e762126f 471-478
+  s_b1f7aef196ea4d::t_e43828b30a1607 411,414-417,428-432,440-442,444-447,449,456-461,465,489-491,499
+  s_b1f7aef196ea4d::t_644bc820b118a5 1025-1041,1043-1054
+  s_b1f7aef196ea4d::t_e3e166d4b969e2 1085
+  s_b1f7aef196ea4d::t_eb33741df36a0d 32-34
+  s_b1f7aef196ea4d::t_57a3a172ff06f6 332
+  s_b1f7aef196ea4d::t_e04042f92b3223 412-413
+  s_b1f7aef196ea4d::t_bb6850a778cf52 462-464
+  s_b1f7aef196ea4d::t_7dc79a7d105532 466-467
+  s_b1f7aef196ea4d::t_01733c8ff3bc18 470
+  s_b1f7aef196ea4d::t_7b6353c42a31fe 479
+  s_b1f7aef196ea4d::t_8c6ebb5ba971b9 492-493
+  s_b1f7aef196ea4d::t_81b6f73ca5b79e 498
+  s_b1f7aef196ea4d::t_ff38ce2ba1f0a3 500
+  s_b1f7aef196ea4d::t_c1bbbe0b12bd6c 1080-1084
+  s_b1f7aef196ea4d::t_db97eef9c5b4b1 1086-1088
+packages/indexer/src/index.ts
+  s_b1f7aef196ea4d::t_77ba3e2c4c685e 7-8
+tests/diff-context.test.ts
+  s_b1f7aef196ea4d::t_0645b2a01f2aee 573-613
+  s_b1f7aef196ea4d::t_358548652c1033 702-730,739-838
+  s_c65a210f6d20dc::t_d0517bcc305f95 457-458,463-469,475-488
+  s_b1f7aef196ea4d::t_126f1f45c70a02 614-671
+  s_c65a210f6d20dc::t_4666b95d417c8f 459-462,470-474
+  s_b1f7aef196ea4d::t_92e331dabb038d 846-847,849,851-854,857,861,863,866,882
+  s_b1f7aef196ea4d::t_82fdd97a9d2273 492,494-495,675,677,839-845,848,850,855-856,858-860,862,864-865,867-881,883-932
+  s_b1f7aef196ea4d::t_789067d1a45788 490-491,493,673-674,676,933-977,982-984
+  s_b1f7aef196ea4d::t_7a43485267907d 8
+  s_b1f7aef196ea4d::t_3d630ccc094636 731-735
+  s_b1f7aef196ea4d::t_b6e11d0dcd5d47 736-738
+  s_b1f7aef196ea4d::t_cd5dd67ed2ab07 978-981
+  s_b1f7aef196ea4d::t_013c9b99d53e29 9-11
+  s_b1f7aef196ea4d::t_0b88ce1c821bef 672
+  s_b1f7aef196ea4d::t_5894f7d1954a45 678
+  s_b1f7aef196ea4d::t_0a1320d5f0fc6c 985-987
+README.md
+  s_b1f7aef196ea4d::t_4c493be7414009 93-99
+apps/cli/src/cli.ts
+  s_b1f7aef196ea4d::t_e6b1160215cfd9 371-377
+  s_b1f7aef196ea4d::t_6752cf4157f69f 395
+  s_b1f7aef196ea4d::t_6850b37f24bdbc 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "c1a127048831d0e6739b4cd12e8b7113fc7cfa5b",
+  "prompts": {},
+  "sessions": {
+    "s_b1f7aef196ea4d": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dawn-maize",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_c65a210f6d20dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03438-ce3c-7670-97a5-c7b15b27235f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
