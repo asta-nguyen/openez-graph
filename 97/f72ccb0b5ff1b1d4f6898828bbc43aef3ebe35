@@ -1,0 +1,47 @@
+apps/cli/package.json
+  s_c65a210f6d20dc::t_824da638100bdc 3
+apps/web/src/routes/settings.tsx
+  s_c65a210f6d20dc::t_a874fc52da2797 274
+apps/web/src/routes/workspaces/$workspaceId/index.tsx
+  s_c65a210f6d20dc::t_a874fc52da2797 32,411,448,486
+packages/core/src/diff-context.ts
+  s_c65a210f6d20dc::t_8f1b7d7ed4f701 492-524,550-552,554,581,594,596-621,631,781
+  s_c65a210f6d20dc::t_0cebedf13dd420 535,542-543
+  s_c65a210f6d20dc::t_168d3c8231ad54 480,541
+  s_c65a210f6d20dc::t_de50097a6eb10f 479,531-534,545-547
+apps/web/src/routes/index.tsx
+  s_c65a210f6d20dc::t_e85de94d45aedf 205-212
+  s_c65a210f6d20dc::t_a874fc52da2797 5,150,181,270
+apps/web/src/routes/memories.tsx
+  s_c65a210f6d20dc::t_a874fc52da2797 145,157
+tests/diff-context.test.ts
+  s_c65a210f6d20dc::t_7d5a3c97e11fda 427-431,436-449,454-462
+  s_c65a210f6d20dc::t_73d45575d3889a 250,270,273,284,292,306,310,739-778
+  s_c65a210f6d20dc::t_e8950e407d72e9 432-435,450-453
+  s_c65a210f6d20dc::t_d3df7221367696 313,421,423
+  s_c65a210f6d20dc::t_c6a8a80de9ea4f 779
+apps/web/src/routes/workspaces/index.tsx
+  s_c65a210f6d20dc::t_a874fc52da2797 97
+apps/web/src/routes/documents.tsx
+  s_c65a210f6d20dc::t_a874fc52da2797 4,77
+CHANGELOG.md
+  s_c65a210f6d20dc::t_824da638100bdc 9-19,21
+  s_c65a210f6d20dc::t_99d193c0c6c456 346
+  s_c65a210f6d20dc::t_51dc340ed57f8e 8,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "97f72ccb0b5ff1b1d4f6898828bbc43aef3ebe35",
+  "prompts": {},
+  "sessions": {
+    "s_c65a210f6d20dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03438-ce3c-7670-97a5-c7b15b27235f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
