@@ -29,7 +29,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { StatusBadge } from "../../../components/status-badge";
-import { api } from "../../../lib/api";
+import { api, type QueryMetrics, type RunRow } from "../../../lib/api";
 import { metricsQueryOptions, workspaceQueryOptions } from "../../../lib/queries";
 import { formatDate } from "../../../lib/utils";
 
@@ -408,7 +408,7 @@ function WorkspaceDetailPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {metrics.recentQueries.map((q) => (
+                  {metrics.recentQueries.map((q: QueryMetrics["recentQueries"][number]) => (
                     <TableRow key={q.id}>
                       <TableCell className="font-medium max-w-50 truncate">{q.query}</TableCell>
                       <TableCell>{q.resultCount}</TableCell>
@@ -445,7 +445,7 @@ function WorkspaceDetailPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workspace.recentIndexRuns.map((run) => (
+                  {workspace.recentIndexRuns.map((run: RunRow) => (
                     <TableRow key={run.id}>
                       <TableCell>{run.mode}</TableCell>
                       <TableCell>
@@ -483,7 +483,7 @@ function WorkspaceDetailPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workspace.recentGraphRuns.map((run) => (
+                  {workspace.recentGraphRuns.map((run: RunRow) => (
                     <TableRow key={run.id}>
                       <TableCell>{run.mode}</TableCell>
                       <TableCell>

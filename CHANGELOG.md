@@ -5,6 +5,20 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-08-26
+
+### Added
+
+- **CLI and MCP diff context** — `openez diff` and `diff_context` now report affected symbols, callers, callees, historical symbols, and deleted symbols across staged changes and Git refs.
+
+### Changed
+
+- **Diff scope and workspace contracts** — supports default tracked staged + unstaged changes, staged-only changes, Git refs/ranges, workspace selectors, structured multi-workspace responses, and token-bounded MCP output.
+
+### Fixed
+
+- **Diff correctness and readiness** — normalizes staged hunk coordinates, reads staged symbols from Git index blobs, avoids leaking working-tree dependency context, validates Git refs, preserves deleted-symbol counts, and surfaces structured historical-blob warnings.
+
 ## [1.4.0] - 2026-08-19
 
 ### Added
@@ -329,6 +343,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - Error handling and validation for import path extraction
 - CLI npm packaging
 
+[1.5.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.0...v1.3.1
 [1.2.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.1.0...v1.2.0
