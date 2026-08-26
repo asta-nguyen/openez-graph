@@ -247,7 +247,7 @@ export function checkout(amount: number): number {
     );
   });
 
-  test("correctly maps symbols when staged and unstaged edits coexist in the same file", async () => {
+  test("uses staged symbol content when unstaged edits change the same symbol", async () => {
     const srcDir = path.join(workspaceRoot, "src");
     fs.mkdirSync(srcDir, { recursive: true });
 
@@ -267,10 +267,10 @@ export function formatCurrency(amount: number): string {
     execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
     execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
 
-    // Staged change modifying calculateTax
+    // Stage a rename, then make a different unstaged rename in the same hunk.
     fs.writeFileSync(
       utilsPath,
-      `export function calculateTax(amount: number): number {
+      `export function stagedTax(amount: number): number {
   return amount * 0.15;
 }
 
@@ -281,7 +281,7 @@ export function formatCurrency(amount: number): string {
     );
     execSync("git add src/utils.ts", { cwd: workspaceRoot, stdio: "ignore" });
 
-    // Unstaged change adding lines at the top (shifting line numbers)
+    // The working tree must not replace the staged symbol in --staged output.
     fs.writeFileSync(
       utilsPath,
       `// Unstaged header comment 1
@@ -289,7 +289,7 @@ export function formatCurrency(amount: number): string {
 // Unstaged header comment 3
 // Unstaged header comment 4
 
-export function calculateTax(amount: number): number {
+export function workingTreeTax(amount: number): number {
   return amount * 0.15;
 }
 
@@ -303,14 +303,14 @@ export function formatCurrency(amount: number): string {
     const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "staged-test" });
     await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
 
-    const report = await analyzeDiffContext(workspaceRoot, { staged: true });
+    const report = await analyzeDiffContext(workspaceRoot, { staged: true, parseBlob });
 
     expect(report.totalFilesChanged).toBe(1);
     expect(report.files[0].affectedSymbols.length).toBeGreaterThan(0);
-    expect(report.files[0].affectedSymbols[0].name).toBe("calculateTax");
+    expect(report.files[0].affectedSymbols[0].name).toBe("stagedTax");
   });
 
-  test("maps a staged hunk through separate unstaged hunks in working-tree coordinates", async () => {
+  test("keeps staged hunk ranges in index coordinates despite unstaged hunks", async () => {
     const srcDir = path.join(workspaceRoot, "src");
     fs.mkdirSync(srcDir, { recursive: true });
     const utilsPath = path.join(srcDir, "utils.ts");
@@ -418,10 +418,46 @@ export function after(): string {
     const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "multi-hunk-test" });
     await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
 
-    const report = await analyzeDiffContext(workspaceRoot, { staged: true });
+    const report = await analyzeDiffContext(workspaceRoot, { staged: true, parseBlob });
 
-    expect(report.files[0].changedLineRanges).toEqual([{ start: 16, end: 22 }]);
+    expect(report.files[0].changedLineRanges).toEqual([{ start: 10, end: 16 }]);
     expect(report.files[0].affectedSymbols.map((symbol) => symbol.name)).toEqual(["target"]);
+  });
+
+  test("does not include working-tree graph context for staged symbols", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const targetPath = path.join(srcDir, "target.ts");
+
+    fs.writeFileSync(
+      path.join(srcDir, "helper.ts"),
+      "export function helper(): number { return 1; }\n",
+    );
+    fs.writeFileSync(targetPath, "export function target(): number { return 1; }\n");
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+
+    fs.writeFileSync(targetPath, "export function target(): number { return 2; }\n");
+    execSync("git add src/target.ts", { cwd: workspaceRoot, stdio: "ignore" });
+    fs.writeFileSync(
+      targetPath,
+      `import { helper } from "./helper";
+export function target(): number { return helper(); }
+`,
+    );
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({
+      rootPath: workspaceRoot,
+      name: "staged-graph-test",
+    });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+    await ensureGraphReady(ws.id);
+
+    const report = await analyzeDiffContext(workspaceRoot, { staged: true, parseBlob });
+
+    expect(report.files[0].imports).toBeUndefined();
+    expect(report.files[0].affectedSymbols[0].callees).toEqual([]);
   });
 
   // Helper: wrap the indexer's parseDocument into the BlobParser shape that
@@ -698,6 +734,47 @@ export function alsoRemoved(): number {
     expect(report.files[0].status).toBe("deleted");
     expect(report.files[0].deletedSymbols).toBeUndefined();
     expect(report.files[0].oldSymbols).toBeUndefined();
+  });
+
+  test("formats newly added symbols as added", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const addedPath = path.join(srcDir, "added.ts");
+    fs.writeFileSync(path.join(srcDir, "existing.ts"), "export const existing = true;\n");
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+
+    fs.writeFileSync(addedPath, "export function addedSymbol(): void {}\n");
+    execSync("git add src/added.ts", { cwd: workspaceRoot, stdio: "ignore" });
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "added-summary" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const report = await analyzeDiffContext(workspaceRoot, { staged: true });
+
+    expect(report.formattedSummary).toContain("addedSymbol [L1-L1] (added)");
+  });
+
+  test("does not warn when an added file has no historical blob", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    const addedPath = path.join(srcDir, "added.ts");
+    fs.writeFileSync(path.join(srcDir, "existing.ts"), "export const existing = true;\n");
+    execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
+
+    fs.writeFileSync(addedPath, "export function addedSymbol(): void {}\n");
+    execSync("git add src/added.ts", { cwd: workspaceRoot, stdio: "ignore" });
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "added-history" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const report = await analyzeDiffContext(workspaceRoot, { staged: true, parseBlob });
+
+    expect(report.warnings).toBeUndefined();
+    expect(report.files[0].warnings).toBeUndefined();
   });
 
   // ── P1: Git ref validation (option injection prevention) ──

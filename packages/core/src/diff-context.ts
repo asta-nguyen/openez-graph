@@ -312,73 +312,6 @@ export function parseGitDiffHunks(diffText: string): FileDiffHunks[] {
 }
 
 /**
- * When analyzing staged diffs with unstaged working-tree changes present, maps
- * line ranges from the staged blob (INDEX) to current working-tree coordinates.
- */
-export function mapStagedRangesToWorkingTree(
-  stagedRanges: ChangedHunkRange[],
-  unstagedDiffText: string,
-): ChangedHunkRange[] {
-  if (!unstagedDiffText.trim()) return stagedRanges.map(({ start, end }) => ({ start, end }));
-
-  const lines = unstagedDiffText.split("\n");
-  const hunks: Array<{
-    aStart: number;
-    aCount: number;
-    bStart: number;
-    bCount: number;
-    delta: number;
-  }> = [];
-
-  for (const line of lines) {
-    if (line.startsWith("@@ ")) {
-      const match = line.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
-      if (match) {
-        const aStart = parseInt(match[1], 10);
-        const aCount = match[2] !== undefined ? parseInt(match[2], 10) : 1;
-        const bStart = parseInt(match[3], 10);
-        const bCount = match[4] !== undefined ? parseInt(match[4], 10) : 1;
-        hunks.push({
-          aStart,
-          aCount,
-          bStart,
-          bCount,
-          delta: bCount - aCount,
-        });
-      }
-    }
-  }
-
-  if (hunks.length === 0) return stagedRanges.map(({ start, end }) => ({ start, end }));
-
-  return stagedRanges.map((range) => {
-    let start = range.start;
-    let end = range.end;
-
-    for (const h of hunks) {
-      const aEnd = h.aCount === 0 ? h.aStart : h.aStart + h.aCount - 1;
-
-      // Compare every hunk with immutable index coordinates. `start` and `end`
-      // below are working-tree coordinates after earlier hunks have been applied.
-      if (range.end < h.aStart) {
-        // Range is before this hunk, unaffected
-        continue;
-      } else if (range.start > aEnd) {
-        // Range is after this hunk, shift by delta
-        start += h.delta;
-        end += h.delta;
-      } else {
-        // Range overlaps the unstaged hunk
-        start = Math.min(start, h.bStart);
-        end = Math.max(end + h.delta, h.bStart + Math.max(0, h.bCount - 1));
-      }
-    }
-
-    return { start: Math.max(1, start), end: Math.max(1, end) };
-  });
-}
-
-/**
  * Looks up callers and callees for a symbol name from the current graph.
  * Returns empty arrays if no current graph node matches. Used for historical
  * symbols per the plan: "Current graph edges are used for historical symbols
@@ -543,6 +476,8 @@ export async function analyzeDiffContext(
       }
     >();
     const cachedLookupGraphEdges = async (symbolName: string) => {
+      // ponytail: graph follows the working tree; build an index-backed graph before adding staged edges.
+      if (options.staged) return { callers: [], callees: [] };
       const cached = graphEdgesCache.get(symbolName);
       if (cached) return cached;
       const result = await lookupCurrentGraphEdges(
@@ -554,66 +489,69 @@ export async function analyzeDiffContext(
       graphEdgesCache.set(symbolName, result);
       return result;
     };
-    let rangesToMatch = fileDiff.status === "deleted" ? [] : fileDiff.ranges;
+    const rangesToMatch = fileDiff.status === "deleted" ? [] : fileDiff.ranges;
+    let symbolsList: Array<{
+      name: string;
+      symbolType?: string;
+      kind?: string;
+      exported?: boolean;
+      startLine?: number;
+      endLine?: number;
+      parentSymbol?: string;
+      receiver?: string;
+    }> = [];
+    let usedStagedBlob = false;
 
-    if (options.staged && fileDiff.status !== "deleted") {
-      try {
-        const unstagedDiff = execFileSync(
-          "git",
-          ["diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", "--", fileDiff.filePath],
-          {
-            cwd: resolvedRoot,
-            encoding: "utf8",
-            maxBuffer: 5 * 1024 * 1024,
-            stdio: ["ignore", "pipe", "pipe"],
-          },
-        );
-        rangesToMatch = mapStagedRangesToWorkingTree(fileDiff.ranges, unstagedDiff);
-      } catch {
-        // Unstaged diff for this file may fail if the file is new or git
-        // state is unusual — fall back to staged ranges as-is.
-      }
+    if (options.staged && options.parseBlob && fileDiff.status !== "deleted") {
+      const stagedContent = execFileSync("git", ["show", `:${fileDiff.filePath}`], {
+        cwd: resolvedRoot,
+        encoding: "utf8",
+        maxBuffer: 5 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const stagedSymbols = await options.parseBlob({
+        relativePath: fileDiff.filePath,
+        content: stagedContent,
+      });
+      symbolsList = stagedSymbols.map((s) => ({
+        name: s.name,
+        symbolType: s.symbolType,
+        exported: s.exported,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        parentSymbol: s.parentSymbol,
+      }));
+      usedStagedBlob = true;
     }
 
     // Query parsed_documents for file AST symbols
     const doc =
       fileDiff.status === "deleted" ? undefined : await repo.getDocumentByPath(fileDiff.filePath);
     if (doc) {
-      // Query file-level imports dependencies.
-      // --limit bounds callers/callees per symbol, NOT file-level imports.
-      // Cutting imports here violates the spec and hides dependency context.
-      const fileEdges = (await repo.queryRaw(
-        `SELECT target.label
+      // Query file-level imports dependencies. The graph follows the working
+      // tree, so it cannot safely enrich a staged-only report.
+      if (!options.staged) {
+        const fileEdges = (await repo.queryRaw(
+          `SELECT target.label
          FROM graph_edges e
          JOIN graph_nodes source ON source.id = e.from_node_id
          JOIN graph_nodes target ON target.id = e.to_node_id
          WHERE source.type = 'file'
            AND source.label = ?
-           AND e.type = 'imports'`,
-        [doc.path],
-      )) as Array<{ label: string }>;
+          AND e.type = 'imports'`,
+          [doc.path],
+        )) as Array<{ label: string }>;
 
-      for (const edge of fileEdges) {
-        fileImports.push(edge.label);
+        for (const edge of fileEdges) {
+          fileImports.push(edge.label);
+        }
       }
 
-      // ── P2.3: Dirty worktree freshness check ──
-      // parsed_documents reflects the last index, which may be stale if the
-      // file changed after indexing. When parseBlob is available, check the
-      // content hash and parse the current file on-the-fly if stale.
-      let symbolsList: Array<{
-        name: string;
-        symbolType?: string;
-        kind?: string;
-        exported?: boolean;
-        startLine?: number;
-        endLine?: number;
-        parentSymbol?: string;
-        receiver?: string;
-      }> = [];
-
+      // Parsed documents represent the working tree. For --staged, symbols
+      // must instead come from the index blob above so unstaged edits cannot
+      // change the reported staged context.
       let usedLiveParse = false;
-      if (options.parseBlob) {
+      if (!usedStagedBlob && options.parseBlob) {
         const absPath = path.join(resolvedRoot, fileDiff.filePath);
         try {
           const currentContent = fs.readFileSync(absPath, "utf8");
@@ -640,7 +578,7 @@ export async function analyzeDiffContext(
         }
       }
 
-      if (!usedLiveParse) {
+      if (!usedStagedBlob && !usedLiveParse) {
         const parsed = await repo.queryRaw(
           "SELECT symbols FROM parsed_documents WHERE document_id = ?",
           [doc.id],
@@ -653,49 +591,34 @@ export async function analyzeDiffContext(
           }
         }
       }
+    }
 
-      for (const s of symbolsList) {
-        const symStart = Number(s.startLine || 1);
-        const symEnd = Number(s.endLine || symStart);
+    for (const s of symbolsList) {
+      const symStart = Number(s.startLine || 1);
+      const symEnd = Number(s.endLine || symStart);
 
-        // Check if any diff hunk overlaps with this symbol's line range
-        const overlaps = rangesToMatch.some((r) => r.start <= symEnd && r.end >= symStart);
+      if (!rangesToMatch.some((r) => r.start <= symEnd && r.end >= symStart)) continue;
 
-        if (overlaps) {
-          // Reuse the shared lookupCurrentGraphEdges helper for caller/callee
-          // traversal. Queries incoming (callers) and outgoing (callees)
-          // edges separately so each direction gets its own callerLimit
-          // budget. A single graphNeighbors call shares one edge limit across
-          // both directions, which can starve one side when the other has
-          // many edges.
-          const { callers, callees } = await cachedLookupGraphEdges(s.name);
+      const { callers, callees } = await cachedLookupGraphEdges(s.name);
+      const changeType: "added" | "modified" =
+        fileDiff.status === "added"
+          ? "added"
+          : fileDiff.oldRanges.some((r) => r.start <= symEnd && r.end >= symStart)
+            ? "modified"
+            : "added";
 
-          // Determine changeType for the current-side symbol:
-          // - File added → all symbols are "added"
-          // - File modified + symbol overlaps old-side hunks → "modified"
-          // - File modified + symbol does NOT overlap old-side hunks →
-          //   "added" (new symbol introduced within the changed region)
-          const changeType: "added" | "modified" =
-            fileDiff.status === "added"
-              ? "added"
-              : fileDiff.oldRanges.some((r) => r.start <= symEnd && r.end >= symStart)
-                ? "modified"
-                : "added";
-
-          affectedSymbols.push({
-            name: s.name,
-            kind: s.symbolType || s.kind || "symbol",
-            startLine: symStart,
-            endLine: symEnd,
-            exported: Boolean(s.exported),
-            parentSymbol: s.parentSymbol ?? s.receiver,
-            callers,
-            callees,
-            changeType,
-          });
-          totalSymbolsAffected++;
-        }
-      }
+      affectedSymbols.push({
+        name: s.name,
+        kind: s.symbolType || s.kind || "symbol",
+        startLine: symStart,
+        endLine: symEnd,
+        exported: Boolean(s.exported),
+        parentSymbol: s.parentSymbol ?? s.receiver,
+        callers,
+        callees,
+        changeType,
+      });
+      totalSymbolsAffected++;
     }
 
     // Historical symbol support: parse old Git blob and map old ranges.
@@ -705,7 +628,7 @@ export async function analyzeDiffContext(
     let fileWarnings: string[] | undefined;
     let oldBlobSymbolNames: Set<string> | undefined;
 
-    if (options.parseBlob) {
+    if (options.parseBlob && fileDiff.status !== "added") {
       const oldBlobPath = fileDiff.oldPath ?? fileDiff.filePath;
       try {
         const oldContent = execFileSync("git", ["show", `${oldRev}:${oldBlobPath}`], {
@@ -855,7 +778,7 @@ export async function analyzeDiffContext(
         for (const sym of f.affectedSymbols) {
           const kindIcon = sym.kind === "function" || sym.kind === "method" ? "🔹" : "📦";
           summaryLines.push(
-            `  • ${kindIcon} ${sym.name} [L${sym.startLine}-L${sym.endLine}] (modified)`,
+            `  • ${kindIcon} ${sym.name} [L${sym.startLine}-L${sym.endLine}] (${sym.changeType})`,
           );
           if (sym.callers.length > 0) {
             summaryLines.push(`    ├── 👥 Callers (${sym.callers.length} affected):`);
