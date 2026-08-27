@@ -1,0 +1,35 @@
+tests/mcp-tools.test.ts
+  s_c65a210f6d20dc::t_86529b0a8ed540 131-152
+  s_c65a210f6d20dc::t_534663cb8aac69 128-130
+  s_e94b201468070e::t_13a34b37787816 127
+apps/mcp/src/mcp-core.ts
+  s_c65a210f6d20dc::t_8c3537e0f72c68 723-725
+tests/diff-context.test.ts
+  s_c65a210f6d20dc::t_3fbdbd185f8b7d 674-681,683,707-708
+packages/indexer/src/blob-parser.ts
+  s_c65a210f6d20dc::t_b259d54eb58967 1,22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "d12654b15f23a7a8c2ba80aac584a5f6a5c856ac",
+  "prompts": {},
+  "sessions": {
+    "s_c65a210f6d20dc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03438-ce3c-7670-97a5-c7b15b27235f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_e94b201468070e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a040e9-0ab6-70b3-bcc2-7253263db221",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
