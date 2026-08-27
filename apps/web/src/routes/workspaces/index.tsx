@@ -94,7 +94,7 @@ function WorkspacesPage() {
     );
   }
 
-  const allWorkspaces = result?.data ?? [];
+  const allWorkspaces: WorkspaceListItem[] = result?.data ?? [];
   const totalPages = Math.max(1, Math.ceil(allWorkspaces.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
   const { paged } = paginate(allWorkspaces, safePage);

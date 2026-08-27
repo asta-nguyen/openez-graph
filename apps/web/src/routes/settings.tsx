@@ -271,7 +271,7 @@ function EmbeddingConfigForm() {
               setLocalModel(e.target.value);
             }}
           >
-            {localModelPresets.map((model) => (
+            {localModelPresets.map((model: string) => (
               <option key={model} value={model}>
                 {model}
               </option>

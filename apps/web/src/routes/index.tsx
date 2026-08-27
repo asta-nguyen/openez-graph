@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, TrendingDown } from "lucide-react";
 import { formatDate } from "../lib/utils";
+import type { DashboardSnapshot, DocumentRow, QueryMetrics, RunRow } from "../lib/api";
 import { dashboardQueryOptions, metricsQueryOptions } from "../lib/queries";
 import {
   Table,
@@ -146,7 +147,7 @@ function OverviewPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {snapshot.recentRuns.map((run) => (
+                  {snapshot.recentRuns.map((run: RunRow) => (
                     <TableRow key={run.id}>
                       <TableCell>{run.mode}</TableCell>
                       <TableCell>{run.status}</TableCell>
@@ -177,7 +178,7 @@ function OverviewPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {snapshot.recentDocuments.map((doc) => (
+                {snapshot.recentDocuments.map((doc: DocumentRow) => (
                   <TableRow key={doc.id}>
                     <TableCell>{doc.path}</TableCell>
                     <TableCell>{doc.kind}</TableCell>
@@ -201,12 +202,14 @@ function OverviewPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {snapshot.recentMemories.map((memory) => (
-                  <TableRow key={memory.id}>
-                    <TableCell>{memory.title}</TableCell>
-                    <TableCell>{memory.source}</TableCell>
-                  </TableRow>
-                ))}
+                {snapshot.recentMemories.map(
+                  (memory: DashboardSnapshot["recentMemories"][number]) => (
+                    <TableRow key={memory.id}>
+                      <TableCell>{memory.title}</TableCell>
+                      <TableCell>{memory.source}</TableCell>
+                    </TableRow>
+                  ),
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -264,7 +267,7 @@ function OverviewPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {metrics.recentQueries.map((q) => (
+                  {metrics.recentQueries.map((q: QueryMetrics["recentQueries"][number]) => (
                     <TableRow key={q.id}>
                       <TableCell className="font-medium max-w-[200px] truncate">
                         {q.query}

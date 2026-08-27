@@ -142,7 +142,7 @@ function MemoriesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((memory) => (
+                  {items.map((memory: MemoryRow) => (
                     <TableRow
                       key={memory.id}
                       className="cursor-pointer hover:bg-muted/50"
@@ -154,7 +154,7 @@ function MemoriesPage() {
                           {memory.tags.length === 0 ? (
                             <span className="text-xs text-muted-foreground">—</span>
                           ) : (
-                            memory.tags.map((tag) => (
+                            memory.tags.map((tag: string) => (
                               <Badge key={tag} variant="secondary" className="text-xs">
                                 {tag}
                               </Badge>

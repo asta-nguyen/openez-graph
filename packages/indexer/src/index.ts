@@ -4,3 +4,5 @@ export * from "./graph-service";
 export * from "./scanner";
 export * from "./types";
 export * from "./languages";
+export { parseDocument } from "./parsers";
+export { createBlobParser } from "./blob-parser";

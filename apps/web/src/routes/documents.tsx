@@ -1,7 +1,7 @@
 import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { api } from "../lib/api";
+import type { DocumentRow } from "../lib/api";
 import { documentsQueryOptions } from "../lib/queries";
 import {
   Table,
@@ -74,7 +74,7 @@ function DocumentsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(data?.items ?? []).map((document) => (
+                  {(data?.items ?? []).map((document: DocumentRow) => (
                     <TableRow key={document.id}>
                       <TableCell>{document.path}</TableCell>
                       <TableCell>{document.kind}</TableCell>
