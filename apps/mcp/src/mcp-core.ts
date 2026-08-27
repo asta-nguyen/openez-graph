@@ -720,7 +720,9 @@ export function createMcpServer(options?: McpServerOptions) {
               description: "Max callers to include per symbol (default: 5)",
             },
             maxTokens: {
-              type: "number",
+              type: "integer",
+              minimum: MIN_RESPONSE_TOKENS,
+              maximum: 100_000,
               description:
                 "Positive integer token budget for the response. formattedSummary is dropped before structured symbols/files.",
             },

@@ -671,10 +671,16 @@ export function alsoRemoved(): number {
     execSync("git commit -m 'Initial commit'", { cwd: workspaceRoot, stdio: "ignore" });
     execSync("git branch main", { cwd: workspaceRoot, stdio: "ignore" });
 
-    // Commit 2: diverge on main — add a helper
-    fs.writeFileSync(path.join(srcDir, "helper.ts"), `export function helper(): void {}\n`);
+    // Commit 2: diverge on main — change the same file differently
+    fs.writeFileSync(
+      targetPath,
+      `export function mainOnlyFunction(value: string): string {
+  return value.trim();
+}
+`,
+    );
     execSync("git add .", { cwd: workspaceRoot, stdio: "ignore" });
-    execSync("git commit -m 'Add helper on main'", { cwd: workspaceRoot, stdio: "ignore" });
+    execSync("git commit -m 'Change function on main'", { cwd: workspaceRoot, stdio: "ignore" });
 
     // Switch back to HEAD~1 and create a divergent commit
     execSync("git checkout HEAD~1", { cwd: workspaceRoot, stdio: "ignore" });
@@ -698,7 +704,8 @@ export function alsoRemoved(): number {
 
     // Three-dot range main...HEAD compares merge-base(main, HEAD) against HEAD.
     // merge-base is the initial commit, so oldSymbols should contain
-    // originalFunction (from the merge-base blob), not the helper from main.
+    // originalFunction (from the merge-base blob), not mainOnlyFunction from
+    // the left endpoint.
     const report = await analyzeDiffContext(workspaceRoot, {
       ref: "main...HEAD",
       parseBlob,

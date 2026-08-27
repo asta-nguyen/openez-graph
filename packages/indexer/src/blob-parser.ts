@@ -1,4 +1,4 @@
-import type { BlobParser } from "@openez-graph/core";
+import { fastTokenCounter, type BlobParser } from "@openez-graph/core";
 
 import { parseDocument } from "./parsers";
 
@@ -19,6 +19,7 @@ export function createBlobParser(): BlobParser {
       content,
       targetTokens: 800,
       overlapTokens: 100,
+      counter: fastTokenCounter,
     });
     return parsed.definedSymbols.map((s) => ({
       name: s.name,

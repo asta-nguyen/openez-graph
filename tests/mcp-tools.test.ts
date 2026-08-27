@@ -128,6 +128,32 @@ describe("MCP agent contracts", () => {
     }
   });
 
+  it("rejects diff_context maxTokens outside the advertised integer bounds", async () => {
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const diffTool = (await client.listTools()).tools.find(
+        (tool) => tool.name === "diff_context",
+      );
+      const maxTokens = (
+        diffTool?.inputSchema as {
+          properties?: { maxTokens?: Record<string, unknown> };
+        }
+      ).properties?.maxTokens;
+
+      expect(maxTokens).toMatchObject({
+        type: "integer",
+        minimum: 32,
+        maximum: 100_000,
+      });
+      await expect(
+        client.callTool({ name: "diff_context", arguments: { maxTokens: 31 } }),
+      ).rejects.toThrow();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("prepares caller graph context before analyzing a diff", async () => {
     execSync("git init", { cwd: tempRoot, stdio: "ignore" });
     execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
