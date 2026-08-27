@@ -50,6 +50,7 @@ openez index [path]
 openez reindex [path]
 openez watch [path]
 openez status [path]
+openez diff [ref]
 openez list
 openez remove [path]        remove workspace from registry and delete its .openez data dir (--id, -y; alias: rm)
 openez serve --mcp
@@ -57,6 +58,25 @@ openez setup codex
 ```
 
 Do not bias new work toward `--workspace`, `main-project`, or pinned single-workspace assumptions.
+
+`openez diff` scopes are:
+
+```bash
+openez diff          # tracked staged + unstaged changes
+git diff HEAD        # equivalent Git default: tracked staged + unstaged changes
+openez diff --staged # staged changes only
+openez diff HEAD~1   # diff against the supplied Git ref
+```
+
+For the `diff_context` MCP tool, `path`/`paths` select registered workspace
+roots, not changed files. Untracked files are not included in this Git-diff
+phase. The response is always `{ workspaces: [...] }`, even for a single
+workspace or a top-level validation error. `maxTokens` bounds the response;
+`formattedSummary` is dropped before structured symbols/files. Each entry in
+the `workspaces` array is either a success `{ workspaceId, workspaceName, report }`
+or an error `{ error, workspaceId?, workspaceName?, ref?, staged? }`. Top-level
+errors (ref + staged, invalid ref, unregistered workspace) omit `workspaceId`
+and `workspaceName` since no workspace was resolved.
 
 ## MCP-First Workflow
 
