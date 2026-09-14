@@ -1,0 +1,22 @@
+tests/index-workspace.test.ts
+  s_3aa11d9919194d::t_efae4325e33558 917
+  s_3aa11d9919194d::t_e583bdd4d55525 997-1000
+  s_3aa11d9919194d::t_acaaee769fc95f 879-916,918-958,960-966,968-996,1001-1016
+  s_3aa11d9919194d::t_ad1133b1bcd018 959,967
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9bbb7bfcd7d36184a74f4cfd0c7dace09d2ca116",
+  "prompts": {},
+  "sessions": {
+    "s_3aa11d9919194d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e2a-57e9-76d2-b082-ae933836398c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
