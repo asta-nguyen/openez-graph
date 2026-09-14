@@ -1,0 +1,24 @@
+docs/superpowers/plans/2026-09-14-generic-java-treesitter.md
+  s_3aa11d9919194d::t_1aab2a749e1298 395,405
+tests/index-workspace.test.ts
+  s_3aa11d9919194d::t_50624aff1e0d87 886-895,913,978-994,1020
+packages/indexer/src/index-workspace.ts
+  s_3aa11d9919194d::t_5a91896672c7fd 1330-1335,1401-1406,1409-1416,1426-1429,1440-1447,1481-1496
+  s_3aa11d9919194d::t_5120212fd157c4 1343-1344
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "69f8f3abda534f3b879c05ede4fed5236239e884",
+  "prompts": {},
+  "sessions": {
+    "s_3aa11d9919194d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e2a-57e9-76d2-b082-ae933836398c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
