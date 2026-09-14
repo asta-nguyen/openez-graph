@@ -7,9 +7,16 @@ import { describe, expect, it } from "bun:test";
 import { scanWorkspaceFiles } from "../packages/indexer/src/scanner";
 
 describe("scanWorkspaceFiles", () => {
-  it("includes Ruby, CoffeeScript, CSS, SCSS, Slim, Haml files", async () => {
+  it("includes Java, Ruby, CoffeeScript, CSS, SCSS, Slim, Haml files", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "openez-scan-"));
     try {
+      fs.mkdirSync(path.join(root, "src", "main", "java", "com", "acme"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, "src", "main", "java", "com", "acme", "User.java"),
+        "class User {}\n",
+      );
+      fs.mkdirSync(path.join(root, "target", "classes"), { recursive: true });
+      fs.writeFileSync(path.join(root, "target", "classes", "Ignored.java"), "class Ignored {}\n");
       fs.writeFileSync(path.join(root, "app.rb"), "class App; end\n");
       fs.writeFileSync(path.join(root, "script.coffee"), "console.log 'hi'\n");
       fs.writeFileSync(path.join(root, "doc.litcoffee"), "# Title\n");
@@ -26,6 +33,7 @@ describe("scanWorkspaceFiles", () => {
       const relativePaths = files.map((f) => f.relativePath).sort();
       expect(relativePaths).toEqual(
         expect.arrayContaining([
+          "src/main/java/com/acme/User.java",
           "app.rb",
           "script.coffee",
           "doc.litcoffee",
@@ -37,6 +45,7 @@ describe("scanWorkspaceFiles", () => {
           "view.haml",
         ]),
       );
+      expect(relativePaths).not.toContain("target/classes/Ignored.java");
       expect(relativePaths).not.toContain("node_modules/ignored.js");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

@@ -9,6 +9,17 @@ import {
   parseDocument,
   TreeSitterParser,
 } from "../packages/indexer/src/parsers";
+import { inferDocumentKind } from "../packages/indexer/src/languages";
+
+describe("language inference", () => {
+  it("recognizes Java source files as code", () => {
+    expect(inferDocumentKind("src/main/java/User.java")).toEqual({
+      kind: "code",
+      language: "java",
+      extension: ".java",
+    });
+  });
+});
 
 describe("parser registry dispatch", () => {
   it("selects MarkdownParser for .md files", () => {
