@@ -149,10 +149,10 @@ function countDefinedScopes(input: {
   path?: string;
 }): number {
   let count = 0;
-  if (input.workspaceIds && input.workspaceIds.length > 0) count += 1;
-  if (input.workspaceId) count += 1;
-  if (input.paths && input.paths.length > 0) count += 1;
-  if (input.path) count += 1;
+  if (input.workspaceIds !== undefined) count += 1;
+  if (input.workspaceId !== undefined) count += 1;
+  if (input.paths !== undefined) count += 1;
+  if (input.path !== undefined) count += 1;
   return count;
 }
 
@@ -227,6 +227,14 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
       paths?: string[];
       path?: string;
     }): Promise<WorkspaceLike[]> {
+      if (
+        (input.workspaceIds !== undefined && input.workspaceIds.length === 0) ||
+        input.workspaceId === "" ||
+        (input.paths !== undefined && input.paths.length === 0) ||
+        input.path === ""
+      ) {
+        throw new Error("Workspace selectors must not be empty.");
+      }
       if (countDefinedScopes(input) > 1) {
         throw new Error(
           "Pass only one workspace selector type at a time: workspaceIds, workspaceId, paths, or path.",

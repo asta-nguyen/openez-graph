@@ -103,6 +103,34 @@ describe("MCP agent contracts", () => {
     }
   });
 
+  it("rejects empty workspace selectors instead of treating them as absent", async () => {
+    const workspace = await createIndexedWorkspace("selector-target", tempRoot);
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      await expect(
+        client.callTool({ name: "workspace_context", arguments: { workspaceIds: [] } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
+        client.callTool({
+          name: "workspace_context",
+          arguments: { workspaceIds: [], workspaceId: workspace.id },
+        }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
+        client.callTool({ name: "workspace_context", arguments: { workspaceId: "" } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
+        client.callTool({ name: "workspace_context", arguments: { paths: [] } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
+        client.callTool({ name: "workspace_context", arguments: { path: "" } }),
+      ).rejects.toThrow(/empty/i);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("returns default and explicit multi-workspace context", async () => {
     const first = await createIndexedWorkspace("context-first", tempRoot);
     fs.writeFileSync(path.join(tempRoot, "AGENTS.md"), "Use the first workspace.\n");
