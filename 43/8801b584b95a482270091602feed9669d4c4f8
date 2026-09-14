@@ -1,0 +1,45 @@
+packages/indexer/src/tree-sitter/configs.ts
+  s_3aa11d9919194d::t_7f756a3e92f7b6 590-594
+  s_3aa11d9919194d::t_92e7188d7e4c3c 573-574
+  s_3aa11d9919194d::t_1201f8382d2962 558-572,575-589,595-599,605-614,616-703
+  s_3aa11d9919194d::t_89f1f25977aff9 600-604
+  s_3aa11d9919194d::t_eadaf62b473e46 615
+tests/tree-sitter-parser.test.ts
+  s_3aa11d9919194d::t_7c14ce4fbe4350 5,536-555,558-618,624-656,661-664
+  s_3aa11d9919194d::t_89f1f25977aff9 556-557,657-660
+  s_3aa11d9919194d::t_8f78b2af8638b6 619-623
+  s_3aa11d9919194d::t_805431173607d0 665-666
+packages/indexer/src/tree-sitter/parse.ts
+  s_3aa11d9919194d::t_061722889cdb4f 45,67
+  s_3aa11d9919194d::t_3d6080f4c39fba 23-24,121-128,255-259,310-322,379
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_3aa11d9919194d::t_89f1f25977aff9 29-30
+  s_3aa11d9919194d::t_1201f8382d2962 4-10,17,26,45,47-48,65-68
+  s_3aa11d9919194d::t_40f9b5b17637e9 88-91
+  s_3aa11d9919194d::t_883d9c64f79267 3
+packages/indexer/package.json
+  s_3aa11d9919194d::t_09659bff3203c3 24
+packages/indexer/src/tree-sitter/index.ts
+  s_3aa11d9919194d::t_1201f8382d2962 3
+tests/parser-registry.test.ts
+  s_3aa11d9919194d::t_7c14ce4fbe4350 44
+  s_3aa11d9919194d::t_40f9b5b17637e9 37
+pnpm-lock.yaml
+  s_3aa11d9919194d::t_0bd6dc3ab73ef8 398-400,4537-4544,8936-8940
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "438801b584b95a482270091602feed9669d4c4f8",
+  "prompts": {},
+  "sessions": {
+    "s_3aa11d9919194d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e2a-57e9-76d2-b082-ae933836398c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
