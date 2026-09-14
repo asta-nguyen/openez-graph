@@ -1,0 +1,24 @@
+tests/scanner.test.ts
+  s_3aa11d9919194d::t_0e93d9e9d2dcd3 10,18-19,48
+  s_3aa11d9919194d::t_3dab4fd240c6e5 13-17,36
+packages/indexer/src/languages.ts
+  s_3aa11d9919194d::t_8f47a1c6928dd5 35
+tests/parser-registry.test.ts
+  s_3aa11d9919194d::t_0e93d9e9d2dcd3 12-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c965f29276b642ca19e7989c1f9da60dcece0bc8",
+  "prompts": {},
+  "sessions": {
+    "s_3aa11d9919194d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e2a-57e9-76d2-b082-ae933836398c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
