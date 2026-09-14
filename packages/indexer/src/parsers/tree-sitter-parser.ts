@@ -1,12 +1,20 @@
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
-import { parseGo, parsePython, parseRuby, parseRust, type IndexedCodeResult } from "../languages";
+import {
+  makeFallbackChunks,
+  parseGo,
+  parsePython,
+  parseRuby,
+  parseRust,
+  type IndexedCodeResult,
+} from "../languages";
 import {
   goConfig,
   parseWithTreeSitter,
   pythonConfig,
   rubyConfig,
   rustConfig,
+  javaConfig,
 } from "../tree-sitter";
 import type { CodeParser, ParseInput, ParsedDocument } from "./types";
 
@@ -15,11 +23,11 @@ const LANGUAGE_CONFIGS = {
   go: goConfig,
   rust: rustConfig,
   ruby: rubyConfig,
+  java: javaConfig,
 } as const;
 
-const REGEX_FALLBACKS: Record<
-  string,
-  (content: string, counter: TokenCounter) => IndexedCodeResult
+const REGEX_FALLBACKS: Partial<
+  Record<string, (content: string, counter: TokenCounter) => IndexedCodeResult>
 > = {
   python: parsePython,
   go: parseGo,
@@ -34,9 +42,9 @@ function isTreeSitterLanguage(language: string): language is TreeSitterLanguage 
 }
 
 /**
- * Parses Python/Go/Rust/Ruby using tree-sitter (WASM AST).
- * Falls back to the regex parser if tree-sitter fails (grammar unavailable,
- * parse error, etc.) — matching the spec's resilience guidance.
+ * Parses Python/Go/Rust/Ruby/Java using tree-sitter (WASM AST).
+ * Falls back to a language-specific regex parser or raw chunks if tree-sitter
+ * fails (grammar unavailable, parse error, etc.). Java has no regex parser.
  */
 export class TreeSitterParser implements CodeParser {
   readonly name = "tree-sitter";
@@ -53,10 +61,12 @@ export class TreeSitterParser implements CodeParser {
 
     const config = LANGUAGE_CONFIGS[language];
     const tsResult = await parseWithTreeSitter(config, input.content, counter);
-    const result = tsResult ?? REGEX_FALLBACKS[language](input.content, counter);
+    const regexFallback = REGEX_FALLBACKS[language];
+    const result =
+      tsResult ?? regexFallback?.(input.content, counter) ?? this.rawFallback(input, counter);
 
     return {
-      parser: tsResult ? this.name : "regex",
+      parser: tsResult ? this.name : regexFallback ? "regex" : "fallback",
       language,
       kind: "code",
       chunks: result.chunks,
@@ -73,23 +83,21 @@ export class TreeSitterParser implements CodeParser {
     language: string | null,
     counter: TokenCounter,
   ): ParsedDocument {
-    const fallback =
-      language && REGEX_FALLBACKS[language]
-        ? REGEX_FALLBACKS[language](input.content, counter)
-        : {
-            chunks: [],
-            importPaths: [],
-            definedSymbols: [],
-            calledIdentifiers: [],
-            callExpressions: [],
-          };
+    const regexFallback = language ? REGEX_FALLBACKS[language] : undefined;
+    const fallback = regexFallback
+      ? regexFallback(input.content, counter)
+      : this.rawFallback(input, counter);
 
     return {
-      parser: "regex",
+      parser: regexFallback ? "regex" : "fallback",
       language,
       kind: "code",
       ...fallback,
       wikilinks: [],
     };
+  }
+
+  private rawFallback(input: ParseInput, counter: TokenCounter): IndexedCodeResult {
+    return makeFallbackChunks(input.content, input.content.split("\n"), counter);
   }
 }

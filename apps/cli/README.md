@@ -9,12 +9,12 @@ OpenEZ Graph indexes your codebase into a local SQLite database, builds a code g
 
 **Zero config. No Docker. No Postgres. No Redis. Just install and go.**
 
-> **v1.0: Bun-powered, Rust-native parsing.** The CLI now runs exclusively on [Bun](https://bun.sh) 1.1+ with native `bun:sqlite` (no `better-sqlite3` compilation step). TS/JS parsing uses [oxc-parser](https://oxc.rs) (Rust-based, ~13x faster than Babel) instead of `ts-morph`. Python/Go/Rust/Ruby use tree-sitter (WASM) with regex fallback. Requires Bun 1.1+.
+> **v1.0: Bun-powered, Rust-native parsing.** The CLI now runs exclusively on [Bun](https://bun.sh) 1.1+ with native `bun:sqlite` (no `better-sqlite3` compilation step). TS/JS parsing uses [oxc-parser](https://oxc.rs) (Rust-based, ~13x faster than Babel) instead of `ts-morph`. Python/Go/Rust/Ruby use tree-sitter (WASM) with regex fallback; Java uses tree-sitter (WASM) for generic AST symbols/imports/calls and best-effort local imports, with no JDK or build-tool setup required for indexing. Requires Bun 1.1+.
 
 ## Features
 
 - **Bun-powered** — native `bun:sqlite` driver, no native compilation, near-instant startup
-- **Rust-native parsing** — [oxc-parser](https://oxc.rs) for TS/JS (~13x faster than Babel), tree-sitter (WASM) for Python/Go/Rust/Ruby with regex fallback
+- **Rust-native parsing** — [oxc-parser](https://oxc.rs) for TS/JS (~13x faster than Babel), tree-sitter (WASM) for Python/Go/Rust/Ruby with regex fallback, and Java with generic AST symbols/imports/calls plus best-effort local imports; no JDK or build-tool setup required for Java indexing
 - **Zero-config** — auto-registers workspace, auto-indexes; opt-in auto-sync via `OPENEZ_MCP_WATCH=1`
 - **SQLite-first** — all data stored locally in `.openez/` per workspace, no Postgres/Redis
 - **FTS5 full-text search** — SQLite FTS5 with BM25 ranking and porter tokenizer
@@ -133,6 +133,7 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 | Go                                                    | tree-sitter (WASM)           | Symbol extraction, receiver-qualified methods, calls                                     |
 | Rust                                                  | tree-sitter (WASM)           | Symbol extraction, impl blocks, calls                                                    |
 | Ruby                                                  | tree-sitter (WASM)           | Symbol extraction, `class << self` context, `self.foo` calls, `require_relative` imports |
+| Java                                                  | tree-sitter (WASM)           | Generic AST symbols/imports/calls; best-effort local imports                             |
 | CoffeeScript / Slim / CSS / SCSS / SASS / LESS / Haml | Fallback parser              | Scanned and chunked (no symbol extraction)                                               |
 | YAML / JSON / TOML                                    | Structure-aware              | Structure-aware chunking                                                                 |
 | Markdown                                              | Section-oriented             | Section-oriented chunking                                                                |

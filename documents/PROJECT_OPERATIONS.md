@@ -50,6 +50,8 @@ pnpm openez serve --mcp
 
 - TS/JS: rich path via `oxc-parser`
 - Python/Go/Rust/Ruby: tree-sitter AST symbol extraction with regex fallback
+- Java: tree-sitter (WASM), generic AST symbols/imports/calls, and best-effort local imports; no JDK or build-tool setup required for indexing
+- Java target/build output is excluded by the existing scanner patterns (`target/` and `build/`)
 - CoffeeScript/Slim/CSS/SCSS/SASS/LESS/Haml: scanner inclusion + fallback chunking
 - YAML/JSON/TOML: structure-aware chunking
 - Markdown: section-oriented chunking

@@ -153,8 +153,8 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
     resetNativeParserCache();
   });
 
-  test("second graph build reuses fallback-v1 cache and performs zero fallback parses", async () => {
-    // Only assert fallback-v1 behavior when the native extension is unavailable.
+  test("reparses fallback-v1 rows after the fallback cache version bump", async () => {
+    // Only assert fallback behavior when the native extension is unavailable.
     resetNativeParserCache();
     if (resolveNativeParser()) return;
 
@@ -169,14 +169,13 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
     const doc = await repo.getDocumentByPath("src/app.py");
     expect(doc).not.toBeNull();
 
-    // Overwrite the cached parse result with a fallback-v1 tag, simulating a
-    // prior build that parsed via the fallback parser (the version
-    // buildGraphGeneration expects when native is unavailable).
+    // Overwrite the cached parse result with a fallback-v1 tag and stale data,
+    // simulating a prior build that parsed via the fallback parser.
     repo.insertParsedDocument({
       documentId: doc!.id,
       contentHash: doc!.contentHash,
       symbols: JSON.stringify([
-        { name: "add", symbolType: "function", type: "function", exported: true },
+        { name: "stale", symbolType: "function", type: "function", exported: true },
       ]),
       imports: "[]",
       calls: "[]",
@@ -189,19 +188,23 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
     const parsedAtFirst = cachedBefore!.parsedAt;
     const symbolsBefore = cachedBefore!.symbols;
 
-    // First graph build: cache hit (fallback-v1 matches expected version) —
-    // no re-parse, so parsed_at must not advance.
+    // First graph build: fallback-v1 is stale and must be reparsed.
     await buildGraphGeneration(workspace.id, workspaceRoot, 1, 1);
     const cachedAfterFirst = repo.getParsedDocument(doc!.id);
-    expect(cachedAfterFirst?.parserVersion).toBe("fallback-v1");
-    expect(cachedAfterFirst!.parsedAt).toBe(parsedAtFirst);
-    expect(cachedAfterFirst!.symbols).toBe(symbolsBefore);
+    expect(cachedAfterFirst?.parserVersion).toBe("fallback-v2");
+    expect(cachedAfterFirst!.symbols).not.toBe(symbolsBefore);
+    expect(JSON.parse(cachedAfterFirst!.symbols!)).toContainEqual(
+      expect.objectContaining({ name: "add" }),
+    );
+    expect(JSON.parse(cachedAfterFirst!.symbols!)).not.toContainEqual(
+      expect.objectContaining({ name: "stale" }),
+    );
 
-    // Second graph build: still a cache hit — zero fallback parses.
+    // Second graph build: the refreshed fallback-v2 row is reused.
     await buildGraphGeneration(workspace.id, workspaceRoot, 2, 2);
     const cachedAfterSecond = repo.getParsedDocument(doc!.id);
-    expect(cachedAfterSecond?.parserVersion).toBe("fallback-v1");
-    expect(cachedAfterSecond!.parsedAt).toBe(parsedAtFirst);
-    expect(cachedAfterSecond!.symbols).toBe(symbolsBefore);
+    expect(cachedAfterSecond?.parserVersion).toBe("fallback-v2");
+    expect(cachedAfterSecond!.symbols).toBe(cachedAfterFirst!.symbols);
+    expect(cachedAfterSecond!.parsedAt).toBeGreaterThanOrEqual(parsedAtFirst);
   });
 });
