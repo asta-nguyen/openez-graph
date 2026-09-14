@@ -34,13 +34,14 @@ describe("parser registry dispatch", () => {
     expect(getParserForPath("src/legacy.jsx")).toBeInstanceOf(OxcParser);
   });
 
-  it("selects TreeSitterParser for Python/Go/Rust/Ruby files", () => {
+  it("selects TreeSitterParser for Python/Go/Rust/Ruby/Java files", () => {
     expect(getParserForPath("main.py")).toBeInstanceOf(TreeSitterParser);
     expect(getParserForPath("main.go")).toBeInstanceOf(TreeSitterParser);
     expect(getParserForPath("main.rs")).toBeInstanceOf(TreeSitterParser);
     expect(getParserForPath("app.rb")).toBeInstanceOf(TreeSitterParser);
     expect(getParserForPath("Rakefile.rake")).toBeInstanceOf(TreeSitterParser);
     expect(getParserForPath("mygem.gemspec")).toBeInstanceOf(TreeSitterParser);
+    expect(getParserForPath("src/main/java/User.java")).toBeInstanceOf(TreeSitterParser);
   });
 
   it("falls back to FallbackParser for CoffeeScript/Slim/CSS/SCSS files", () => {

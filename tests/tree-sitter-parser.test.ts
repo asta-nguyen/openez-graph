@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   goConfig,
+  javaConfig,
   parseWithTreeSitter,
   pythonConfig,
   rubyConfig,
@@ -529,6 +530,137 @@ describe("tree-sitter ruby parser", () => {
     const names = result!.definedSymbols.map((s) => s.name);
     expect(names).toContain("Handler::handler");
     expect(names).toContain("Handler::proc_var");
+  });
+});
+
+// ── Java ──
+
+describe("tree-sitter java parser", () => {
+  const fixture = [
+    "package com.acme.service;",
+    "",
+    "import java.util.List;",
+    "import com.acme.model.User;",
+    "import static com.acme.util.Names.normalize;",
+    "import com.acme.wildcard.*;",
+    "",
+    "public class UserService {",
+    "  private final UserRepository repository;",
+    "  protected int version, retries;",
+    "",
+    "  public UserService(UserRepository repository) {",
+    "    this.repository = repository;",
+    "  }",
+    "",
+    "  public User find(String id) {",
+    '    // normalize("comment") must not become a call.',
+    '    String sample = "orElseThrow()";',
+    "    return repository.findById(normalize(id)).orElseThrow();",
+    "  }",
+    "",
+    "  private void hidden() {}",
+    "",
+    "  public void save(String value) {}",
+    "  public void save(int value) {}",
+    "}",
+    "",
+    "interface Factory {",
+    "  int MAX = 1;",
+    "  User create();",
+    "}",
+    "",
+    "enum Status { READY }",
+    "",
+    "record UserDto(String id) {",
+    "  UserDto { }",
+    "}",
+    "",
+    "@interface Audited {",
+    "  String value();",
+    "}",
+  ].join("\n");
+
+  it("extracts symbols, imports, calls, and chunks", async () => {
+    const result = await parseWithTreeSitter(javaConfig, fixture);
+
+    expect(result).not.toBeNull();
+    expect(result!.chunks.length).toBeGreaterThan(0);
+    expect(result!.importPaths).toEqual(
+      expect.arrayContaining([
+        "java.util.List",
+        "com.acme.model.User",
+        "static com.acme.util.Names.normalize",
+        "com.acme.wildcard.*",
+      ]),
+    );
+
+    const symbols = result!.definedSymbols;
+    const expectedSymbols = [
+      ["UserService", "class", true],
+      ["UserService::repository", "field", false],
+      ["UserService::version", "field", true],
+      ["UserService::retries", "field", true],
+      ["UserService::<constructor>", "constructor", true],
+      ["UserService::find", "method", true],
+      ["UserService::hidden", "method", false],
+      ["Factory", "interface", false],
+      ["Factory::MAX", "field", false],
+      ["Factory::create", "method", false],
+      ["Status", "enum", false],
+      ["UserDto", "record", false],
+      ["UserDto::<constructor>", "constructor", false],
+      ["Audited", "annotation", false],
+    ] as const;
+
+    for (const [name, type, exported] of expectedSymbols) {
+      expect(symbols).toContainEqual(expect.objectContaining({ name, symbolType: type, exported }));
+    }
+    expect(symbols.filter((symbol) => symbol.name === "UserService::save")).toHaveLength(2);
+    expect(
+      symbols
+        .filter((symbol) => symbol.name === "UserService::save")
+        .every((symbol) => symbol.symbolType === "method" && symbol.exported),
+    ).toBe(true);
+
+    const find = symbols.find((symbol) => symbol.name === "UserService::find");
+    expect(find).toMatchObject({
+      symbolType: "method",
+      startLine: 16,
+      endLine: 20,
+    });
+    expect(
+      result!.chunks.find((chunk) => chunk.symbolName === "UserService::find")?.metadata,
+    ).toMatchObject({
+      language: "java",
+      symbolName: "UserService::find",
+      symbolType: "method",
+    });
+
+    expect(result!.callExpressions).toEqual(
+      expect.arrayContaining([
+        { callerName: "UserService::find", calleeName: "findById" },
+        { callerName: "UserService::find", calleeName: "normalize" },
+        { callerName: "UserService::find", calleeName: "orElseThrow" },
+      ]),
+    );
+    expect(result!.callExpressions).not.toContainEqual({
+      callerName: "UserService::find",
+      calleeName: "comment",
+    });
+    expect(result!.callExpressions).not.toContainEqual({
+      callerName: "UserService::find",
+      calleeName: "sample",
+    });
+  });
+
+  it("handles malformed Java without throwing", async () => {
+    const result = await parseWithTreeSitter(
+      javaConfig,
+      "public class Broken { public void run( {",
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.definedSymbols.length + result!.chunks.length).toBeGreaterThan(0);
   });
 });
 

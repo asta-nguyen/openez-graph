@@ -20,6 +20,8 @@ export interface SymbolRule {
   nameField?: string;
   /** override name extraction for complex nodes (e.g. Rust impl_item) */
   extractName?: (node: Node) => string | null;
+  /** override name extraction for declarations with multiple names */
+  extractNames?: (node: Node) => string[];
   /** override context name for nesting (defaults to symbol name) */
   extractContextName?: (node: Node, contextStack: ReadonlyArray<ContextFrame>) => string | null;
   /** push context stack without emitting a symbol or extracting calls */
@@ -40,7 +42,7 @@ export interface SymbolRule {
  * Context frame on the walker's context stack. `kind` is optional — only
  * Ruby class/module rules set it so singleton_class.extractContextName and
  * the qualifyCall hook can walk back for the nearest class/module frame.
- * Python/Go/Rust frames have kind: undefined.
+ * Python/Go/Rust/Java frames have kind: undefined.
  */
 export interface ContextFrame {
   name: string;
@@ -62,7 +64,7 @@ export interface CallRule {
 }
 
 export interface LanguageConfig {
-  /** tree-sitter language name: "python", "go", "rust" */
+  /** tree-sitter language name, e.g. "python", "go", "rust", or "java" */
   language: string;
   symbolRules: SymbolRule[];
   importRules: ImportRule[];
@@ -114,6 +116,14 @@ function getNodeName(node: Node, field: string): string | null {
   // Some grammars use child by index
   const firstChild = node.namedChildren.find((c) => c.type === "identifier");
   return firstChild?.text ?? null;
+}
+
+function extractSymbolNames(node: Node, rule: SymbolRule): string[] {
+  if (rule.extractNames) return rule.extractNames(node);
+  const name = rule.extractName
+    ? rule.extractName(node)
+    : getNodeName(node, rule.nameField ?? "name");
+  return name ? [name] : [];
 }
 
 function isCallNode(node: Node, callRule: CallRule): boolean {
@@ -242,10 +252,11 @@ function walkTree(
         }
         // Skip symbol emission and call extraction — context-only.
       } else {
-        const name = symbolRule.extractName
-          ? symbolRule.extractName(node)
-          : getNodeName(node, symbolRule.nameField ?? "name");
-        if (name) {
+        const names = extractSymbolNames(node, symbolRule);
+        const isContextNode =
+          symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
+        for (let nameIndex = 0; nameIndex < names.length; nameIndex++) {
+          const name = names[nameIndex];
           const parentName =
             contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
           const exported = symbolRule.isExported ? symbolRule.isExported(name, node) : false;
@@ -289,8 +300,6 @@ function walkTree(
             receiverVar && receiverType
               ? { varName: receiverVar, typeName: receiverType }
               : undefined;
-          const isContextNode =
-            symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
           const contextName = isContextNode
             ? (symbolRule.extractContextName?.(node, contextStack) ?? fullName)
             : null;
@@ -298,17 +307,19 @@ function walkTree(
             contextName && symbolRule.contextKind
               ? [...contextStack, { name: contextName, endRow, kind: symbolRule.contextKind }]
               : contextStack;
-          extractCallsInNode(
-            node,
-            config,
-            fullName,
-            receiverInfo,
-            calledIdentifiers,
-            callExpressions,
-            callContext,
-          );
+          if (isContextNode && nameIndex === 0) {
+            extractCallsInNode(
+              node,
+              config,
+              fullName,
+              receiverInfo,
+              calledIdentifiers,
+              callExpressions,
+              callContext,
+            );
+          }
 
-          if (isContextNode) {
+          if (isContextNode && nameIndex === 0) {
             contextStack.push({
               name: contextName ?? fullName,
               endRow,
@@ -365,9 +376,7 @@ function extractCallsInNode(
       const rule = symbolRuleMap.get(node.type);
       if (!rule) return false;
       if (rule.contextOnly) return true;
-      return Boolean(
-        rule.extractName ? rule.extractName(node) : getNodeName(node, rule.nameField ?? "name"),
-      );
+      return extractSymbolNames(node, rule).length > 0;
     });
 
   const callNodes = symbolNode.descendantsOfType(config.callRule.nodeType);

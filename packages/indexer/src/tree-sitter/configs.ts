@@ -555,3 +555,149 @@ export const rubyConfig: LanguageConfig = {
   contextNameField: "name",
   qualifyCall: rubyQualifyCall,
 };
+
+// ── Java ──
+
+const JAVA_CALL_IGNORES = new Set([
+  "if",
+  "for",
+  "while",
+  "switch",
+  "catch",
+  "assert",
+  "this",
+  "super",
+]);
+
+function isJavaExported(_name: string, node: Node): boolean {
+  const modifiers = node.namedChildren.find((child) => child.type === "modifiers")?.text;
+  return modifiers ? /\b(?:public|protected)\b/.test(modifiers) : false;
+}
+
+function extractJavaConstructorName(node: Node): string | null {
+  const declarator =
+    node.childForFieldName("declarator") ??
+    node.namedChildren.find((child) => child.type === "constructor_declarator");
+  const nameNode = declarator?.childForFieldName("name") ?? node.childForFieldName("name");
+  return nameNode?.text ? "<constructor>" : null;
+}
+
+function extractJavaFieldNames(node: Node): string[] {
+  return node.namedChildren
+    .filter((child) => child.type === "variable_declarator")
+    .map((declarator) => {
+      const nameNode = declarator.childForFieldName("name");
+      return (
+        nameNode?.text ??
+        declarator.namedChildren.find((child) => child.type === "identifier")?.text ??
+        ""
+      );
+    })
+    .filter(Boolean);
+}
+
+function extractJavaImports(node: Node): string[] {
+  const path = node.text
+    .trim()
+    .replace(/^import\s+/, "")
+    .replace(/;\s*$/, "")
+    .trim();
+  return path ? [path] : [];
+}
+
+function normalizeJavaCallName(value: string): string {
+  const parts = value.split(".").filter(Boolean);
+  return parts[parts.length - 1] ?? value;
+}
+
+// Java call edges are intentionally heuristic: overloads and receiver types
+// remain unresolved until a future type-aware resolver can replace this rule.
+// ponytail: keep method-name calls; upgrade to type-aware dispatch when needed.
+export const javaConfig: LanguageConfig = {
+  language: "java",
+  symbolRules: [
+    {
+      nodeType: "class_declaration",
+      symbolType: "class",
+      nameField: "name",
+      establishesContext: true,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "interface_declaration",
+      symbolType: "interface",
+      nameField: "name",
+      establishesContext: true,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "enum_declaration",
+      symbolType: "enum",
+      nameField: "name",
+      establishesContext: true,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "record_declaration",
+      symbolType: "record",
+      nameField: "name",
+      establishesContext: true,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "annotation_type_declaration",
+      symbolType: "annotation",
+      nameField: "name",
+      establishesContext: true,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "method_declaration",
+      symbolType: "method",
+      nameField: "name",
+      establishesContext: true,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "constructor_declaration",
+      symbolType: "constructor",
+      extractName: extractJavaConstructorName,
+      establishesContext: true,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "compact_constructor_declaration",
+      symbolType: "constructor",
+      extractName: extractJavaConstructorName,
+      establishesContext: true,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "field_declaration",
+      symbolType: "field",
+      extractNames: extractJavaFieldNames,
+      isExported: isJavaExported,
+    },
+    {
+      nodeType: "constant_declaration",
+      symbolType: "field",
+      extractNames: extractJavaFieldNames,
+      isExported: isJavaExported,
+    },
+  ],
+  importRules: [{ nodeType: "import_declaration", extract: extractJavaImports }],
+  callRule: { nodeType: "method_invocation", functionField: "name" },
+  callIgnores: JAVA_CALL_IGNORES,
+  normalizeCallName: normalizeJavaCallName,
+  contextNodeTypes: new Set([
+    "class_declaration",
+    "interface_declaration",
+    "enum_declaration",
+    "record_declaration",
+    "annotation_type_declaration",
+    "method_declaration",
+    "constructor_declaration",
+    "compact_constructor_declaration",
+  ]),
+  contextNameField: "name",
+};
