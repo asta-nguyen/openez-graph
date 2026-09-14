@@ -21,12 +21,14 @@ import {
   memoryRecall,
   memoryWrite,
   truncateToTokenLimit,
+  workspaceContext,
 } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
   findLocalWorkspaceConfig,
   removeWorkspace,
+  type RegistryWorkspace,
 } from "@openez-graph/db";
 import {
   createBlobParser,
@@ -90,6 +92,14 @@ const memoryRecallSchema = z.object({
   maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
 });
 
+const workspaceContextSchema = z.object({
+  workspaceIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
+  paths: z.array(z.string()).optional(),
+  path: z.string().optional(),
+  maxTokens: z.number().int().min(128).max(100_000).optional(),
+});
+
 const indexWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
@@ -130,11 +140,7 @@ const catchupState = new Map<
   }
 >();
 
-type WorkspaceLike = {
-  id: string;
-  name: string;
-  rootPath: string;
-};
+type WorkspaceLike = RegistryWorkspace;
 
 function countDefinedScopes(input: {
   workspaceIds?: string[];
@@ -309,6 +315,67 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
   }
 
   metrics.truncated = true;
+  const contextEntries = Array.isArray(value.workspaces)
+    ? value.workspaces.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") return [];
+        const context = (entry as { context?: unknown }).context;
+        return context && typeof context === "object" ? [context as Record<string, unknown>] : [];
+      })
+    : [];
+
+  if (contextEntries.length > 0) {
+    const overBudget = () => serializedTokens() > maxTokens;
+
+    while (overBudget()) {
+      const context = contextEntries.find(
+        (entry) => Array.isArray(entry.instructions) && entry.instructions.length > 1,
+      );
+      if (!context) break;
+      (context.instructions as unknown[]).pop();
+    }
+
+    while (overBudget()) {
+      const instruction = contextEntries
+        .flatMap((entry) => (Array.isArray(entry.instructions) ? entry.instructions : []))
+        .filter(
+          (item): item is Record<string, unknown> => Boolean(item) && typeof item === "object",
+        )
+        .filter((item) => typeof item.content === "string" && item.content.length > 0)
+        .sort((left, right) => String(right.content).length - String(left.content).length)[0];
+      if (!instruction) break;
+      const content = String(instruction.content);
+      const overflow = serializedTokens() - maxTokens;
+      instruction.content = truncateToTokenLimit(
+        content,
+        Math.max(0, countTokens(content) - overflow - 8),
+      );
+      if (instruction.content === content) break;
+    }
+
+    for (const key of ["memories", "changedFiles"] as const) {
+      while (overBudget()) {
+        const arrays = contextEntries.flatMap((entry) => {
+          const target =
+            key === "changedFiles"
+              ? (entry.activity as Record<string, unknown> | undefined)?.changedFiles
+              : entry.memories;
+          return Array.isArray(target) && target.length > 0 ? [target] : [];
+        });
+        if (arrays.length === 0) break;
+        arrays
+          .sort(
+            (left, right) =>
+              JSON.stringify(right[right.length - 1]).length -
+              JSON.stringify(left[left.length - 1]).length,
+          )[0]!
+          .pop();
+      }
+    }
+
+    updateMetrics();
+    if (!overBudget()) return value;
+  }
+
   for (let attempts = 0; attempts < 10_000 && serializedTokens() > maxTokens; attempts += 1) {
     const arrays: Array<{ items: unknown[]; minimum: number }> = [];
     const strings: Array<{ owner: Record<string, unknown>; key: string; value: string }> = [];
@@ -337,6 +404,13 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
         return;
       }
       if (!current || typeof current !== "object") return;
+      if (
+        contextEntries.length > 0 &&
+        (contextEntries.includes(current as Record<string, unknown>) ||
+          Object.prototype.hasOwnProperty.call(current, "context"))
+      ) {
+        return;
+      }
       for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
         // Protect the `error` field from truncation — it is the actionable
         // message the client needs. Truncating it to empty would leave the
@@ -550,6 +624,27 @@ export function createMcpServer(options?: McpServerOptions) {
         inputSchema: {
           type: "object",
           properties: {},
+          required: [],
+        },
+      },
+      {
+        name: "workspace_context",
+        description:
+          "Load deterministic workspace instructions, Git activity, index state, and active memories at session start. Supports one or many workspaces.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceIds: { type: "array", items: { type: "string" } },
+            workspaceId: { type: "string" },
+            paths: { type: "array", items: { type: "string" } },
+            path: { type: "string" },
+            maxTokens: {
+              type: "integer",
+              minimum: 128,
+              maximum: 100_000,
+              description: "Maximum tokens for the complete serialized response",
+            },
+          },
           required: [],
         },
       },
@@ -768,6 +863,29 @@ export function createMcpServer(options?: McpServerOptions) {
       case "list_workspaces": {
         const registry = createRegistryRepository();
         return jsonResponse(await registry.listWorkspaces());
+      }
+      case "workspace_context": {
+        const input = workspaceContextSchema.parse(request.params.arguments ?? {});
+        const workspaces = await resolver.resolveReadWorkspaces(input);
+        const settled = await Promise.allSettled(
+          workspaces.map((workspace) => workspaceContext(workspace)),
+        );
+        const entries = settled.map((result, index) => {
+          const workspace = workspaces[index]!;
+          const identity = {
+            workspaceId: workspace.id,
+            workspaceName: workspace.name,
+            rootPath: workspace.rootPath,
+          };
+          return result.status === "fulfilled"
+            ? { ...identity, context: result.value }
+            : {
+                ...identity,
+                error:
+                  result.reason instanceof Error ? result.reason.message : String(result.reason),
+              };
+        });
+        return jsonResponse({ workspaces: entries }, input.maxTokens ?? 800);
       }
       case "code_query":
       case "memory_query": {

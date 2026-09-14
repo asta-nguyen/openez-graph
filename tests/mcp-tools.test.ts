@@ -83,6 +83,151 @@ function textResult(result: Awaited<ReturnType<Client["callTool"]>>) {
 }
 
 describe("MCP agent contracts", () => {
+  it("advertises workspace_context as a session-start read tool", async () => {
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const tool = (await client.listTools()).tools.find(
+        (item) => item.name === "workspace_context",
+      );
+      expect(tool?.description).toContain("session start");
+      expect(
+        (tool?.inputSchema as { properties?: Record<string, unknown> }).properties,
+      ).toHaveProperty("workspaceIds");
+      expect(
+        (tool?.inputSchema as { properties?: { maxTokens?: Record<string, unknown> } }).properties
+          ?.maxTokens,
+      ).toMatchObject({ type: "integer", minimum: 128, maximum: 100_000 });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("returns default and explicit multi-workspace context", async () => {
+    const first = await createIndexedWorkspace("context-first", tempRoot);
+    fs.writeFileSync(path.join(tempRoot, "AGENTS.md"), "Use the first workspace.\n");
+    fs.writeFileSync(
+      path.join(tempRoot, ".openez", "workspace.json"),
+      JSON.stringify({
+        workspaceId: first.id,
+        rootPath: tempRoot,
+        name: first.name,
+        updatedAt: "2026-09-14T00:00:00.000Z",
+      }),
+    );
+    const nestedPath = path.join(tempRoot, "src", "nested");
+    fs.mkdirSync(nestedPath, { recursive: true });
+    const secondRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-context-second-"));
+    try {
+      const second = await createIndexedWorkspace("context-second", secondRoot);
+      const { client, server } = await connectClient(nestedPath);
+      try {
+        const defaultBody = toolJson(
+          await client.callTool({ name: "workspace_context", arguments: {} }),
+        ) as {
+          workspaces: Array<{ workspaceId: string }>;
+          metrics: { tokenBudget: number };
+        };
+        expect(defaultBody.workspaces.map((item) => item.workspaceId)).toEqual([first.id]);
+        expect(defaultBody.metrics.tokenBudget).toBe(800);
+
+        const multiBody = toolJson(
+          await client.callTool({
+            name: "workspace_context",
+            arguments: { workspaceIds: [first.id, second.id], maxTokens: 2_000 },
+          }),
+        ) as { workspaces: Array<{ workspaceId: string }> };
+        expect(multiBody.workspaces.map((item) => item.workspaceId)).toEqual([first.id, second.id]);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    } finally {
+      closeAllWorkspaceDbs();
+      fs.rmSync(secondRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps successful workspace context when a sibling snapshot fails", async () => {
+    const good = await createIndexedWorkspace("context-good", tempRoot);
+    const brokenRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-context-broken-"));
+    const broken = await createRegistryRepository().createWorkspace({
+      id: "context-broken",
+      name: "context-broken",
+      rootPath: brokenRoot,
+    });
+    closeAllWorkspaceDbs();
+    fs.rmSync(brokenRoot, { recursive: true, force: true });
+    fs.writeFileSync(brokenRoot, "not a directory\n");
+    try {
+      const { client, server } = await connectClient(tempRoot);
+      try {
+        const body = toolJson(
+          await client.callTool({
+            name: "workspace_context",
+            arguments: { workspaceIds: [good.id, broken.id], maxTokens: 2_000 },
+          }),
+        ) as { workspaces: Array<{ workspaceId: string; context?: unknown; error?: string }> };
+        expect(body.workspaces.find((item) => item.workspaceId === good.id)?.context).toBeTruthy();
+        expect(body.workspaces.find((item) => item.workspaceId === broken.id)?.error).toBeTruthy();
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    } finally {
+      fs.rmSync(brokenRoot, { force: true });
+    }
+  });
+
+  it("fits workspace_context to maxTokens before dropping core identity", async () => {
+    await createIndexedWorkspace("context-budget", tempRoot);
+    fs.writeFileSync(path.join(tempRoot, "AGENTS.md"), "Primary instruction.\n");
+    fs.writeFileSync(path.join(tempRoot, "CLAUDE.md"), "Secondary instruction. ".repeat(200));
+    const repo = createWorkspaceRepository(tempRoot);
+    await repo.insertMemory({
+      title: "Decision",
+      content: "Keep SQLite local-first.",
+      source: "agent",
+    });
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const text = textResult(
+        await client.callTool({
+          name: "workspace_context",
+          arguments: { maxTokens: 300 },
+        }),
+      );
+      const body = JSON.parse(text) as {
+        workspaces: Array<{
+          workspaceId: string;
+          context?: {
+            instructions: Array<{ path: string }>;
+            memories: unknown[];
+            activity: unknown;
+          };
+        }>;
+        metrics: { tokenBudget: number; responseTokens: number; truncated: boolean };
+      };
+
+      expect(countTokens(text)).toBeLessThanOrEqual(300);
+      expect(body.metrics).toMatchObject({
+        tokenBudget: 300,
+        responseTokens: countTokens(text),
+        truncated: true,
+      });
+      expect(body.workspaces[0]?.workspaceId).toBe("context-budget");
+      expect(body.workspaces[0]?.context?.instructions.map((item) => item.path)).toEqual([
+        "AGENTS.md",
+      ]);
+      expect(body.workspaces[0]?.context?.memories).toHaveLength(1);
+      expect(body.workspaces[0]?.context?.activity).toBeTruthy();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("returns the core diff scope error for ref and staged changes", async () => {
     const { client, server } = await connectClient(tempRoot);
     try {
