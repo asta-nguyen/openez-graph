@@ -1,0 +1,34 @@
+tests/workspace-db.test.ts
+  s_0a3d9a9833d01c::t_29794074f2360b 584-600
+  s_0a3d9a9833d01c::t_9040ebf18bf426 601-602
+tests/mcp-tools.test.ts
+  s_0a3d9a9833d01c::t_29794074f2360b 113-118,131-136,140-145,187-210,301-337,339-354
+  s_0a3d9a9833d01c::t_54da38d38078fb 338
+  s_0a3d9a9833d01c::t_6a95672c31e390 355-357
+apps/mcp/src/mcp-core.ts
+  s_0a3d9a9833d01c::t_f326a908be1a09 168-184,198-199,201,204,249,293
+  s_0a3d9a9833d01c::t_49684ee861a1f8 388-390,397-399,505-507,539-565
+  s_0a3d9a9833d01c::t_73bf5b610afdc1 382-387,391-396,400-417,508-538
+  s_0a3d9a9833d01c::t_323137215f108b 252
+  s_0a3d9a9833d01c::t_284bf20a26db40 570
+packages/core/src/workspace-context.ts
+  s_0a3d9a9833d01c::t_ebe406fca6ace0 10,70-76,79-85
+packages/db/src/sqlite/memory-repository.ts
+  s_0a3d9a9833d01c::t_ae875e80684241 85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b6b5ed8b857db659529d8b68d991dd9b68011969",
+  "prompts": {},
+  "sessions": {
+    "s_0a3d9a9833d01c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e28-ff5d-7f60-b6a9-174da271ba26",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
