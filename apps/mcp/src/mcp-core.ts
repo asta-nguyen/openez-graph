@@ -21,12 +21,14 @@ import {
   memoryRecall,
   memoryWrite,
   truncateToTokenLimit,
+  workspaceContext,
 } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
   findLocalWorkspaceConfig,
   removeWorkspace,
+  type RegistryWorkspace,
 } from "@openez-graph/db";
 import {
   createBlobParser,
@@ -90,6 +92,14 @@ const memoryRecallSchema = z.object({
   maxTokens: z.number().int().min(MIN_RESPONSE_TOKENS).max(100_000).optional(),
 });
 
+const workspaceContextSchema = z.object({
+  workspaceIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
+  paths: z.array(z.string()).optional(),
+  path: z.string().optional(),
+  maxTokens: z.number().int().min(128).max(100_000).optional(),
+});
+
 const indexWorkspaceSchema = z.object({
   workspaceId: z.string().optional(),
   path: z.string().optional(),
@@ -130,11 +140,7 @@ const catchupState = new Map<
   }
 >();
 
-type WorkspaceLike = {
-  id: string;
-  name: string;
-  rootPath: string;
-};
+type WorkspaceLike = RegistryWorkspace;
 
 function countDefinedScopes(input: {
   workspaceIds?: string[];
@@ -143,10 +149,10 @@ function countDefinedScopes(input: {
   path?: string;
 }): number {
   let count = 0;
-  if (input.workspaceIds && input.workspaceIds.length > 0) count += 1;
-  if (input.workspaceId) count += 1;
-  if (input.paths && input.paths.length > 0) count += 1;
-  if (input.path) count += 1;
+  if (input.workspaceIds !== undefined) count += 1;
+  if (input.workspaceId !== undefined) count += 1;
+  if (input.paths !== undefined) count += 1;
+  if (input.path !== undefined) count += 1;
   return count;
 }
 
@@ -157,6 +163,23 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
     seen.add(item.id);
     return true;
   });
+}
+
+function assertNonBlankSelectors(input: {
+  workspaceIds?: string[];
+  workspaceId?: string;
+  paths?: string[];
+  path?: string;
+}): void {
+  const selectors = [
+    input.workspaceId,
+    input.path,
+    ...(input.workspaceIds ?? []),
+    ...(input.paths ?? []),
+  ];
+  if (selectors.some((selector) => selector !== undefined && selector.trim() === "")) {
+    throw new Error("Workspace selectors must not be empty.");
+  }
 }
 
 function createWorkspaceResolver(options?: { defaultPath?: string }) {
@@ -172,11 +195,13 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
   }
 
   async function resolveWorkspaceByPath(searchPath: string): Promise<WorkspaceLike> {
+    assertNonBlankSelectors({ path: searchPath });
+    const resolvedPath = path.resolve(searchPath);
     const registry = createRegistryRepository();
-    const workspace = await registry.getWorkspaceByPath(path.resolve(searchPath));
+    const workspace = await registry.getWorkspaceByPath(resolvedPath);
     if (!workspace) {
       throw new Error(
-        `No workspace registered at ${path.resolve(searchPath)}. ` +
+        `No workspace registered at ${resolvedPath}. ` +
           "Run 'openez init <path>' or pass a registered workspaceId.",
       );
     }
@@ -221,6 +246,13 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
       paths?: string[];
       path?: string;
     }): Promise<WorkspaceLike[]> {
+      assertNonBlankSelectors(input);
+      if (
+        (input.workspaceIds !== undefined && input.workspaceIds.length === 0) ||
+        (input.paths !== undefined && input.paths.length === 0)
+      ) {
+        throw new Error("Workspace selectors must not be empty.");
+      }
       if (countDefinedScopes(input) > 1) {
         throw new Error(
           "Pass only one workspace selector type at a time: workspaceIds, workspaceId, paths, or path.",
@@ -258,6 +290,7 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
       workspaceId?: string;
       path?: string;
     }): Promise<WorkspaceLike> {
+      assertNonBlankSelectors(input);
       if (input.workspaceId && input.path) {
         throw new Error("Pass either workspaceId or path, not both.");
       }
@@ -309,6 +342,85 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
   }
 
   metrics.truncated = true;
+  const contextEntries = Array.isArray(value.workspaces)
+    ? value.workspaces.flatMap((entry) => {
+        if (!entry || typeof entry !== "object") return [];
+        const context = (entry as { context?: unknown }).context;
+        return context && typeof context === "object" ? [context as Record<string, unknown>] : [];
+      })
+    : [];
+
+  if (contextEntries.length > 0) {
+    const overBudget = () => serializedTokens() > maxTokens;
+
+    while (overBudget()) {
+      const context = contextEntries.find(
+        (entry) => Array.isArray(entry.instructions) && entry.instructions.length > 1,
+      );
+      if (!context) break;
+      (context.instructions as unknown[]).pop();
+    }
+
+    while (overBudget()) {
+      const instruction = contextEntries
+        .flatMap((entry) => (Array.isArray(entry.instructions) ? entry.instructions : []))
+        .filter(
+          (item): item is Record<string, unknown> => Boolean(item) && typeof item === "object",
+        )
+        .filter((item) => typeof item.content === "string" && item.content.length > 0)
+        .sort((left, right) => String(right.content).length - String(left.content).length)[0];
+      if (!instruction) break;
+      const content = String(instruction.content);
+      const overflow = serializedTokens() - maxTokens;
+      instruction.content = truncateToTokenLimit(
+        content,
+        Math.max(0, countTokens(content) - overflow - 8),
+      );
+      if (instruction.content === content) break;
+    }
+
+    while (overBudget()) {
+      const oldestMemory = contextEntries
+        .flatMap((entry) => {
+          if (!Array.isArray(entry.memories)) return [];
+          return entry.memories.flatMap((memory) => {
+            if (!memory || typeof memory !== "object") return [];
+            return [
+              { items: entry.memories as unknown[], memory: memory as Record<string, unknown> },
+            ];
+          });
+        })
+        .sort((left, right) => {
+          const updatedAt = String(left.memory.updatedAt ?? "").localeCompare(
+            String(right.memory.updatedAt ?? ""),
+          );
+          return (
+            updatedAt || String(left.memory.id ?? "").localeCompare(String(right.memory.id ?? ""))
+          );
+        })[0];
+      if (!oldestMemory) break;
+      oldestMemory.items.splice(oldestMemory.items.indexOf(oldestMemory.memory), 1);
+    }
+
+    while (overBudget()) {
+      const arrays = contextEntries.flatMap((entry) => {
+        const target = (entry.activity as Record<string, unknown> | undefined)?.changedFiles;
+        return Array.isArray(target) && target.length > 0 ? [target] : [];
+      });
+      if (arrays.length === 0) break;
+      arrays
+        .sort(
+          (left, right) =>
+            JSON.stringify(right[right.length - 1]).length -
+            JSON.stringify(left[left.length - 1]).length,
+        )[0]!
+        .pop();
+    }
+
+    updateMetrics();
+    if (!overBudget()) return value;
+  }
+
   for (let attempts = 0; attempts < 10_000 && serializedTokens() > maxTokens; attempts += 1) {
     const arrays: Array<{ items: unknown[]; minimum: number }> = [];
     const strings: Array<{ owner: Record<string, unknown>; key: string; value: string }> = [];
@@ -337,6 +449,13 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
         return;
       }
       if (!current || typeof current !== "object") return;
+      if (
+        contextEntries.length > 0 &&
+        (contextEntries.includes(current as Record<string, unknown>) ||
+          Object.prototype.hasOwnProperty.call(current, "context"))
+      ) {
+        return;
+      }
       for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
         // Protect the `error` field from truncation — it is the actionable
         // message the client needs. Truncating it to empty would leave the
@@ -383,16 +502,72 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
       // and truncating the error until the serialized response fits.
       const originalError =
         first?.error === undefined ? undefined : String(first.error).slice(0, 200);
-      const variants = [
-        { includeWorkspaceId: true, includeName: true, includeRef: true, includeStaged: true },
-        { includeWorkspaceId: true, includeName: false, includeRef: true, includeStaged: true },
-        { includeWorkspaceId: true, includeName: false, includeRef: false, includeStaged: false },
-        { includeWorkspaceId: false, includeName: false, includeRef: false, includeStaged: false },
-      ];
+      const isWorkspaceContext = Boolean(first && ("context" in first || "rootPath" in first));
+      const variants: Array<{
+        includeWorkspaceId: boolean;
+        includeName: boolean;
+        includeRootPath: boolean;
+        includeRef: boolean;
+        includeStaged: boolean;
+      }> = isWorkspaceContext
+        ? [
+            {
+              includeWorkspaceId: true,
+              includeName: true,
+              includeRootPath: true,
+              includeRef: false,
+              includeStaged: false,
+            },
+            {
+              includeWorkspaceId: true,
+              includeName: false,
+              includeRootPath: true,
+              includeRef: false,
+              includeStaged: false,
+            },
+            {
+              includeWorkspaceId: true,
+              includeName: false,
+              includeRootPath: false,
+              includeRef: false,
+              includeStaged: false,
+            },
+          ]
+        : [
+            {
+              includeWorkspaceId: true,
+              includeName: true,
+              includeRootPath: false,
+              includeRef: true,
+              includeStaged: true,
+            },
+            {
+              includeWorkspaceId: true,
+              includeName: false,
+              includeRootPath: false,
+              includeRef: true,
+              includeStaged: true,
+            },
+            {
+              includeWorkspaceId: true,
+              includeName: false,
+              includeRootPath: false,
+              includeRef: false,
+              includeStaged: false,
+            },
+            {
+              includeWorkspaceId: false,
+              includeName: false,
+              includeRootPath: false,
+              includeRef: false,
+              includeStaged: false,
+            },
+          ];
       const buildMinimal = (variant: (typeof variants)[number], errorTokens: number) => {
         const entry: Record<string, unknown> = {};
         if (variant.includeWorkspaceId && first?.workspaceId) entry.workspaceId = first.workspaceId;
         if (variant.includeName && first?.workspaceName) entry.workspaceName = first.workspaceName;
+        if (variant.includeRootPath && first?.rootPath) entry.rootPath = first.rootPath;
         if (originalError !== undefined) {
           entry.error = truncateToTokenLimit(originalError, errorTokens);
         }
@@ -550,6 +725,27 @@ export function createMcpServer(options?: McpServerOptions) {
         inputSchema: {
           type: "object",
           properties: {},
+          required: [],
+        },
+      },
+      {
+        name: "workspace_context",
+        description:
+          "Load deterministic workspace instructions, Git activity, index state, and active memories at session start. Supports one or many workspaces.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workspaceIds: { type: "array", items: { type: "string" } },
+            workspaceId: { type: "string" },
+            paths: { type: "array", items: { type: "string" } },
+            path: { type: "string" },
+            maxTokens: {
+              type: "integer",
+              minimum: 128,
+              maximum: 100_000,
+              description: "Maximum tokens for the complete serialized response",
+            },
+          },
           required: [],
         },
       },
@@ -768,6 +964,29 @@ export function createMcpServer(options?: McpServerOptions) {
       case "list_workspaces": {
         const registry = createRegistryRepository();
         return jsonResponse(await registry.listWorkspaces());
+      }
+      case "workspace_context": {
+        const input = workspaceContextSchema.parse(request.params.arguments ?? {});
+        const workspaces = await resolver.resolveReadWorkspaces(input);
+        const settled = await Promise.allSettled(
+          workspaces.map((workspace) => workspaceContext(workspace)),
+        );
+        const entries = settled.map((result, index) => {
+          const workspace = workspaces[index]!;
+          const identity = {
+            workspaceId: workspace.id,
+            workspaceName: workspace.name,
+            rootPath: workspace.rootPath,
+          };
+          return result.status === "fulfilled"
+            ? { ...identity, context: result.value }
+            : {
+                ...identity,
+                error:
+                  result.reason instanceof Error ? result.reason.message : String(result.reason),
+              };
+        });
+        return jsonResponse({ workspaces: entries }, input.maxTokens ?? 800);
       }
       case "code_query":
       case "memory_query": {
