@@ -681,7 +681,7 @@ describe("tree-sitter java parser", () => {
 // ── Fallback behavior ──
 
 describe("tree-sitter fallback", () => {
-  it("keeps unknown-language fallback output empty", async () => {
+  it("returns a raw chunk for unknown code languages", async () => {
     const result = await new TreeSitterParser().parse(
       {
         relativePath: "unknown.example",
@@ -694,8 +694,9 @@ describe("tree-sitter fallback", () => {
       "code",
     );
 
-    expect(result.parser).toBe("regex");
-    expect(result.chunks).toEqual([]);
+    expect(result.parser).toBe("fallback");
+    expect(result.chunks).toHaveLength(1);
+    expect(result.chunks[0]?.content).toContain("class Broken {}");
     expect(result.definedSymbols).toEqual([]);
     expect(result.importPaths).toEqual([]);
     expect(result.callExpressions).toEqual([]);

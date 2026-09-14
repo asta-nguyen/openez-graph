@@ -43,7 +43,7 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
 // entries are invalidated on the next index/graph build.
 const PARSER_VERSION_OXC = "oxc-v2";
 const PARSER_VERSION_NATIVE = "native-v1";
-const PARSER_VERSION_FALLBACK = "fallback-v1";
+const PARSER_VERSION_FALLBACK = "fallback-v2";
 const INDEX_LEASE_DURATION_MS = 60_000;
 const INDEX_HEARTBEAT_INTERVAL_MS = 15_000;
 
@@ -54,7 +54,7 @@ function indexLeaseExpiry(): string {
 /**
  * Native tree-sitter parser surface used by the indexer. The native extension
  * is optional (platform-specific .node binary); when unavailable the indexer
- * falls back to the WASM/regex parsers and tags cache rows `fallback-v1`.
+ * falls back to the WASM/regex parsers and tags cache rows `fallback-v2`.
  */
 export interface NativeParser {
   readonly id: "native-v1";
@@ -78,10 +78,10 @@ let _nativeParser: NativeParser | null | undefined;
 /**
  * Resolve the native tree-sitter parser once and cache the result. Returns
  * `null` when the platform-specific native extension is unavailable — callers
- * then fall back to the registry parsers and tag cached rows `fallback-v1`.
+ * then fall back to the registry parsers and tag cached rows `fallback-v2`.
  * The resolved capability also drives parsed_documents cache validation: a
  * cache row is only reused when its `parser_version` matches the parser that
- * the current capability would use (`native-v1` vs `fallback-v1`).
+ * the current capability would use (`native-v1` vs `fallback-v2`).
  */
 export function resolveNativeParser(): NativeParser | null {
   if (_nativeParser !== undefined) return _nativeParser;
@@ -110,10 +110,10 @@ export function resetNativeParserCache(): void {
  * Map a parser name (returned by `parseDocument`/`parseInline`) to the
  * version tag stored in `parsed_documents.parser_version`. Native
  * tree-sitter results use `native-v1`, the fallback parser uses
- * `fallback-v1`, and every other parser (oxc, markdown, config, regex)
+ * `fallback-v2`, and every other parser (oxc, markdown, config, regex)
  * is grouped under `oxc-v2` since they share the same chunking/call-
  * extraction contract. Non-native tree-sitter/regex fallbacks for
- * Python/Go/Rust use `fallback-v1` so cache validation matches the
+ * Python/Go/Rust use `fallback-v2` so cache validation matches the
  * expected version when the native extension is unavailable.
  */
 function parserVersionFor(parserName: string): string {
@@ -1158,7 +1158,7 @@ export async function buildGraphGeneration(
   if (nativeDocs.length > 0) {
     // Resolve the native parser capability once. The expected cache version
     // for native-language docs depends on this: `native-v1` when the native
-    // extension is available, `fallback-v1` when it is not (the fallback
+    // extension is available, `fallback-v2` when it is not (the fallback
     // parser would re-parse them). A cache row is only reused when both the
     // content hash AND this expected version match.
     const nativeCapability = resolveNativeParser();
