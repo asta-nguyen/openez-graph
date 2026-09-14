@@ -1,13 +1,6 @@
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
-import {
-  makeFallbackChunks,
-  parseGo,
-  parsePython,
-  parseRuby,
-  parseRust,
-  type IndexedCodeResult,
-} from "../languages";
+import { parseGo, parsePython, parseRuby, parseRust, type IndexedCodeResult } from "../languages";
 import {
   goConfig,
   parseWithTreeSitter,
@@ -26,8 +19,9 @@ const LANGUAGE_CONFIGS = {
   java: javaConfig,
 } as const;
 
-const REGEX_FALLBACKS: Partial<
-  Record<string, (content: string, counter: TokenCounter) => IndexedCodeResult>
+const REGEX_FALLBACKS: Record<
+  string,
+  (content: string, counter: TokenCounter) => IndexedCodeResult
 > = {
   python: parsePython,
   go: parseGo,
@@ -44,8 +38,7 @@ function isTreeSitterLanguage(language: string): language is TreeSitterLanguage 
 /**
  * Parses Python/Go/Rust/Ruby/Java using tree-sitter (WASM AST).
  * Falls back to the regex parser if tree-sitter fails (grammar unavailable,
- * parse error, etc.). Java has no language-specific regex parser and uses a
- * raw fallback chunk instead.
+ * parse error, etc.). Java has no language-specific regex parser.
  */
 export class TreeSitterParser implements CodeParser {
   readonly name = "tree-sitter";
@@ -62,10 +55,14 @@ export class TreeSitterParser implements CodeParser {
 
     const config = LANGUAGE_CONFIGS[language];
     const tsResult = await parseWithTreeSitter(config, input.content, counter);
-    const result =
-      tsResult ??
-      REGEX_FALLBACKS[language]?.(input.content, counter) ??
-      makeFallbackChunks(input.content, input.content.split("\n"), counter);
+    const result = tsResult ??
+      REGEX_FALLBACKS[language]?.(input.content, counter) ?? {
+        chunks: [],
+        importPaths: [],
+        definedSymbols: [],
+        calledIdentifiers: [],
+        callExpressions: [],
+      };
 
     return {
       parser: tsResult ? this.name : "regex",
@@ -85,10 +82,16 @@ export class TreeSitterParser implements CodeParser {
     language: string | null,
     counter: TokenCounter,
   ): ParsedDocument {
-    const fallbackParser = language ? REGEX_FALLBACKS[language] : undefined;
-    const fallback = fallbackParser
-      ? fallbackParser(input.content, counter)
-      : makeFallbackChunks(input.content, input.content.split("\n"), counter);
+    const fallback =
+      language && REGEX_FALLBACKS[language]
+        ? REGEX_FALLBACKS[language](input.content, counter)
+        : {
+            chunks: [],
+            importPaths: [],
+            definedSymbols: [],
+            calledIdentifiers: [],
+            callExpressions: [],
+          };
 
     return {
       parser: "regex",

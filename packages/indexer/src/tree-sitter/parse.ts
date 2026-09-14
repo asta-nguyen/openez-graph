@@ -307,7 +307,7 @@ function walkTree(
             contextName && symbolRule.contextKind
               ? [...contextStack, { name: contextName, endRow, kind: symbolRule.contextKind }]
               : contextStack;
-          if (isContextNode && nameIndex === 0) {
+          if (!symbolRule.extractNames && nameIndex === 0) {
             extractCallsInNode(
               node,
               config,

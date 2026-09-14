@@ -8,6 +8,7 @@ import {
   rubyConfig,
   rustConfig,
 } from "../packages/indexer/src/tree-sitter";
+import { TreeSitterParser } from "../packages/indexer/src/parsers";
 import { fastTokenCounter } from "../packages/core/src/tokenizer";
 
 // ── Python ──
@@ -531,6 +532,18 @@ describe("tree-sitter ruby parser", () => {
     expect(names).toContain("Handler::handler");
     expect(names).toContain("Handler::proc_var");
   });
+
+  it("keeps calls inside named lambda assignments", async () => {
+    const result = await parseWithTreeSitter(
+      rubyConfig,
+      ["class Handler", "  handler = lambda { custom_call() }", "end"].join("\n"),
+    );
+
+    expect(result!.callExpressions).toContainEqual({
+      callerName: "Handler::handler",
+      calleeName: "custom_call",
+    });
+  });
 });
 
 // ── Java ──
@@ -616,6 +629,7 @@ describe("tree-sitter java parser", () => {
       expect(symbols).toContainEqual(expect.objectContaining({ name, symbolType: type, exported }));
     }
     expect(symbols.filter((symbol) => symbol.name === "UserService::save")).toHaveLength(2);
+    expect(symbols.map((symbol) => symbol.name)).not.toContain("UserService::sample");
     expect(
       symbols
         .filter((symbol) => symbol.name === "UserService::save")
@@ -667,6 +681,26 @@ describe("tree-sitter java parser", () => {
 // ── Fallback behavior ──
 
 describe("tree-sitter fallback", () => {
+  it("keeps unknown-language fallback output empty", async () => {
+    const result = await new TreeSitterParser().parse(
+      {
+        relativePath: "unknown.example",
+        absolutePath: "/tmp/unknown.example",
+        content: "class Broken {}\n",
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "nonexistent",
+      "code",
+    );
+
+    expect(result.parser).toBe("regex");
+    expect(result.chunks).toEqual([]);
+    expect(result.definedSymbols).toEqual([]);
+    expect(result.importPaths).toEqual([]);
+    expect(result.callExpressions).toEqual([]);
+  });
+
   it("returns null for unavailable grammar (non-existent language)", async () => {
     // Use a config with a language that doesn't have a grammar installed
     const result = await parseWithTreeSitter(
