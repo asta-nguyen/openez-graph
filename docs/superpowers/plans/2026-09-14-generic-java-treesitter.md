@@ -392,7 +392,7 @@ src/main/java/com/acme/model/User.java
 src/main/java/com/acme/service/UserService.java
 ```
 
-- [ ] Use source where UserService.java imports com.acme.model.User, declares public class UserService, and contains public User find(User user) { return user; }. Keep the source syntactically valid without requiring a JDK or compiling the project.
+- [ ] Use source where UserService.java imports com.acme.model.User, declares public class UserService, and contains public User find(User user) { return user.uniqueCode(); } plus a call to an overloaded User.id(...) method. Define one unique User.uniqueCode() target and two overloaded User.id(...) declarations so the graph can prove both unique linking and ambiguity rejection without compiling the project.
 - [ ] Run indexWorkspace({ workspaceId }), then ensureGraphReady(workspace.id).
 - [ ] Assert through existing repository APIs/raw queries that both Java files have indexed documents with language "java"; UserService and UserService::find have symbol nodes and defines edges; the service file has exactly one imports edge to the model file; and Java chunks retain symbol name/type and line metadata.
 - [ ] Call codeContext({ workspaceId, symbolOrPath: "UserService::find", hops: 1 }) and assert the returned symbol/source context contains the Java method body and the available file relationship. This proves existing retrieval consumes Java chunks without a Java-specific MCP change.
@@ -402,7 +402,7 @@ src/main/java/com/acme/service/UserService.java
 - [ ] Run indexWorkspace a second time without changing either file and rebuild graph state.
 - [ ] Assert the service-to-model imports edge count is still exactly one and the defines edge count for UserService::find is still exactly one.
 - [ ] Change only the body of UserService.find, re-index, and assert the same edge counts. This covers stale parsed-document replacement and graph edge rebuilding for Java.
-- [ ] Do not assert a Java call edge for user.id() or new User(); the approved v1 design intentionally leaves receiver/type/constructor dispatch heuristic and unresolved when no unique graph target exists. Parser-level method invocation extraction is covered in Task 2.
+- [ ] Assert the unique user.uniqueCode() invocation creates exactly one low-confidence calls edge from UserService::find to User::uniqueCode. Assert the overloaded user.id() invocation creates no calls edge because multiple User::id candidates exist. Do not assert a call edge for new User(); constructor dispatch remains unresolved in v1.
 
 ### Step 3: Verify and commit
 

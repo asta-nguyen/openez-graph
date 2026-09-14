@@ -883,7 +883,16 @@ describe("indexWorkspace", () => {
     fs.mkdirSync(path.join(workspaceRoot, "src/main/java/com/acme/service"), { recursive: true });
     fs.writeFileSync(
       path.join(workspaceRoot, modelPath),
-      ["package com.acme.model;", "", "public class User {}", ""].join("\n"),
+      [
+        "package com.acme.model;",
+        "",
+        "public class User {",
+        '  public String uniqueCode() { return "unique"; }',
+        "  public String id(String value) { return value; }",
+        "  public String id(int value) { return String.valueOf(value); }",
+        "}",
+        "",
+      ].join("\n"),
     );
     const writeService = (body: string) =>
       fs.writeFileSync(
@@ -901,7 +910,7 @@ describe("indexWorkspace", () => {
           "",
         ].join("\n"),
       );
-    writeService("return user;");
+    writeService("user.uniqueCode(); user.id(); return user;");
 
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
     const repo = createWorkspaceRepository(workspaceRoot);
@@ -966,6 +975,23 @@ describe("indexWorkspace", () => {
     );
     expect(imports).toEqual([{ source: servicePath, target: modelPath, count: 1 }]);
 
+    const userIdSymbols = await repo.queryRaw(
+      `SELECT count(*) AS count FROM graph_nodes
+       WHERE type = 'symbol' AND label = 'User::id'`,
+    );
+    expect(Number(userIdSymbols[0]?.count ?? 0)).toBe(2);
+
+    const calls = await repo.queryRaw(
+      `SELECT target.label, count(*) AS count
+       FROM graph_edges edge
+       JOIN graph_nodes source ON source.id = edge.from_node_id
+       JOIN graph_nodes target ON target.id = edge.to_node_id
+       WHERE edge.type = 'calls' AND source.label = ?
+       GROUP BY target.label ORDER BY target.label`,
+      ["UserService::find"],
+    );
+    expect(calls).toEqual([{ label: "User::uniqueCode", count: 1 }]);
+
     const context = await codeContext({
       workspaceId: workspace.id,
       symbolOrPath: "UserService::find",
@@ -991,7 +1017,7 @@ describe("indexWorkspace", () => {
       { type: "imports", count: 1 },
     ]);
 
-    writeService("return user == null ? null : user;");
+    writeService("user.uniqueCode(); user.id(); return user == null ? null : user;");
     await indexWorkspace({ workspaceId: workspace.id });
     await ensureGraphReady(workspace.id);
     const updatedMethodChunk = (await repo.getChunksByDocument(serviceDocument!.id)).find(

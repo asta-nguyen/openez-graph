@@ -1327,7 +1327,12 @@ export async function buildGraphGeneration(
   const allEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> =
     [];
   const symbolNodeIdsByFileAndName = new Map<string, string>();
-  const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
+  const pendingCallEdges: Array<{
+    callerName: string;
+    calleeName: string;
+    filePath: string;
+    language: string;
+  }> = [];
 
   // Map: filePath -> { fileNodeIdx, symNodeStart, symCount }
   const _symMeta: Array<{
@@ -1335,6 +1340,8 @@ export async function buildGraphGeneration(
     fileNodeIdx: number;
     symNodeStart: number;
     symCount: number;
+    language: string;
+    symbols: ParsedFile["definedSymbols"];
   }> = [];
 
   // Map: filePath -> doc.id (for chunk lookups)
@@ -1391,10 +1398,22 @@ export async function buildGraphGeneration(
 
     // Call expressions (cap 20)
     for (const call of parsed.callExpressions.slice(0, 20)) {
-      pendingCallEdges.push({ callerName: call.callerName, calleeName: call.calleeName, filePath });
+      pendingCallEdges.push({
+        callerName: call.callerName,
+        calleeName: call.calleeName,
+        filePath,
+        language,
+      });
     }
 
-    _symMeta.push({ filePath, fileNodeIdx, symNodeStart, symCount: symbols.length });
+    _symMeta.push({
+      filePath,
+      fileNodeIdx,
+      symNodeStart,
+      symCount: symbols.length,
+      language,
+      symbols,
+    });
   }
 
   // Generate IDs in memory so nodes and edges can be atomically swapped into
@@ -1404,6 +1423,10 @@ export async function buildGraphGeneration(
   // ── Build edges ──
   // Maps for node lookup
   const fileNodeIdsByPath = new Map<string, string>();
+  const javaMethodCandidatesByLeafName = new Map<
+    string,
+    Array<{ filePath: string; nodeId: string }>
+  >();
   for (const meta of _symMeta) {
     const fileNodeId = nodeIds[meta.fileNodeIdx];
     if (fileNodeId) fileNodeIdsByPath.set(meta.filePath, fileNodeId);
@@ -1414,6 +1437,14 @@ export async function buildGraphGeneration(
         `${meta.filePath}\0${allNodeInputs[meta.symNodeStart + si].label}`,
         symNodeId,
       );
+      const symbol = meta.symbols[si];
+      if (meta.language === "java" && symbol?.symbolType === "method" && symNodeId) {
+        const separator = symbol.name.lastIndexOf("::");
+        const leafName = separator >= 0 ? symbol.name.slice(separator + 2) : symbol.name;
+        const candidates = javaMethodCandidatesByLeafName.get(leafName) ?? [];
+        candidates.push({ filePath: meta.filePath, nodeId: symNodeId });
+        javaMethodCandidatesByLeafName.set(leafName, candidates);
+      }
       if (fileNodeId && symNodeId && fileNodeId !== symNodeId) {
         allEdges.push({ fromNodeId: fileNodeId, toNodeId: symNodeId, type: "defines" });
       }
@@ -1447,6 +1478,22 @@ export async function buildGraphGeneration(
   for (const call of pendingCallEdges) {
     const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
     if (!callerNodeId) continue;
+
+    if (call.language === "java") {
+      const candidates = javaMethodCandidatesByLeafName.get(call.calleeName) ?? [];
+      const sameFileCandidates = candidates.filter(({ filePath }) => filePath === call.filePath);
+      const targetCandidates = sameFileCandidates.length > 0 ? sameFileCandidates : candidates;
+      const calleeNodeId = targetCandidates.length === 1 ? targetCandidates[0]?.nodeId : undefined;
+      if (!calleeNodeId || callerNodeId === calleeNodeId) continue;
+      allEdges.push({
+        fromNodeId: callerNodeId,
+        toNodeId: calleeNodeId,
+        type: "calls",
+        metadata: _callMeta,
+      });
+      continue;
+    }
+
     // Resolve call targets with lexical scope awareness:
     // 1. Try qualified name (callerName.calleeName) — handles nested functions
     //    that shadow top-level symbols (e.g. `two.helper` called from `two`)
