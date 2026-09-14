@@ -165,6 +165,23 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
   });
 }
 
+function assertNonBlankSelectors(input: {
+  workspaceIds?: string[];
+  workspaceId?: string;
+  paths?: string[];
+  path?: string;
+}): void {
+  const selectors = [
+    input.workspaceId,
+    input.path,
+    ...(input.workspaceIds ?? []),
+    ...(input.paths ?? []),
+  ];
+  if (selectors.some((selector) => selector !== undefined && selector.trim() === "")) {
+    throw new Error("Workspace selectors must not be empty.");
+  }
+}
+
 function createWorkspaceResolver(options?: { defaultPath?: string }) {
   const defaultPath = options?.defaultPath ? path.resolve(options.defaultPath) : undefined;
 
@@ -178,11 +195,13 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
   }
 
   async function resolveWorkspaceByPath(searchPath: string): Promise<WorkspaceLike> {
+    assertNonBlankSelectors({ path: searchPath });
+    const resolvedPath = path.resolve(searchPath);
     const registry = createRegistryRepository();
-    const workspace = await registry.getWorkspaceByPath(path.resolve(searchPath));
+    const workspace = await registry.getWorkspaceByPath(resolvedPath);
     if (!workspace) {
       throw new Error(
-        `No workspace registered at ${path.resolve(searchPath)}. ` +
+        `No workspace registered at ${resolvedPath}. ` +
           "Run 'openez init <path>' or pass a registered workspaceId.",
       );
     }
@@ -227,11 +246,10 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
       paths?: string[];
       path?: string;
     }): Promise<WorkspaceLike[]> {
+      assertNonBlankSelectors(input);
       if (
         (input.workspaceIds !== undefined && input.workspaceIds.length === 0) ||
-        input.workspaceId === "" ||
-        (input.paths !== undefined && input.paths.length === 0) ||
-        input.path === ""
+        (input.paths !== undefined && input.paths.length === 0)
       ) {
         throw new Error("Workspace selectors must not be empty.");
       }
@@ -272,6 +290,7 @@ function createWorkspaceResolver(options?: { defaultPath?: string }) {
       workspaceId?: string;
       path?: string;
     }): Promise<WorkspaceLike> {
+      assertNonBlankSelectors(input);
       if (input.workspaceId && input.path) {
         throw new Error("Pass either workspaceId or path, not both.");
       }
@@ -360,24 +379,42 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
       if (instruction.content === content) break;
     }
 
-    for (const key of ["memories", "changedFiles"] as const) {
-      while (overBudget()) {
-        const arrays = contextEntries.flatMap((entry) => {
-          const target =
-            key === "changedFiles"
-              ? (entry.activity as Record<string, unknown> | undefined)?.changedFiles
-              : entry.memories;
-          return Array.isArray(target) && target.length > 0 ? [target] : [];
-        });
-        if (arrays.length === 0) break;
-        arrays
-          .sort(
-            (left, right) =>
-              JSON.stringify(right[right.length - 1]).length -
-              JSON.stringify(left[left.length - 1]).length,
-          )[0]!
-          .pop();
-      }
+    while (overBudget()) {
+      const oldestMemory = contextEntries
+        .flatMap((entry) => {
+          if (!Array.isArray(entry.memories)) return [];
+          return entry.memories.flatMap((memory) => {
+            if (!memory || typeof memory !== "object") return [];
+            return [
+              { items: entry.memories as unknown[], memory: memory as Record<string, unknown> },
+            ];
+          });
+        })
+        .sort((left, right) => {
+          const updatedAt = String(left.memory.updatedAt ?? "").localeCompare(
+            String(right.memory.updatedAt ?? ""),
+          );
+          return (
+            updatedAt || String(left.memory.id ?? "").localeCompare(String(right.memory.id ?? ""))
+          );
+        })[0];
+      if (!oldestMemory) break;
+      oldestMemory.items.splice(oldestMemory.items.indexOf(oldestMemory.memory), 1);
+    }
+
+    while (overBudget()) {
+      const arrays = contextEntries.flatMap((entry) => {
+        const target = (entry.activity as Record<string, unknown> | undefined)?.changedFiles;
+        return Array.isArray(target) && target.length > 0 ? [target] : [];
+      });
+      if (arrays.length === 0) break;
+      arrays
+        .sort(
+          (left, right) =>
+            JSON.stringify(right[right.length - 1]).length -
+            JSON.stringify(left[left.length - 1]).length,
+        )[0]!
+        .pop();
     }
 
     updateMetrics();
@@ -465,16 +502,72 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
       // and truncating the error until the serialized response fits.
       const originalError =
         first?.error === undefined ? undefined : String(first.error).slice(0, 200);
-      const variants = [
-        { includeWorkspaceId: true, includeName: true, includeRef: true, includeStaged: true },
-        { includeWorkspaceId: true, includeName: false, includeRef: true, includeStaged: true },
-        { includeWorkspaceId: true, includeName: false, includeRef: false, includeStaged: false },
-        { includeWorkspaceId: false, includeName: false, includeRef: false, includeStaged: false },
-      ];
+      const isWorkspaceContext = Boolean(first && ("context" in first || "rootPath" in first));
+      const variants: Array<{
+        includeWorkspaceId: boolean;
+        includeName: boolean;
+        includeRootPath: boolean;
+        includeRef: boolean;
+        includeStaged: boolean;
+      }> = isWorkspaceContext
+        ? [
+            {
+              includeWorkspaceId: true,
+              includeName: true,
+              includeRootPath: true,
+              includeRef: false,
+              includeStaged: false,
+            },
+            {
+              includeWorkspaceId: true,
+              includeName: false,
+              includeRootPath: true,
+              includeRef: false,
+              includeStaged: false,
+            },
+            {
+              includeWorkspaceId: true,
+              includeName: false,
+              includeRootPath: false,
+              includeRef: false,
+              includeStaged: false,
+            },
+          ]
+        : [
+            {
+              includeWorkspaceId: true,
+              includeName: true,
+              includeRootPath: false,
+              includeRef: true,
+              includeStaged: true,
+            },
+            {
+              includeWorkspaceId: true,
+              includeName: false,
+              includeRootPath: false,
+              includeRef: true,
+              includeStaged: true,
+            },
+            {
+              includeWorkspaceId: true,
+              includeName: false,
+              includeRootPath: false,
+              includeRef: false,
+              includeStaged: false,
+            },
+            {
+              includeWorkspaceId: false,
+              includeName: false,
+              includeRootPath: false,
+              includeRef: false,
+              includeStaged: false,
+            },
+          ];
       const buildMinimal = (variant: (typeof variants)[number], errorTokens: number) => {
         const entry: Record<string, unknown> = {};
         if (variant.includeWorkspaceId && first?.workspaceId) entry.workspaceId = first.workspaceId;
         if (variant.includeName && first?.workspaceName) entry.workspaceName = first.workspaceName;
+        if (variant.includeRootPath && first?.rootPath) entry.rootPath = first.rootPath;
         if (originalError !== undefined) {
           entry.error = truncateToTokenLimit(originalError, errorTokens);
         }

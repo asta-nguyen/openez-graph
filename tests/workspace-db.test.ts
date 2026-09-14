@@ -581,4 +581,23 @@ describe("createWorkspaceRepository", () => {
     expect(memories.map((memory) => memory.id)).toEqual([replacementId, activeId]);
     expect(memories.map((memory) => memory.id)).not.toContain(supersededId);
   });
+
+  it("uses id descending as the final active-memory tie-breaker", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const firstId = await repo.insertMemory({ title: "First", content: "1", source: "agent" });
+    const secondId = await repo.insertMemory({ title: "Second", content: "2", source: "agent" });
+    await repo.executeRaw("UPDATE memories SET id = ? WHERE id = ?", ["memory-a", firstId]);
+    await repo.executeRaw("UPDATE memories SET id = ? WHERE id = ?", ["memory-z", secondId]);
+    await repo.executeRaw("UPDATE memories SET updated_at = ?, created_at = ? WHERE id IN (?, ?)", [
+      "2020-01-01T00:00:00.000Z",
+      "2020-01-01T00:00:00.000Z",
+      "memory-a",
+      "memory-z",
+    ]);
+
+    expect((await repo.listActiveMemories(2)).map((memory) => memory.id)).toEqual([
+      "memory-z",
+      "memory-a",
+    ]);
+  });
 });

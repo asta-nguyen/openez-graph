@@ -111,6 +111,12 @@ describe("MCP agent contracts", () => {
         client.callTool({ name: "workspace_context", arguments: { workspaceIds: [] } }),
       ).rejects.toThrow(/empty/i);
       await expect(
+        client.callTool({ name: "workspace_context", arguments: { workspaceIds: [""] } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
+        client.callTool({ name: "workspace_context", arguments: { workspaceIds: ["  "] } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
         client.callTool({
           name: "workspace_context",
           arguments: { workspaceIds: [], workspaceId: workspace.id },
@@ -123,7 +129,19 @@ describe("MCP agent contracts", () => {
         client.callTool({ name: "workspace_context", arguments: { paths: [] } }),
       ).rejects.toThrow(/empty/i);
       await expect(
+        client.callTool({ name: "workspace_context", arguments: { paths: [""] } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
+        client.callTool({ name: "workspace_context", arguments: { paths: ["  "] } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
         client.callTool({ name: "workspace_context", arguments: { path: "" } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
+        client.callTool({ name: "workspace_context", arguments: { workspaceId: "  " } }),
+      ).rejects.toThrow(/empty/i);
+      await expect(
+        client.callTool({ name: "workspace_context", arguments: { path: "  " } }),
       ).rejects.toThrow(/empty/i);
     } finally {
       await client.close();
@@ -166,6 +184,30 @@ describe("MCP agent contracts", () => {
           }),
         ) as { workspaces: Array<{ workspaceId: string }> };
         expect(multiBody.workspaces.map((item) => item.workspaceId)).toEqual([first.id, second.id]);
+
+        const byId = toolJson(
+          await client.callTool({
+            name: "workspace_context",
+            arguments: { workspaceId: first.id, maxTokens: 2_000 },
+          }),
+        ) as { workspaces: Array<{ workspaceId: string }> };
+        expect(byId.workspaces.map((item) => item.workspaceId)).toEqual([first.id]);
+
+        const byPath = toolJson(
+          await client.callTool({
+            name: "workspace_context",
+            arguments: { path: tempRoot, maxTokens: 2_000 },
+          }),
+        ) as { workspaces: Array<{ workspaceId: string }> };
+        expect(byPath.workspaces.map((item) => item.workspaceId)).toEqual([first.id]);
+
+        const byPaths = toolJson(
+          await client.callTool({
+            name: "workspace_context",
+            arguments: { paths: [tempRoot, secondRoot], maxTokens: 2_000 },
+          }),
+        ) as { workspaces: Array<{ workspaceId: string }> };
+        expect(byPaths.workspaces.map((item) => item.workspaceId)).toEqual([first.id, second.id]);
       } finally {
         await client.close();
         await server.close();
@@ -253,6 +295,63 @@ describe("MCP agent contracts", () => {
     } finally {
       await client.close();
       await server.close();
+    }
+  });
+
+  it("removes the globally oldest memory across workspace contexts", async () => {
+    const first = await createIndexedWorkspace("memory-old", tempRoot);
+    const secondRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-memory-new-"));
+    try {
+      const second = await createIndexedWorkspace("memory-new", secondRoot);
+      const oldId = await createWorkspaceRepository(tempRoot).insertMemory({
+        title: "Old",
+        content: "old",
+        source: "agent",
+      });
+      const newId = await createWorkspaceRepository(secondRoot).insertMemory({
+        title: "New",
+        content: "new ".repeat(80),
+        source: "agent",
+      });
+      await createWorkspaceRepository(tempRoot).executeRaw(
+        "UPDATE memories SET updated_at = ? WHERE id = ?",
+        ["2020-01-01T00:00:00.000Z", oldId],
+      );
+      await createWorkspaceRepository(secondRoot).executeRaw(
+        "UPDATE memories SET updated_at = ? WHERE id = ?",
+        ["2021-01-01T00:00:00.000Z", newId],
+      );
+
+      const { client, server } = await connectClient(tempRoot);
+      try {
+        const fullText = textResult(
+          await client.callTool({
+            name: "workspace_context",
+            arguments: { workspaceIds: [first.id, second.id], maxTokens: 100_000 },
+          }),
+        );
+        const text = textResult(
+          await client.callTool({
+            name: "workspace_context",
+            arguments: {
+              workspaceIds: [first.id, second.id],
+              maxTokens: countTokens(fullText) - 10,
+            },
+          }),
+        );
+        const body = JSON.parse(text) as {
+          workspaces: Array<{ context?: { memories: Array<{ id: string }> } }>;
+        };
+        expect(
+          body.workspaces.flatMap((item) => item.context?.memories ?? []).map((item) => item.id),
+        ).toEqual([newId]);
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    } finally {
+      closeAllWorkspaceDbs();
+      fs.rmSync(secondRoot, { recursive: true, force: true });
     }
   });
 

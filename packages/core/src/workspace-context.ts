@@ -7,6 +7,7 @@ import { createWorkspaceRepository, type RegistryWorkspace } from "@openez-graph
 
 const execFileAsync = promisify(execFile);
 const INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md"] as const;
+const INSTRUCTION_READ_FLAGS = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
 
 export interface WorkspaceContextSnapshot {
   index: {
@@ -66,14 +67,22 @@ export async function workspaceContext(
   for (const fileName of INSTRUCTION_FILES) {
     const instructionPath = path.join(workspace.rootPath, fileName);
     try {
-      const stat = await fs.lstat(instructionPath);
-      if (stat.isSymbolicLink()) {
-        warnings.push(`Skipped symlinked instruction file: ${fileName}`);
-      } else if (stat.isFile()) {
-        instructions.push({ path: fileName, content: await fs.readFile(instructionPath, "utf8") });
+      const handle = await fs.open(instructionPath, INSTRUCTION_READ_FLAGS);
+      try {
+        if ((await handle.stat()).isFile()) {
+          instructions.push({ path: fileName, content: await handle.readFile("utf8") });
+        }
+      } finally {
+        await handle.close();
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") continue;
+      if (code === "ELOOP") {
+        warnings.push(`Skipped symlinked instruction file: ${fileName}`);
+        continue;
+      }
+      throw error;
     }
   }
 

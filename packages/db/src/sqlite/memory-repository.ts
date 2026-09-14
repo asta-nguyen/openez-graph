@@ -82,7 +82,7 @@ export function createMemoryOps(native: NativeDatabase, _stmts: MemoryStmts) {
           `SELECT m.*
        FROM memories m
        WHERE NOT EXISTS (SELECT 1 FROM memories newer WHERE newer.supersedes_id = m.id)
-       ORDER BY m.updated_at DESC, m.created_at DESC
+       ORDER BY m.updated_at DESC, m.created_at DESC, m.id DESC
        LIMIT ?`,
         )
         .all(limit) as Array<Record<string, unknown>>;
