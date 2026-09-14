@@ -876,6 +876,144 @@ describe("indexWorkspace", () => {
     expect(userSymbol.length).toBeGreaterThan(0);
   });
 
+  it("indexes Java through graph and retrieval with idempotent incremental updates", async () => {
+    const modelPath = "src/main/java/com/acme/model/User.java";
+    const servicePath = "src/main/java/com/acme/service/UserService.java";
+    fs.mkdirSync(path.join(workspaceRoot, "src/main/java/com/acme/model"), { recursive: true });
+    fs.mkdirSync(path.join(workspaceRoot, "src/main/java/com/acme/service"), { recursive: true });
+    fs.writeFileSync(
+      path.join(workspaceRoot, modelPath),
+      ["package com.acme.model;", "", "public class User {}", ""].join("\n"),
+    );
+    const writeService = (body: string) =>
+      fs.writeFileSync(
+        path.join(workspaceRoot, servicePath),
+        [
+          "package com.acme.service;",
+          "",
+          "import com.acme.model.User;",
+          "",
+          "public class UserService {",
+          "  public User find(User user) {",
+          `    ${body}`,
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+      );
+    writeService("return user;");
+
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    const repo = createWorkspaceRepository(workspaceRoot);
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+
+    const documents = await repo.queryRaw(
+      "SELECT path, language FROM documents WHERE path IN (?, ?) ORDER BY path",
+      [modelPath, servicePath],
+    );
+    expect(documents).toEqual([
+      { path: modelPath, language: "java" },
+      { path: servicePath, language: "java" },
+    ]);
+
+    const serviceDocument = await repo.getDocumentByPath(servicePath);
+    expect(serviceDocument).not.toBeNull();
+    const serviceChunks = await repo.getChunksByDocument(serviceDocument!.id);
+    const methodChunk = serviceChunks.find(
+      (chunk) => JSON.parse(chunk.metadata).symbolName === "UserService::find",
+    );
+    expect(methodChunk).toBeTruthy();
+    expect(JSON.parse(methodChunk!.metadata)).toMatchObject({
+      language: "java",
+      symbolName: "UserService::find",
+      symbolType: "method",
+      startLine: 6,
+      endLine: 8,
+    });
+
+    const serviceSymbols = await repo.queryRaw(
+      `SELECT label FROM graph_nodes
+       WHERE type = 'symbol' AND json_extract(metadata, '$.filePath') = ?
+       ORDER BY label`,
+      [servicePath],
+    );
+    expect(serviceSymbols.map((row) => row.label)).toEqual(["UserService", "UserService::find"]);
+
+    const defines = await repo.queryRaw(
+      `SELECT target.label, count(*) AS count
+       FROM graph_edges edge
+       JOIN graph_nodes source ON source.id = edge.from_node_id
+       JOIN graph_nodes target ON target.id = edge.to_node_id
+       WHERE edge.type = 'defines' AND source.label = ?
+       GROUP BY target.label ORDER BY target.label`,
+      [servicePath],
+    );
+    expect(defines).toEqual([
+      { label: "UserService", count: 1 },
+      { label: "UserService::find", count: 1 },
+    ]);
+
+    const imports = await repo.queryRaw(
+      `SELECT source.label AS source, target.label AS target, count(*) AS count
+       FROM graph_edges edge
+       JOIN graph_nodes source ON source.id = edge.from_node_id
+       JOIN graph_nodes target ON target.id = edge.to_node_id
+       WHERE edge.type = 'imports' AND source.label = ? AND target.label = ?
+       GROUP BY source.label, target.label`,
+      [servicePath, modelPath],
+    );
+    expect(imports).toEqual([{ source: servicePath, target: modelPath, count: 1 }]);
+
+    const context = await codeContext({
+      workspaceId: workspace.id,
+      symbolOrPath: "UserService::find",
+      hops: 1,
+    });
+    expect(context.symbol?.snippet).toContain("return user;");
+    expect(context.files).toContainEqual({ path: servicePath });
+
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+    const countsAfterRepeat = await repo.queryRaw(
+      `SELECT edge.type, count(*) AS count
+       FROM graph_edges edge
+       JOIN graph_nodes source ON source.id = edge.from_node_id
+       JOIN graph_nodes target ON target.id = edge.to_node_id
+       WHERE (edge.type = 'imports' AND source.label = ? AND target.label = ?)
+          OR (edge.type = 'defines' AND source.label = ? AND target.label = ?)
+       GROUP BY edge.type ORDER BY edge.type`,
+      [servicePath, modelPath, servicePath, "UserService::find"],
+    );
+    expect(countsAfterRepeat).toEqual([
+      { type: "defines", count: 1 },
+      { type: "imports", count: 1 },
+    ]);
+
+    writeService("return user == null ? null : user;");
+    await indexWorkspace({ workspaceId: workspace.id });
+    await ensureGraphReady(workspace.id);
+    const updatedMethodChunk = (await repo.getChunksByDocument(serviceDocument!.id)).find(
+      (chunk) => JSON.parse(chunk.metadata).symbolName === "UserService::find",
+    );
+    expect(updatedMethodChunk?.content).toContain("return user == null ? null : user;");
+    const countsAfterChange = await repo.queryRaw(
+      `SELECT edge.type, count(*) AS count
+       FROM graph_edges edge
+       JOIN graph_nodes source ON source.id = edge.from_node_id
+       JOIN graph_nodes target ON target.id = edge.to_node_id
+       WHERE (edge.type = 'imports' AND source.label = ? AND target.label = ?)
+          OR (edge.type = 'defines' AND source.label = ? AND target.label = ?)
+       GROUP BY edge.type ORDER BY edge.type`,
+      [servicePath, modelPath, servicePath, "UserService::find"],
+    );
+    expect(countsAfterChange).toEqual([
+      { type: "defines", count: 1 },
+      { type: "imports", count: 1 },
+    ]);
+  });
+
   it("indexes SCSS and Slim files via FallbackParser with no symbols", async () => {
     fs.writeFileSync(path.join(workspaceRoot, "app.scss"), ".container { max-width: 1200px; }\n");
     fs.writeFileSync(path.join(workspaceRoot, "index.slim"), "h1 Welcome\np Hello\n");
