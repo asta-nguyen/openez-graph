@@ -6,3 +6,4 @@ export * from "./memory";
 export * from "./retrieval";
 export * from "./tokenizer";
 export * from "./types";
+export * from "./workspace-context";
