@@ -1,0 +1,20 @@
+docs/superpowers/specs/2026-09-14-workspace-context-design.md
+  s_0a3d9a9833d01c::t_480229fa0c60a6 167-169
+  s_0a3d9a9833d01c::t_1f1a37ff96e2c8 1-166,170-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "42cc3631e847850c666d27c1421e871782449510",
+  "prompts": {},
+  "sessions": {
+    "s_0a3d9a9833d01c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e28-ff5d-7f60-b6a9-174da271ba26",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
