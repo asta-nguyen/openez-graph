@@ -44,17 +44,18 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 
 ## MCP tools
 
-| Tool              | Purpose                                                                                        |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| `code_outline`    | Inspect file AST structure, functions, classes, and symbols with line numbers (~50 tokens)     |
-| `code_query`      | Retrieve ranked code and documentation context                                                 |
-| `code_context`    | Get graph-adjacent context for a symbol or file (limit: 50/workspace, max 200, token-budgeted) |
-| `diff_context`    | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies        |
-| `graph_neighbors` | Inspect nearby graph nodes and edges                                                           |
-| `list_workspaces` | List registered workspaces and index status                                                    |
-| `memory_recall`   | Recall stored technical decisions and notes                                                    |
-| `memory_write`    | Store a decision or learned constraint                                                         |
-| `index_workspace` | Run an incremental or full index                                                               |
+| Tool                | Purpose                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| `code_outline`      | Inspect file AST structure, functions, classes, and symbols with line numbers (~50 tokens)        |
+| `code_query`        | Retrieve ranked code and documentation context                                                    |
+| `code_context`      | Get graph-adjacent context for a symbol or file (limit: 50/workspace, max 200, token-budgeted)    |
+| `diff_context`      | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies           |
+| `graph_neighbors`   | Inspect nearby graph nodes and edges                                                              |
+| `list_workspaces`   | List registered workspaces and index status                                                       |
+| `workspace_context` | Load token-budgeted instructions, Git activity, index state, and active memories at session start |
+| `memory_recall`     | Recall stored technical decisions and notes                                                       |
+| `memory_write`      | Store a decision or learned constraint                                                            |
+| `index_workspace`   | Run an incremental or full index                                                                  |
 
 Read tools support one or many workspaces. Write and index operations remain scoped to one workspace.
 

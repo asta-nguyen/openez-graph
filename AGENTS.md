@@ -106,7 +106,8 @@ These rules apply to ALL agents working in this repository. Violating them waste
 - **ALWAYS** use `code_query` instead of `grep`/`ripgrep`/`find` when searching for code by concept, function name, or behavior. `code_query` returns ranked, token-budgeted chunks — not entire files.
 - **ALWAYS** use `code_outline` before reading a full file when you only need its structure (functions, classes, methods, exports with line numbers).
 - **ALWAYS** use `code_context` when you need to understand what calls/imports a specific symbol or file.
-- **ALWAYS** use `memory_recall` at the start of a session to load prior architectural decisions.
+- **ALWAYS** use `workspace_context` at the start of a session to load workspace instructions, Git activity, index state, and active memories.
+- Use `memory_recall` for query-specific follow-up on previously stored architectural decisions and agent notes.
 - **ALWAYS** use `memory_write` when the user makes an architectural decision or you discover a non-obvious technical constraint.
 
 ### When NOT to use OpenEZ
@@ -125,13 +126,13 @@ Every `code_query` call logs `tokens_returned`, `tokens_saved`, and `files_scann
 openez setup codex    # or claude, opencode, windsurf
 ```
 
-This configures MCP server access. After setup, the agent automatically sees `code_query`, `code_outline`, `code_context`, `graph_neighbors`, `memory_write`, `memory_recall`, `index_workspace`, `remove_workspace`, and `list_workspaces` as available tools. `remove_workspace` is destructive (deletes the registry entry and `<root>/.openez/`) and requires `confirm: true`.
+This configures MCP server access. After setup, the agent automatically sees `code_query`, `code_outline`, `code_context`, `graph_neighbors`, `memory_write`, `memory_recall`, `index_workspace`, `remove_workspace`, `list_workspaces`, and `workspace_context` as available tools. `remove_workspace` is destructive (deletes the registry entry and `<root>/.openez/`) and requires `confirm: true`.
 
 ## MCP Expectations
 
 MCP should be multi-workspace aware.
 
-- `code_query`, `code_context`, `graph_neighbors`, and `memory_recall` should support one or many workspaces
+- `workspace_context`, `code_query`, `code_context`, `graph_neighbors`, and `memory_recall` should support one or many workspaces
 - `code_outline`, `memory_write`, `index_workspace`, and `remove_workspace` remain single-workspace operations
 - `list_workspaces` should expose the registered workspace inventory
 - `workspaceId` is the canonical internal key

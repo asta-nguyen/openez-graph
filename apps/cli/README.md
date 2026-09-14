@@ -101,17 +101,18 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 
 ## MCP Tools
 
-| Tool              | Description                                                                                         |
-| ----------------- | --------------------------------------------------------------------------------------------------- |
-| `list_workspaces` | List all registered workspaces                                                                      |
-| `code_outline`    | Inspect file AST structure, functions, classes, and exported symbols with line numbers (~50 tokens) |
-| `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
-| `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
-| `diff_context`    | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies             |
-| `graph_neighbors` | Traverse graph edges from a node or label                                                           |
-| `memory_recall`   | Recall active memory entries and technical decisions                                                |
-| `memory_write`    | Write a memory entry (notes, decisions, patterns)                                                   |
-| `index_workspace` | Trigger indexing for a workspace                                                                    |
+| Tool                | Description                                                                                         |
+| ------------------- | --------------------------------------------------------------------------------------------------- |
+| `list_workspaces`   | List all registered workspaces                                                                      |
+| `workspace_context` | Load token-budgeted instructions, Git activity, index state, and active memories at session start   |
+| `code_outline`      | Inspect file AST structure, functions, classes, and exported symbols with line numbers (~50 tokens) |
+| `code_query`        | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
+| `code_context`      | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
+| `diff_context`      | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies             |
+| `graph_neighbors`   | Traverse graph edges from a node or label                                                           |
+| `memory_recall`     | Recall active memory entries and technical decisions                                                |
+| `memory_write`      | Write a memory entry (notes, decisions, patterns)                                                   |
+| `index_workspace`   | Trigger indexing for a workspace                                                                    |
 
 `memory_query` is accepted as a deprecated compatibility alias for `code_query`, but is not advertised to new clients.
 
