@@ -547,4 +547,38 @@ describe("createWorkspaceRepository", () => {
       memId,
     ]);
   });
+
+  it("lists newest active memories and excludes superseded rows", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const supersededId = await repo.insertMemory({
+      title: "Old runtime",
+      content: "Use Node",
+      source: "agent",
+    });
+    const activeId = await repo.insertMemory({
+      title: "Editor",
+      content: "Use Vim",
+      source: "user",
+    });
+    const replacementId = await repo.insertMemory({
+      title: "Current runtime",
+      content: "Use Bun",
+      source: "agent",
+      supersedesId: supersededId,
+    });
+
+    await repo.executeRaw("UPDATE memories SET updated_at = ? WHERE id = ?", [
+      "2026-09-14T00:00:01.000Z",
+      activeId,
+    ]);
+    await repo.executeRaw("UPDATE memories SET updated_at = ? WHERE id = ?", [
+      "2026-09-14T00:00:02.000Z",
+      replacementId,
+    ]);
+
+    const memories = await repo.listActiveMemories(2);
+
+    expect(memories.map((memory) => memory.id)).toEqual([replacementId, activeId]);
+    expect(memories.map((memory) => memory.id)).not.toContain(supersededId);
+  });
 });

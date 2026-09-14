@@ -425,6 +425,7 @@ export interface WorkspaceRepository {
   }): Promise<string>;
   getMemory(id: string): Promise<StoredMemory | null>;
   searchMemories(query: string, limit: number): Promise<StoredMemory[]>;
+  listActiveMemories(limit: number): Promise<StoredMemory[]>;
 
   createIndexRun(input: { mode: string }): Promise<string>;
   completeIndexRun(
