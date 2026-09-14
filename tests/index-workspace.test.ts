@@ -11,13 +11,82 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
 } from "../packages/db/src/sqlite";
-import { indexWorkspace, waitForFts } from "../packages/indexer/src/index-workspace";
+import {
+  createWorkspaceFileResolver,
+  indexWorkspace,
+  waitForFts,
+} from "../packages/indexer/src/index-workspace";
 import { ensureGraphReady } from "../packages/indexer/src/graph-service";
 import { codeContext, graphNeighbors } from "../packages/core/src/graph";
 import { countTokens } from "../packages/core/src/tokenizer";
 
 let registryRoot: string;
 let workspaceRoot: string;
+
+describe("createWorkspaceFileResolver", () => {
+  it("resolves unique Java classes and static members", () => {
+    const root = path.resolve("/workspace");
+    const resolver = createWorkspaceFileResolver(root, [
+      {
+        relativePath: "src/main/java/com/acme/model/User.java",
+        absolutePath: path.join(root, "src/main/java/com/acme/model/User.java"),
+      },
+      {
+        relativePath: "src/main/java/com/acme/util/Util.java",
+        absolutePath: path.join(root, "src/main/java/com/acme/util/Util.java"),
+      },
+      {
+        relativePath: "modules/legacy/src/main/java/com/acme/model/User.java",
+        absolutePath: path.join(root, "modules/legacy/src/main/java/com/acme/model/User.java"),
+      },
+    ]);
+
+    expect(resolver.resolveImport("Service.java", "com.acme.util.Util", "java")).toBe(
+      "src/main/java/com/acme/util/Util.java",
+    );
+    expect(resolver.resolveImport("Service.java", "static com.acme.util.Util.run;", "java")).toBe(
+      "src/main/java/com/acme/util/Util.java",
+    );
+    expect(resolver.resolveImport("Service.java", "com.acme.model.User", "java")).toBeNull();
+  });
+
+  it("rejects wildcard, external, missing, and ambiguous Java imports", () => {
+    const root = path.resolve("/workspace");
+    const resolver = createWorkspaceFileResolver(root, [
+      {
+        relativePath: "src/main/java/com/acme/util/Util.java",
+        absolutePath: path.join(root, "src/main/java/com/acme/util/Util.java"),
+      },
+      {
+        relativePath: "src/main/java/com/acme/model/User.java",
+        absolutePath: path.join(root, "src/main/java/com/acme/model/User.java"),
+      },
+      {
+        relativePath: "modules/legacy/src/main/java/com/acme/model/User.java",
+        absolutePath: path.join(root, "modules/legacy/src/main/java/com/acme/model/User.java"),
+      },
+    ]);
+
+    expect(resolver.resolveImport("Service.java", "com.acme.util.*", "java")).toBeNull();
+    expect(resolver.resolveImport("Service.java", "java.util.List", "java")).toBeNull();
+    expect(resolver.resolveImport("Service.java", "com.acme.missing.Missing", "java")).toBeNull();
+    expect(resolver.resolveImport("Service.java", "com.acme.model.User", "java")).toBeNull();
+  });
+
+  it("resolves a unique Java class when no duplicate exists", () => {
+    const root = path.resolve("/workspace");
+    const resolver = createWorkspaceFileResolver(root, [
+      {
+        relativePath: "src/main/java/com/acme/model/User.java",
+        absolutePath: path.join(root, "src/main/java/com/acme/model/User.java"),
+      },
+    ]);
+
+    expect(resolver.resolveImport("Service.java", "com.acme.model.User", "java")).toBe(
+      "src/main/java/com/acme/model/User.java",
+    );
+  });
+});
 
 beforeEach(() => {
   registryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-index-registry-"));

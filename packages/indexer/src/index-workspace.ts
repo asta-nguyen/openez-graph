@@ -36,6 +36,7 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
   ".mdx",
   ".py",
   ".rb",
+  ".java",
 ] as const;
 
 // Parser version tags stored alongside cached parse results in
@@ -214,6 +215,28 @@ export function createWorkspaceFileResolver(
     return resolvePythonModulePath(importPath);
   }
 
+  function resolveJavaImport(importPath: string): string | null {
+    const normalized = importPath
+      .trim()
+      .replace(/^static\s+/, "")
+      .replace(/;$/, "")
+      .trim();
+    if (!normalized || normalized.endsWith(".*")) return null;
+
+    const segments = normalized.split(".");
+    // ponytail: O(number of known files × import segments) suffix scan; upgrade to a pre-indexed package/class map when workspace scale or build-model integration justifies it.
+    for (let end = segments.length; end > 0; end--) {
+      const candidate = `${segments.slice(0, end).join("/")}.java`;
+      const matches = [...knownRelativePaths].filter(
+        (knownPath) => knownPath === candidate || knownPath.endsWith(`/${candidate}`),
+      );
+      if (matches.length > 1) return null;
+      if (matches.length === 1) return matches[0];
+    }
+
+    return null;
+  }
+
   return {
     resolveImport(
       importerRelativePath: string,
@@ -227,6 +250,10 @@ export function createWorkspaceFileResolver(
 
       if (language === "ruby") {
         return resolveRelativeImport(importerRelativePath, importPath);
+      }
+
+      if (language === "java") {
+        return resolveJavaImport(importPath);
       }
 
       if (importPath.startsWith(".")) {
