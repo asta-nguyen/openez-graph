@@ -1,0 +1,28 @@
+tests/tree-sitter-parser.test.ts
+  s_3aa11d9919194d::t_e93be6768a3e35 684,697-699
+tests/parsed-documents-cache.test.ts
+  s_3aa11d9919194d::t_31162181f38639 156-157,172-173,178,191,194-203,206-208
+packages/indexer/src/index-workspace.ts
+  s_3aa11d9919194d::t_10a6bc34e01b67 46,57,81,84,113,116,1161
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_3aa11d9919194d::t_10a6bc34e01b67 4-10,64,69,86-89,92,99-101
+  s_3aa11d9919194d::t_75ffa5559d6cff 29-30,65-66
+  s_3aa11d9919194d::t_746477c374c7e3 46-47
+  s_3aa11d9919194d::t_a2d744882b8541 3,102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7a7f6f75eccb89e90a42ae01cf2f4e9b6092224f",
+  "prompts": {},
+  "sessions": {
+    "s_3aa11d9919194d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e2a-57e9-76d2-b082-ae933836398c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
