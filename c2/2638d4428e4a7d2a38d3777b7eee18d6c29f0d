@@ -1,0 +1,24 @@
+tests/tree-sitter-parser.test.ts
+  s_3aa11d9919194d::t_53545581529dda 11,535-546,632,684-703
+packages/indexer/src/tree-sitter/parse.ts
+  s_3aa11d9919194d::t_02381d232e98e9 310
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_3aa11d9919194d::t_5237b816e45616 3,58
+  s_3aa11d9919194d::t_02381d232e98e9 22-24,41,59-65,85-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c22638d4428e4a7d2a38d3777b7eee18d6c29f0d",
+  "prompts": {},
+  "sessions": {
+    "s_3aa11d9919194d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e2a-57e9-76d2-b082-ae933836398c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
