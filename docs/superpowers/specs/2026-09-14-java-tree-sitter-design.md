@@ -69,19 +69,19 @@ languages. Package names are not prefixed onto graph labels; the file path
 remains the identity boundary and keeps symbol search consistent with existing
 languages.
 
-| Java construct | `symbolType` | Example graph label |
-| --- | --- | --- |
-| class declaration | `class` | `User` |
-| interface declaration | `interface` | `Repository` |
-| enum declaration | `enum` | `Status` |
-| record declaration | `record` | `UserDto` |
-| annotation type declaration | `annotation` | `Audited` |
-| nested type | corresponding type | `Outer::Inner` |
-| method declaration | `method` | `User::save` |
-| constructor declaration | `constructor` | `User::<constructor>` |
-| compact record constructor | `constructor` | `UserDto::<constructor>` |
-| class field declaration | `field` | `User::id` |
-| interface/annotation constant declaration | `field` | `Config::TIMEOUT` |
+| Java construct                            | `symbolType`       | Example graph label      |
+| ----------------------------------------- | ------------------ | ------------------------ |
+| class declaration                         | `class`            | `User`                   |
+| interface declaration                     | `interface`        | `Repository`             |
+| enum declaration                          | `enum`             | `Status`                 |
+| record declaration                        | `record`           | `UserDto`                |
+| annotation type declaration               | `annotation`       | `Audited`                |
+| nested type                               | corresponding type | `Outer::Inner`           |
+| method declaration                        | `method`           | `User::save`             |
+| constructor declaration                   | `constructor`      | `User::<constructor>`    |
+| compact record constructor                | `constructor`      | `UserDto::<constructor>` |
+| class field declaration                   | `field`            | `User::id`               |
+| interface/annotation constant declaration | `field`            | `Config::TIMEOUT`        |
 
 Only class-level fields and constants are extracted. Local variable declarations
 are deliberately excluded to keep symbol graphs useful for code navigation.
