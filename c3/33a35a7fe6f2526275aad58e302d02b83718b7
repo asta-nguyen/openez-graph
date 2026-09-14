@@ -1,0 +1,21 @@
+tests/mcp-tools.test.ts
+  s_0a3d9a9833d01c::t_78d6db23f097b9 106-133
+apps/mcp/src/mcp-core.ts
+  s_0a3d9a9833d01c::t_f1fa8812f52b60 152-155,230-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c333a35a7fe6f2526275aad58e302d02b83718b7",
+  "prompts": {},
+  "sessions": {
+    "s_0a3d9a9833d01c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09e28-ff5d-7f60-b6a9-174da271ba26",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
