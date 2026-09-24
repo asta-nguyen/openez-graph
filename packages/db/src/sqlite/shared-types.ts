@@ -14,6 +14,8 @@ export interface NativeDatabase {
     get(...params: unknown[]): unknown;
     run(...params: unknown[]): unknown;
   };
+  transaction?<T>(fn: () => T): () => T;
+  close?(): void;
 }
 
 /**

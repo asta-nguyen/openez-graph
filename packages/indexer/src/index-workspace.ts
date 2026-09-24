@@ -444,7 +444,7 @@ async function parseInline(
     }
   }
 
-  // Parse remaining files (TS/JS, markdown, config) sequentially
+  // Parse remaining files (TS/JS, markdown, config)
   for (const task of otherTasks) {
     const indexed = await chunkDocument({
       relativePath: task.relativePath,

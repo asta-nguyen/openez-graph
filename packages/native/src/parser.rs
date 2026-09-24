@@ -393,12 +393,6 @@ fn rust_config() -> LanguageConfig {
 
 // ── Helpers ──
 
-fn node_text(node: &Node, source: &[u8]) -> String {
-  let start = node.start_byte();
-  let end = node.end_byte();
-  String::from_utf8_lossy(&source[start..end]).to_string()
-}
-
 fn get_node_name(node: &Node, field: &str, source: &[u8]) -> Option<String> {
   if let Some(name_node) = node.child_by_field_name(field) {
     return Some(text_of(&name_node, source));
@@ -434,7 +428,6 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
   match language {
     "python" => {
       if node.kind() == "import_statement" {
-        let mut cursor = node.walk();
         for i in 0..node.named_child_count() {
           if let Some(child) = node.named_child(i) {
             match child.kind() {
@@ -448,7 +441,6 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
             }
           }
         }
-        let _ = cursor;
       } else if node.kind() == "import_from_statement" {
         let module_path = node
           .child_by_field_name("module_name")
@@ -829,13 +821,13 @@ pub struct ParseBatchItem {
 #[napi]
 pub fn parse_code_native(language: String, content: String) -> Option<NativeParseResult> {
   let config = get_config(&language)?;
-  let lang = get_language_fn(&language)?;
+  let lang_fn = get_language_fn(&language)?;
 
   let tree = PARSER_CACHE.with(|cache| {
     let mut cache = cache.borrow_mut();
     let parser = cache.entry(language.clone()).or_insert_with(|| {
       let mut p = Parser::new();
-      p.set_language(&lang).ok();
+      p.set_language(&lang_fn).ok();
       p
     });
     parser.parse(content.as_bytes(), None)
@@ -862,7 +854,7 @@ pub fn parse_code_batch(items: Vec<ParseBatchItem>) -> Vec<Option<NativeParseRes
         Some(c) => c,
         None => return None,
       };
-      let lang = match get_language_fn(&item.language) {
+      let lang_fn = match get_language_fn(&item.language) {
         Some(l) => l,
         None => return None,
       };
@@ -872,7 +864,7 @@ pub fn parse_code_batch(items: Vec<ParseBatchItem>) -> Vec<Option<NativeParseRes
         let mut cache = cache.borrow_mut();
         let parser = cache.entry(item.language.clone()).or_insert_with(|| {
           let mut p = Parser::new();
-          p.set_language(&lang).ok();
+          p.set_language(&lang_fn).ok();
           p
         });
         parser.parse(item.content.as_bytes(), None)
