@@ -29,7 +29,7 @@
     "codex"
   ],
   "engines": {
-    "bun": ">=1.1.0"
+    "bun": ">=1.4.3"
   },
   "type": "module",
   "main": "./dist/cli.cjs",
