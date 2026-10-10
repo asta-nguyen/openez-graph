@@ -14,7 +14,7 @@ function getBuildId() {
 }
 
 export default defineConfig({
-  entry: ["src/cli.ts"],
+  entry: ["src/cli.ts", "src/parse-worker.ts"],
   format: ["cjs"],
   target: "node20",
   platform: "node",

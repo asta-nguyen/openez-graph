@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { Worker } from "node:worker_threads";
 
 import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
 import { fastTokenCounter, type TokenCounter } from "@openez-graph/core";
@@ -334,7 +336,7 @@ export async function chunkDocument(input: {
   };
 }
 
-interface ParseTask {
+export interface ParseTask {
   id: string;
   content: string;
   relativePath: string;
@@ -346,7 +348,7 @@ interface ParseTask {
   counter: TokenCounter;
 }
 
-type ParseResult = Awaited<ReturnType<typeof chunkDocument>>;
+export type ParseResult = Awaited<ReturnType<typeof chunkDocument>>;
 
 async function parseInline(
   tasks: ParseTask[],
@@ -444,32 +446,158 @@ async function parseInline(
     }
   }
 
-  // Parse remaining files (TS/JS, markdown, config) sequentially
-  for (const task of otherTasks) {
-    const indexed = await chunkDocument({
-      relativePath: task.relativePath,
-      absolutePath: task.absolutePath,
-      content: task.content,
-      targetTokens: task.targetTokens,
-      overlapTokens: task.overlapTokens,
-      counter: task.counter,
-    });
-    // Bound large symbol chunks (e.g. a 1000-line function) to the target
-    // token limit. The OxcParser creates one chunk per symbol, which can
-    // exceed the limit for very large functions.
-    if (indexed.kind === "code") {
-      indexed.chunks = boundChunks(
-        indexed.chunks,
-        task.targetTokens,
-        task.overlapTokens,
-        task.counter,
+  // Parse remaining files (TS/JS, markdown, config). Large batches fan out to
+  // a worker pool; below the threshold worker startup outweighs the gain.
+  // The pool requires tasks to use the indexing-standard fastTokenCounter,
+  // since TokenCounter is not structured-cloneable across the boundary.
+  const parallelizable =
+    otherTasks.length >= PARSE_WORKER_MIN_FILES &&
+    otherTasks.every((task) => task.counter === fastTokenCounter);
+  if (parallelizable) {
+    try {
+      await parseTasksInWorkers(otherTasks, results, tasks.length, onProgress);
+    } catch (err) {
+      process.stderr.write(
+        `[t] worker pool unavailable (${err instanceof Error ? err.message : err}); parsing serially\n`,
       );
+      await parseTasksSerial(otherTasks, results, tasks.length, onProgress);
     }
-    results.set(task.id, indexed);
-    onProgress?.(results.size, tasks.length);
+  } else {
+    await parseTasksSerial(otherTasks, results, tasks.length, onProgress);
   }
 
   return results;
+}
+
+/**
+ * Parse a single file end-to-end: `chunkDocument` plus the bounding pass the
+ * serial path applies to oversized symbol chunks. Shared by the serial loop
+ * and `parse-worker.ts` so output is identical on both paths.
+ */
+export async function parseSingleTask(task: ParseTask): Promise<ParseResult> {
+  const indexed = await chunkDocument({
+    relativePath: task.relativePath,
+    absolutePath: task.absolutePath,
+    content: task.content,
+    targetTokens: task.targetTokens,
+    overlapTokens: task.overlapTokens,
+    counter: task.counter,
+  });
+  // Bound large symbol chunks (e.g. a 1000-line function) to the target
+  // token limit. The OxcParser creates one chunk per symbol, which can
+  // exceed the limit for very large functions.
+  if (indexed.kind === "code") {
+    indexed.chunks = boundChunks(
+      indexed.chunks,
+      task.targetTokens,
+      task.overlapTokens,
+      task.counter,
+    );
+  }
+  return indexed;
+}
+
+const PARSE_WORKER_MIN_FILES = 64;
+const PARSE_WORKER_MAX = 8;
+
+async function parseTasksSerial(
+  tasks: ParseTask[],
+  results: Map<string, ParseResult>,
+  total: number,
+  onProgress?: (done: number, total: number) => void,
+): Promise<void> {
+  for (const task of tasks) {
+    if (results.has(task.id)) continue;
+    results.set(task.id, await parseSingleTask(task));
+    onProgress?.(results.size, total);
+  }
+}
+
+/**
+ * The worker entry ships two ways: bundled beside the CLI as
+ * `parse-worker.cjs` (tsup second entry), or as `parse-worker.ts` next to
+ * this file when running from source under Bun/tsx.
+ */
+function resolveParseWorkerEntry(): string | null {
+  for (const name of ["parse-worker.cjs", "parse-worker.js", "parse-worker.ts"]) {
+    const candidate = path.join(__dirname, name);
+    if (fsSync.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function runWorkerSlice(
+  entry: string,
+  slice: ParseTask[],
+  results: Map<string, ParseResult>,
+  total: number,
+  onProgress?: (done: number, total: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const workerTasks = slice.map(({ counter: _counter, ...rest }) => rest);
+    const worker = new Worker(entry, { workerData: { tasks: workerTasks } });
+    let finished = false;
+    worker.on("message", (msg: any) => {
+      if (msg?.type === "result") {
+        results.set(msg.id, msg.result);
+        onProgress?.(results.size, total);
+      } else if (msg?.type === "done") {
+        finished = true;
+        void worker.terminate();
+        resolve();
+      } else if (msg?.type === "error") {
+        finished = true;
+        void worker.terminate();
+        reject(new Error(msg.message));
+      }
+    });
+    worker.once("error", (err) => {
+      void worker.terminate();
+      reject(err);
+    });
+    worker.once("exit", (code) => {
+      if (code !== 0 || !finished) {
+        reject(new Error(`parse worker exited before completing (code ${code})`));
+      }
+    });
+  });
+}
+
+/**
+ * Fan `tasks` across a `node:worker_threads` pool. A worker that fails
+ * mid-slice hands its unfinished files back to the serial path, so a broken
+ * worker environment degrades to today's behavior rather than failing the
+ * index.
+ */
+async function parseTasksInWorkers(
+  tasks: ParseTask[],
+  results: Map<string, ParseResult>,
+  total: number,
+  onProgress?: (done: number, total: number) => void,
+): Promise<void> {
+  const entry = resolveParseWorkerEntry();
+  if (!entry) throw new Error("parse worker entry not found");
+  const cpuCount = Math.max(2, os.cpus().length);
+  const workerCount = Math.min(PARSE_WORKER_MAX, cpuCount - 1, Math.ceil(tasks.length / 32));
+  if (workerCount < 2) throw new Error("parallel parse not beneficial");
+  const slices: ParseTask[][] = Array.from({ length: workerCount }, () => []);
+  tasks.forEach((task, i) => slices[i % workerCount].push(task));
+  await Promise.all(
+    slices.map((slice) =>
+      runWorkerSlice(entry, slice, results, total, onProgress).catch((err) =>
+        parseTasksSerial(
+          slice.filter((task) => !results.has(task.id)),
+          results,
+          total,
+          onProgress,
+        ).then(() => {
+          process.stderr.write(
+            `[t] parse worker failed (${err instanceof Error ? err.message : err}); finished its slice serially\n`,
+          );
+        }),
+      ),
+    ),
+  );
 }
 
 export async function indexWorkspace(input: {
