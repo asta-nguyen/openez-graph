@@ -47,31 +47,30 @@
 **Interfaces:**
 
 - Consumes: uncommitted pool code
-- Produces: known-good worker engagement from source (`bun src/cli.ts`) — or a fix
+- Produces: confirmed worker engagement from source (`bun apps/cli/src/cli.ts`) and bundled dist
 
-**Background:** `@openez-graph/indexer` is `"type": "module"`, so `__dirname` may be `undefined` when `index-workspace.ts` runs from source under Bun ESM. If so, `resolveParseWorkerEntry` throws, `parseInline` catches, and indexing silently degrades to serial — correct but means the feature only works bundled.
+**Background:** Source execution under Bun 1.4.3 has been verified in benchmarks (9/9 runs engaged without fallback; `import.meta.dirname` patch was not needed). This task serves as a fast smoke verification before proceeding.
 
-- [ ] **Step 1: Run an index from source on a 64+ file workspace and watch stderr**
+- [x] **Step 1: Smoke-check index from source on a 64+ file workspace and verify stderr**
 
   ```sh
   bun apps/cli/src/cli.ts index <path-with-64-plus-files> 2>&1 | grep '\[t\]'
   ```
 
-  - If worker pool engaged: no `worker pool unavailable` line, and phase-2 timing reflects parallel parse.
-  - If the `worker pool unavailable (... path.join ...)` line appears: `__dirname` is undefined from source — proceed to Step 2.
-  - For a deterministic 64+ file fixture, reuse the repo itself (`/home/giogio/Project/openez-graph`, minus `node_modules`/`.git` — same file set as `probe-oxc.cjs`).
+  - Worker pool engages: no `worker pool unavailable` line, and phase-2 timing reflects parallel parse.
+  - Verified on repo itself (`openez-graph`, 135 docs): pool engages with 0 fallback lines.
 
-- [ ] **Step 2 (only if Step 1 shows fallback): add `import.meta.dirname` fallback**
+- [x] **Step 2: Fallback check (`import.meta.dirname`)**
 
-  In `resolveParseWorkerEntry`, resolve the base directory as `__dirname ?? import.meta.dirname` (verify `bun check` + runtime accept this in both CJS-bundled and ESM-source contexts; tsup defines `__dirname` in CJS output so bundled behavior is unchanged). Re-run Step 1 and confirm engagement.
+  _Resolved:_ Bun 1.4.3 resolves `__dirname` correctly in ESM source execution; Step 2 fallback patch was not required.
 
 - [ ] **Step 3: Confirm the bundled path engages**
 
   ```sh
-  pnpm build:cli && node dist/cli.cjs index <same-64-plus-file-workspace> 2>&1 | grep '\[t\]'
+  pnpm build:cli && bun apps/cli/dist/cli.cjs index <same-64-plus-file-workspace> 2>&1 | grep '\[t\]'
   ```
 
-  Expect no fallback line and `dist/parse-worker.cjs` present in `apps/cli/dist/`. (If `pnpm` is unavailable in this env — pnpm 10 needs Node 22.5+, env has Node 20 — run `bunx tsup` in `apps/cli` directly and invoke with `bun dist/cli.cjs`. Do NOT "fix" pnpm as part of this task.)
+  Expect no fallback line and `dist/parse-worker.cjs` present in `apps/cli/dist/`. (If `pnpm` is unavailable in this env — pnpm 10 needs Node 22.5+, env has Node 20 — run `bunx tsup` in `apps/cli` directly and invoke with `bun apps/cli/dist/cli.cjs`. Do NOT "fix" pnpm as part of this task.)
 
 ## Task 2: Prove serial/parallel output parity
 
@@ -89,8 +88,8 @@
   Forced-serial run: temporarily set `PARSE_WORKER_MIN_FILES` to `Infinity` (revert after; do NOT commit this). Compare the resulting workspace DBs (`.openez/*.sqlite`): dump `chunks` + `documents` tables from both runs and `diff`. Expect zero differences — both paths share `parseSingleTask`, so any diff is a real bug (e.g. nondeterministic ordering in the `results` map merge).
 
   ```sh
-  sqlite3 run-a.sqlite "SELECT id, content_hash FROM chunks ORDER BY id;" > a.txt
-  sqlite3 run-b.sqlite "SELECT id, content_hash FROM chunks ORDER BY id;" > b.txt
+  sqlite3 run-a.sqlite "SELECT path, content_hash, total_chunks, total_tokens FROM documents ORDER BY path; SELECT path, content_hash, token_count, start_line, end_line, symbol_name FROM chunks ORDER BY path, start_line;" > a.txt
+  sqlite3 run-b.sqlite "SELECT path, content_hash, total_chunks, total_tokens FROM documents ORDER BY path; SELECT path, content_hash, token_count, start_line, end_line, symbol_name FROM chunks ORDER BY path, start_line;" > b.txt
   diff a.txt b.txt
   ```
 
@@ -136,9 +135,11 @@
 
   Generate N small TS/markdown files in a temp dir (or extend an existing fixture), run `indexWorkspace` (pool engaged), and assert the chunk set equals a forced-serial run's chunk set (same technique as Task 2, in-process). Keep N just over the threshold (e.g. 70) so the test stays fast.
 
-- [ ] **Step 2: Add a worker-failure fallback test**
+- [ ] **Step 2: Add worker-failure fallback tests (pool init failure and mid-slice failure recovery)**
 
-  Spawn path with a bogus entry (or kill the worker mid-slice) and assert indexing still completes with full results — the slice→serial fallback. Unit-test `runWorkerSlice`'s rejection path if it's exported; otherwise test through `indexWorkspace` with an unresolvable entry and assert the `[t] worker pool unavailable` fallback produces complete output. (May require exporting a test hook — prefer dependency injection of the entry resolver over exporting internals.)
+  Cover both levels of worker failure:
+  1. _Pool initialization failure:_ Test `indexWorkspace` when the worker entry cannot be resolved, asserting it prints `[t] worker pool unavailable` and falls back cleanly to full serial indexing.
+  2. _Mid-slice failure recovery:_ Test a worker failing or terminating mid-slice (e.g. by injecting a worker that errors after processing half its slice), and assert that the uncompleted tasks in that slice are recovered and completed serially without dropped chunks or duplicate results.
 
 - [ ] **Step 3: Full suite green**
 

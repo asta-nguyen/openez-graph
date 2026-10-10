@@ -37,7 +37,7 @@ export async function parseSingleTask(task: ParseTask): Promise<ParseResult> {
 
 This is the exact body of the old serial loop (chunk + bound oversized symbol chunks), lifted verbatim. The worker calls this same function, so chunk output is identical on both paths. `ParseTask` (`:339`) and `ParseResult` (`:351`) changed from private to exported to support it.
 
-### `parseTasksSerial` (`:499`) — the old loop, extracted
+### `parseTasksSerial` (`:503`) — the old loop, extracted
 
 Same loop, plus a `results.has(task.id)` skip so a slice that partially completed in a dead worker doesn't re-parse finished files on fallback.
 
@@ -60,7 +60,7 @@ Pool failure (`parseTasksInWorkers` throws) falls back to `parseTasksSerial` wit
 
 ## Commit 2 — Worker pool + dual entries + bundling
 
-### Pool (`parseTasksInWorkers`, `:570`)
+### Pool (`parseTasksInWorkers`, `:572`)
 
 - `workerCount = min(PARSE_WORKER_MAX = 8, cpuCount - 1, ceil(tasks / 32))`; `< 2` throws → serial.
 - Round-robin slices (`i % workerCount`) — even split without measuring file sizes first (a `ponytail:`-grade simplification; size-aware scheduling when profiling says so).
@@ -71,7 +71,7 @@ Pool failure (`parseTasksInWorkers` throws) falls back to `parseTasksSerial` wit
 - Parent strips `counter` before `workerData` (functions don't clone), worker reattaches `fastTokenCounter` (`parse-worker.ts:26`).
 - One `{ type: "result", id, result }` message per file → merged into the parent's `results` map with identical `onProgress` semantics. `{ type: "done" }` resolves; uncaught worker failure posts `{ type: "error" }` and the parent treats it as "re-run the rest of this slice serially". Non-zero exit without `done` also rejects.
 
-### Entry resolution (`resolveParseWorkerEntry`, `:518`)
+### Entry resolution (`resolveParseWorkerEntry`, `:521`)
 
 Tries `parse-worker.cjs` → `parse-worker.js` → `parse-worker.ts` next to `__dirname`:
 
@@ -83,8 +83,8 @@ Tries `parse-worker.cjs` → `parse-worker.js` → `parse-worker.ts` next to `__
 ### Verification
 
 - `bun check` clean (worker files included in `src/**/*.ts`).
-- Serial/parallel output parity + timing on a 64+ file workspace — not yet run (plan Task 2/3).
-- Current test suite passes but almost certainly never engages the pool (fixtures < 64 files) — plan Task 4.
+- Serial/parallel output parity + timing verified on medium (135 docs), large (158 docs), and bigfiles (70 docs) — see [Measured results](#measured-results-2026-10-10-bun-143-8-cores-bun-srcclits-from-source) below.
+- Current test suite passes but fixtures are < 64 files so unit suite runs serial — parallel-path automated test tracked in plan Task 4.
 
 ## Out of scope
 
@@ -110,8 +110,8 @@ Medians of 3 fresh-index runs per cell (`.openez` deleted before each run). `par
 
 **Parity:** medium workspace pool vs serial DBs diffed clean — 135 `documents` rows and 765 `chunks` rows identical on `(path, content_hash, token_count)`.
 
-**Why the gain is small:** worker spawn+init costs ~124–225ms per worker (measured: empty-task spawn of `parse-worker.ts` under Bun — transpile + import graph init), and all workers spawn concurrently so each index run pays ~150ms fixed, plus structured-clone of file contents and per-file IPC. The fixtures average 2–3ms/file (medium: 377ms / 135), so fixed cost ≈ parallel gain: 377/7 ≈ 54ms ideal + ~150ms fixed + clone/IPC ≈ 385ms actual. The pool only pays when parse work ≫ fixed cost (bigfiles: 888/3 ≈ 300ms + fixed ≈ 690ms actual).
+**Why the gain is small:** worker spawn+init costs ~124–225ms per worker (measured: empty-task spawn of `parse-worker.ts` under Bun — transpile + import graph init), and all workers spawn concurrently so each index run pays ~150ms fixed, plus structured-clone of file contents and per-file IPC. The fixtures average 2–3ms/file (medium: 377ms / 135), so fixed cost ≈ parallel gain: with medium capped at 5 workers (`ceil(135 / 32) = 5`), 377/5 ≈ 75ms ideal + ~150ms fixed + clone/IPC ≈ 385ms actual. The pool only pays when parse work ≫ fixed cost (bigfiles: 888/3 ≈ 300ms + fixed ≈ 690ms actual).
 
 **Follow-ups (not this landing):** persistent worker pool reused across index calls (kills the per-run spawn cost), fewer workers for small batches, size-aware slicing instead of round-robin, raising `PARSE_WORKER_MIN_FILES` or gating on total bytes rather than file count. Re-measure before changing any constant.
 
-**Bottom line:** correctness and fallback design verified (parity identical, 12/12 pool runs engaged, 0 failures); throughput win is 1.0–1.3x on realistic small-file repos. Land for the architecture, not the numbers.
+**Bottom line:** correctness and fallback design verified (parity identical, 9/9 above-threshold pool runs engaged without fallback, 3/3 below-threshold runs stayed serial as designed; 0 failures overall); throughput win is 1.0–1.3x on realistic small-file repos. Land for the architecture, not the numbers.

@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
@@ -14,6 +15,7 @@
     "noEmit": true,
     "isolatedModules": true,
     "declaration": false,
+    "rootDir": ".",
     "paths": {
       "@openez-graph/config": ["./packages/config/src/index.ts"],
       "@openez-graph/db": ["./packages/db/src/index.ts"],
