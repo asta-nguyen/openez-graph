@@ -26,6 +26,6 @@
     "tailwindcss": "^4.1.8"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "bun check"
   }
 }

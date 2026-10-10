@@ -11,7 +11,7 @@
     "dev:all": "concurrently \"pnpm dev\" \"pnpm dev:api\"",
     "build": "vite build && tsc --noEmit",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "bun check"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.12",

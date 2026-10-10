@@ -6,7 +6,7 @@
   "types": "./src/mcp-core.ts",
   "scripts": {
     "mcp": "tsx src/server.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "bun check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
