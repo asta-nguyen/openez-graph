@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.10.0",
+  "engines": {
+    "bun": ">=1.4.3"
+  },
   "scripts": {
     "start": "concurrently --names web,mcp --prefix-colors cyan,green --kill-others \"pnpm dev:web\" \"pnpm mcp\"",
     "dev:web": "pnpm --filter @openez-graph/web dev:all",

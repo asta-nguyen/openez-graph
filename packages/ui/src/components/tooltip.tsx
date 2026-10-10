@@ -20,7 +20,7 @@ export function Tooltip({
   delayDuration = 300,
 }: TooltipProps) {
   const [isVisible, setIsVisible] = React.useState(false);
-  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showTooltip = () => {
     timeoutRef.current = setTimeout(() => {

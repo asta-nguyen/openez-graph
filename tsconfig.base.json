@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
@@ -14,16 +15,16 @@
     "noEmit": true,
     "isolatedModules": true,
     "declaration": false,
-    "baseUrl": ".",
+    "rootDir": ".",
     "paths": {
-      "@openez-graph/config": ["packages/config/src/index.ts"],
-      "@openez-graph/db": ["packages/db/src/index.ts"],
-      "@openez-graph/core": ["packages/core/src/index.ts"],
-      "@openez-graph/indexer": ["packages/indexer/src/index.ts"],
-      "@openez-graph/ui": ["packages/ui/src/index.ts"],
-      "@openez-graph/ui/*": ["packages/ui/src/*"],
-      "@openez-graph/mcp": ["apps/mcp/src/mcp-core.ts"],
-      "@openez-graph/web": ["apps/web/src/server/index.ts"]
+      "@openez-graph/config": ["./packages/config/src/index.ts"],
+      "@openez-graph/db": ["./packages/db/src/index.ts"],
+      "@openez-graph/core": ["./packages/core/src/index.ts"],
+      "@openez-graph/indexer": ["./packages/indexer/src/index.ts"],
+      "@openez-graph/ui": ["./packages/ui/src/index.ts"],
+      "@openez-graph/ui/*": ["./packages/ui/src/*"],
+      "@openez-graph/mcp": ["./apps/mcp/src/mcp-core.ts"],
+      "@openez-graph/web": ["./apps/web/src/server/index.ts"]
     }
   }
 }

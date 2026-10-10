@@ -9,7 +9,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "bun check"
   },
   "dependencies": {
     "@openez-graph/config": "workspace:*",
