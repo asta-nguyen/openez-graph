@@ -38,7 +38,7 @@ describe("parsed_documents cache", () => {
 
   afterEach(() => {
     closeAllWorkspaceDbs();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
 
   test("insert and get parsed document", async () => {
@@ -146,8 +146,8 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
   afterEach(() => {
     closeAllWorkspaceDbs();
     closeRegistryDb();
-    fs.rmSync(registryRoot, { recursive: true, force: true });
-    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    fs.rmSync(registryRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    fs.rmSync(workspaceRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
     delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
     delete process.env.EMBEDDING_PROVIDER;
     resetNativeParserCache();

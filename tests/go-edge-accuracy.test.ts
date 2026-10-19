@@ -83,8 +83,8 @@ async function indexFixtureAndReadEdges(fixtureName: string): Promise<Set<string
   const registryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-edges-reg-"));
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-edges-ws-"));
   cleanups.push(() => {
-    fs.rmSync(registryRoot, { recursive: true, force: true });
-    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    fs.rmSync(registryRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    fs.rmSync(workspaceRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   });
 
   process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(registryRoot, "registry.sqlite");
