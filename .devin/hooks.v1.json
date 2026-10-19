@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": ".devin/hooks/superpowers-session-start.sh",
+          "command": ".devin/hooks/agent-devkit-session-start.sh",
           "timeout": 10
         }
       ]

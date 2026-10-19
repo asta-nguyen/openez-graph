@@ -218,3 +218,13 @@ git push
 - Always run `pnpm build:web` before `pnpm build:cli` — CLI bundles stale frontend otherwise.
 - Check `--version` output before publishing — npm rejects re-publishing the same version.
 - Always commit `package.json` and `CHANGELOG.md` together to avoid changelog drift.
+
+## Agent Workflow
+
+Use `.agents/skills/using-devkit/SKILL.md` as the workflow entry point, then read the selected skill before acting. The installed skills are:
+
+- `brainstorm-feature`, `context-handoff`, `document-wiki`, `estimate-feature`, `implement-task`
+- `lean-audit`, `plan-feature`, `read-codebase-context`, `review-and-verify`
+- `setup-codebase`, `setup-openez`, `systematic-debugging`, `using-devkit`
+
+The project-specific `.agents/skills/release-cli/SKILL.md` remains available.
