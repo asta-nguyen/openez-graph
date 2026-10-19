@@ -1,0 +1,30 @@
+tests/scanner.test.ts
+  s_99e89e1c5083fb::t_7210781a94eae1 43
+  s_99e89e1c5083fb::t_b1e9070fe3cdd4 8
+tests/go-edge-accuracy.test.ts
+  s_99e89e1c5083fb::t_96a6eb2f28d377 19
+  s_99e89e1c5083fb::t_aba3d441380f35 87-88
+tests/parsed-documents-cache.test.ts
+  s_99e89e1c5083fb::t_b96d66610d91be 42
+  s_99e89e1c5083fb::t_1b33ebeff9757a 150-151
+  s_99e89e1c5083fb::t_6f41c09c4535ff 13
+tests/helpers/temp-cleanup.ts
+  s_99e89e1c5083fb::t_b7ea85b5b83a1d 1-21,23-27
+  s_99e89e1c5083fb::t_e28e94f7a95b14 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b4bb3743a3a29bfcd4a1b6f3be63cbd86bf5f0f1",
+  "prompts": {},
+  "sessions": {
+    "s_99e89e1c5083fb": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "grass-python",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
