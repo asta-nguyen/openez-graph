@@ -1,0 +1,79 @@
+.devin/hooks.v1.json
+  s_38835a8978de52::t_8bbb4f0616279d 8
+docs/agent-devkit/INDEX.md
+  s_38835a8978de52::t_2ebb9bef108c56 1-4
+  s_38835a8978de52::t_edc6507dac938a 5-7
+AGENTS.md
+  s_38835a8978de52::t_8bbb4f0616279d 221-223
+  s_38835a8978de52::t_dff2b29372d72e 224-230
+.devin/hooks/agent-devkit-session-start.sh
+  s_38835a8978de52::t_8bbb4f0616279d 1-41
+.agents/skills/brainstorm-feature/SKILL.md
+  s_38835a8978de52::t_5898347f47c55a 1-192
+.agents/skills/brainstorm-feature/references/delta-format.md
+  s_38835a8978de52::t_e09611d672f32a 1-111
+.agents/skills/brainstorm-feature/references/spec-self-review.md
+  s_38835a8978de52::t_21be3ef4a2999e 1-40
+.agents/skills/context-handoff/SKILL.md
+  s_38835a8978de52::t_592da214e61b06 1-91
+.agents/skills/document-wiki/SKILL.md
+  s_38835a8978de52::t_8734e9a4b184de 2-3,6-185
+.agents/skills/document-wiki/references/evidence-matrix-and-page-template.md
+  s_38835a8978de52::t_173f652642425c 1-23,26-32,35-40,42-43,45,47,49,51,53-55,57,59,61,63,65,67,69,71,73,75,77,79,81,83,85,87,89-90,93-144
+.agents/skills/document-wiki/references/inventory-and-report.md
+  s_38835a8978de52::t_b0a7f560607d54 1-61
+.agents/skills/document-wiki/references/legacy-conversion.md
+  s_38835a8978de52::t_f784169a611e03 1-18
+.agents/skills/document-wiki/references/merge-task-delta.md
+  s_38835a8978de52::t_79e520d2ddf6cb 1-79
+.agents/skills/document-wiki/scripts/validate-llm-wiki.mjs
+  s_38835a8978de52::t_4e1d3fde90063f 1-2,4-5,7-9,11-14,16-25,27,29-34,37-39,41-43,45-52,54,57-74,77-81,84-93,96-106,109-111,114-127,129,132-137,139-144,147-155,157-161,163-164,166-168,172-175,177-201,203-237,240,242-255,257,259-270,272-275,278-288,291,293-324,326-344,346-357,359-378,380-385,388-389,392-408,410-413,415-458,460-469,471-477,480-489,491,494-500,502-510,513
+.agents/skills/estimate-feature/SKILL.md
+  s_38835a8978de52::t_8e4868859b3279 2-3,6-107
+.agents/skills/implement-task/SKILL.md
+  s_38835a8978de52::t_765679cce1131c 2-3,6-114,117-193
+.agents/skills/lean-audit/SKILL.md
+  s_38835a8978de52::t_b8e4ba43369d46 2-3,6,10-77
+.agents/skills/plan-feature/SKILL.md
+  s_38835a8978de52::t_bfdc3a0137a468 2-3,6-131
+.agents/skills/plan-feature/references/tasks-template.md
+  s_38835a8978de52::t_fb40a902adb7b1 1,3-5,7,9,11-12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,45-66,68-72,74,76-77,79,81,83-84,86-90,92,94-98
+.agents/skills/read-codebase-context/SKILL.md
+  s_38835a8978de52::t_b629e85bc4abf5 1-115
+.agents/skills/review-and-verify/SKILL.md
+  s_38835a8978de52::t_6397e95fc0f3b7 2-3,6,8-12,14,17,20-136,139-189,192-205,208-226
+.agents/skills/review-and-verify/references/receiving-code-review.md
+  s_38835a8978de52::t_0a32929b92d480 1-17
+.agents/skills/setup-codebase/SKILL.md
+  s_38835a8978de52::t_6aa5ad8ae119f5 1-146
+.agents/skills/setup-codebase/references/convention-capture.md
+  s_38835a8978de52::t_304e4388f81f0a 1-42
+.agents/skills/setup-openez/SKILL.md
+  s_38835a8978de52::t_788c4acdda3bac 2-3,6,8-9,13-16,18-122,125,127-130,133,136-137
+.agents/skills/systematic-debugging/SKILL.md
+  s_38835a8978de52::t_b7709f061bdd10 3,8,14-71,75-143,145-148,150-165
+.agents/skills/using-devkit/SKILL.md
+  s_38835a8978de52::t_8fa916846589c0 1-102
+.agents/skills/using-devkit/references/legacy.md
+  s_38835a8978de52::t_a59f9f345ae167 1-59
+docs/agent-devkit/changes/archive/2026-10-19-replace-superpowers-with-agent-devkit/design.md
+  s_38835a8978de52::t_711031895c2cb4 1,5,9-16,18,20,22,24,26,28-33,35,37-40,42,44-49,51,53
+docs/agent-devkit/changes/archive/2026-10-19-replace-superpowers-with-agent-devkit/tasks.md
+  s_38835a8978de52::t_37b2e6e414a30f 1,3,5,7,9-14,16,18-24,26,28,30-35,37,39-44,46,48-51,53,55-56,58,60-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1de68a3fa8fa837f1af121008f7e79392d2e7790",
+  "prompts": {},
+  "sessions": {
+    "s_38835a8978de52": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15304-4fc1-76a1-96d1-904eb24efb74",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
