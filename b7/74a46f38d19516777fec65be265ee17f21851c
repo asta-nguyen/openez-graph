@@ -1,0 +1,20 @@
+docs/agent-devkit/changes/2026-10-19-native-parity-and-ci/tasks.md
+  s_99e89e1c5083fb::t_57d5e6a4d094f6 124-125
+  s_99e89e1c5083fb::t_ebadc361035bf0 93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b774a46f38d19516777fec65be265ee17f21851c",
+  "prompts": {},
+  "sessions": {
+    "s_99e89e1c5083fb": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "grass-python",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
