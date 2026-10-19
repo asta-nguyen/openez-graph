@@ -1,0 +1,19 @@
+docs/agent-devkit/INDEX.md
+  s_99e89e1c5083fb::t_ee6a5f317922f8 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6bda6e50fc6144f6cfcaf0bdbddb39d0d7fc9be5",
+  "prompts": {},
+  "sessions": {
+    "s_99e89e1c5083fb": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "grass-python",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
