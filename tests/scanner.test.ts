@@ -39,7 +39,7 @@ describe("scanWorkspaceFiles", () => {
       );
       expect(relativePaths).not.toContain("node_modules/ignored.js");
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
     }
   });
 });
