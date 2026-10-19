@@ -1,0 +1,24 @@
+tests/parsed-documents-cache.test.ts
+  s_99e89e1c5083fb::t_59ad26a6cb0560 41
+  s_99e89e1c5083fb::t_bacbe3d89092ae 149-150
+tests/scanner.test.ts
+  s_99e89e1c5083fb::t_63c25d1ce42d53 42
+tests/go-edge-accuracy.test.ts
+  s_99e89e1c5083fb::t_4310094539e78e 86-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7d62679a8a0df486d165605869ba760743160635",
+  "prompts": {},
+  "sessions": {
+    "s_99e89e1c5083fb": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "grass-python",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
