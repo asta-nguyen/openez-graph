@@ -1,0 +1,172 @@
+tests/fixtures/go-edges/types/baseline.json
+  s_99e89e1c5083fb::t_ad09d153ca694d 1-11
+tests/fixtures/go-edges/packages/baseline.json
+  s_99e89e1c5083fb::t_ad09d153ca694d 1-11
+docs/agent-devkit/INDEX.md
+  s_99e89e1c5083fb::t_3b70f22328afd6 5-6
+apps/cli/tsup.config.ts
+  s_99e89e1c5083fb::t_0bbdf7d012b105 88-89,91,93-94,97-99,117,119
+  s_99e89e1c5083fb::t_e6354f93e4744d 2
+  s_99e89e1c5083fb::t_bd6ed08045f3a4 108-112
+  s_99e89e1c5083fb::t_7233b781688502 92
+tests/fixtures/go-edges/packages/a/helper.go
+  s_99e89e1c5083fb::t_2609780b0c5da4 1-7
+tests/fixtures/go-edges/types/expected-edges.json
+  s_99e89e1c5083fb::t_378c2b002637e8 1-11
+docs/agent-devkit/changes/2026-10-19-native-parity-and-ci/tasks.md
+  s_99e89e1c5083fb::t_98a21cd8e4030d 83
+  s_99e89e1c5083fb::t_4223d3747efceb 51,56-57,61,110
+  s_7802d18c12f232::t_09e3a7778793e3 111
+  s_99e89e1c5083fb::t_645cce27efd4bd 115-116
+  s_7802d18c12f232::t_4e7597fa95e1f9 64
+  s_7802d18c12f232::t_985c5da41fcfd8 63
+  s_99e89e1c5083fb::t_11be053acbf8d3 65
+  s_7802d18c12f232::t_6bd664336f5d5c 143-147
+  s_7802d18c12f232::t_bcd953b0aa08ec 14
+  s_99e89e1c5083fb::t_6f7486257cf11c 42-43
+  s_35b22b8768fc19::t_ce8547d28fbd04 11,113,152
+  s_99e89e1c5083fb::t_a398efee04c0bc 92-93
+  s_99e89e1c5083fb::t_2404c0cb82e928 74-75
+  s_99e89e1c5083fb::t_4053bc719c8e37 66
+  s_99e89e1c5083fb::t_eb8571682d8f9f 101-102
+  s_7802d18c12f232::t_bcf5a700319d98 148-151
+  s_7802d18c12f232::t_9670704e85849a 90
+  s_7802d18c12f232::t_525ce88febc64c 1-2,5-10,12-13,15-41,44-50,52-55,58-60,62,67-70,76-82,85-89,94-98,100,103-109,112,114,117-136,140-142
+  s_7802d18c12f232::t_b05a3f8b94436e 3-4
+  s_99e89e1c5083fb::t_a470cc8a7fef6e 137-139
+  s_7802d18c12f232::t_819478c468aea9 72
+  s_99e89e1c5083fb::t_f15457cdda42cc 84
+  s_7802d18c12f232::t_822274b595fbbc 71
+  s_7802d18c12f232::t_e20413d3bddff4 99
+  s_7802d18c12f232::t_8e700988bff4c2 73
+  s_7802d18c12f232::t_3c989cb448def5 91
+tests/fixtures/go-edges/packages/go.mod
+  s_99e89e1c5083fb::t_98bd1bc2362f54 1-3
+tests/fixtures/native-binding/throwing-binding.cjs
+  s_99e89e1c5083fb::t_46cc61d333284c 1
+tests/fixtures/parity/known-differences.json
+  s_99e89e1c5083fb::t_4030eb9fc4090a 1-15,18-33,36-38
+  s_99e89e1c5083fb::t_4af4a28ba1d4f4 16-17,34-35
+tests/fixtures/go-edges/packages/b/b.go
+  s_99e89e1c5083fb::t_980f2c0eae8a86 1-15
+.github/workflows/native.yml
+  s_99e89e1c5083fb::t_c46d638ab3005d 1-88
+.agents/skills/release-cli/SKILL.md
+  s_99e89e1c5083fb::t_4b86c48abff9e6 31-54,56-61,70,75
+  s_99e89e1c5083fb::t_1c80ff1583f52a 94
+  s_99e89e1c5083fb::t_1a42617ff62f09 55
+  s_99e89e1c5083fb::t_b585c97ad84250 83
+packages/native/build.rs
+  s_99e89e1c5083fb::t_9178a6e694cdd9 1-3
+tests/fixtures/parity/rust/example.rs
+  s_99e89e1c5083fb::t_c67d52e3add61b 1-55
+tests/native-binding.test.ts
+  s_99e89e1c5083fb::t_4223d3747efceb 5
+  s_99e89e1c5083fb::t_dccc01181d0e96 1-4,6-50
+tests/go-edge-accuracy.test.ts
+  s_99e89e1c5083fb::t_abeee658c437ab 1-147,155-207
+  s_99e89e1c5083fb::t_a06fd681c17f17 148-154
+tests/fixtures/go-edges/packages/c/main.go
+  s_99e89e1c5083fb::t_4ef1311f883379 1-14
+tests/fixtures/go-edges/types/go.mod
+  s_99e89e1c5083fb::t_7b8c2bff87c51d 1-3
+tests/fixtures/parity/python/example.py
+  s_99e89e1c5083fb::t_8a5ac64b990d68 1-36
+packages/indexer/src/native-binding.ts
+  s_99e89e1c5083fb::t_628f1195bd4e99 21-24,26
+  s_99e89e1c5083fb::t_65c2765b36d87f 1-20,25,27-53
+tests/fixtures/go-edges/packages/a/a.go
+  s_99e89e1c5083fb::t_e0e9b0aee6698a 1-10
+tests/fixtures/parity/go/example.go
+  s_99e89e1c5083fb::t_229e165c407547 1-42,53-60
+  s_99e89e1c5083fb::t_d9aa162036cf2a 43-52
+packages/indexer/src/index-workspace.ts
+  s_99e89e1c5083fb::t_4faa067a4ef0d7 88
+  s_99e89e1c5083fb::t_f9621874a33e17 16
+  s_99e89e1c5083fb::t_707abd6f7b3801 90,100
+tests/fixtures/go-edges/types/d/d.go
+  s_99e89e1c5083fb::t_48336bae6d77f2 1-37
+AGENTS.md
+  s_99e89e1c5083fb::t_df7ef669cc68ee 231
+  s_99e89e1c5083fb::t_e979784f904629 187-210,212-217,226
+  s_99e89e1c5083fb::t_c10111e782e64e 239
+  s_99e89e1c5083fb::t_eab538ff023b33 250
+  s_99e89e1c5083fb::t_ec8263a6171639 211
+apps/cli/README.md
+  s_99e89e1c5083fb::t_abaa30bc25ed01 132-134
+  s_99e89e1c5083fb::t_fdd43dac63b1fb 17
+  s_99e89e1c5083fb::t_c8f3ca0ff87890 12
+  s_99e89e1c5083fb::t_3f0b021be8b09c 140-157
+.gitignore
+  s_99e89e1c5083fb::t_42ad560e67dd8f 34
+tests/fixtures/native-binding/stub-binding.cjs
+  s_99e89e1c5083fb::t_c1a51136ce717e 1-4
+tests/native-wasm-parity.test.ts
+  s_99e89e1c5083fb::t_4882be90164de1 353-356
+  s_99e89e1c5083fb::t_7e8a9f05fdae16 1-250,259-261,270-304,309-352,357-366,368-369,371-384
+  s_99e89e1c5083fb::t_bcd1a8fbe5dedb 367,370
+  s_99e89e1c5083fb::t_4223d3747efceb 251-258,262-269,305-308
+packages/indexer/src/scanner.ts
+  s_99e89e1c5083fb::t_01488ca6d25934 120-130
+  s_99e89e1c5083fb::t_51dcbc7fa2e7d4 10
+  s_99e89e1c5083fb::t_d52868554af664 137
+docs/agent-devkit/changes/2026-10-19-native-parity-and-ci/design.md
+  s_35b22b8768fc19::t_ce8547d28fbd04 7,34
+  s_7802d18c12f232::t_b5eaf530edcdf6 23
+  s_7802d18c12f232::t_29e6cc27b1dc42 28
+  s_7802d18c12f232::t_6281dc532b7cf7 25
+  s_7802d18c12f232::t_95da20ea66fa5b 39
+  s_7802d18c12f232::t_640fbf1d368858 57
+  s_7802d18c12f232::t_4a18f52e3851cd 51
+  s_7802d18c12f232::t_be6d0e595c7563 58
+  s_7802d18c12f232::t_a9231744a77e09 61
+  s_7802d18c12f232::t_28534a2b304f4f 24
+  s_7802d18c12f232::t_af62a6ae13a3b6 67
+  s_7802d18c12f232::t_d0601c675a6e00 68
+  s_7802d18c12f232::t_58a990a07cf841 1-2,5-6,8-10,17-22,26-27,29-33,35-38,40-45,48-50,52-56,59-60,62-66,69-76
+  s_99e89e1c5083fb::t_4223d3747efceb 11-16
+  s_7802d18c12f232::t_78033ef698ba13 46-47
+  s_7802d18c12f232::t_a829411312ed43 3-4
+tests/fixtures/go-edges/packages/expected-edges.json
+  s_99e89e1c5083fb::t_68c58b878198fb 1-9
+packages/native/Cargo.lock
+  s_99e89e1c5083fb::t_bf091f49e2e348 194-199,250
+packages/native/Cargo.toml
+  s_99e89e1c5083fb::t_917f28349bb719 19-21
+packages/native/index.d.ts
+  s_99e89e1c5083fb::t_98a98dbe9461a9 6-58
+packages/native/index.js
+  s_99e89e1c5083fb::t_0a9cbaa97292b8 287-295,297-299
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e23ed77daa875314fb822165f5cf83d6a32775b",
+  "prompts": {},
+  "sessions": {
+    "s_35b22b8768fc19": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1533e-2ac5-73e1-8e60-aaea2ec93a67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_7802d18c12f232": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b22da1c5-c585-41d1-9a6d-3f29a54da8d8",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_99e89e1c5083fb": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "grass-python",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
