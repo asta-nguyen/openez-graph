@@ -1,0 +1,9 @@
+{
+  "canary": { "from": "b/b.go#New", "to": "b/b.go#helper" },
+  "edges": [
+    { "from": "a/a.go#New", "to": "a/helper.go#helper", "tier": "package" },
+    { "from": "b/b.go#New", "to": "b/b.go#helper", "tier": "package" },
+    { "from": "c/main.go#main", "to": "a/a.go#New", "tier": "package" },
+    { "from": "c/main.go#main", "to": "b/b.go#New", "tier": "package" }
+  ]
+}

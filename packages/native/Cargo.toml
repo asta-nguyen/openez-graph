@@ -16,6 +16,9 @@ tree-sitter-python = "0.25"
 tree-sitter-go = "0.25"
 tree-sitter-rust = "0.24"
 
+[build-dependencies]
+napi-build = "2"
+
 [profile.release]
 lto = true
 opt-level = 3

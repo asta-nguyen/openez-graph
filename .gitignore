@@ -31,6 +31,7 @@ docs/CODE_RAG_REVIEW.md
 
 # Rust build artifacts
 packages/native/target/
+packages/native/*.node
 
 # Review files
 reviews/

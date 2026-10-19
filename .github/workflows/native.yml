@@ -1,0 +1,88 @@
+name: native
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packages/native/**"
+      - "packages/indexer/src/**"
+      - "tests/**"
+      - ".github/workflows/native.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/native/**"
+      - "packages/indexer/src/**"
+      - "tests/**"
+      - ".github/workflows/native.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.artifact }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            binary: index.linux-x64-gnu.node
+            artifact: native-linux-x64-gnu
+          - runner: macos-14
+            binary: index.darwin-arm64.node
+            artifact: native-darwin-arm64
+          - runner: windows-latest
+            binary: index.win32-x64-msvc.node
+            artifact: native-win32-x64-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          HUSKY: "0"
+
+      # The checkout can still carry committed binaries from before they were
+      # untracked; each leg builds and uploads only its own platform output.
+      - name: Remove checked-out native binaries
+        shell: bash
+        run: rm -f packages/native/*.node
+
+      - name: Build native extension
+        shell: bash
+        run: pnpm --filter @openez-graph/native build
+
+      - name: Verify expected binary exists
+        shell: bash
+        run: test -f "packages/native/${{ matrix.binary }}"
+
+      - name: Run native parity and Go edge tests
+        shell: bash
+        env:
+          OPENEZ_NATIVE_EXPECT: "1"
+        run: >-
+          bun test
+          tests/native-wasm-parity.test.ts
+          tests/go-edge-accuracy.test.ts
+          tests/native-binding.test.ts
+          tests/go-rust-indexer.test.ts
+          tests/tree-sitter-parser.test.ts
+          tests/scanner.test.ts
+          tests/parsed-documents-cache.test.ts
+
+      - name: Upload native binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: packages/native/${{ matrix.binary }}
+          if-no-files-found: error

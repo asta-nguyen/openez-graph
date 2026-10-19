@@ -13,6 +13,7 @@ import {
 import type { RegistryWorkspace, WorkspaceRepository } from "@openez-graph/db";
 
 import { hashContent } from "./hash";
+import { isNativeDisabled, loadNativeBinding, resetNativeBindingCache } from "./native-binding";
 import {
   createSymbolChunks,
   inferDocumentKind,
@@ -84,17 +85,9 @@ let _nativeParser: NativeParser | null | undefined;
  * the current capability would use (`native-v1` vs `fallback-v1`).
  */
 export function resolveNativeParser(): NativeParser | null {
+  if (isNativeDisabled()) return null;
   if (_nativeParser !== undefined) return _nativeParser;
-  try {
-    const nativePath = path.join(__dirname, "native", "index.linux-x64-gnu.node");
-    _nativeParser = require(nativePath) as NativeParser;
-  } catch {
-    try {
-      _nativeParser = require("@openez-graph/native") as NativeParser;
-    } catch {
-      _nativeParser = null;
-    }
-  }
+  _nativeParser = loadNativeBinding() as NativeParser | null;
   return _nativeParser;
 }
 
@@ -104,6 +97,7 @@ export function resolveNativeParser(): NativeParser | null {
  */
 export function resetNativeParserCache(): void {
   _nativeParser = undefined;
+  resetNativeBindingCache();
 }
 
 /**
