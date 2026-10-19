@@ -1,0 +1,19 @@
+.github/workflows/native.yml
+  s_99e89e1c5083fb::t_1753ecbc342977 22-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5766dac548f6de76091935ba460b0c2bc4a1d867",
+  "prompts": {},
+  "sessions": {
+    "s_99e89e1c5083fb": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "grass-python",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
