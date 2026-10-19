@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "bun:test";
 
 import { scanWorkspaceFiles } from "../packages/indexer/src/scanner";
+import { rmTempDir } from "./helpers/temp-cleanup";
 
 describe("scanWorkspaceFiles", () => {
   it("includes Ruby, CoffeeScript, CSS, SCSS, Slim, Haml files", async () => {
@@ -39,7 +40,7 @@ describe("scanWorkspaceFiles", () => {
       );
       expect(relativePaths).not.toContain("node_modules/ignored.js");
     } finally {
-      fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      rmTempDir(root);
     }
   });
 });
