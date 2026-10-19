@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import picomatch from "picomatch";
 
 import type { FileToIndex } from "./types";
+import { loadNativeBinding } from "./native-binding";
 import {
   codeExtensions,
   configExtensions,
@@ -116,21 +117,24 @@ export async function scanWorkspaceFiles(input: {
   // Native Rust scanner (rayon parallel walk) — fast path for default includes
   if (!input.include) {
     try {
-      let nativeBinding: any = null;
-      try {
-        nativeBinding = require(
-          require("path").join(__dirname, "native", "index.linux-x64-gnu.node"),
-        );
-      } catch {
-        nativeBinding = require("@openez-graph/native");
-      }
+      const nativeBinding = loadNativeBinding() as {
+        scanWorkspaceFast?: (
+          rootPath: string,
+          allowedExtensions: string[],
+        ) => Array<{
+          absolutePath: string;
+          relativePath: string;
+          sizeBytes: number;
+          mtimeMs: number;
+        }>;
+      } | null;
       if (nativeBinding && typeof nativeBinding.scanWorkspaceFast === "function") {
         const rawFiles: Array<{
           absolutePath: string;
           relativePath: string;
           sizeBytes: number;
           mtimeMs: number;
-        }> = nativeBinding.scanWorkspaceFast(rootPath, ALLOWED_EXTENSIONS);
+        }> = nativeBinding.scanWorkspaceFast(rootPath, [...ALLOWED_EXTENSIONS]);
         if (rawFiles && rawFiles.length > 0) {
           const isIgnored = picomatch(ignorePatterns, { dot: true });
           const results: FileToIndex[] = [];

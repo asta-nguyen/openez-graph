@@ -1,0 +1,38 @@
+{
+  "go/example.go#crlf": {
+    "symbols": {
+      "onlyNative": [],
+      "onlyWasm": []
+    },
+    "importPaths": {
+      "onlyNative": [],
+      "onlyWasm": []
+    },
+    "callExpressions": {
+      "onlyNative": [],
+      "onlyWasm": []
+    },
+    "calledIdentifiers": {
+      "onlyNative": ["Node::Traverse"],
+      "onlyWasm": ["Traverse"]
+    }
+  },
+  "go/example.go": {
+    "symbols": {
+      "onlyNative": [],
+      "onlyWasm": []
+    },
+    "importPaths": {
+      "onlyNative": [],
+      "onlyWasm": []
+    },
+    "callExpressions": {
+      "onlyNative": [],
+      "onlyWasm": []
+    },
+    "calledIdentifiers": {
+      "onlyNative": ["Node::Traverse"],
+      "onlyWasm": ["Traverse"]
+    }
+  }
+}
