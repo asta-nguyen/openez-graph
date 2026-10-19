@@ -10,6 +10,7 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
 } from "../packages/db/src/sqlite";
+import { rmTempDir } from "./helpers/temp-cleanup";
 import {
   buildGraphGeneration,
   indexWorkspace,
@@ -38,7 +39,7 @@ describe("parsed_documents cache", () => {
 
   afterEach(() => {
     closeAllWorkspaceDbs();
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    rmTempDir(tmpDir);
   });
 
   test("insert and get parsed document", async () => {
@@ -146,8 +147,8 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
   afterEach(() => {
     closeAllWorkspaceDbs();
     closeRegistryDb();
-    fs.rmSync(registryRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-    fs.rmSync(workspaceRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    rmTempDir(registryRoot);
+    rmTempDir(workspaceRoot);
     delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
     delete process.env.EMBEDDING_PROVIDER;
     resetNativeParserCache();
