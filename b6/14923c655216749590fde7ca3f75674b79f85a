@@ -1,0 +1,174 @@
+tests/fixtures/java-edges/conflicts/src/app/Util.java
+  s_94af5036d79280::t_3881d22bafdd52 1-7
+tests/fixtures/java-edges/packages/src/other/Util.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+apps/cli/package.json
+  s_94af5036d79280::t_3881d22bafdd52 55
+  s_94af5036d79280::t_7e0037620b77a3 4
+packages/native/Cargo.toml
+  s_94af5036d79280::t_3881d22bafdd52 21
+tests/java-edge-accuracy.test.ts
+  s_94af5036d79280::t_3881d22bafdd52 1-224
+apps/cli/README.md
+  s_94af5036d79280::t_10a8eeb17eab0d 138
+  s_94af5036d79280::t_adc20a538a59c8 17
+  s_94af5036d79280::t_4348f671178a7e 12
+  s_94af5036d79280::t_3a6efc24858e87 146
+  s_94af5036d79280::t_3054582994ff3d 129-137,139-141
+tests/fixtures/java-edges/packages/src/other/app/Util.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+tests/java-resolver.test.ts
+  s_94af5036d79280::t_3881d22bafdd52 1-561
+tests/java-indexer.test.ts
+  s_94af5036d79280::t_3881d22bafdd52 1-286
+tests/fixtures/java-edges/imports/src/shop/Static.java
+  s_94af5036d79280::t_3881d22bafdd52 1-9
+tests/fixtures/java-edges/conflicts/src/shop/Single.java
+  s_94af5036d79280::t_3881d22bafdd52 1-9
+tests/fixtures/java-edges/packages/baseline.json
+  s_94af5036d79280::t_3881d22bafdd52 1-5
+tests/fixtures/java-edges/imports/src/shop/Wild.java
+  s_94af5036d79280::t_3881d22bafdd52 1-9
+tests/fixtures/java-edges/anonymous/baseline.json
+  s_94af5036d79280::t_3881d22bafdd52 1-5
+tests/fixtures/java-edges/packages/src/dup/Caller.java
+  s_94af5036d79280::t_3881d22bafdd52 1-7
+tests/fixtures/java-edges/packages/src/dup/Shared.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+tests/fixtures/java-edges/resolution/src/res/Recv.java
+  s_94af5036d79280::t_3881d22bafdd52 1-17
+tests/fixtures/java-edges/resolution/expected-edges.json
+  s_94af5036d79280::t_3881d22bafdd52 1-18
+tests/fixtures/java-edges/resolution/src/res/Over.java
+  s_94af5036d79280::t_3881d22bafdd52 1-13
+tests/fixtures/java-edges/imports/src/shop/Reserved.java
+  s_94af5036d79280::t_3881d22bafdd52 1-9
+tests/fixtures/java-edges/imports/src/shop/Util.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+tests/fixtures/java-edges/imports/src/shop/Blocked.java
+  s_94af5036d79280::t_3881d22bafdd52 1-12
+packages/indexer/src/tree-sitter/configs.ts
+  s_94af5036d79280::t_50154fd3066177 1113,1352
+  s_94af5036d79280::t_a07692a00f1af0 3,743,941,994,1114-1351
+tests/fixtures/java-edges/types/src/app/Outer.java
+  s_94af5036d79280::t_3881d22bafdd52 1-27
+packages/indexer/src/tree-sitter/parse.ts
+  s_94af5036d79280::t_3881d22bafdd52 74-78,197,344-345,349,407-409,411-416
+  s_94af5036d79280::t_72d4ebe6bae42a 572-575
+  s_94af5036d79280::t_6089fbfc90f5ff 41-43
+  s_94af5036d79280::t_ae6b8205cbdab9 389,392-393
+  s_94af5036d79280::t_45ef62bd5de7f7 73,143-148
+AGENTS.md
+  s_94af5036d79280::t_196aa1ebc31d81 145,152
+  s_94af5036d79280::t_3881d22bafdd52 151
+tests/fixtures/java-edges/abovecap/expected-edges.json
+  s_94af5036d79280::t_3881d22bafdd52 1-133
+tests/fixtures/java-edges/conflicts/expected-edges.json
+  s_94af5036d79280::t_3881d22bafdd52 1-53
+docs/agent-devkit/changes/2026-10-20-39-java-indexing-accuracy/tasks.md
+  s_94af5036d79280::t_3881d22bafdd52 28,38-39,47-48,56-57,65-66,74-77
+  s_94af5036d79280::t_9bfec3d63775c0 78-79
+packages/native/src/parser.rs
+  s_94af5036d79280::t_2bb74bd136fa75 805,1157
+  s_94af5036d79280::t_2ca23c1b1b9bdf 2146,2193-2295
+  s_94af5036d79280::t_3881d22bafdd52 126-128,333,404,558,1156,1402-1414,1582-1608,1676-1681,1744-1745,1747-1754,1756,1901-1910,1917-1921,1929,1934,2296-2351,2353-2365,2367-2379,2381-2393,2395-2407,2409-2421,2423-2435,2437-2449,2451-2463,2465-2477,2479-2528,2531-2534,2548,2561
+  s_94af5036d79280::t_ca1da901e03900 2352,2366,2380,2394,2408,2422,2436,2450,2464,2478,2529-2530
+apps/cli/tsup.config.ts
+  s_94af5036d79280::t_3881d22bafdd52 38
+tests/fixtures/java-edges/anonymous/src/app/Util.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+tests/fixtures/java-edges/types/src/app/Use.java
+  s_94af5036d79280::t_3881d22bafdd52 1-8
+packages/indexer/package.json
+  s_94af5036d79280::t_3881d22bafdd52 26
+tests/fixtures/java-edges/imports/expected-edges.json
+  s_94af5036d79280::t_3881d22bafdd52 1-43
+tests/fixtures/java-edges/packages/src/other/Main.java
+  s_94af5036d79280::t_3881d22bafdd52 1-9
+packages/indexer/src/languages.ts
+  s_94af5036d79280::t_3881d22bafdd52 51
+tests/fixtures/java-edges/anonymous/src/app/Anon.java
+  s_94af5036d79280::t_3881d22bafdd52 1-16
+tests/fixtures/java-edges/imports/src/shop/Service.java
+  s_94af5036d79280::t_3881d22bafdd52 1-9
+tests/fixtures/java-edges/packages/src/shop/Helper.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+tests/fixtures/java-edges/packages/src/dup2/Shared.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+tests/fixtures/java-edges/resolution/src/res/Statics.java
+  s_94af5036d79280::t_3881d22bafdd52 1-9
+tests/fixtures/java-edges/imports/baseline.json
+  s_94af5036d79280::t_3881d22bafdd52 1-11
+tests/fixtures/parity/java/example.java
+  s_94af5036d79280::t_3881d22bafdd52 1-57
+tests/fixtures/java-edges/conflicts/baseline.json
+  s_94af5036d79280::t_3881d22bafdd52 1-11
+packages/indexer/src/java-resolver.ts
+  s_94af5036d79280::t_3881d22bafdd52 1-326
+tests/fixtures/java-edges/anonymous/expected-edges.json
+  s_94af5036d79280::t_3881d22bafdd52 1-13
+tests/fixtures/java-edges/packages/expected-edges.json
+  s_94af5036d79280::t_3881d22bafdd52 1-23
+packages/indexer/src/index-workspace.ts
+  s_94af5036d79280::t_ec97a869374c7b 139
+  s_94af5036d79280::t_4d2413a766942e 406-407
+  s_94af5036d79280::t_3881d22bafdd52 40,432,471,1243,1320,1322,1518-1539,1611-1612,1772-1775,2015,2070-2079
+  s_94af5036d79280::t_4689d3c855b7f4 1136-1137
+  s_94af5036d79280::t_1696c7a4905fb5 473
+  s_94af5036d79280::t_64edf77efb863e 2080-2081
+tests/fixtures/java-edges/resolution/src/res/Helper.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+tests/fixtures/java-edges/imports/src/app/Util.java
+  s_94af5036d79280::t_3881d22bafdd52 1-6
+tests/fixtures/java-edges/abovecap/src/cap/Big.java
+  s_94af5036d79280::t_3881d22bafdd52 1-112
+tests/fixtures/java-edges/conflicts/src/other/Util.java
+  s_94af5036d79280::t_3881d22bafdd52 1-7
+tests/native-wasm-parity.test.ts
+  s_94af5036d79280::t_3881d22bafdd52 14,45,379-380
+packages/indexer/src/tree-sitter/index.ts
+  s_94af5036d79280::t_a0e480990eed35 11
+tests/fixtures/parity/java/calls.java
+  s_94af5036d79280::t_3881d22bafdd52 1-77
+tests/fixtures/java-edges/types/expected-edges.json
+  s_94af5036d79280::t_3881d22bafdd52 1-28
+tests/fixtures/java-edges/types/baseline.json
+  s_94af5036d79280::t_3881d22bafdd52 1-5
+tests/fixtures/java-edges/conflicts/src/shop/Reversed.java
+  s_94af5036d79280::t_3881d22bafdd52 1-10
+tests/fixtures/java-edges/conflicts/src/shop/Service.java
+  s_94af5036d79280::t_3881d22bafdd52 1-14
+tests/fixtures/java-edges/conflicts/src/shop/Statics.java
+  s_94af5036d79280::t_3881d22bafdd52 1-10
+tests/fixtures/java-edges/packages/src/shop/User.java
+  s_94af5036d79280::t_3881d22bafdd52 1-7
+tests/fixtures/java-edges/resolution/baseline.json
+  s_94af5036d79280::t_3881d22bafdd52 1-11
+tests/fixtures/java-edges/abovecap/baseline.json
+  s_94af5036d79280::t_3881d22bafdd52 1-11
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_94af5036d79280::t_3881d22bafdd52 19,34
+  s_94af5036d79280::t_b040cc003745c2 86-88,93
+  s_94af5036d79280::t_3d1eed58a93dcc 107-110
+  s_94af5036d79280::t_9f7cecbace5601 111
+packages/native/Cargo.lock
+  s_94af5036d79280::t_d125fe42f473f1 255,257,437-438,440,447-448,450,466-475
+pnpm-lock.yaml
+  s_94af5036d79280::t_ca031d456b8067 80-82,86-88,413-415,4572-4579,8967-8970,8987-8991
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b614923c655216749590fde7ca3f75674b79f85a",
+  "prompts": {},
+  "sessions": {
+    "s_94af5036d79280": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "better-drop",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
