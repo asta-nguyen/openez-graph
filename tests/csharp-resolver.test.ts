@@ -660,3 +660,240 @@ describe("csharp-resolver same-line declarations", () => {
     expect(r.resolveCall("main.cs", "Program::Main", "B.C.Y.M")).toBeNull();
   });
 });
+
+describe("csharp-resolver namespace-scoped usings", () => {
+  test("a block-namespace using binds calls inside its own block only", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace Acme.Util
+{
+    public static class Helper
+    {
+        public static int Add(int a, int b) => a + b;
+    }
+}
+`,
+      "c.cs": `namespace Acme.Consumer
+{
+    using Util;
+    public class C
+    {
+        public void Run() { Helper.Add(1, 2); }
+    }
+}
+namespace Acme.Other
+{
+    public class D
+    {
+        public void Go() { Helper.Add(1, 2); }
+    }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    // `using Util` inside `namespace Acme.Consumer` resolves `Acme.Util` for
+    // code in that block — `Helper.Add` binds through it.
+    expect(r.resolveCall("c.cs", "C::Run", "Helper.Add")).toEqual({
+      filePath: "u.cs",
+      name: "Helper::Add",
+    });
+    // `Acme.Other` is a sibling declaration: the Acme.Consumer-block using
+    // is not visible there even though `Acme` is a name prefix.
+    expect(r.resolveCall("c.cs", "D::Go", "Helper.Add")).toBeNull();
+  });
+
+  test("a nested namespace using applies within its own subtree", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace A.B.Util
+{
+    public static class Helper
+    {
+        public static int Add(int a, int b) => a + b;
+    }
+}
+`,
+      "c.cs": `namespace A
+{
+    namespace B
+    {
+        using Util;
+        public class C
+        {
+            public void Run() { Helper.Add(1, 2); }
+        }
+    }
+    public class D
+    {
+        public void Go() { Helper.Add(1, 2); }
+    }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    // `using Util` inside `namespace A.B` binds `A.B.Util`.
+    expect(r.resolveCall("c.cs", "C::Run", "Helper.Add")).toEqual({
+      filePath: "u.cs",
+      name: "Helper::Add",
+    });
+    // `D` is in `A` but outside `A.B` — the using does not apply.
+    expect(r.resolveCall("c.cs", "D::Go", "Helper.Add")).toBeNull();
+  });
+
+  test("a block-namespace alias resolves relative to its scope", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace Acme.Util
+{
+    public static class Helper
+    {
+        public static int Add(int a, int b) => a + b;
+    }
+}
+`,
+      "c.cs": `namespace Acme.Consumer
+{
+    using H = Util.Helper;
+    public class C
+    {
+        public void Run() { H.Add(1, 2); }
+    }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    // The alias target `Util.Helper` is resolved relative to `Acme.Consumer`:
+    // `Acme.Consumer.Util.Helper` misses, `Acme.Util.Helper` hits.
+    expect(r.resolveCall("c.cs", "C::Run", "H.Add")).toEqual({
+      filePath: "u.cs",
+      name: "Helper::Add",
+    });
+  });
+
+  test("a block-namespace using-static binds static members in scope only", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace Acme.Util
+{
+    public static class Math2
+    {
+        public static int Sq(int x) => x * x;
+    }
+}
+`,
+      "c.cs": `namespace Acme.Consumer
+{
+    using static Acme.Util.Math2;
+    public class C
+    {
+        public void Run() { Sq(3); }
+    }
+}
+namespace Acme.Other
+{
+    public class D
+    {
+        public void Go() { Sq(3); }
+    }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Run", "Sq")).toEqual({
+      filePath: "u.cs",
+      name: "Math2::Sq",
+    });
+    expect(r.resolveCall("c.cs", "D::Go", "Sq")).toBeNull();
+  });
+
+  test("using-static binds static methods but never instance methods", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace Acme.Util
+{
+    public static class St
+    {
+        public static int Twice(int x) => 2 * x;
+        public int Inst(int x) => x;
+    }
+}
+`,
+      "c.cs": `using static Acme.Util.St;
+namespace Acme.Consumer
+{
+    public class C
+    {
+        public void Run() { Twice(2); Inst(2); }
+    }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    // The static member resolves; the same-named instance member must not.
+    expect(r.resolveCall("c.cs", "C::Run", "Twice")).toEqual({
+      filePath: "u.cs",
+      name: "St::Twice",
+    });
+    expect(r.resolveCall("c.cs", "C::Run", "Inst")).toBeNull();
+  });
+
+  test("instance methods still resolve through the same-type member path", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "c.cs": `namespace Acme
+{
+    public class C
+    {
+        public void Run() { Inst(); Stat(); }
+        private void Inst() { }
+        private static void Stat() { }
+    }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Run", "Inst")).toEqual({
+      filePath: "c.cs",
+      name: "C::Inst",
+    });
+    expect(r.resolveCall("c.cs", "C::Run", "Stat")).toEqual({
+      filePath: "c.cs",
+      name: "C::Stat",
+    });
+    expect(r.resolveCall("c.cs", "C::Run", "this.Inst")).toEqual({
+      filePath: "c.cs",
+      name: "C::Inst",
+    });
+  });
+
+  test("scoped usings emit imports edges owned by the declaring file", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace Acme.Util
+{
+    public static class Helper
+    {
+        public static int Add(int a, int b) => a + b;
+    }
+}
+`,
+      "c.cs": `namespace Acme.Consumer
+{
+    using Util;
+    using H = Util.Helper;
+    using static Acme.Util.Helper;
+    public class C { }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    // Every scoped directive resolves relative to Acme.Consumer and maps to
+    // the single file declaring its target. The `Acme.Consumer@1` scope key
+    // names the enclosing declaration (`namespace` keyword at line 1).
+    expect(r.resolveImport("c.cs", "Acme.Consumer@1\0using Util;")).toBe("u.cs");
+    expect(r.resolveImport("c.cs", "Acme.Consumer@1\0using H = Util.Helper;")).toBe("u.cs");
+    expect(r.resolveImport("c.cs", "Acme.Consumer@1\0using static Acme.Util.Helper;")).toBe("u.cs");
+    // An undeclared scoped using still yields no edge.
+    expect(r.resolveImport("c.cs", "Acme.Consumer@1\0using Missing;")).toBeNull();
+  });
+});

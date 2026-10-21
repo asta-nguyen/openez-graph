@@ -1334,16 +1334,46 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
     }
     "csharp" => {
       // Full directive text, verbatim — the resolver parses the
-      // global/alias/static modifiers out of it. Directives nested inside a
-      // `declaration_list` (a block-scoped `namespace` body) are dropped:
-      // importPaths carry no positions, so the resolver cannot tell them
-      // apart from compilation-unit usings — carrying them would bind names
-      // in files where the using does not apply.
+      // global/alias/static modifiers out of it. A directive inside a
+      // `declaration_list` belongs to its enclosing block `namespace`, and
+      // one following a file-scoped namespace belongs to it; those carry
+      // the enclosing declaration's scope as
+      // `<qualified-name>@<decl-start-line>\0<verbatim>` so the resolver can
+      // apply the using inside exactly the block that declared it.
+      // Mirrors extractCSharpImports in configs.ts.
       if node.kind() == "using_directive" {
+        let mut scope: Option<String> = None;
         if node.parent().map(|p| p.kind()) == Some("declaration_list") {
-          return paths;
+          // The declaration_list must be a namespace body — a directive
+          // inside any other body keeps the old drop.
+          let owner = node.parent().and_then(|p| p.parent());
+          if owner.map(|o| o.kind()) != Some("namespace_declaration") {
+            return paths;
+          }
+          let ns_node = owner.unwrap();
+          if let Some(qual) = csharp_ns_name(&ns_node, source) {
+            scope = Some(format!("{}@{}", qual, ns_node.start_position().row + 1));
+          }
+        } else if node.parent().map(|p| p.kind()) == Some("compilation_unit") {
+          let mut sib = node.prev_named_sibling();
+          while let Some(s) = sib {
+            if s.kind() == "file_scoped_namespace_declaration" {
+              if let Some(n) = s.child_by_field_name("name") {
+                scope = Some(format!(
+                  "{}@{}",
+                  text_of(&n, source),
+                  s.start_position().row + 1
+                ));
+              }
+              break;
+            }
+            sib = s.prev_named_sibling();
+          }
         }
-        paths.push(text_of(&node, source));
+        match scope {
+          Some(s) => paths.push(format!("{}\0{}", s, text_of(&node, source))),
+          None => paths.push(text_of(&node, source)),
+        }
       }
     }
     "ruby" => {
@@ -1984,6 +2014,18 @@ fn csharp_ns_name(node: &Node, source: &[u8]) -> Option<String> {
   Some(parts.join("."))
 }
 
+/// `static` modifier → internal `static_method` so `using static` binds
+/// only genuinely static members. Mirrors csharpMethodType in configs.ts.
+fn csharp_method_type(node: &Node, source: &[u8], _stack: &[ContextFrame]) -> &'static str {
+  let mut cursor = node.walk();
+  for child in node.children(&mut cursor) {
+    if child.kind() == "modifier" && child.utf8_text(source).unwrap_or("") == "static" {
+      return "static_method";
+    }
+  }
+  "method"
+}
+
 /// Field names come from `variable_declarator` nodes, but only when the
 /// declarator sits inside `field_declaration` — local `var`/`using`
 /// declarators inside methods share the node type and are never members.
@@ -2102,7 +2144,10 @@ fn csharp_config() -> LanguageConfig {
     rule("record_declaration", "record", true),
     rule("enum_declaration", "enum", true),
     rule("delegate_declaration", "delegate", false),
-    rule("method_declaration", "method", true),
+    SymbolRule {
+      symbol_type_fn: Some(csharp_method_type),
+      ..rule("method_declaration", "method", true)
+    },
     rule("constructor_declaration", "constructor", true),
     rule("destructor_declaration", "destructor", true),
     rule("property_declaration", "property", false),
@@ -2222,6 +2267,26 @@ fn java_node_exported(node: &Node, _source: &[u8]) -> bool {
 
 fn java_exported(node: &Node, source: &[u8], _name: &str) -> bool {
   java_node_exported(node, source)
+}
+
+/// `static` modifier token → internal `static_function` so `import static`
+/// binds only genuinely static members. Mirrors javaMethodType in configs.ts.
+fn java_method_type(node: &Node, _source: &[u8], _stack: &[ContextFrame]) -> &'static str {
+  for i in 0..node.named_child_count() {
+    if let Some(c) = node.named_child(i) {
+      if c.kind() != "modifiers" {
+        continue;
+      }
+      for j in 0..c.child_count() {
+        if let Some(m) = c.child(j) {
+          if m.kind() == "static" {
+            return "static_function";
+          }
+        }
+      }
+    }
+  }
+  "function"
 }
 
 fn java_package_name(node: &Node, source: &[u8]) -> Option<String> {
@@ -2433,7 +2498,7 @@ fn java_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
-        symbol_type_fn: None,
+        symbol_type_fn: Some(java_method_type),
       },
       SymbolRule {
         node_type: "constructor_declaration",

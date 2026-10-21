@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { createWorkspaceRepository } from "@openez-graph/db";
+import { createWorkspaceRepository, publicSymbolKind } from "@openez-graph/db";
 
 export interface ChangedHunkRange {
   start: number;
@@ -609,7 +609,7 @@ export async function analyzeDiffContext(
 
       affectedSymbols.push({
         name: s.name,
-        kind: s.symbolType || s.kind || "symbol",
+        kind: publicSymbolKind(String(s.symbolType || s.kind || "symbol")),
         startLine: symStart,
         endLine: symEnd,
         exported: Boolean(s.exported),
@@ -658,7 +658,7 @@ export async function analyzeDiffContext(
               const edges = await cachedLookupGraphEdges(s.name);
               return {
                 name: s.name,
-                kind: s.symbolType,
+                kind: s.symbolType ? publicSymbolKind(String(s.symbolType)) : s.symbolType,
                 startLine: s.startLine,
                 endLine: s.endLine,
                 exported: s.exported,
@@ -684,7 +684,7 @@ export async function analyzeDiffContext(
                 const edges = await cachedLookupGraphEdges(s.name);
                 return {
                   name: s.name,
-                  kind: s.symbolType,
+                  kind: s.symbolType ? publicSymbolKind(String(s.symbolType)) : s.symbolType,
                   startLine: s.startLine,
                   endLine: s.endLine,
                   exported: s.exported,

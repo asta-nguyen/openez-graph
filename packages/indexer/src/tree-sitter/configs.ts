@@ -961,16 +961,54 @@ function csharpFieldDeclaratorName(node: Node): string | null {
 }
 
 /**
+ * Enclosing declaration scope for a `using` directive, encoded as
+ * `<qualified-name>@<decl-start-line>`. A directive inside a
+ * `declaration_list` belongs to the enclosing block `namespace`, and one
+ * that follows a file-scoped namespace belongs to it; both keep their
+ * scope so the resolver applies the using inside exactly the declaration
+ * block that contains it. A `declaration_list` owned by anything else is
+ * not a namespace body — the directive is still dropped.
+ * Mirrors the csharp arm of extract_imports in parser.rs.
+ */
+function csharpUsingScope(node: Node): string {
+  const parent = node.parent;
+  if (parent?.type === "declaration_list") {
+    const owner = parent.parent;
+    if (owner?.type !== "namespace_declaration") return "";
+    const qual = csharpNamespaceName(owner);
+    return qual ? `${qual}@${owner.startPosition.row + 1}` : "";
+  }
+  if (parent?.type === "compilation_unit") {
+    for (let sib = node.previousNamedSibling; sib; sib = sib.previousNamedSibling) {
+      if (sib.type === "file_scoped_namespace_declaration") {
+        const name = sib.childForFieldName("name")?.text;
+        return name ? `${name}@${sib.startPosition.row + 1}` : "";
+      }
+    }
+  }
+  return "";
+}
+
+/**
  * `using` directives are carried verbatim — the resolver parses
- * global/alias/static modifiers out of the full text. Directives nested
- * inside a `declaration_list` (a block-scoped `namespace` body) are dropped:
- * importPaths carry no positions, so the resolver cannot tell them apart
- * from compilation-unit usings — carrying them would bind names in files
- * where the using does not apply.
+ * global/alias/static modifiers out of the full text. Scoped directives
+ * carry their enclosing declaration as `<scope>\0<verbatim text>` so
+ * importPaths stays `string[]` while the resolver can apply each using at
+ * exactly the levels where C# makes it visible.
  */
 function extractCSharpImports(node: Node): string[] {
-  if (node.parent?.type === "declaration_list") return [];
-  return [node.text];
+  const scope = csharpUsingScope(node);
+  return [scope ? `${scope}\0${node.text}` : node.text];
+}
+
+/** `static` modifier → internal `static_method` so `using static` binds
+ *  only genuinely static members. Mirrors csharp_method_type in parser.rs. */
+function csharpMethodType(node: Node): string {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (child?.type === "modifier" && child.text === "static") return "static_method";
+  }
+  return "method";
 }
 
 /**
@@ -1054,6 +1092,7 @@ export const csharpConfig: LanguageConfig = {
     {
       nodeType: "method_declaration",
       symbolType: "method",
+      symbolTypeFor: csharpMethodType,
       nameField: "name",
       establishesContext: true,
       isExported: csharpExported,
@@ -1207,6 +1246,17 @@ function javaExported(node: Node): boolean {
   );
 }
 
+/** `static` modifier token → internal `static_function` so `import static`
+ *  binds only genuinely static members. Mirrors java_method_type in
+ *  parser.rs. */
+function javaMethodType(node: Node): string {
+  return node.namedChildren.some(
+    (c) => c.type === "modifiers" && c.children.some((m) => m.type === "static"),
+  )
+    ? "static_function"
+    : "function";
+}
+
 /**
  * Anonymous-class suppression: a bare or `this.` callee inside a class body
  * owned by `object_creation_expression` or `enum_constant` (constant-specific
@@ -1288,6 +1338,7 @@ export const javaConfig: LanguageConfig = {
     {
       nodeType: "method_declaration",
       symbolType: "function",
+      symbolTypeFor: javaMethodType,
       nameField: "name",
       establishesContext: true,
       isExported: (_name, node) => javaExported(node),

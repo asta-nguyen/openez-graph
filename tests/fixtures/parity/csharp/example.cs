@@ -23,6 +23,8 @@ namespace Alpha.Util
 
 namespace App.Core
 {
+    using Inner.Util;
+    using Z = Alpha.Util.Helper;
     public partial class Widget
     {
         public void Run()
