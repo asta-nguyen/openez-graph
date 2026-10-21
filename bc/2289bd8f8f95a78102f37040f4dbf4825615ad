@@ -1,0 +1,62 @@
+tests/fixtures/csharp-edges/ns-same-line/Consumers.cs
+  s_4a52a9425df993::t_570edde5bc465b 1
+tests/fixtures/csharp-edges/ns-same-line/expected-edges.json
+  s_4a52a9425df993::t_629f320f305437 1-2,4
+  s_4a52a9425df993::t_f16bf770743a15 3
+tests/parsed-documents-cache.test.ts
+  s_4a52a9425df993::t_0862e641f793fe 157-158,173,185,189,193,197,204,359,401,409,418,485,513
+tests/fixtures/csharp-edges/ns-same-line/Lib.cs
+  s_4a52a9425df993::t_cddbfd442925b2 1
+AGENTS.md
+  s_4a52a9425df993::t_c4a2eabb2f7723 150
+  s_4a52a9425df993::t_0862e641f793fe 145-149,151
+packages/indexer/src/tree-sitter/configs.ts
+  s_4a52a9425df993::t_1344d4a90e84b0 964-982,984-995,998-999,1013-1016,1025
+  s_4a52a9425df993::t_1aff070dea8a41 963
+  s_4a52a9425df993::t_f0dcb4cd9a7a66 1021-1024
+  s_4a52a9425df993::t_f16bf770743a15 983
+tests/fixtures/parity/csharp/sibling-ns.cs
+  s_4a52a9425df993::t_ac3ee214884469 1
+packages/native/src/parser.rs
+  s_4a52a9425df993::t_30d5b8cdd17b48 1341-1344
+  s_4a52a9425df993::t_642d35d6745fa1 2027-2059
+  s_4a52a9425df993::t_3d0f7c307f4f96 1357-1363,1369-1376
+tests/native-wasm-parity.test.ts
+  s_4a52a9425df993::t_31edfcee7259f7 374
+packages/indexer/src/csharp-resolver.ts
+  s_4a52a9425df993::t_76e04d2231370c 187-188,193-195
+  s_4a52a9425df993::t_b3c931bc65bc1f 19-21
+  s_4a52a9425df993::t_fbecc995bbd225 255-269,271,285-318
+  s_4a52a9425df993::t_2903dedb37c03b 448,462-463
+  s_4a52a9425df993::t_d546aa3da5ca5d 152-155,164
+tests/fixtures/csharp-edges/ns-same-line/baseline.json
+  s_4a52a9425df993::t_7a75286e06de80 1-11
+tests/csharp-indexer.test.ts
+  s_4a52a9425df993::t_2585d4f08957dd 228-237
+tests/csharp-resolver.test.ts
+  s_4a52a9425df993::t_696ded3c1e43cf 899-943
+packages/indexer/src/index-workspace.ts
+  s_4a52a9425df993::t_0862e641f793fe 64-65,88,91,112,115,136-137,140,1247-1248
+.prettierignore
+  s_4a52a9425df993::t_5d515cfc612650 17
+tests/fixtures/csharp-edges/ns-same-line/App.csproj
+  s_4a52a9425df993::t_729980575cc414 1
+docs/agent-devkit/changes/2026-10-20-39-csharp-indexing-accuracy/tasks.md
+  s_4a52a9425df993::t_c9a00842808540 286-320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bc2289bd8f8f95a78102f37040f4dbf4825615ad",
+  "prompts": {},
+  "sessions": {
+    "s_4a52a9425df993": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "glorious-brochure",
+        "model": "unknown"
+      },
+      "human_author": null
+    }
+  }
+}
