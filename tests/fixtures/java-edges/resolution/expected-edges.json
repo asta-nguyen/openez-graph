@@ -1,0 +1,18 @@
+{
+  "canary": {
+    "from": "src/res/Recv.java#Recv::go",
+    "to": "src/res/Helper.java#Helper::act"
+  },
+  "edges": [
+    {
+      "from": "src/res/Recv.java#Recv::go",
+      "to": "src/res/Helper.java#Helper::act",
+      "tier": "package"
+    },
+    {
+      "from": "src/res/Recv.java#Recv::go",
+      "to": "src/res/Recv.java#Recv::getRecv",
+      "tier": "package"
+    }
+  ]
+}

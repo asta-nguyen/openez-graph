@@ -9,6 +9,7 @@ import {
 } from "../packages/indexer/src/index-workspace";
 import {
   goConfig,
+  javaConfig,
   parseWithTreeSitter,
   pythonConfig,
   rubyConfig,
@@ -37,6 +38,7 @@ const LANG_CONFIG: Record<string, LanguageConfig> = {
   go: goConfig,
   rust: rustConfig,
   ruby: rubyConfig,
+  java: javaConfig,
 };
 
 // ── Pure difference computation ──
@@ -366,6 +368,8 @@ describe("native-wasm parity", () => {
       "ruby/example.rb",
       "ruby/torture.rb",
       "rust/example.rs",
+      "java/example.java",
+      "java/calls.java",
     ];
     const keys = new Set(listFixtureCases().map((c) => c.key));
     for (const required of REQUIRED_FIXTURES) {

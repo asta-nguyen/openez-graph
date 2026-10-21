@@ -33,6 +33,7 @@ export default defineConfig({
     "tree-sitter-go",
     "tree-sitter-rust",
     "tree-sitter-ruby",
+    "tree-sitter-java",
     "oxc-parser",
     "@oxc-parser/binding-darwin-arm64",
     "@oxc-parser/binding-darwin-x64",

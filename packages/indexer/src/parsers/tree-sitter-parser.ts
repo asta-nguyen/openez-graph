@@ -1,9 +1,17 @@
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
-import { parseGo, parsePython, parseRuby, parseRust, type IndexedCodeResult } from "../languages";
+import {
+  makeFallbackChunks,
+  parseGo,
+  parsePython,
+  parseRuby,
+  parseRust,
+  type IndexedCodeResult,
+} from "../languages";
 import { extractPythonBindings, markPythonCallShadowing } from "../python-resolver";
 import {
   goConfig,
+  javaConfig,
   parseWithTreeSitter,
   pythonConfig,
   rubyConfig,
@@ -16,6 +24,7 @@ const LANGUAGE_CONFIGS = {
   go: goConfig,
   rust: rustConfig,
   ruby: rubyConfig,
+  java: javaConfig,
 } as const;
 
 const REGEX_FALLBACKS: Record<
@@ -54,7 +63,13 @@ export class TreeSitterParser implements CodeParser {
 
     const config = LANGUAGE_CONFIGS[language];
     const tsResult = await parseWithTreeSitter(config, input.content, counter);
-    const result = tsResult ?? REGEX_FALLBACKS[language](input.content, counter);
+    // Java has no regex fallback — a failed parse keeps generic text chunks
+    // with no symbols/calls rather than emitting regex guesses.
+    const result =
+      tsResult ??
+      (language === "java"
+        ? makeFallbackChunks(input.content, input.content.split("\n"), counter)
+        : REGEX_FALLBACKS[language](input.content, counter));
 
     // Python bindings and local-shadow marks are extracted once in
     // TypeScript over the source so the WASM and regex paths agree; see
