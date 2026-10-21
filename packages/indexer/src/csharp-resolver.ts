@@ -48,7 +48,11 @@ export interface CSharpResolvedOccurrence extends CSharpResolvedTarget {
 }
 
 export interface CSharpResolver {
-  resolveCall(filePath: string, callerName: string, calleeName: string): CSharpResolvedTarget | null;
+  resolveCall(
+    filePath: string,
+    callerName: string,
+    calleeName: string,
+  ): CSharpResolvedTarget | null;
   resolveCallOccurrence(
     filePath: string,
     callerName: string,
@@ -59,14 +63,12 @@ export interface CSharpResolver {
 
 // ── Internal model ──
 
-const TYPE_KINDS = new Set([
-  "class",
-  "struct",
-  "interface",
-  "record",
-  "enum",
-  "delegate",
-]);
+const TYPE_KINDS = new Set(["class", "struct", "interface", "record", "enum", "delegate"]);
+
+/** Call targets are methods only: fields, properties, nested type
+ *  declarations (including delegates), and constructors/destructors share
+ *  member names but an invocation never targets them. */
+const CALLABLE_MEMBER_KINDS = new Set(["method"]);
 
 interface FileSymbol {
   name: string;
@@ -102,7 +104,9 @@ interface TypeIdentity {
 }
 
 /** Parse one using-directive text into its kind + operands. */
-function parseUsing(text: string):
+function parseUsing(
+  text: string,
+):
   | { kind: "ordinary"; ns: string; global: boolean }
   | { kind: "static"; target: string; global: boolean }
   | { kind: "alias"; name: string; target: string; global: boolean }
@@ -347,13 +351,14 @@ export function createCSharpResolver(
   }
 
   /**
-   * Symbols `chain::member` inside the parts of one type identity. Ranges
-   * disambiguate same-named types sharing one file across namespaces.
+   * Symbols `chain::member` of the given kinds inside the parts of one type
+   * identity. Ranges disambiguate same-named types sharing one file across
+   * namespaces.
    */
   function membersOf(
     identity: TypeIdentity,
     member: string,
-    typeOnly: boolean,
+    kinds: ReadonlySet<string>,
   ): MemberCandidate[] {
     const found: MemberCandidate[] = [];
     const full = `${identity.chain}::${member}`;
@@ -365,7 +370,7 @@ export function createCSharpResolver(
         // nearest preceding same-named type in its file, so same-named
         // types sharing one line range keep distinct member sets.
         if (memberOwnerByFile.get(part.file)?.get(c.index) !== part.index) continue;
-        if (typeOnly && !TYPE_KINDS.has(c.symbolType)) continue;
+        if (!kinds.has(c.symbolType)) continue;
         found.push({ filePath: part.file, name: full, index: c.index });
       }
     }
@@ -374,14 +379,15 @@ export function createCSharpResolver(
 
   /**
    * Unique (file,name,occurrence) targets for member `name` on a set of
-   * type identities. Same-named symbols in one file — overloads, #if/#else
-   * bodies, and declarations sharing a line — stay distinct, so resolution
-   * requires exactly one candidate.
+   * type identities, restricted to callable method symbols. Same-named
+   * symbols in one file — overloads, #if/#else bodies, and declarations
+   * sharing a line — stay distinct, so resolution requires exactly one
+   * candidate.
    */
   function memberTargets(identities: TypeIdentity[], member: string): MemberCandidate[] {
     const seen = new Map<string, MemberCandidate>();
     for (const ident of identities) {
-      for (const target of membersOf(ident, member, false)) {
+      for (const target of membersOf(ident, member, CALLABLE_MEMBER_KINDS)) {
         const key = `${target.filePath}\0${target.name}\0${target.index}`;
         if (!seen.has(key)) seen.set(key, target);
       }
@@ -544,7 +550,9 @@ export function createCSharpResolver(
   /** Caller type identity: (root, ns, chain) of the symbol the call sits in. */
   function callerContext(file: string, callerName: string): CallerContext | null {
     const syms = nameIndexByFile.get(file)?.get(callerName) ?? [];
-    const chain = callerName.includes("::") ? callerName.slice(0, callerName.lastIndexOf("::")) : "";
+    const chain = callerName.includes("::")
+      ? callerName.slice(0, callerName.lastIndexOf("::"))
+      : "";
     // Caller must be a single occurrence. Call records carry no position, so
     // two same-file symbols sharing this label (overloads, #if duplicates,
     // same-named members) cannot be attributed to their own graph nodes —
@@ -607,7 +615,9 @@ export function createCSharpResolver(
     if (segs[0] === "this") {
       // this.M — same-type member across all parts.
       if (!ctx.chain || segs.length !== 2) return null;
-      const own = typeIdentitiesIn(ctx.ns, ctx.chain).filter((t) => t.root === projectRootOf(filePath));
+      const own = typeIdentitiesIn(ctx.ns, ctx.chain).filter(
+        (t) => t.root === projectRootOf(filePath),
+      );
       const targets = new Map<string, MemberCandidate>();
       for (const ident of own) {
         for (const t of memberTargets([ident], segs[1])) {
