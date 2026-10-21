@@ -609,3 +609,243 @@ export const rubyConfig: LanguageConfig = {
   contextNameField: "name",
   qualifyCall: rubyQualifyCall,
 };
+
+// ── Java ──
+
+const JAVA_CALL_IGNORES = new Set([
+  "if",
+  "for",
+  "while",
+  "switch",
+  "catch",
+  "return",
+  "throw",
+  "new",
+  "super",
+  "this",
+  "assert",
+  "synchronized",
+  "try",
+  "do",
+  "else",
+  "case",
+  "instanceof",
+  "null",
+  "true",
+  "false",
+  "void",
+  "break",
+  "continue",
+  "default",
+  "finally",
+  "package",
+  "import",
+]);
+
+const JAVA_QUALIFIED_NAME_RE = /^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$/;
+
+/** Body node types that delimit a type-like scope. The innermost enclosing
+ *  body determines whether a call sits inside an anonymous class. */
+const JAVA_BODY_TYPES = new Set([
+  "class_body",
+  "interface_body",
+  "enum_body",
+  "enum_body_declarations",
+  "annotation_type_body",
+]);
+
+function normalizeJavaCallName(value: string): string {
+  // `x.super.m()`, casts, chained `new`/`()` receivers and other non-qualified
+  // receiver text collapse to the empty callee and are dropped.
+  const v = value.replace(/\s+/g, "");
+  return JAVA_QUALIFIED_NAME_RE.test(v) ? v : "";
+}
+
+function extractJavaImports(node: Node): string[] {
+  // `import static app.Util.format;` → "static app.Util.format";
+  // `import app.Util;` → "app.Util"; `import app.*;` → "app.*"
+  const spec = node.text
+    .replace(/^import\s+/, "")
+    .replace(/;+\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return spec ? [spec] : [];
+}
+
+/** `obj.m()` → `obj.m`; `this.m()` → `this.m`; `super.m()` → `super.m`;
+ *  `x.super.m()` → `x.super.m`; `m()` → `m`; `Outer.Inner.m()` → `Outer.Inner.m`. */
+function extractJavaCall(callNode: Node): string | null {
+  const nameNode = callNode.childForFieldName("name");
+  if (!nameNode) return null;
+  const obj = callNode.childForFieldName("object");
+  let receiver = obj?.text;
+  for (const child of callNode.children) {
+    if (child.type === "super" && child.id !== obj?.id) {
+      receiver = receiver ? `${receiver}.super` : "super";
+    }
+  }
+  return receiver ? `${receiver}.${nameNode.text}` : nameNode.text;
+}
+
+/** `int x, y;` → ["x", "y"]; each declarator name is a field symbol. */
+function javaFieldNames(node: Node): string[] {
+  const names: string[] = [];
+  for (const child of node.namedChildren) {
+    if (child.type !== "variable_declarator") continue;
+    const nameNode = child.childForFieldName("name");
+    if (nameNode) names.push(nameNode.text);
+  }
+  return names;
+}
+
+function javaExported(node: Node): boolean {
+  // Only the actual `public` modifier token counts — annotation contents such
+  // as `@Doc("public API")` must not mark a declaration exported.
+  return node.namedChildren.some(
+    (c) => c.type === "modifiers" && c.children.some((m) => m.type === "public"),
+  );
+}
+
+/**
+ * Anonymous-class suppression: a bare or `this.` callee inside a class body
+ * owned by `object_creation_expression` or `enum_constant` (constant-specific
+ * class bodies are anonymous subclasses) may be supplied by the supertype, so
+ * no edge is emitted. Type-qualified calls are unaffected.
+ */
+function javaQualifyCall(
+  callNode: Node,
+  _calleeName: string,
+  normalized: string,
+  _contextStack: ReadonlyArray<ContextFrame>,
+): string | null {
+  if (!normalized) return null;
+  if (!normalized.startsWith("this.") && normalized.includes(".")) return null;
+  let parent = callNode.parent;
+  while (parent) {
+    if (JAVA_BODY_TYPES.has(parent.type)) {
+      const owner = parent.parent;
+      if (
+        parent.type === "class_body" &&
+        owner &&
+        (owner.type === "object_creation_expression" || owner.type === "enum_constant")
+      ) {
+        return "";
+      }
+      break;
+    }
+    parent = parent.parent;
+  }
+  return null;
+}
+
+export const javaConfig: LanguageConfig = {
+  language: "java",
+  symbolRules: [
+    {
+      nodeType: "package_declaration",
+      symbolType: "package",
+      extractName: (node) =>
+        node.namedChildren.find((c) => c.type === "scoped_identifier" || c.type === "identifier")
+          ?.text ?? null,
+      isExported: () => true,
+    },
+    {
+      nodeType: "class_declaration",
+      symbolType: "class",
+      nameField: "name",
+      establishesContext: true,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "interface_declaration",
+      symbolType: "interface",
+      nameField: "name",
+      establishesContext: true,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "enum_declaration",
+      symbolType: "enum",
+      nameField: "name",
+      establishesContext: true,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "record_declaration",
+      symbolType: "record",
+      nameField: "name",
+      establishesContext: true,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "enum_constant",
+      symbolType: "const",
+      nameField: "name",
+      establishesContext: true,
+      isExported: () => true,
+    },
+    {
+      nodeType: "method_declaration",
+      symbolType: "function",
+      nameField: "name",
+      establishesContext: true,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "constructor_declaration",
+      symbolType: "constructor",
+      nameField: "name",
+      establishesContext: true,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "compact_constructor_declaration",
+      symbolType: "constructor",
+      nameField: "name",
+      establishesContext: true,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "field_declaration",
+      symbolType: "field",
+      extractNames: javaFieldNames,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "constant_declaration",
+      symbolType: "field",
+      extractNames: javaFieldNames,
+      isExported: (_name, node) => javaExported(node),
+    },
+    {
+      nodeType: "object_creation_expression",
+      symbolType: "anonymous",
+      contextOnly: true,
+      extractContextName: (node, contextStack) =>
+        node.namedChildren.some((c) => c.type === "class_body")
+          ? `${contextStack[contextStack.length - 1]?.name ?? ""}::<anonymous>`.replace(/^::/, "")
+          : null,
+    },
+  ],
+  importRules: [{ nodeType: "import_declaration", extract: extractJavaImports }],
+  callRule: {
+    nodeType: "method_invocation",
+    functionField: "name",
+    extractCall: extractJavaCall,
+  },
+  callIgnores: JAVA_CALL_IGNORES,
+  normalizeCallName: normalizeJavaCallName,
+  contextNodeTypes: new Set([
+    "class_declaration",
+    "interface_declaration",
+    "enum_declaration",
+    "record_declaration",
+    "enum_constant",
+    "method_declaration",
+    "constructor_declaration",
+    "compact_constructor_declaration",
+  ]),
+  contextNameField: "name",
+  keepQualifiedCallee: true,
+  qualifyCall: javaQualifyCall,
+};

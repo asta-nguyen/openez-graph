@@ -35,6 +35,7 @@ import {
   type PythonResolver,
 } from "./python-resolver";
 import { createRubyImportResolver, createRubyResolver, type RubyResolver } from "./ruby-resolver";
+import { createJavaResolver, type JavaResolver } from "./java-resolver";
 import { scanWorkspaceFiles } from "./scanner";
 import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
 
@@ -57,8 +58,8 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
 // `parsed_documents`. Bump these when parser logic changes so stale cache
 // entries are invalidated on the next index/graph build.
 const PARSER_VERSION_OXC = "oxc-v5";
-const PARSER_VERSION_NATIVE = "native-v5";
-const PARSER_VERSION_FALLBACK = "fallback-v5";
+const PARSER_VERSION_NATIVE = "native-v6";
+const PARSER_VERSION_FALLBACK = "fallback-v6";
 
 /** OXC-family languages that share binding extraction, module-aware call
  *  resolution, and lifted graph caps. JS/JSX callers keep the JS-only target
@@ -76,10 +77,10 @@ function indexLeaseExpiry(): string {
 /**
  * Native tree-sitter parser surface used by the indexer. The native extension
  * is optional (platform-specific .node binary); when unavailable the indexer
- * falls back to the WASM/regex parsers and tags cache rows `fallback-v5`.
+ * falls back to the WASM/regex parsers and tags cache rows `fallback-v6`.
  */
 export interface NativeParser {
-  readonly id: "native-v5";
+  readonly id: "native-v6";
   parseCodeBatch(items: Array<{ language: string; content: string }>): Array<{
     symbols: Array<{
       name: string;
@@ -100,10 +101,10 @@ let _nativeParser: NativeParser | null | undefined;
 /**
  * Resolve the native tree-sitter parser once and cache the result. Returns
  * `null` when the platform-specific native extension is unavailable — callers
- * then fall back to the registry parsers and tag cached rows `fallback-v5`.
+ * then fall back to the registry parsers and tag cached rows `fallback-v6`.
  * The resolved capability also drives parsed_documents cache validation: a
  * cache row is only reused when its `parser_version` matches the parser that
- * the current capability would use (`native-v5` vs `fallback-v5`).
+ * the current capability would use (`native-v6` vs `fallback-v6`).
  */
 export function resolveNativeParser(): NativeParser | null {
   if (isNativeDisabled()) return null;
@@ -124,11 +125,11 @@ export function resetNativeParserCache(): void {
 /**
  * Map a parser name (returned by `parseDocument`/`parseInline`) to the
  * version tag stored in `parsed_documents.parser_version`. Native
- * tree-sitter results use `native-v5`, the fallback parser uses
+ * tree-sitter results use `native-v6`, the fallback parser uses
  * `fallback-v5`, and every other parser (oxc, markdown, config, regex)
  * is grouped under `oxc-v5` since they share the same chunking/call-
  * extraction contract. Non-native tree-sitter/regex fallbacks for
- * Python/Go/Rust use `fallback-v5` so cache validation matches the
+ * Python/Go/Rust use `fallback-v6` so cache validation matches the
  * expected version when the native extension is unavailable.
  */
 function parserVersionFor(parserName: string): string {
@@ -393,8 +394,8 @@ async function parseInline(
 ): Promise<Map<string, ParseResult>> {
   const results = new Map<string, ParseResult>();
 
-  // ── Batch native tree-sitter parse for Python/Go/Rust/Ruby files ──
-  const TS_LANGS = new Set(["python", "go", "rust", "ruby"]);
+  // ── Batch native tree-sitter parse for Python/Go/Rust/Ruby/Java files ──
+  const TS_LANGS = new Set(["python", "go", "rust", "ruby", "java"]);
   const native = resolveNativeParser();
 
   const batchTasks: ParseTask[] = [];
@@ -419,7 +420,7 @@ async function parseInline(
       language: inferDocumentKind(t.relativePath).language!,
       content: t.content,
     }));
-    // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust/Ruby
+    // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust/Ruby/Java
     const nativeResults = native!.parseCodeBatch(batchItems);
     process.stderr.write(
       `[t]   native-batch: ${Date.now() - _batchStart}ms (${batchTasks.length} files)\n`,
@@ -457,8 +458,9 @@ async function parseInline(
         const isPython = lang === "python";
         const isRuby = lang === "ruby";
         const isRust = lang === "rust";
+        const isJava = lang === "java";
         const callExpressions =
-          lang === "go" || isPython || isRuby || isRust
+          lang === "go" || isPython || isRuby || isRust || isJava
             ? nr.callExpressions
             : nr.callExpressions.slice(0, 20);
         if (isPython) markPythonCallShadowing(task.content, symbols, callExpressions);
@@ -1122,7 +1124,7 @@ export async function buildGraphGeneration(
   const fs = await import("node:fs/promises");
 
   // Split documents: native-parseable (python/go/rust/ruby) vs registry-parseable
-  const NATIVE_LANGS = new Set(["python", "go", "rust", "ruby"]);
+  const NATIVE_LANGS = new Set(["python", "go", "rust", "ruby", "java"]);
   const nativeDocs: typeof graphDocs = [];
   const registryDocs: typeof graphDocs = [];
   for (const doc of graphDocs) {
@@ -1228,11 +1230,11 @@ export async function buildGraphGeneration(
     }
   }
 
-  // ── Parse native docs (Python/Go/Rust/Ruby) with native batch, fallback to parseDocument ──
+  // ── Parse native docs (Python/Go/Rust/Ruby/Java) with native batch, fallback to parseDocument ──
   if (nativeDocs.length > 0) {
     // Resolve the native parser capability once. The expected cache version
-    // for native-language docs depends on this: `native-v5` when the native
-    // extension is available, `fallback-v5` when it is not (the fallback
+    // for native-language docs depends on this: `native-v6` when the native
+    // extension is available, `fallback-v6` when it is not (the fallback
     // parser would re-parse them). A cache row is only reused when both the
     // content hash AND this expected version match.
     const nativeCapability = resolveNativeParser();
@@ -1304,8 +1306,9 @@ export async function buildGraphGeneration(
           const isPython = lang === "python";
           const isRuby = lang === "ruby";
           const isRust = lang === "rust";
+          const isJava = lang === "java";
           const callExpressions =
-            lang === "go" || isPython || isRuby || isRust
+            lang === "go" || isPython || isRuby || isRust || isJava
               ? nr.callExpressions
               : nr.callExpressions.slice(0, 20);
           if (isPython)
@@ -1460,6 +1463,28 @@ export async function buildGraphGeneration(
         )
       : null;
 
+  // Java call resolution is package/type/member-aware: package identity,
+  // enclosing-type members, explicit single-type and static imports, and
+  // same-package types resolve unique workspace targets only — see
+  // java-resolver.ts.
+  const javaFiles = [...parsedFiles.keys()].filter((p) => parsedFiles.get(p)?.language === "java");
+  const javaResolver: JavaResolver | null =
+    javaFiles.length > 0
+      ? createJavaResolver(
+          javaFiles.map((file) => {
+            const parsed = parsedFiles.get(file);
+            return {
+              filePath: file,
+              symbols: (parsed?.definedSymbols ?? []).map((sym) => ({
+                name: sym.name,
+                symbolType: sym.symbolType,
+              })),
+              importPaths: parsed?.importPaths ?? [],
+            };
+          }),
+        )
+      : null;
+
   // ── Build nodes ──
   const allNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> =
     [];
@@ -1525,7 +1550,8 @@ export async function buildGraphGeneration(
       language === "go" ||
       language === "python" ||
       language === "ruby" ||
-      language === "rust";
+      language === "rust" ||
+      language === "java";
     const symbols = uncapped ? parsed.definedSymbols : parsed.definedSymbols.slice(0, 30);
     const symNodeStart = allNodeInputs.length;
     for (const sym of symbols) {
@@ -1678,6 +1704,10 @@ export async function buildGraphGeneration(
   function resolveModuleSpecifier(fromFile: string, specifier: string): string | null {
     const language = parsedFiles.get(fromFile)?.language ?? "";
     if (TS_GRAPH_LANGUAGES.has(language)) return tsResolver.resolve(fromFile, specifier);
+    // Java imports are package paths, not filesystem paths — only explicit
+    // single-type/static imports that resolve to a unique workspace type
+    // produce an imports edge; wildcards and external packages return null.
+    if (language === "java") return javaResolver?.resolveImport(fromFile, specifier) ?? null;
     return resolver.resolveImport(fromFile, specifier, language);
   }
 
@@ -1915,6 +1945,7 @@ export async function buildGraphGeneration(
     const isPythonCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "python";
     const isRubyCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "ruby";
     const isRustCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "rust";
+    const isJavaCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "java";
     let calleeNodeId: string | undefined;
     if (isGoCaller) {
       calleeNodeId = resolveGoCall(call) ?? undefined;
@@ -1945,6 +1976,18 @@ export async function buildGraphGeneration(
       );
       calleeNodeId = target
         ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.name}`)
+        : undefined;
+    } else if (isJavaCaller) {
+      // Java never uses lexical-name guessing or the global symbol map —
+      // resolution is package/type/member-aware via java-resolver.ts and
+      // emits only unique workspace targets.
+      const target = javaResolver?.resolveCall({
+        filePath: call.filePath,
+        callerName: call.callerName,
+        calleeName: call.calleeName,
+      });
+      calleeNodeId = target
+        ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.symbolName}`)
         : undefined;
     } else {
       calleeNodeId = lexicalNames

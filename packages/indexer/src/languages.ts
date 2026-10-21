@@ -33,6 +33,7 @@ export const codeExtensions = new Map<string, string>([
   [".rb", "ruby"],
   [".rake", "ruby"],
   [".gemspec", "ruby"],
+  [".java", "java"],
 ]);
 
 export const configExtensions = new Map<string, string>([

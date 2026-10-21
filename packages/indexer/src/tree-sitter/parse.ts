@@ -64,6 +64,12 @@ export interface CallRule {
   /** field containing the callable expression */
   functionField: string;
   /**
+   * Optional override for callee extraction when the call node's callee is
+   * not a single field (Java method_invocation: `name` field plus optional
+   * `object`/`super` receiver). Takes precedence over functionField.
+   */
+  extractCall?: (callNode: Node) => string | null;
+  /**
    * Optional second node type treated as a call only when its `typeField`
    * child has `requiredTypeKind` — Go generic instantiations surface as
    * `type_conversion_expression` with a `generic_type` type node.
@@ -163,6 +169,7 @@ function isCallNode(node: Node, callRule: CallRule): boolean {
 }
 
 function extractCallName(node: Node, callRule: CallRule): string | null {
+  if (callRule.extractCall) return callRule.extractCall(node);
   const tc = callRule.typeConversion;
   if (tc && node.type === tc.nodeType) {
     return node.childForFieldName(tc.typeField)?.text ?? null;
@@ -302,10 +309,12 @@ function walkTree(
         // Multi-name declarations (Go const/var specs). These are values,
         // not callables: emit symbols but never contexts or call edges.
         if (!symbolRule.topLevelOnly || contextStack.length === 0) {
+          const parentName =
+            contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
           for (const specName of symbolRule.extractNames(node)) {
             if (!specName || specName === "_") continue;
             symbols.push({
-              name: specName,
+              name: parentName ? `${parentName}::${specName}` : specName,
               symbolType: symbolRule.symbolType,
               type: symbolRule.symbolType,
               exported: symbolRule.isExported ? symbolRule.isExported(specName, node) : false,
@@ -362,8 +371,16 @@ function walkTree(
             receiverVar && receiverType
               ? { varName: receiverVar, typeName: receiverType }
               : undefined;
+          // Java enum constants only scope a constant-specific class body —
+          // a bodiless constant (`LOW, HIGH`) must not leak a frame into its
+          // same-line siblings.
           const isContextNode =
-            symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
+            (symbolRule.establishesContext || config.contextNodeTypes.has(node.type)) &&
+            !(
+              config.language === "java" &&
+              node.type === "enum_constant" &&
+              !node.childForFieldName("body")
+            );
           const contextName = isContextNode
             ? (symbolRule.extractContextName?.(node, contextStack) ?? fullName)
             : null;
