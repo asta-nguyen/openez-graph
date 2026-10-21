@@ -96,6 +96,8 @@ struct SymbolRule {
   symbol_type_fn: Option<fn(&Node, &[u8], &[ContextFrame]) -> &'static str>,
 }
 
+type CallExtractFn = fn(&Node, &[u8]) -> Option<String>;
+
 struct LanguageConfig {
   symbol_rules: Vec<SymbolRule>,
   import_node_types: Vec<&'static str>,
@@ -125,7 +127,7 @@ struct LanguageConfig {
   blank_directives: bool,
   /// Optional override for callee extraction when the call node's callee is
   /// not a single field (Java method_invocation: `name` + `object`/`super`).
-  call_extract: Option<fn(&Node, &[u8]) -> Option<String>>,
+  call_extract: Option<CallExtractFn>,
 }
 
 // ── Exported checks ──
@@ -1401,7 +1403,7 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
     }
     "java" => {
       // `import static app.Util.format;` → "static app.Util.format"
-      let text = text_of(&node, source);
+      let text = text_of(node, source);
       let spec = text
         .strip_prefix("import")
         .unwrap_or(text.as_str())
@@ -2312,9 +2314,7 @@ fn java_qualify_call(
     "enum_body_declarations",
     "annotation_type_body",
   ];
-  if normalized.is_empty()
-    || !(normalized.starts_with("this.") || !normalized.contains('.'))
-  {
+  if normalized.is_empty() || !normalized.starts_with("this.") && normalized.contains('.') {
     return None;
   }
   let mut parent = call_node.parent();
