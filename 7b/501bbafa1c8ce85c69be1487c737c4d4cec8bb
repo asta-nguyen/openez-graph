@@ -1,0 +1,1202 @@
+tests/fixtures/javascript-edges/reexports/expected-edges.json
+  s_99e89e1c5083fb::t_72f695e8cf66e2 1-9
+tests/typescript-edge-accuracy.test.ts
+  s_99e89e1c5083fb::t_b415152d94c268 1-173
+tests/fixtures/python-edges/reexports/starpkg/hidden.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1-2
+tests/fixtures/rust-edges/crates/app/src/shapes.rs
+  s_608e225b64c825::t_92d5ba324b645e 1-33
+tests/fixtures/ruby-edges/abovecap/expected-edges.json
+  s_cf89229b6156eb::t_61498c4b7bc360 346
+  s_cf89229b6156eb::t_674e74dda19c60 9-108,323-342
+  s_cf89229b6156eb::t_80f4d3298dbf7e 1-8,109-322,343-345
+tests/go-edge-accuracy.test.ts
+  s_99e89e1c5083fb::t_a6400bb014ee40 127,131,134,136-141,145
+  s_99e89e1c5083fb::t_c8ac908388a548 142-144
+  s_4c4a7c4c58b5f7::t_18e854e0e64ae3 128-130,132-133,135
+tests/fixtures/typescript-edges/negative/shadow.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-9
+tests/fixtures/typescript-edges/nested/pkg3/caller.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-7
+tests/fixtures/typescript-edges/negative/api.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-3
+tests/fixtures/ruby-edges/imports/main.rb
+  s_cf89229b6156eb::t_a7a2f3a1ed7822 1-2,4-7,13-17
+  s_cf89229b6156eb::t_9f3667355ab5be 3,8-12,18-20
+tests/fixtures/go-edges/dupnames/x/use.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-8
+tests/fixtures/go-edges/modules/c/c.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-8
+tests/fixtures/go-edges/imports/expected-edges.json
+  s_99e89e1c5083fb::t_52501084874a50 1-4,6-10
+  s_4c4a7c4c58b5f7::t_af08d0b9e7a439 5
+packages/indexer/src/tree-sitter/configs.ts
+  s_99e89e1c5083fb::t_68d42fe5f760b0 212,215-219
+  s_99e89e1c5083fb::t_d4ce21ad42d4af 210-211,213-214
+  s_c20854ba925a50::t_63c5819dec208e 83-86,90,94
+  s_99e89e1c5083fb::t_12f27235c571f2 261-271
+  s_99e89e1c5083fb::t_c7b7a4cf74d920 245-258
+  s_c20854ba925a50::t_b8078971f662a5 55-57
+  s_608e225b64c825::t_ad37ef7ac4d68b 3
+  s_608e225b64c825::t_e3ff6947ad27e6 408
+  s_c20854ba925a50::t_9f6598b0df6231 130
+  s_99e89e1c5083fb::t_55c01ace27ac25 180-182
+  s_608e225b64c825::t_4802465c17207f 409
+  s_cf89229b6156eb::t_42e466b07f4815 445-451
+  s_cf89229b6156eb::t_d42199957fef63 504-511,513-518,520-522
+tests/fixtures/python-edges/dupnames/expected-edges.json
+  s_c20854ba925a50::t_eb538d68854dce 1-9
+tests/fixtures/go-edges/imports/imp/c.go
+  s_99e89e1c5083fb::t_52501084874a50 1-5
+tests/fixtures/ruby-edges/imports/baseline.json
+  s_cf89229b6156eb::t_76bcc59e8200eb 3-4,8-10
+  s_cf89229b6156eb::t_ecb51bf1774de1 1-2,5-7,11-12
+tests/fixtures/go-edges/modules/expected-edges.json
+  s_99e89e1c5083fb::t_8423d616401a38 1-8
+tests/fixtures/parity/ruby/example.rb
+  s_cf89229b6156eb::t_c3393664f5facc 1-95
+tests/fixtures/go-edges/modules/a/a.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-5
+tests/fixtures/python-edges/dupnames/pkg1/__init__.py
+  s_c20854ba925a50::t_eb538d68854dce 1
+packages/indexer/src/index-workspace.ts
+  s_c20854ba925a50::t_247babbcafb5d0 29-36
+  s_99e89e1c5083fb::t_cebdd2c081a43a 129
+  s_99e89e1c5083fb::t_2eae0b5590a197 1774-1775,1783-1784,1786,1799-1800,1818-1819,1827-1833
+  s_cf89229b6156eb::t_8d73f646a5b306 1434
+  s_608e225b64c825::t_dcecf5660ce6e7 1546-1547
+  s_99e89e1c5083fb::t_15a7aee5a09450 1591
+  s_cf89229b6156eb::t_0ff15c6591a0d7 396-397
+  s_608e225b64c825::t_cb0f142e206799 1440-1442,1444-1461
+  s_99e89e1c5083fb::t_4b95684ba26352 1699,1705-1706,1738,1747
+  s_99e89e1c5083fb::t_030c29698cf39b 1156
+  s_99e89e1c5083fb::t_cedd32757f7864 1473
+  s_99e89e1c5083fb::t_1a69087210b425 1787-1789,1791-1793
+  s_99e89e1c5083fb::t_3a7d0d09e82c80 1837-1851,1853-1857,1859-1873,1875-1890
+  s_cf89229b6156eb::t_df7bf69135c1f1 1916,1926-1932
+  s_99e89e1c5083fb::t_45fbc8eee824f0 1722-1726,1731-1735
+  s_99e89e1c5083fb::t_407646a1123603 477
+  s_99e89e1c5083fb::t_16f4bc6d792be2 1743-1744
+  s_c20854ba925a50::t_78d1dd02219898 1262
+  s_99e89e1c5083fb::t_e740751daf6695 1369-1373
+  s_40482f44189743::t_548a94e5206ac5 1402
+  s_99e89e1c5083fb::t_8b7a3da247270e 1549
+  s_99e89e1c5083fb::t_456d46f627f569 1307
+  s_99e89e1c5083fb::t_c6a450c4218aa9 1702,1707-1716
+  s_99e89e1c5083fb::t_158fcd17a96407 1620-1621,1624-1625,1627,1629,1637,1639,1673-1681
+  s_cf89229b6156eb::t_08eb3494e408c2 422
+  s_99e89e1c5083fb::t_f59d08e2e30e0b 1159-1160
+  s_608e225b64c825::t_c57ae04a0c1e04 1936-1948
+  s_99e89e1c5083fb::t_930fc23714e708 1754-1755,1761-1762,1768-1770
+  s_99e89e1c5083fb::t_e84263adc1c905 1790,1798
+  s_99e89e1c5083fb::t_84501408fcd7d3 1913
+  s_cf89229b6156eb::t_7c58e7aec29cb5 195
+  s_99e89e1c5083fb::t_46012ae4439a57 1727-1730
+  s_608e225b64c825::t_5832d8c79d768e 1917
+  s_cf89229b6156eb::t_0d65b037adc6bc 60-61
+  s_cf89229b6156eb::t_61498c4b7bc360 37,1311-1312,1426,1443,1548
+  s_99e89e1c5083fb::t_3cc9a1e405766b 62-68
+  s_99e89e1c5083fb::t_47c572a728f60e 326-327,331-374,1399
+  s_c20854ba925a50::t_85f1afe94585bd 1143-1150
+  s_99e89e1c5083fb::t_48dae993d501af 24
+  s_99e89e1c5083fb::t_2f90a4671d01ec 1522
+  s_608e225b64c825::t_90b992a0c54cb1 79,82,103,106,127-128,131,1234-1235
+  s_99e89e1c5083fb::t_c8ac908388a548 1403,1852,1858
+  s_99e89e1c5083fb::t_6af9dc1be11277 198
+  s_99e89e1c5083fb::t_d0416fa727e218 1175,1182,1185-1186,1209-1210,1217-1221
+  s_cf89229b6156eb::t_8fc7ee0556e8b3 1425
+  s_99e89e1c5083fb::t_742c551bde7043 1554
+  s_c20854ba925a50::t_167f14483533d5 189-194,205-211
+  s_cf89229b6156eb::t_f3aae59362f463 458,462-463
+  s_99e89e1c5083fb::t_855f50b328586f 26
+  s_99e89e1c5083fb::t_d97659c85bbcc6 1401,1404-1406
+  s_99e89e1c5083fb::t_d1e02b35fa8237 1469-1472,1474-1475
+  s_99e89e1c5083fb::t_3e2ca9cab8cb08 1601-1612
+  s_cf89229b6156eb::t_6507b714e60766 1305,1309-1310
+  s_c20854ba925a50::t_d4f01482dc4e51 1529
+  s_99e89e1c5083fb::t_72bd5c6d353150 1619,1622-1623,1628,1630,1638,1682-1698,1700-1701,1703-1704,1717-1721,1736-1737,1739-1742,1745-1746,1748-1753,1757-1760,1763-1767,1771-1773,1776-1782,1785,1794-1797,1801-1816,1820-1826,1834-1836,1899-1901,1958
+  s_608e225b64c825::t_58f59eb414df8a 1520-1521,1524-1528
+  s_99e89e1c5083fb::t_b8eaf5f569b187 1626,1631-1636,1640-1672
+  s_99e89e1c5083fb::t_a21ee76c3fca4c 1756
+  s_608e225b64c825::t_039954d77a7c93 455-456,459,461,465
+  s_99e89e1c5083fb::t_0209d278d62cd5 940-944
+  s_99e89e1c5083fb::t_b7b3ced44ac4ff 1153-1155,1157-1158
+  s_cf89229b6156eb::t_266f7a01b1ce3e 215-221
+  s_cf89229b6156eb::t_f43e99b4eb0798 1231
+  s_99e89e1c5083fb::t_839dbb1ddc8243 25
+  s_cf89229b6156eb::t_3e8722377d22ab 1124-1125
+  s_99e89e1c5083fb::t_3286cf7bfa87b9 1252,1259
+  s_c20854ba925a50::t_8ba417c46d7750 1296-1297,1299-1301,1304,1314-1316,1326,1333
+  s_608e225b64c825::t_2a73511dfad499 1302-1303,1306,1308,1313
+  s_c20854ba925a50::t_16c962e7e6a3cb 453-454,457,460,464,475-476
+  s_4c4a7c4c58b5f7::t_18e854e0e64ae3 1495
+  s_4c4a7c4c58b5f7::t_af08d0b9e7a439 1874
+  s_c20854ba925a50::t_7a41ab46b44922 1915,1921-1925,1933-1935
+  s_cf89229b6156eb::t_d3722d301b0419 1422-1424,1427-1433,1435-1439
+  s_c20854ba925a50::t_e18ef9d31856f1 1407-1421
+  s_99e89e1c5083fb::t_c34fee218a29d7 1817
+  s_cf89229b6156eb::t_1f709b1629aec3 1523
+  s_99e89e1c5083fb::t_d6fea4eabe9ac3 1550-1553,1555-1556
+  s_608e225b64c825::t_705a5a49a3a883 27-28
+  s_99e89e1c5083fb::t_022623c146b0ef 1914,1918-1920,1949-1950,1952-1957
+  s_39270ae3bb7555::t_e0d07f114e4012 59,375,1396-1398,1400
+tests/fixtures/typescript-edges/negative/caller.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-11
+tests/fixtures/ruby-edges/classbody/expected-edges.json
+  s_cf89229b6156eb::t_8733c4fa19e4da 1-26
+tests/fixtures/javascript-edges/negative/dupa.js
+  s_99e89e1c5083fb::t_c9a683e53f8cda 1-3
+tests/fixtures/go-edges/shadow/s/s.go
+  s_99e89e1c5083fb::t_52501084874a50 1-10
+tests/fixtures/go-edges/dupnames/baseline.json
+  s_99e89e1c5083fb::t_18463d62156f2b 1-11
+tests/fixtures/typescript-edges/nested/pkg/caller.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-7
+tests/fixtures/go-edges/abovecap/big/big.go
+  s_99e89e1c5083fb::t_77c544325c43fe 1-71
+tests/fixtures/typescript-edges/aliases/src/exact.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/ruby-resolver.test.ts
+  s_cf89229b6156eb::t_5ed5e36369e879 154-207,211-212,214-228,241-242
+  s_cf89229b6156eb::t_35aa3abff277f0 1-12,17-108,112-128,133-153,229-240,243-245
+  s_cf89229b6156eb::t_aa83e1497821db 13
+  s_cf89229b6156eb::t_7d0196c6f6cdb3 109-111
+  s_cf89229b6156eb::t_61498c4b7bc360 129-132
+  s_cf89229b6156eb::t_3ee53e3a92ced5 208-210,213
+  s_d472a2e9e1bba2::t_ba15c696f446a7 14-16
+tests/fixtures/go-edges/dupnames/x/a_windows.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-5
+tests/fixtures/typescript-edges/reexports/consumer.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-9
+tests/fixtures/python-edges/relimports/pkg/sub/deep.py
+  s_c20854ba925a50::t_f19d64a28d45db 1-2
+tests/fixtures/rust-edges/abovecap/expected-edges.json
+  s_608e225b64c825::t_47ee3d7a6a57ca 1-188,209-210
+  s_608e225b64c825::t_d0ab8cfd8fc65f 189-208,211
+tests/fixtures/javascript-edges/reexports/importer.js
+  s_99e89e1c5083fb::t_097ea4e934af96 1-12
+tests/fixtures/typescript-edges/above-cap/expected-edges.json
+  s_99e89e1c5083fb::t_426ed70a650d6a 1-41
+packages/indexer/src/tree-sitter/parse.ts
+  s_608e225b64c825::t_c78944f75f0111 101,106,108-117
+  s_c20854ba925a50::t_3e6e4a7401c523 405-406,413
+  s_99e89e1c5083fb::t_ee63f8ba503417 455-466
+  s_99e89e1c5083fb::t_d58de506759937 395-397,408-412
+  s_99e89e1c5083fb::t_a2cac9b9d6eb27 156-162,166-169
+  s_99e89e1c5083fb::t_40b59df324a0e1 485
+  s_608e225b64c825::t_313ab963e7756d 146-154
+  s_99e89e1c5083fb::t_1fbf102cb6148c 301-316
+  s_99e89e1c5083fb::t_2f744455a383e2 66-71
+  s_608e225b64c825::t_04370e77720655 524
+  s_99e89e1c5083fb::t_a50f7e06833894 37-40
+  s_c20854ba925a50::t_28b327f0e4702b 267,271-279
+  s_cf89229b6156eb::t_f360e3ad9509b0 494
+  s_c20854ba925a50::t_d3cc2dbdb330b5 497,502
+  s_608e225b64c825::t_788d729f352401 268-270,401,490
+  s_608e225b64c825::t_8168512da94a1e 102-105,107
+tests/fixtures/ruby-edges/scope/baseline.json
+  s_cf89229b6156eb::t_76bcc59e8200eb 3-4
+  s_cf89229b6156eb::t_ecb51bf1774de1 1-2,5-12
+tests/fixtures/javascript-edges/negative/nsimporter.js
+  s_99e89e1c5083fb::t_c914d90446fff3 1-5
+tests/fixtures/javascript-edges/cjs/nestedreq.cjs
+  s_99e89e1c5083fb::t_c6d1c8dd797ae3 42-51
+  s_99e89e1c5083fb::t_72ace44cdf22d9 1-2,23-40
+  s_99e89e1c5083fb::t_18ce35a2d2a1c7 3-22,41
+tests/fixtures/go-edges/dupnames/expected-edges.json
+  s_99e89e1c5083fb::t_8423d616401a38 1-4
+tests/fixtures/python-edges/lexical/main.py
+  s_c20854ba925a50::t_fd71b2d495b94f 1-32
+tests/fixtures/rust-edges/crates/app/src/sub/mod.rs
+  s_608e225b64c825::t_72df896ced99dd 1-5
+tests/parsed-documents-cache.test.ts
+  s_cf89229b6156eb::t_87913bf9cf9c4c 157-158,173,185,189,193,197,204
+  s_608e225b64c825::t_8abd4e0f5572ba 304-425
+  s_99e89e1c5083fb::t_7c596f535757b1 209-233,236-237,243-254,256-258,280-295,302-303
+  s_99e89e1c5083fb::t_5a561df78aeced 235
+  s_99e89e1c5083fb::t_1f1cf35123ed5b 234,238-242,255,259-279,296-301
+tests/fixtures/python-edges/dupnames/pkg2/util.py
+  s_c20854ba925a50::t_eb538d68854dce 1-10
+docs/agent-devkit/changes/2026-10-21-39-php-indexing-accuracy/design.md
+  s_d472a2e9e1bba2::t_6b44b2d22a1667 1-86
+tests/fixtures/ruby-edges/reopen/x/one.rb
+  s_cf89229b6156eb::t_f02a99f65458bf 1-9
+tests/fixtures/typescript-edges/negative/dupb.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-3
+tests/fixtures/javascript-edges/negative/nsbarrel.js
+  s_99e89e1c5083fb::t_c914d90446fff3 1-3
+tests/fixtures/python-edges/reexports/pkg/impl.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1-2
+tests/go-rust-indexer.test.ts
+  s_99e89e1c5083fb::t_bd85427748e645 119-206,209-211
+  s_99e89e1c5083fb::t_67569606211760 207-208
+tests/fixtures/go-edges/dupnames/x/a_linux.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-5
+tests/fixtures/typescript-edges/nested/pkg2/caller.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-7
+tests/fixtures/ruby-edges/reopen/expected-edges.json
+  s_cf89229b6156eb::t_63b2c75efae7d5 3
+  s_cf89229b6156eb::t_d5c31834265ffa 1-2,4-18
+tests/fixtures/rust-edges/crates/app/src/inline_dup.rs
+  s_608e225b64c825::t_20481143025c34 1-25
+tests/fixtures/typescript-edges/negative/cycb.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1
+tests/fixtures/typescript-edges/negative/amb.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-2
+tests/javascript-edge-accuracy.test.ts
+  s_99e89e1c5083fb::t_2ad0b18665a523 1-19,23,26-102,105-118,120-131,136-138
+  s_99e89e1c5083fb::t_bc3c1f97b5bfaa 103-104
+  s_99e89e1c5083fb::t_e856437c1d990c 20-22,24-25
+  s_99e89e1c5083fb::t_c5ee4dc9e21659 119,132-135
+tests/fixtures/typescript-edges/negative/cyca.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1
+tests/fixtures/parity/rust/calls.rs
+  s_608e225b64c825::t_c715c36c3806a5 1-4,6-26
+  s_608e225b64c825::t_b98a85a02732e5 5
+tests/fixtures/python-edges/shadow/helpers.py
+  s_c20854ba925a50::t_fd71b2d495b94f 1-8
+tests/fixtures/javascript-edges/negative/expected-edges.json
+  s_99e89e1c5083fb::t_7523b5dd91aa0d 1-4
+tests/fixtures/python-edges/decorators/main.py
+  s_c20854ba925a50::t_266438b5df8737 1-19
+tests/fixtures/python-edges/reexports/pkg/__init__.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1-2
+tests/fixtures/ruby-edges/imports/other.rb
+  s_cf89229b6156eb::t_149dd41b87191a 1-2
+tests/fixtures/rust-edges/crates/app/src/orphan.rs
+  s_608e225b64c825::t_e873357a02a0f4 1-6
+tests/fixtures/rust-edges/crates/other/src/lib.rs
+  s_608e225b64c825::t_635284d5d0a1dc 1-3
+tests/python-resolver.test.ts
+  s_c20854ba925a50::t_2e29d599dc9144 67-68
+  s_c20854ba925a50::t_c5210e5b6893f9 1-20,22-27,31-38,40-66,69-156,160,163-239,244-246,250-377,381-398
+  s_c20854ba925a50::t_67f9742e053aec 157-159,161-162
+  s_8b476f3e82b2b0::t_ac88db68da7d65 240-243,247-249,378-380
+  s_8b476f3e82b2b0::t_3bc0f97b477593 21,28-30,39
+tests/fixtures/typescript-edges/negative/lib.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-6
+tests/fixtures/parity/known-differences.json
+  s_608e225b64c825::t_981be3b94c60e2 1
+tests/fixtures/typescript-edges/type-only/mixed.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-6
+tests/fixtures/python-edges/abovecap/big.rs
+  s_c20854ba925a50::t_f671ff06ec6530 1-35
+tests/fixtures/javascript-edges/cjs/mod.cjs
+  s_99e89e1c5083fb::t_42cca445889929 1-9
+  s_99e89e1c5083fb::t_a5a0177ac7a815 10-14
+tests/fixtures/ruby-edges/reopen/y/two.rb
+  s_cf89229b6156eb::t_2bf78fdbe184af 1-11
+tests/fixtures/typescript-edges/aliases/src/second/deep.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+docs/agent-devkit/changes/2026-10-20-39-csharp-indexing-accuracy/tasks.md
+  s_d472a2e9e1bba2::t_0a73812585338a 18
+  s_bf9c60822fd083::t_51cc9dd92ee730 12,20
+  s_40482f44189743::t_9634755a742dfa 88
+  s_d472a2e9e1bba2::t_2512c6b5cecd0b 11,13-17,19,24-30,36,38,45-48,54-57,63,65-66,74-75,81,92-97
+  s_bf9c60822fd083::t_72ce50923665ba 1-10,21-23,31-35,37,39-44,49-53,58-62,64,67-73,76-80,82-87,89-91
+AGENTS.md
+  s_99e89e1c5083fb::t_498aae7c554dad 142-143
+  s_c20854ba925a50::t_bcbd63618cd833 146
+  s_608e225b64c825::t_2317f5f6acaf06 147
+  s_608e225b64c825::t_81e4a8c7a41476 148
+  s_99e89e1c5083fb::t_4ebb0bdae84fed 144
+  s_cf89229b6156eb::t_92f1e24daf09af 145
+tests/fixtures/go-edges/modules/dup1/go.mod
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/ruby-edges/imports/util.rb
+  s_cf89229b6156eb::t_c64c3bab7d7a45 1-5
+tests/fixtures/typescript-edges/nested/pkg/src/b.ts
+  s_99e89e1c5083fb::t_620643ed3b0e31 1-5
+tests/fixtures/go-edges/shadow/expected-edges.json
+  s_99e89e1c5083fb::t_2b8213aaed1c77 4-5
+  s_99e89e1c5083fb::t_52501084874a50 1-3,6-7
+tests/fixtures/typescript-edges/reexports/impl.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-9
+tests/fixtures/python-edges/conflicts/real_b.py
+  s_c20854ba925a50::t_266438b5df8737 1-2
+tests/fixtures/python-edges/dupnames/main.py
+  s_c20854ba925a50::t_eb538d68854dce 1-17
+tests/fixtures/javascript-edges/above-cap/expected-edges.json
+  s_99e89e1c5083fb::t_c726256c47ee76 1-148
+tests/fixtures/typescript-edges/aliases/src/special/sp.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/fixtures/typescript-edges/jstargets/tscaller.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-9
+tests/fixtures/typescript-edges/nested/shared/helper.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-3
+tests/fixtures/go-edges/resolution/u/u.go
+  s_99e89e1c5083fb::t_52501084874a50 1-10
+tests/fixtures/rust-edges/crates/app/src/shapes_ext.rs
+  s_608e225b64c825::t_8366c0fb7a1e73 1-8
+tests/fixtures/rust-edges/abovecap/src/lib.rs
+  s_608e225b64c825::t_bdb6ac59c87034 1
+tests/fixtures/rust-edges/crates/other/src/inner.rs
+  s_608e225b64c825::t_46bd450852e4f8 1-6
+packages/native/src/parser.rs
+  s_cf89229b6156eb::t_500161adcc999c 1185-1195,1197,1199-1241
+  s_99e89e1c5083fb::t_3ab53a9a6ff619 196-201
+  s_99e89e1c5083fb::t_6088f3a911e0e1 238,1098-1102,1108,1122-1124,1351,1380,1387,1391
+  s_c20854ba925a50::t_7f44c2eae25d0b 1075,1077-1079,1082,1085
+  s_c20854ba925a50::t_43b69ce400a277 301,305
+  s_c20854ba925a50::t_fc09531e50bea2 1321-1325
+  s_cf89229b6156eb::t_89964ff101b1f6 2
+  s_cf89229b6156eb::t_cae71a3638aab2 49-57,59-66,74,76-78,83-87,98-105
+  s_99e89e1c5083fb::t_5034cb5caaea1c 1106-1107,1109-1121
+  s_99e89e1c5083fb::t_699ad98c38f854 1103-1105
+  s_cf89229b6156eb::t_4c00ba857f515d 1295-1305
+  s_c20854ba925a50::t_a5d3837af1b6d0 190-195,215
+  s_608e225b64c825::t_f55a959d720e59 248-249
+  s_cf89229b6156eb::t_91edf6fecc73e1 345-346
+  s_8b476f3e82b2b0::t_cf5d60ed1c3f69 791
+  s_cf89229b6156eb::t_ed173c585defcd 244,516,518-534,537-580,585-592,599-600,603,605-636,644-753,1343,1353,1355,1369,1428-1429
+  s_cf89229b6156eb::t_eb6204d909a307 368-369
+  s_cf89229b6156eb::t_d8ce8ab8706ec0 1416
+  s_99e89e1c5083fb::t_232371474eba6c 228,1244-1258,1384,1420
+  s_cf89229b6156eb::t_86392d2e28b31d 280-281,293-294,332-333,358-359,396-397,409-410,422-423,435-436,448-449,461-462,474-475,487-488,500-501
+  s_cf89229b6156eb::t_d8d83862ea0f24 987-989
+  s_99e89e1c5083fb::t_a9b64c35156af5 1269-1272
+  s_608e225b64c825::t_5609612cb38b16 512
+  s_cf89229b6156eb::t_b0a7674aeeaac3 146-150
+  s_cf89229b6156eb::t_5515885bccb150 232,241,911-965,1342,1347,1352,1403,1422
+  s_cf89229b6156eb::t_43f9427d8e64e3 1008-1009
+  s_cf89229b6156eb::t_e2f26b8502df77 1125-1137,1139-1143,1145-1146,1385
+  s_cf89229b6156eb::t_1fd8ff9e2b4c3c 1265-1267
+  s_cf89229b6156eb::t_d191297b975d9a 1438,1448
+  s_c20854ba925a50::t_327d0b9a86c61f 1286,1288-1294
+  s_608e225b64c825::t_da4f554187fe49 1280-1282
+  s_99e89e1c5083fb::t_011f86e3d87411 366
+  s_cf89229b6156eb::t_46c4b4277099f8 1035
+  s_cf89229b6156eb::t_6e5307023242a4 510-511
+  s_c20854ba925a50::t_f810d9409cab05 106-109
+  s_c20854ba925a50::t_3d85d928bb9ba0 370
+  s_cf89229b6156eb::t_32686d4fda8c75 303-304
+  s_c20854ba925a50::t_2189e5be06f46d 824-832,841,847
+  s_cf89229b6156eb::t_958473f2581627 637-643
+  s_cf89229b6156eb::t_ae3a465bbf9d03 581-584,593-598,601-602,604
+  s_608e225b64c825::t_0526cb848503b2 1076
+  s_cf89229b6156eb::t_93b8c4365d3e20 58
+  s_99e89e1c5083fb::t_06305c956fe8ac 202-204
+  s_c20854ba925a50::t_9c1d030aed8f63 212-214
+  s_99e89e1c5083fb::t_e45e276fbaf84c 225-227
+  s_cf89229b6156eb::t_64e1774873d0fd 242-243
+  s_608e225b64c825::t_85dd78f63a3390 250-251
+  s_cf89229b6156eb::t_6638d36f2e6e10 754-755
+  s_cf89229b6156eb::t_79c51f411eee92 1339-1341
+  s_cf89229b6156eb::t_dcb304285504e0 1344-1346
+  s_cf89229b6156eb::t_c72c1f0cee4f7d 1354
+  s_cf89229b6156eb::t_ade28969aa2b3f 1356-1358,1366-1368
+  s_99e89e1c5083fb::t_e094397beef4c7 1381-1383
+  s_99e89e1c5083fb::t_3f21169f229fbd 1388-1390
+  s_cf89229b6156eb::t_27884d6f75737b 1404-1406,1413-1415
+  s_cf89229b6156eb::t_648b0e8b9a9c73 1423-1427
+  s_cf89229b6156eb::t_9fbeb29e5ee1c8 1430
+  s_8b476f3e82b2b0::t_1162df8b42d67d 206-207,211,217-224,229-231,233-237,239-240,245-247,1334-1338,1348-1350,1359-1365,1370-1379,1386,1392-1402,1407-1412,1417-1419,1421
+tests/fixtures/go-edges/resolution/baseline.json
+  s_99e89e1c5083fb::t_18463d62156f2b 1-11
+tests/fixtures/python-edges/reexports/pkg/sub/__init__.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1
+tests/fixtures/go-edges/imports/baseline.json
+  s_99e89e1c5083fb::t_18463d62156f2b 1-11
+tests/fixtures/typescript-edges/esm/importer.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-10
+tests/fixtures/go-edges/imports/imp/a.go
+  s_99e89e1c5083fb::t_52501084874a50 1-7
+  s_4c4a7c4c58b5f7::t_af08d0b9e7a439 8
+tests/fixtures/typescript-edges/nested/pkg2/tsconfig.json
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-5
+tests/fixtures/typescript-edges/nested/tsconfig.base.json
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-9
+tests/fixtures/rust-edges/crates/app/src/util.rs
+  s_608e225b64c825::t_2f1b2487d187c8 1-3
+docs/agent-devkit/changes/2026-10-21-39-php-indexing-accuracy/tasks.md
+  s_d472a2e9e1bba2::t_1f70a64b9e878a 1-88,90-100
+  s_d472a2e9e1bba2::t_123cb539bd118f 89
+tests/fixtures/typescript-edges/aliases/tsconfig.json
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-14
+tests/fixtures/go-edges/shadow/go.mod
+  s_99e89e1c5083fb::t_52501084874a50 1-3
+tests/fixtures/typescript-edges/type-only/caller.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-11
+tests/fixtures/go-edges/resolution/gen/gen.go
+  s_99e89e1c5083fb::t_52501084874a50 1-7
+tests/fixtures/typescript-edges/reexports/namedbar.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-2
+tests/fixtures/go-edges/testpkg/expected-edges.json
+  s_99e89e1c5083fb::t_8423d616401a38 1-8
+tests/fixtures/python-edges/dupnames/pkg2/__init__.py
+  s_c20854ba925a50::t_eb538d68854dce 1
+tests/fixtures/ruby-edges/scope/app/invoice.rb
+  s_cf89229b6156eb::t_cc4abf246ed5ec 1-51
+tests/fixtures/go-edges/imports/imp/b.go
+  s_99e89e1c5083fb::t_52501084874a50 1-8
+tests/fixtures/go-edges/testpkg/foo/foo_test.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-7
+tests/fixtures/go-edges/abovecap/baseline.json
+  s_99e89e1c5083fb::t_18463d62156f2b 1-11
+tests/fixtures/python-edges/abovecap/expected-edges.json
+  s_608e225b64c825::t_e36f466046cad9 222-277,289
+  s_608e225b64c825::t_ac9ed58f57538c 285-286
+  s_c20854ba925a50::t_f671ff06ec6530 1-221,278-284,287-288
+tests/fixtures/ruby-edges/scope/expected-edges.json
+  s_cf89229b6156eb::t_677a41578b82fc 3
+  s_cf89229b6156eb::t_d71fa12eb9a48d 1-2,4-42
+tests/fixtures/ruby-edges/imports/util.md
+  s_cf89229b6156eb::t_9096b8ceeff99e 1-4
+tests/fixtures/ruby-edges/reopen/baseline.json
+  s_cf89229b6156eb::t_76bcc59e8200eb 3-4
+  s_cf89229b6156eb::t_ecb51bf1774de1 1-2,5-12
+tests/fixtures/javascript-edges/negative/dupb.js
+  s_99e89e1c5083fb::t_0dae783a887ea9 1-3
+tests/fixtures/rust-edges/crates/app/src/main.rs
+  s_608e225b64c825::t_69a3f829cced2e 1-11
+tests/fixtures/go-edges/resolution/t/t.go
+  s_99e89e1c5083fb::t_52501084874a50 1-7
+tests/fixtures/ruby-edges/imports/expected-edges.json
+  s_cf89229b6156eb::t_11049dd0b43da0 3,10
+  s_cf89229b6156eb::t_d158867f500f34 1-2,4-9,11-23
+tests/fixtures/ruby-edges/abovecap/big.rb
+  s_cf89229b6156eb::t_a8789367d618d0 1-159
+tests/fixtures/python-edges/decorators/helpers.py
+  s_c20854ba925a50::t_266438b5df8737 1-2
+tests/fixtures/typescript-edges/nested/expected-edges.json
+  s_99e89e1c5083fb::t_620643ed3b0e31 5-6,12-13
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-4,7-11,14-17
+docs/agent-devkit/changes/2026-10-20-39-java-indexing-accuracy/tasks.md
+  s_bf9c60822fd083::t_72ce50923665ba 1-10,20-22,26,30-34,36,38-43,48-52,57-61,66-72,75-79,81-86,88-90
+  s_bf9c60822fd083::t_51cc9dd92ee730 11,13,19
+  s_d472a2e9e1bba2::t_cb8c40ea750b0a 12,14-16,18,23-25,27-29,35,37,44-47,53-56,62-65,73-74,80,91-94
+  s_40482f44189743::t_9634755a742dfa 87
+  s_d472a2e9e1bba2::t_ab8de7b19b4df5 17
+tests/fixtures/go-edges/modules/baseline.json
+  s_99e89e1c5083fb::t_18463d62156f2b 1-11
+tests/fixtures/typescript-edges/type-only/expected-edges.json
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-7
+tests/fixtures/python-edges/relimports/pkg/__init__.py
+  s_c20854ba925a50::t_f19d64a28d45db 1
+tests/fixtures/typescript-edges/jstargets/tsbarrel.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1
+tests/fixtures/go-edges/imports/imp/d.go
+  s_99e89e1c5083fb::t_52501084874a50 1-11
+docs/agent-devkit/INDEX.md
+  s_4c4a7c4c58b5f7::t_d3476068ed92ff 16-17
+  s_40482f44189743::t_548a94e5206ac5 12
+  s_d472a2e9e1bba2::t_a08e9c1e72ad77 8
+  s_40482f44189743::t_9634755a742dfa 5-7,9
+  s_608e225b64c825::t_07f18d5f360f1e 14
+  s_cf89229b6156eb::t_4a9496d76d1f30 15
+  s_40482f44189743::t_06dd65d477aad1 13
+tests/fixtures/typescript-edges/nested/pkg/src/deep/a.ts
+  s_99e89e1c5083fb::t_620643ed3b0e31 1-5
+tests/fixtures/rust-edges/crates/app/src/ambiguous/mod.rs
+  s_608e225b64c825::t_2a8b05c88f422b 1
+tests/fixtures/rust-edges/crates/app/src/external.rs
+  s_608e225b64c825::t_de68be5571766a 1-6
+tests/fixtures/python-edges/conflicts/real_c.py
+  s_c20854ba925a50::t_266438b5df8737 1-2
+tests/fixtures/go-edges/dupnames/go.mod
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/ruby-edges/abovecap/baseline.json
+  s_cf89229b6156eb::t_76bcc59e8200eb 3-4
+  s_cf89229b6156eb::t_ecb51bf1774de1 1-2,5-12
+tests/fixtures/go-edges/testpkg/foo/helper_test.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/rust-edges/crates/app/src/callers.rs
+  s_608e225b64c825::t_b3f5da0d1f88ae 1-20
+tests/fixtures/python-edges/relimports/expected-edges.json
+  s_c20854ba925a50::t_f19d64a28d45db 1-8
+tests/fixtures/rust-edges/crates/app/src/helper.rs
+  s_608e225b64c825::t_865a854e1c6750 1-5
+tests/fixtures/ruby-edges/imports/ghost.rb
+  s_cf89229b6156eb::t_f908b3a8e80cbf 1-3
+tests/fixtures/python-edges/reexports/cycb/__init__.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1
+tests/fixtures/typescript-edges/nested/pkg4/caller.ts
+  s_99e89e1c5083fb::t_4d2160b3d93680 1-7
+tests/fixtures/javascript-edges/esm/decoy.js
+  s_99e89e1c5083fb::t_1d73f3c134e2fb 1-10
+tsconfig.json
+  s_8b476f3e82b2b0::t_3f1c6bb5c6407a 12-13
+tests/fixtures/rust-edges/crates/app/src/shadow.rs
+  s_608e225b64c825::t_d9c0a30d5aa09b 1-52
+packages/indexer/src/parsers/types.ts
+  s_99e89e1c5083fb::t_e2fd3914583a21 75-78
+  s_99e89e1c5083fb::t_cb6abdda88740a 33-36
+  s_99e89e1c5083fb::t_bf76b5578780fc 24-26,32
+  s_99e89e1c5083fb::t_5990034c331b54 46-47,55
+  s_99e89e1c5083fb::t_597553b1ed32e5 21-23,27-31,37-45,48-54,56-57,81-84
+  s_99e89e1c5083fb::t_01a4c57b610916 72-74,79-80
+tests/tree-sitter-parser.test.ts
+  s_608e225b64c825::t_321fb4893f135d 339
+  s_8b476f3e82b2b0::t_5afcb18b92fd2a 341-343
+  s_8b476f3e82b2b0::t_5686921ccc3eaa 340,344
+  s_c20854ba925a50::t_cf62be752e42ea 112-113,120
+apps/cli/README.md
+  s_cf89229b6156eb::t_50e48c489db4ff 17
+  s_cf89229b6156eb::t_55dd810c236081 143
+  s_cf89229b6156eb::t_2c3379b772a1f5 129-133,135-138
+  s_608e225b64c825::t_af6b11739d9af3 134
+tests/fixtures/typescript-edges/subst/util.js
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/fixtures/go-edges/types/baseline.json
+  s_99e89e1c5083fb::t_165ccf0bf627d8 3,7
+tests/fixtures/python-edges/decorators/expected-edges.json
+  s_c20854ba925a50::t_266438b5df8737 1-7
+tests/ruby-edge-accuracy.test.ts
+  s_cf89229b6156eb::t_ec6eadc4ca6a4a 205-215
+  s_cf89229b6156eb::t_8e2144634e061e 1-204,216-238
+tests/fixtures/python-edges/reexports/starpkg/__init__.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1
+tests/fixtures/go-edges/modules/dup2/q/q.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/ruby-edges/duplabel/expected-edges.json
+  s_cf89229b6156eb::t_0a060d524be241 3
+  s_cf89229b6156eb::t_0089d0813789a5 1-2,4-14
+tests/fixtures/ruby-edges/abovecap/capped.py
+  s_cf89229b6156eb::t_a8789367d618d0 1-101
+tests/fixtures/typescript-edges/type-only/typebarrel.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1
+tests/fixtures/python-edges/reexports/pkg/sub/inner.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1-2
+tests/fixtures/go-edges/modules/dup1/call.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-5
+tests/fixtures/javascript-edges/esm/arrdef.js
+  s_99e89e1c5083fb::t_18ce35a2d2a1c7 1
+tests/fixtures/go-edges/resolution/go.mod
+  s_99e89e1c5083fb::t_52501084874a50 1-3
+tests/go-resolver.test.ts
+  s_99e89e1c5083fb::t_5d6092caa5049c 1-57,64-77,80-81,89-114,131-206,221,248-263,265-315,318-344
+  s_4c4a7c4c58b5f7::t_18e854e0e64ae3 58-63,78-79,82-88,222-247
+  s_99e89e1c5083fb::t_c8ac908388a548 207-220
+  s_99e89e1c5083fb::t_f1da1feb0ab6fc 316-317
+  s_99e89e1c5083fb::t_12571cca876423 264
+  s_4c4a7c4c58b5f7::t_3cab277d7fe7c2 115-130
+tests/fixtures/go-edges/packages/baseline.json
+  s_99e89e1c5083fb::t_0e7fb51ea27f1f 3,7
+tests/fixtures/typescript-edges/aliases/expected-edges.json
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-21
+tests/fixtures/python-edges/shadow/main.py
+  s_c20854ba925a50::t_fd71b2d495b94f 1-18
+  s_c20854ba925a50::t_6c8d221e880fba 19-23
+packages/indexer/src/languages.ts
+  s_c20854ba925a50::t_a0c14c864423f7 6
+  s_8b476f3e82b2b0::t_31a3afa3dbf328 796-800,803,805-826,848-849
+  s_608e225b64c825::t_b47a510feb72cb 658,660-662,702-715,718-724,730,767-769,875-908,911
+  s_8b476f3e82b2b0::t_cf4be39933151b 732,758-759,773,779-781
+  s_8b476f3e82b2b0::t_fdf778ca2f2030 751
+  s_99e89e1c5083fb::t_d7d9deae5dffb7 462-463,470
+  s_8b476f3e82b2b0::t_ec1c1dd4821d0b 786
+  s_99e89e1c5083fb::t_885f9df0267f44 505-509,511-531,534-546
+  s_8b476f3e82b2b0::t_4a656732177207 716-717
+  s_c20854ba925a50::t_d58ccde6d0d6f2 163-165,202-205,216-223,225,236,274-283,288-289,293-294,297,303-310,318-319,323-324,327,341,347
+  s_8b476f3e82b2b0::t_94a943c75120f6 736,743,745,749-750,752-756
+  s_8b476f3e82b2b0::t_337efcfff35565 785
+  s_8b476f3e82b2b0::t_628ea0b52efbf1 909-910
+  s_608e225b64c825::t_91ff43a4277f85 1144,1146,1149,1153
+  s_99e89e1c5083fb::t_2201c9e9fdb2b0 510
+  s_8b476f3e82b2b0::t_ba3e17d3bf97ce 725-729,789,793-794,801-802,804,842-843,846-847
+  s_99e89e1c5083fb::t_765956d7fab453 437
+  s_8b476f3e82b2b0::t_5410308f0f5d8e 733-734,737-741,746
+  s_608e225b64c825::t_311ad1b249b4a4 934
+  s_8b476f3e82b2b0::t_d2b9f22607f37b 760-766,770-772,782-784,787-788
+  s_608e225b64c825::t_af4a60a6434d25 1165-1166
+  s_8b476f3e82b2b0::t_6719422845a7c8 774-778
+  s_cf89229b6156eb::t_f86b6f9c0cb0ff 1219,1225-1234
+  s_cf89229b6156eb::t_ed7f5b89902587 1264-1272
+  s_99e89e1c5083fb::t_8da5d7b0f74514 560
+  s_608e225b64c825::t_4c16b69361e7b6 622-657
+  s_8b476f3e82b2b0::t_08705afc4fd2d0 790-792,795,827-841,844-845,851-854,856-874
+  s_99e89e1c5083fb::t_c8ac908388a548 464-468
+  s_8b476f3e82b2b0::t_2ec269583eec87 735,742,744,747-748,757
+  s_99e89e1c5083fb::t_8a6e18172a6f67 430-434
+  s_99e89e1c5083fb::t_9ed875c6471139 533
+  s_608e225b64c825::t_4cbaf812d89d70 611-619
+  s_608e225b64c825::t_788d729f352401 663-699,731
+  s_8b476f3e82b2b0::t_03168e96205d0a 850,855
+  s_608e225b64c825::t_a1a93c0d84c45b 620-621
+  s_608e225b64c825::t_713adeb5416d2b 659
+  s_cf89229b6156eb::t_3207dc535fb497 1235
+  s_8b476f3e82b2b0::t_cd3594f93c549e 383-385
+tests/fixtures/javascript-edges/negative/tdz.js
+  s_99e89e1c5083fb::t_18ce35a2d2a1c7 1-8
+tests/fixtures/typescript-edges/nested/pkg/tsconfig.json
+  s_99e89e1c5083fb::t_4588a89039ac1d 1
+tests/fixtures/python-edges/conflicts/main.py
+  s_c20854ba925a50::t_266438b5df8737 1-38
+tests/fixtures/typescript-edges/esm/lib.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-9
+tests/fixtures/python-edges/lexical/expected-edges.json
+  s_c20854ba925a50::t_fd71b2d495b94f 1,6,27-28
+  s_c20854ba925a50::t_6c8d221e880fba 2-5,7-26
+tests/fixtures/typescript-edges/nested/pkg3/tsconfig.json
+  s_99e89e1c5083fb::t_4588a89039ac1d 1
+tests/fixtures/typescript-edges/reexports/b.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-3
+tests/fixtures/python-edges/reexports/expected-edges.json
+  s_c20854ba925a50::t_6c88d81c96b42a 1-8
+tests/fixtures/rust-edges/crates/app/Cargo.toml
+  s_608e225b64c825::t_4a7e9f5c299d5f 1-4
+tests/fixtures/go-edges/testpkg/go.mod
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/go-edges/imports/client/v3/v3.go
+  s_99e89e1c5083fb::t_52501084874a50 1-3
+  s_4c4a7c4c58b5f7::t_af08d0b9e7a439 4-5
+tests/fixtures/rust-edges/abovecap/src/big.rs
+  s_608e225b64c825::t_360c680cac7728 1-61
+tests/fixtures/javascript-edges/esm/anodef.js
+  s_99e89e1c5083fb::t_18ce35a2d2a1c7 1-3
+tests/fixtures/rust-edges/crates/app/src/sub/deep.rs
+  s_608e225b64c825::t_169eb11d5acbcd 1-24
+docs/agent-devkit/changes/2026-10-20-39-csharp-indexing-accuracy/design.md
+  s_40482f44189743::t_9634755a742dfa 29
+  s_bf9c60822fd083::t_72ce50923665ba 1-10,13,17-18,22-24,26-28,30-32,38,40-42,47,49-52,61-64,69-72
+  s_d472a2e9e1bba2::t_dcaa3a42a3997d 11-12,14-16,19-21,25,33-37,39,43-46,48,53-60,65-68
+tests/fixtures/go-edges/modules/b/b.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-10
+README.md
+  s_608e225b64c825::t_a7e87e377da0da 129
+packages/native/Cargo.toml
+  s_cf89229b6156eb::t_c3be1edc660a3a 18
+packages/indexer/src/go-resolver.ts
+  s_99e89e1c5083fb::t_fe745e5d4de43c 272-275
+  s_99e89e1c5083fb::t_c31217e8d60209 578,585-588
+  s_99e89e1c5083fb::t_37977931110b9c 595
+  s_40482f44189743::t_548a94e5206ac5 7
+  s_99e89e1c5083fb::t_0638b88f7b3436 490-498,501-519,522-523,527-529
+  s_99e89e1c5083fb::t_f255f77d429de1 26-27
+  s_cf89229b6156eb::t_42df474245d997 134-137
+  s_4c4a7c4c58b5f7::t_18e854e0e64ae3 213-214,229-230,245-254,333,384-404,416,470-474,477,483-484,543-545,548-554,556,561-562
+  s_99e89e1c5083fb::t_cbac52ffe7e904 58-63,87,109-118
+  s_99e89e1c5083fb::t_c8ac908388a548 47-50,165-166,198-203,263-264,269-270
+  s_99e89e1c5083fb::t_69dd2f894219e7 572-573,577
+  s_99e89e1c5083fb::t_eb9f066fb373e6 429-449
+  s_99e89e1c5083fb::t_3765a13ae6fa85 308-311
+  s_4c4a7c4c58b5f7::t_3cab277d7fe7c2 132,499-500
+  s_4c4a7c4c58b5f7::t_58ac62b4ef317f 485
+  s_99e89e1c5083fb::t_97b64d9e172717 526
+  s_99e89e1c5083fb::t_b3bfcbc2d27714 51-55
+  s_99e89e1c5083fb::t_5afb7c975bea5b 581
+  s_99e89e1c5083fb::t_1e1f843fe28b82 1-6,8-25,28-46,56-57,64-86,88-108,119-131,133,138-164,167-197,204-212,215-228,231-244,255-262,265-268,271,276-307,312-320,322-323,325-331,334,336-383,405-415,417-428,450-469,475-476,478-479,481-482,486-489,520-521,524-525,530-538,546-547,555,557-560,563-571,574-576,579-580,582-584,589-594,596-620
+  s_4c4a7c4c58b5f7::t_50286a2e8d736e 480,539-542
+  s_39270ae3bb7555::t_c6094a8f239ead 321,324,332,335
+tests/fixtures/typescript-edges/aliases/src/base/base.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/fixtures/javascript-edges/negative/importer.js
+  s_99e89e1c5083fb::t_735a6395089107 1-13
+  s_99e89e1c5083fb::t_c914d90446fff3 14-17
+tests/fixtures/go-edges/abovecap/go.mod
+  s_99e89e1c5083fb::t_77c544325c43fe 1-3
+tests/fixtures/python-edges/conflicts/expected-edges.json
+  s_c20854ba925a50::t_266438b5df8737 1-7
+tests/fixtures/typescript-edges/negative/self.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-6
+tests/fixtures/python-edges/dupnames/pkg1/util.py
+  s_c20854ba925a50::t_eb538d68854dce 1-10
+tests/fixtures/typescript-edges/aliases/caller.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-19
+tests/fixtures/javascript-edges/cjs/expected-edges.json
+  s_99e89e1c5083fb::t_c6d1c8dd797ae3 2-5,7-70
+  s_99e89e1c5083fb::t_d60ff83730c013 1,6,71-72
+tests/fixtures/ruby-edges/duplabel/baseline.json
+  s_cf89229b6156eb::t_76bcc59e8200eb 3-4
+  s_cf89229b6156eb::t_ecb51bf1774de1 1-2,5-12
+tests/fixtures/rust-edges/crates/other/Cargo.toml
+  s_608e225b64c825::t_78a0c9e9534346 1-4
+tests/native-wasm-parity.test.ts
+  s_cf89229b6156eb::t_502b26215b14ba 14
+  s_cf89229b6156eb::t_d875ef4c29c30e 39
+  s_cf89229b6156eb::t_806ddc60dc0bd9 363-369
+  s_cf89229b6156eb::t_d80076465b5601 360-362
+  s_cf89229b6156eb::t_f0a52b21d39c07 370-372
+tests/fixtures/javascript-edges/esm/lib.js
+  s_99e89e1c5083fb::t_dee8744bbed125 1-12,17-19
+  s_99e89e1c5083fb::t_18ce35a2d2a1c7 13-16
+tests/fixtures/python-edges/relimports/pkg/sibling.py
+  s_c20854ba925a50::t_f19d64a28d45db 1-2
+tests/fixtures/go-edges/modules/go.mod
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/typescript-edges/above-cap/many.ts
+  s_99e89e1c5083fb::t_426ed70a650d6a 1-146
+tests/fixtures/typescript-edges/esm/decoy.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-3
+tests/fixtures/typescript-edges/type-only/shapes.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-6
+tests/fixtures/typescript-edges/esm/widget.tsx
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-5
+tests/fixtures/go-edges/testpkg/baseline.json
+  s_99e89e1c5083fb::t_18463d62156f2b 1-11
+tests/fixtures/javascript-edges/reexports/a.js
+  s_99e89e1c5083fb::t_d1c306d915b715 1-3
+tests/fixtures/typescript-edges/aliases/src/app/plain.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/fixtures/go-edges/resolution/expected-edges.json
+  s_99e89e1c5083fb::t_52501084874a50 1-7
+tests/fixtures/javascript-edges/reexports/b.js
+  s_99e89e1c5083fb::t_d3438a48b0c85f 1-3
+tests/fixtures/typescript-edges/subst/util.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/fixtures/python-edges/abovecap/big.py
+  s_c20854ba925a50::t_f671ff06ec6530 1-104
+tests/fixtures/parity/python/multiline-imports.py
+  s_c20854ba925a50::t_7d4189fb528a27 1-18
+tests/python-edge-accuracy.test.ts
+  s_c20854ba925a50::t_48a2fb88819da9 1-200
+tests/fixtures/ruby-edges/duplabel/b/report.rb
+  s_cf89229b6156eb::t_8bdf2b5b77ce36 1-7
+tests/fixtures/ruby-edges/negative/expected-edges.json
+  s_cf89229b6156eb::t_cd423360dbc796 1-14
+tests/fixtures/rust-edges/crates/app/src/ambiguous.rs
+  s_608e225b64c825::t_e45b6bbcf887af 1
+tests/fixtures/typescript-edges/subst/expected-edges.json
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-4
+docs/agent-devkit/changes/2026-10-20-39-java-indexing-accuracy/design.md
+  s_d472a2e9e1bba2::t_70413f58558e4a 11-14,16-18,22,31-36,38,44-45,51-57,61-65
+  s_40482f44189743::t_9634755a742dfa 26
+  s_bf9c60822fd083::t_72ce50923665ba 1-10,15,19-21,23-25,27-30,37,39-43,46-50,58-60,66-69
+tests/rust-resolver.test.ts
+  s_8b476f3e82b2b0::t_1cbaca1d9d9824 848-856,862,867-873,880-883
+  s_8b476f3e82b2b0::t_e7da79f71aa751 874-879
+  s_8b476f3e82b2b0::t_c8b629a1c04c6f 491,501-505,510-521,773-780
+  s_8b476f3e82b2b0::t_ecefffe6182adf 653-654
+  s_608e225b64c825::t_f33c5b8e05d150 1-11,13-149,152-209,212-329,331-489,782-826,828-847,857-858,860-861,863-866,884-885
+  s_608e225b64c825::t_788d729f352401 150-151,210-211
+  s_8b476f3e82b2b0::t_3f263c76faabe5 500,595-597,618-622,685-686,715-718
+  s_8b476f3e82b2b0::t_6b475a6494c75e 692-697
+  s_8b476f3e82b2b0::t_593b9aa70b425d 581,583-587,590,647-651,725-732
+  s_8b476f3e82b2b0::t_503c15fe80d532 524-525,555-560,669-674,757-767
+  s_8b476f3e82b2b0::t_3a6025c72f5b28 568-580,638-646,720-722
+  s_8b476f3e82b2b0::t_d4f5ac4a614442 582
+  s_8b476f3e82b2b0::t_75a0035e209bbe 703-713
+  s_8b476f3e82b2b0::t_b6148f54d82012 506-509,614-617,682-684
+  s_608e225b64c825::t_39134ea627a748 12
+  s_8b476f3e82b2b0::t_ddce8788d99792 495,735
+  s_8b476f3e82b2b0::t_5241ec16a5dfe5 523,533-538,629-633,698-702,714
+  s_608e225b64c825::t_50ad780602a300 330
+  s_8b476f3e82b2b0::t_fc5f3af365992b 540,548-554,663-668,746-756
+  s_8b476f3e82b2b0::t_a803d5dd9a910f 490,492-493,496-499,598-601,603-608,612-613,675-676,681,781
+  s_8b476f3e82b2b0::t_b8337648865158 522,526-532,623-628,687-691
+  s_8b476f3e82b2b0::t_840820638d6654 561-567,634-637,719
+  s_8b476f3e82b2b0::t_0d54ce143536cb 609-611
+  s_8b476f3e82b2b0::t_694a9989383c3b 677-680
+  s_8b476f3e82b2b0::t_7cd35f2ea5a64b 723-724,733
+  s_8b476f3e82b2b0::t_0817affa96d4fd 827,859
+  s_8b476f3e82b2b0::t_95e16b39b5461f 494,539,541-547,657-662,739-745,768-771
+  s_8b476f3e82b2b0::t_da3e71eb17d4f3 588-589,591-594,602,652,655-656,734,736-738,772
+tests/fixtures/typescript-edges/reexports/expected-edges.json
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-9
+tests/fixtures/javascript-edges/esm/expected-edges.json
+  s_99e89e1c5083fb::t_72ace44cdf22d9 12-13
+  s_99e89e1c5083fb::t_e86d50c929ed59 1-8,14-15
+  s_99e89e1c5083fb::t_18ce35a2d2a1c7 9-11
+tests/fixtures/typescript-edges/jstargets/tsmodule.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/fixtures/ruby-edges/negative/neg/main.rb
+  s_cf89229b6156eb::t_0c4d45eb7206d3 1-30
+tests/fixtures/python-edges/shadow/expected-edges.json
+  s_c20854ba925a50::t_6c8d221e880fba 7-8
+  s_c20854ba925a50::t_fd71b2d495b94f 1-6,9-10
+tests/fixtures/typescript-edges/subst/caller.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-5
+tests/fixtures/ruby-edges/negative/baseline.json
+  s_cf89229b6156eb::t_ecb51bf1774de1 1-2,5-12
+  s_cf89229b6156eb::t_76bcc59e8200eb 3-4
+tests/fixtures/javascript-edges/esm/importer.js
+  s_99e89e1c5083fb::t_18ce35a2d2a1c7 2,4-5,17-18,21-29
+  s_99e89e1c5083fb::t_566e0d87591837 1,3,6-16,19-20,30
+tests/fixtures/typescript-edges/negative/expected-edges.json
+  s_99e89e1c5083fb::t_558a6c382e2bc9 3-6
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-2,7
+packages/indexer/src/python-resolver.ts
+  s_c20854ba925a50::t_199be38967b403 810
+  s_c20854ba925a50::t_aac563e2299056 858
+  s_c20854ba925a50::t_02fcc7a4cc8ff4 12-15,22-29,33,95-100,104,106,109,112-115,120,139-176,179-180,182,184,196,201,207,220,222,428,562,584,591-592,614-616,619-621,630-637,639,654-655,659,663-668,675-682,687-700,704-719,759-761,766,774,777-778,807,809,826,835-836
+  s_8b476f3e82b2b0::t_cf4be39933151b 358,377-379
+  s_c20854ba925a50::t_9ebb1db4a99da7 1-11,16-21,30-32,34-94,101-102,105,107-108,110-111,116-119,121-124,127-128,132-138,177-178,181,185-195,197-200,202-206,208-219,221,223-357,359-376,380-427,429-439,441-499,501-561,563-583,585-590,593-613,617-618,622-629,638,640-653,656-657,660-662,669-674,683-686,701-703,720-755,757-758,762-765,767-773,775-776,779-806,811-825,827-834,837-857,859-865,867-870
+  s_c20854ba925a50::t_c03d62c7b977fb 125-126,129-131
+  s_8b476f3e82b2b0::t_223d2b769795f9 103,183,440,500,658,756,808,866
+tests/fixtures/typescript-edges/esm/expected-edges.json
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-10
+tests/fixtures/parity/python/relative-imports.py
+  s_c20854ba925a50::t_7d4189fb528a27 1-13
+tests/fixtures/typescript-edges/aliases/src/lib/util.ts
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/fixtures/ruby-edges/duplabel/a/report.rb
+  s_cf89229b6156eb::t_4842bfdab86dfa 1-16
+tests/fixtures/go-edges/modules/testdata/fake/go.mod
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/go-edges/testpkg/foo/foo.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/go-edges/shadow/store/store.go
+  s_99e89e1c5083fb::t_52501084874a50 1-5
+tests/fixtures/python-edges/reexports/cyca/__init__.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_c20854ba925a50::t_a156eefc19c3f3 59-67,77-80
+  s_c20854ba925a50::t_03154d6a48cfe2 4
+.prettierignore
+  s_99e89e1c5083fb::t_b0dfd0dfad7ca9 17
+tests/fixtures/rust-edges/crates/app/src/lib.rs
+  s_608e225b64c825::t_5eea87ee5b59c5 1-18
+tests/fixtures/go-edges/abovecap/expected-edges.json
+  s_99e89e1c5083fb::t_77c544325c43fe 1-36
+tests/fixtures/python-edges/conflicts/real_a.py
+  s_c20854ba925a50::t_266438b5df8737 1-2
+packages/indexer/src/typescript-resolver.ts
+  s_99e89e1c5083fb::t_8a1f214a5f8c76 160-164
+  s_99e89e1c5083fb::t_05f7423f9cd40c 152-153,165-166
+  s_99e89e1c5083fb::t_4d63634edef9d0 289-291,298
+  s_99e89e1c5083fb::t_b39b7fbd5437ac 292
+  s_99e89e1c5083fb::t_b7d35ca2c5fdb8 1-9,11-16,19-28,33-133,135-151,154-159,167-223,227,229-231,237,246,248-249,252-288,293-297,299-341
+  s_4c4a7c4c58b5f7::t_b53ab6642afc35 10
+  s_99e89e1c5083fb::t_037e148641981d 224-226,228,232-236,238-245,247,250-251
+  s_99e89e1c5083fb::t_5dad1c011b9c70 17-18,29-32
+  s_99e89e1c5083fb::t_12b7c403593a05 134
+docs/agent-devkit/changes/2026-10-20-39-cpp-indexing-accuracy/design.md
+  s_40482f44189743::t_9634755a742dfa 29
+  s_d472a2e9e1bba2::t_3b5ad690ab491a 11-13,15-21,25,34-36,38-39,43,45-46,48-49,54-61,66-69
+  s_bf9c60822fd083::t_72ce50923665ba 1-10,14,22-24,26-28,30-33,37,40-42,44,47,50-53,62-65,70-73
+tests/fixtures/python-edges/relimports/pkg/sub/__init__.py
+  s_c20854ba925a50::t_f19d64a28d45db 1
+packages/indexer/src/rust-resolver.ts
+  s_608e225b64c825::t_a5d8860ce7c020 178-181,186-201,203-205,207,210
+  s_608e225b64c825::t_3583b6320c72da 420-422,424,426-427,433-441,454-455,457,474-476,478,507,511
+  s_608e225b64c825::t_0ab2284f17547c 148-149,155
+  s_608e225b64c825::t_9b6f9754f3a882 614
+  s_608e225b64c825::t_f8fbd0c02e798e 112,117-119
+  s_cf89229b6156eb::t_12d443c38d4f92 615
+  s_608e225b64c825::t_f2b42b59c552e7 1-111,113-116,120-147,150-154,156-177,182-185,202,206,208-209,211-305,307-357,365-419,423,425,428-432,442-453,456,458-473,477,479-484,486-495,497-506,508-510,512-575,577-613
+  s_608e225b64c825::t_788d729f352401 358-364,576
+  s_608e225b64c825::t_88ad94b3de3a17 496
+  s_608e225b64c825::t_14abda9c5e8048 306
+  s_608e225b64c825::t_fdc2f68c0280a0 485
+tests/fixtures/go-edges/shadow/p/p.go
+  s_4c4a7c4c58b5f7::t_af08d0b9e7a439 8-14
+  s_99e89e1c5083fb::t_52501084874a50 1-7
+tests/fixtures/typescript-edges/nested/pkg4/tsconfig.json
+  s_99e89e1c5083fb::t_4d2160b3d93680 1
+tests/python-indexer.test.ts
+  s_c20854ba925a50::t_5d0e857893e422 75-76,79-81
+  s_c20854ba925a50::t_6a916b3a517096 40-41,45
+tests/fixtures/typescript-edges/nested/pkg3/local.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-3
+tests/fixtures/rust-edges/crates/expected-edges.json
+  s_608e225b64c825::t_3915aed12f2827 1-30
+tests/fixtures/go-edges/modules/testdata/fake/f.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/go-edges/modules/inner/p/p.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/typescript-edges/reexports/a.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-3
+tests/fixtures/typescript-edges/reexports/barrel.ts
+  s_99e89e1c5083fb::t_5d5e7b8ddf3ad9 1-3
+tests/fixtures/javascript-edges/negative/amb.js
+  s_99e89e1c5083fb::t_a75ea3a0a84ed9 1-7
+tests/fixtures/typescript-edges/jstargets/cjsmod.cjs
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-4
+tests/fixtures/go-edges/modules/dup1/q/q.go
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/typescript-edges/negative/receiver.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-5
+tests/fixtures/javascript-edges/cjs/objmod.cjs
+  s_99e89e1c5083fb::t_0b2fb381392d15 1-10
+tests/fixtures/typescript-edges/negative/dupa.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-3
+tests/fixtures/typescript-edges/negative/typecaller.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-5
+tests/fixtures/go-edges/modules/inner/go.mod
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/fixtures/ruby-edges/classbody/baseline.json
+  s_cf89229b6156eb::t_76bcc59e8200eb 1-2,6-12
+  s_cf89229b6156eb::t_350658c0264add 3-5
+tests/fixtures/typescript-edges/jstargets/jscalls.js
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-6
+tests/fixtures/typescript-edges/nested/pkg2/src/util.ts
+  s_99e89e1c5083fb::t_4588a89039ac1d 1-3
+tests/fixtures/python-edges/lexical/other.py
+  s_c20854ba925a50::t_fd71b2d495b94f 1-2
+tests/fixtures/rust-edges/crates/app/src/bin/extra.rs
+  s_608e225b64c825::t_422c1289c6d427 1-5
+tests/fixtures/rust-edges/abovecap/many.py
+  s_608e225b64c825::t_360c680cac7728 1-101
+docs/agent-devkit/changes/2026-10-20-39-cpp-indexing-accuracy/tasks.md
+  s_bf9c60822fd083::t_51cc9dd92ee730 14
+  s_d472a2e9e1bba2::t_f5672f10d45bf5 18
+  s_40482f44189743::t_9634755a742dfa 88
+  s_d472a2e9e1bba2::t_587f24e64cd42b 11-13,15-17,19-20,24-26,28-30,36,38,45-48,54-57,63,65-66,73-75,81,92-97
+  s_bf9c60822fd083::t_72ce50923665ba 1-10,21-23,27,31-35,37,39-44,49-53,58-62,64,67-72,76-80,82-87,89-91
+tests/fixtures/javascript-edges/above-cap/many.js
+  s_99e89e1c5083fb::t_af5646d656eb9b 1-38
+  s_99e89e1c5083fb::t_c726256c47ee76 39-177
+tests/fixtures/javascript-edges/reexports/barrel.js
+  s_99e89e1c5083fb::t_46463d7534b2c9 1-8
+tests/fixtures/python-edges/reexports/use.py
+  s_c20854ba925a50::t_6c88d81c96b42a 1-15
+tests/fixtures/javascript-edges/esm/clsdef.js
+  s_99e89e1c5083fb::t_72ace44cdf22d9 1-9
+tests/fixtures/go-edges/shadow/i/i.go
+  s_99e89e1c5083fb::t_52501084874a50 1-6
+tests/fixtures/go-edges/shadow/ok/ok.go
+  s_99e89e1c5083fb::t_52501084874a50 1-5
+tests/fixtures/parity/ruby/torture.rb
+  s_cf89229b6156eb::t_f57ef054f986cc 1-112
+tests/fixtures/typescript-edges/jstargets/jsmod.js
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-3
+tests/fixtures/go-edges/modules/dup2/go.mod
+  s_99e89e1c5083fb::t_8423d616401a38 1-3
+tests/index-workspace.test.ts
+  s_99e89e1c5083fb::t_b4fa75107391bb 557
+  s_99e89e1c5083fb::t_c06702215afcf1 210
+  s_99e89e1c5083fb::t_8cdca3c0a34765 119-122,126-129
+  s_99e89e1c5083fb::t_a067a47ffa2ecf 146
+tests/rust-edge-accuracy.test.ts
+  s_608e225b64c825::t_788d729f352401 107-109
+  s_608e225b64c825::t_d6847ac6144bb6 1-106,110-178
+tests/fixtures/javascript-edges/cjs/user.cjs
+  s_99e89e1c5083fb::t_d63a44c22730e7 1-16
+tests/oxc-parser.test.ts
+  s_8b476f3e82b2b0::t_73ddfb3c9284b6 677-704
+  s_99e89e1c5083fb::t_ad42ebdd8fd015 489-490,492-493
+  s_99e89e1c5083fb::t_04f1da60ff79e5 84-85
+  s_99e89e1c5083fb::t_93097dabecb363 342
+  s_99e89e1c5083fb::t_3083cf5805d47b 78,83,117,122,152,210,218,245,265,312,341,347,369,374,402,429,434,814
+  s_99e89e1c5083fb::t_9cdd949a9c3f90 435-436,639-676,705-752,756-789
+  s_99e89e1c5083fb::t_8c629d03a2f155 438-461,463-488,494-516,518-558,562-563
+  s_99e89e1c5083fb::t_083a4e56f04653 753-755
+  s_99e89e1c5083fb::t_5a561df78aeced 462,491,517
+  s_99e89e1c5083fb::t_9a39e4d5ab4d5b 47-48
+  s_99e89e1c5083fb::t_05eec9d62f8e20 564-638
+  s_99e89e1c5083fb::t_2dffc2ebd06aa7 219-220
+  s_99e89e1c5083fb::t_649b034b711e07 559-561
+  s_71cafbeed1180b::t_d2aa46e972fced 437
+tests/fixtures/typescript-edges/jstargets/expected-edges.json
+  s_99e89e1c5083fb::t_17f763b048f50d 5
+  s_99e89e1c5083fb::t_ca5ea87d896341 1-4,6-7
+packages/indexer/src/ruby-resolver.ts
+  s_cf89229b6156eb::t_f81a70b7b2d869 1-5,7-9,14,20-38,51,54-57,65,71-72,74,77-84,106,108-112,114,117,119-137,141-145
+  s_cf89229b6156eb::t_8276a0fe9251a1 6
+  s_cf89229b6156eb::t_618f5b1d1a59ac 10-13,15-19,39-40,43-50,52-53,58-64,66-70,73,75-76,85-91,94-96,99-100,102-105,107,113,115-116,118,138-140
+  s_cf89229b6156eb::t_32bb8166bcd5e3 92-93,97-98,101
+  s_cf89229b6156eb::t_0df8438f67bc33 41-42
+tests/fixtures/go-edges/imports/go.mod
+  s_99e89e1c5083fb::t_52501084874a50 1-3
+tests/fixtures/go-edges/shadow/baseline.json
+  s_99e89e1c5083fb::t_18463d62156f2b 1-2,4-9,11
+  s_99e89e1c5083fb::t_2b8213aaed1c77 3,10
+tests/fixtures/python-edges/relimports/pkg/sub/worker.py
+  s_c20854ba925a50::t_f19d64a28d45db 1-17
+tests/fixtures/ruby-edges/classbody/x/w.rb
+  s_cf89229b6156eb::t_70308288c3ba36 1-30
+packages/indexer/src/parsers/oxc-parser.ts
+  s_99e89e1c5083fb::t_67f226a4ef5390 45-52
+  s_99e89e1c5083fb::t_bb8369c679be0e 1055-1057
+  s_99e89e1c5083fb::t_fb657f1b542bb0 1222-1230
+  s_99e89e1c5083fb::t_a6c868b4b9db19 1072-1073
+  s_99e89e1c5083fb::t_3b42c8b0d38dfa 90-95,110-119
+  s_99e89e1c5083fb::t_773bd7fceb84a5 1218-1221,1231-1232,1237-1241,1265-1266
+  s_99e89e1c5083fb::t_f81e2b33fc1a5e 1243-1250
+  s_99e89e1c5083fb::t_dc509982be46d5 4
+  s_8b476f3e82b2b0::t_10e89a4d33cef5 415-416,480-481
+  s_99e89e1c5083fb::t_aaeca6eb0d6829 456-458
+  s_99e89e1c5083fb::t_9bb1a5029772e1 1058-1061,1063
+  s_99e89e1c5083fb::t_77a5b8bc254d00 493-494
+  s_99e89e1c5083fb::t_5a561df78aeced 6,926-928
+  s_99e89e1c5083fb::t_700d78666974e0 618
+  s_99e89e1c5083fb::t_165a5405f360f7 951-955,960-962,969,971-974,976,981-984,986,992-995,997,1013,1023-1026,1028
+  s_8b476f3e82b2b0::t_9fd9f50c7fad88 413,467
+  s_99e89e1c5083fb::t_d38167f601f47f 1213-1217
+  s_99e89e1c5083fb::t_083a4e56f04653 476-478,522-526
+  s_99e89e1c5083fb::t_07fe5b4d0734f3 9-11
+  s_99e89e1c5083fb::t_57d9b3ba58686d 1102-1115
+  s_99e89e1c5083fb::t_55a0f7c9e1d8a9 373-399,401-412,417,419-434,439-455,459-466,468-472,475,479,482-483,487,489,491,495,498-508,510-521,527-538,543-547,550-555,557-558,560-565,567-568,584-588,590-596,598-617,619-644,656-660,663-722,725-743,746
+  s_99e89e1c5083fb::t_844959489ab8fb 435-438
+  s_99e89e1c5083fb::t_2a2d223ad9cf77 473-474
+  s_99e89e1c5083fb::t_ba2047a49a96cc 1082-1089
+  s_8b476f3e82b2b0::t_e7da79f71aa751 414
+  s_99e89e1c5083fb::t_ed8fe0f79e5687 922-925
+  s_99e89e1c5083fb::t_928694d3754cb1 1035-1036,1038-1049
+  s_99e89e1c5083fb::t_bb4d6ff5a75d4e 646-647,649-655
+  s_99e89e1c5083fb::t_7f13fd32f5435a 78-89,96-109
+  s_99e89e1c5083fb::t_5044002c5ff2c3 874-921,929-950,956-959,963-968,970,977-980,987-991,998-1012,1014-1019,1021-1022,1029-1034,1037,1050-1054,1064-1071,1074-1081,1090-1101,1116-1149
+  s_99e89e1c5083fb::t_013ed0a025ae8d 589
+  s_99e89e1c5083fb::t_b419c8c5eb564a 975,985,996,1020,1027,1062
+  s_99e89e1c5083fb::t_1199cb29c0306a 645,648,661-662
+  s_99e89e1c5083fb::t_8759e848aea4d7 484-486,488,490,492,496-497,509
+  s_99e89e1c5083fb::t_100aa2c0901596 873
+docs/agent-devkit/changes/archive/2026-10-20-39-go-indexing-accuracy/design.md
+  s_99e89e1c5083fb::t_6a448096d2f19c 1-117
+docs/agent-devkit/changes/archive/2026-10-20-39-go-indexing-accuracy/tasks.md
+  s_99e89e1c5083fb::t_489ecca252774b 1-135
+docs/agent-devkit/changes/archive/2026-10-20-39-javascript-index-accuracy/design.md
+  s_79a9baca6fb21d::t_9e42e537719cd9 1-52
+docs/agent-devkit/changes/archive/2026-10-20-39-ruby-native-indexing/decisions.md
+  s_cf89229b6156eb::t_46c0c20eb573c8 1-78
+docs/agent-devkit/changes/archive/2026-10-20-39-ruby-native-indexing/tasks.md
+  s_cf89229b6156eb::t_2ad932e278a3af 1-125
+docs/agent-devkit/changes/archive/2026-10-20-39-typescript-index-accuracy/design.md
+  s_99e89e1c5083fb::t_e9ee99a0b53031 1-75
+docs/agent-devkit/changes/archive/2026-10-20-39-typescript-index-accuracy/tasks.md
+  s_9716c29917e442::t_04bb0df236d75d 1-114
+packages/native/Cargo.lock
+  s_cf89229b6156eb::t_907aee92f5945e 256,459-468
+tests/fixtures/go-edges/vendor/baseline.json
+  s_99e89e1c5083fb::t_2ba246f895e9b7 1-11
+tests/fixtures/go-edges/vendor/example.com/dep/dep.go
+  s_99e89e1c5083fb::t_88e07f20ea1a31 1-3
+tests/fixtures/go-edges/vendor/go.mod
+  s_99e89e1c5083fb::t_78578a2deea1e3 1-3
+tests/fixtures/go-edges/vendor/m/main.go
+  s_99e89e1c5083fb::t_b4ce44ac617e03 1-11
+tests/fixtures/go-edges/vendor/p/p.go
+  s_99e89e1c5083fb::t_a6c1487d1073b4 1-3
+tests/fixtures/python-edges/srclayout/expected-edges.json
+  s_c20854ba925a50::t_dcec044c0ef455 1-9
+tests/fixtures/python-edges/srclayout/pkg/__init__.py
+  s_c20854ba925a50::t_6c34275789d90a 1
+tests/fixtures/python-edges/srclayout/pkg/logging.py
+  s_c20854ba925a50::t_5da7bd63002159 1-2
+tests/fixtures/python-edges/srclayout/pkg/user.py
+  s_c20854ba925a50::t_724a487444f276 1-10
+tests/fixtures/python-edges/srclayout/src/app/__init__.py
+  s_c20854ba925a50::t_d721c0424d29e8 1
+tests/fixtures/python-edges/srclayout/src/app/models.py
+  s_c20854ba925a50::t_0003936ccf77e8 1-6
+tests/fixtures/python-edges/srclayout/src/tests/test_models.py
+  s_c20854ba925a50::t_0640526f961cd9 1-12
+tests/fixtures/python-edges/srclayout/tests/test_outside.py
+  s_c20854ba925a50::t_aa2f5f117054f1 1-5
+docs/agent-devkit/changes/archive/2026-10-20-39-javascript-index-accuracy/tasks.md
+  s_9b3e88f8601731::t_772529d9e55029 1-98
+docs/agent-devkit/changes/archive/2026-10-20-39-python-index-accuracy/design.md
+  s_f2f875d2632601::t_ce6f565ac81757 1-123
+docs/agent-devkit/changes/archive/2026-10-20-39-ruby-native-indexing/design.md
+  s_f2f875d2632601::t_778e9647cb2f80 1-107
+docs/agent-devkit/changes/archive/2026-10-20-39-rust-index-accuracy/design.md
+  s_f2f875d2632601::t_1cd32213f5f546 1-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7b501bbafa1c8ce85c69be1487c737c4d4cec8bb",
+  "prompts": {},
+  "sessions": {
+    "s_39270ae3bb7555": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15a40-3655-7e73-98c0-e06c51fe4bf7",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_40482f44189743": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a158e1-cb44-7020-aa8f-5329933881f3",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_4c4a7c4c58b5f7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1574f-9ddd-7110-960a-933fffc5c2d5",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_608e225b64c825": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "round-carp",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_71cafbeed1180b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1c4c654d-81b5-4e05-b14b-332a641ba9da",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_79a9baca6fb21d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_eab4733f6ffe0ojGgiIhYgK6m1",
+        "model": "deepseek-v4.1-flash"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_8b476f3e82b2b0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a159bb-3aa0-7922-86f1-ba32bf0ae0f3",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_9716c29917e442": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "southern-wildflower",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_99e89e1c5083fb": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "grass-python",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_9b3e88f8601731": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a154c5-f6ba-7601-a565-80035b0c6ad1",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_bf9c60822fd083": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15879-736b-7950-82d8-629c68265cf2",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_c20854ba925a50": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "foam-penguin",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_cf89229b6156eb": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "right-catcher",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_d472a2e9e1bba2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fc2cd68-aebf-4f78-839b-0c88692eda7f",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_f2f875d2632601": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8761a8f2-77b4-4224-98f3-5fecc301e470",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
