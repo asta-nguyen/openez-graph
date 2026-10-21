@@ -1,0 +1,8 @@
+{
+  "canary": { "from": "calc.cpp#Calc::mul", "to": "calc.cpp#Calc::add" },
+  "edges": [
+    { "from": "calc.cpp#Calc::mul", "to": "calc.cpp#Calc::add", "tier": "type" },
+    { "from": "user.cpp#use", "to": "math.h#add", "tier": "file" },
+    { "from": "thiscalls.cpp#Calc::div", "to": "math.h#Calc::add", "tier": "type" }
+  ]
+}
