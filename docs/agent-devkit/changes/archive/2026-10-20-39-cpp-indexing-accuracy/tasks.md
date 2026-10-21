@@ -87,6 +87,7 @@ Result: Docs updated — AGENTS.md Indexing Expectations gains a C++ bullet (ext
 Status: approved
 
 ## Decision Log
+
 - TU pairing: a caller that includes only a header resolves calls to the header's declaration symbol, not a same-name source definition it cannot see (include-dirs/pairing fixture expectations corrected during verification — resolver behavior matched the design).
 - Overload ambiguity: two same-qualified-name declarations produce no call edge; the resolver intentionally does not collapse duplicate members.
 - Native parity fix: native called_identifiers now records the last segment of a qualified callee under keep_qualified_calls, mirroring WASM (full qualified form stays in call_expressions).
