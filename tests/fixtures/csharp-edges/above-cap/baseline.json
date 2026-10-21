@@ -1,0 +1,11 @@
+{
+  "truePositives": {
+    "member": 25,
+    "binding": 0
+  },
+  "falseNegatives": {
+    "member": 0,
+    "binding": 0
+  },
+  "falsePositives": 0
+}

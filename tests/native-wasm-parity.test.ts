@@ -9,6 +9,7 @@ import {
 } from "../packages/indexer/src/index-workspace";
 import {
   cppConfig,
+  csharpConfig,
   goConfig,
   parseWithTreeSitter,
   pythonConfig,
@@ -39,6 +40,7 @@ const LANG_CONFIG: Record<string, LanguageConfig> = {
   rust: rustConfig,
   ruby: rubyConfig,
   cpp: cppConfig,
+  csharp: csharpConfig,
 };
 
 // ── Pure difference computation ──
@@ -365,6 +367,8 @@ describe("native-wasm parity", () => {
     const REQUIRED_FIXTURES = [
       "cpp/example.cpp",
       "cpp/header.h",
+      "csharp/example.cs",
+      "csharp/file-scoped.cs",
       "go/example.go",
       "python/example.py",
       "ruby/example.rb",

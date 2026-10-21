@@ -1,0 +1,681 @@
+import fs from "node:fs";
+import path from "node:path";
+
+/**
+ * C# namespace/using-aware call and import resolver.
+ *
+ * Callees keep their qualified dotted path (`Ns.Type.M`, `this.M`, `Alias.M`)
+ * and resolve through the C# lookup order — member types of enclosing types,
+ * enclosing namespaces innermost→global, then compilation-unit usings plus
+ * the global usings of the caller's project root — never a global name
+ * lookup. Only unique targets produce edges: duplicates across partial
+ * parts, overloads, same identity in two project roots, ambiguous paths, and
+ * reserved alias names all drop.
+ *
+ * The resolver consumes only parsed-document fields: symbols carry
+ * `Owner::member` names plus 1-based line ranges; importPaths carry the full
+ * using-directive text (global/alias/static modifiers included). Each C#
+ * file's project root is the nearest ancestor directory containing a
+ * `*.csproj` file (directories are listed once and memoized; project files
+ * are never read) or the workspace root when none exists.
+ */
+
+// ── Public types ──
+
+export interface CSharpResolverFileInput {
+  filePath: string;
+  symbols: Array<{
+    name: string;
+    symbolType: string;
+    type: string;
+    exported: boolean;
+    startLine?: number;
+    endLine?: number;
+  }>;
+  importPaths: string[];
+}
+
+export interface CSharpResolvedTarget {
+  filePath: string;
+  name: string;
+}
+
+/** Resolved target plus the symbol's emission index — lets the graph map
+ *  same (file,label) occurrences (same-named members in one file) to their
+ *  distinct nodes instead of collapsing to the last node of that label. */
+export interface CSharpResolvedOccurrence extends CSharpResolvedTarget {
+  index: number;
+}
+
+export interface CSharpResolver {
+  resolveCall(filePath: string, callerName: string, calleeName: string): CSharpResolvedTarget | null;
+  resolveCallOccurrence(
+    filePath: string,
+    callerName: string,
+    calleeName: string,
+  ): CSharpResolvedOccurrence | null;
+  resolveImport(filePath: string, directive: string): string | null;
+}
+
+// ── Internal model ──
+
+const TYPE_KINDS = new Set([
+  "class",
+  "struct",
+  "interface",
+  "record",
+  "enum",
+  "delegate",
+]);
+
+interface FileSymbol {
+  name: string;
+  symbolType: string;
+  startLine: number;
+  endLine: number;
+  /** Position in the file's emitted symbol array (DFS order). Distinguishes
+   *  declaration occurrences that share file, name, and line. */
+  index: number;
+}
+
+interface Usings {
+  /** alias name → target path (e.g. "Ns.Outer.Inner") */
+  aliases: Map<string, string>;
+  ordinary: string[];
+  staticTypes: string[];
+}
+
+interface TypePart {
+  file: string;
+  startLine: number;
+  endLine: number;
+  /** Emission index of the type symbol that declared this part. */
+  index: number;
+}
+
+interface TypeIdentity {
+  key: string;
+  root: string;
+  ns: string;
+  chain: string;
+  parts: TypePart[];
+}
+
+/** Parse one using-directive text into its kind + operands. */
+function parseUsing(text: string):
+  | { kind: "ordinary"; ns: string; global: boolean }
+  | { kind: "static"; target: string; global: boolean }
+  | { kind: "alias"; name: string; target: string; global: boolean }
+  | null {
+  let body = text.trim().replace(/;$/, "").trim();
+  let isGlobal = false;
+  if (body.startsWith("global ")) {
+    isGlobal = true;
+    body = body.slice("global ".length).trim();
+  }
+  if (!body.startsWith("using ")) return null;
+  body = body.slice("using ".length).trim();
+  if (body.startsWith("static ")) {
+    const target = body.slice("static ".length).trim();
+    return target ? { kind: "static", target: stripGlobal(target), global: isGlobal } : null;
+  }
+  const eq = body.indexOf("=");
+  if (eq >= 0) {
+    const name = body.slice(0, eq).trim();
+    const target = body.slice(eq + 1).trim();
+    if (!/^[A-Za-z_]\w*$/.test(name) || !target) return null;
+    return { kind: "alias", name, target: stripGlobal(target), global: isGlobal };
+  }
+  return body ? { kind: "ordinary", ns: stripGlobal(body), global: isGlobal } : null;
+}
+
+function stripGlobal(value: string): string {
+  return value.startsWith("global::") ? value.slice("global::".length) : value;
+}
+
+export function createCSharpResolver(
+  files: CSharpResolverFileInput[],
+  rootPath: string,
+): CSharpResolver {
+  const workspaceRoot = path.resolve(rootPath);
+
+  // ── Per-file symbol index + namespace declarations ──
+  const symbolsByFile = new Map<string, FileSymbol[]>();
+  const nameIndexByFile = new Map<string, Map<string, FileSymbol[]>>();
+  /** full namespace name → files that declare it (prefix-expanded) */
+  const nsDeclared = new Map<string, Set<string>>();
+  /** member symbol index → owning type symbol index (nearest preceding
+   *  same-named type in emission order), per file. */
+  const memberOwnerByFile = new Map<string, Map<number, number>>();
+  /** symbol index → enclosing namespace chain (dotted), per file. */
+  const nsChainByFile = new Map<string, Map<number, string>>();
+  const projectRootByFile = new Map<string, string>();
+  const usingsByFile = new Map<string, Usings>();
+  const globalUsingsByRoot = new Map<string, Usings>();
+
+  const dirCsproj = new Map<string, boolean>();
+  function dirHasCsproj(dir: string): boolean {
+    const hit = dirCsproj.get(dir);
+    if (hit !== undefined) return hit;
+    let found = false;
+    try {
+      for (const entry of fs.readdirSync(dir)) {
+        if (entry.endsWith(".csproj")) {
+          found = true;
+          break;
+        }
+      }
+    } catch {
+      /* unreadable directory */
+    }
+    dirCsproj.set(dir, found);
+    return found;
+  }
+
+  function projectRootOf(filePath: string): string {
+    const cached = projectRootByFile.get(filePath);
+    if (cached !== undefined) return cached;
+    // Nearest ancestor directory containing a *.csproj, else the workspace
+    // root. The project file is never read — only its name is listed.
+    let dir = path.dirname(path.join(workspaceRoot, filePath));
+    let root = workspaceRoot;
+    for (;;) {
+      if (dirHasCsproj(dir)) {
+        root = dir;
+        break;
+      }
+      if (dir === workspaceRoot || dir === path.dirname(dir)) break;
+      dir = path.dirname(dir);
+    }
+    projectRootByFile.set(filePath, root);
+    return root;
+  }
+
+  // First pass: collect symbols per file and per-file usings.
+  for (const file of files) {
+    const syms: FileSymbol[] = file.symbols.map((s, i) => ({
+      name: s.name,
+      symbolType: s.symbolType,
+      startLine: s.startLine ?? 1,
+      endLine: s.endLine ?? s.startLine ?? 1,
+      index: i,
+    }));
+    symbolsByFile.set(file.filePath, syms);
+
+    // Namespace symbols emit fully qualified names (`A.B` for `namespace B`
+    // nested in `A`, `B` for a same-line sibling — the parser walks ancestor
+    // declarations, so no guessing is needed here). A symbol's enclosing
+    // namespace is the latest declaration emitted before it whose line
+    // range still contains it: later declarations supersede earlier same-
+    // line siblings (`A.B {X} B {Y}` puts Y in B), while nested
+    // declarations arrive already carrying their parent path.
+    const nsSyms = syms.filter((x) => x.symbolType === "namespace");
+    const nsChain = new Map<number, string>();
+    const lastTypeIdx = new Map<string, number>();
+    const memberOwner = new Map<number, number>();
+    for (const s of syms) {
+      let best: FileSymbol | null = null;
+      for (const n of nsSyms) {
+        if (n.index >= s.index) break;
+        if (n.startLine <= s.startLine && n.endLine >= s.endLine) best = n;
+      }
+      nsChain.set(s.index, best?.name ?? "");
+      const sep = s.name.lastIndexOf("::");
+      if (sep > 0) {
+        const owner = lastTypeIdx.get(s.name.slice(0, sep));
+        if (owner !== undefined) memberOwner.set(s.index, owner);
+      }
+      if (TYPE_KINDS.has(s.symbolType)) lastTypeIdx.set(s.name, s.index);
+    }
+    memberOwnerByFile.set(file.filePath, memberOwner);
+    nsChainByFile.set(file.filePath, nsChain);
+    const byName = new Map<string, FileSymbol[]>();
+    for (const s of syms) {
+      const list = byName.get(s.name) ?? [];
+      list.push(s);
+      byName.set(s.name, list);
+    }
+    nameIndexByFile.set(file.filePath, byName);
+
+    const usings: Usings = { aliases: new Map(), ordinary: [], staticTypes: [] };
+    for (const raw of file.importPaths) {
+      const parsed = parseUsing(raw);
+      if (!parsed) continue;
+      const bucket = parsed.global ? null : usings;
+      if (parsed.kind === "alias" && bucket) {
+        // Last alias wins locally only for collection; duplicates are a
+        // compile error, keep first for determinism.
+        if (!bucket.aliases.has(parsed.name)) bucket.aliases.set(parsed.name, parsed.target);
+      } else if (parsed.kind === "ordinary" && bucket) {
+        bucket.ordinary.push(parsed.ns);
+      } else if (parsed.kind === "static" && bucket) {
+        bucket.staticTypes.push(parsed.target);
+      }
+    }
+    usingsByFile.set(file.filePath, usings);
+  }
+
+  /** Enclosing namespace chain for a symbol, precomputed per file from
+   *  emission order + line ranges (see the first pass). */
+  function namespaceOf(file: string, sym: FileSymbol): string {
+    return nsChainByFile.get(file)?.get(sym.index) ?? "";
+  }
+
+  // Second pass: project roots, namespace declarations, type identities,
+  // and global usings.
+  const typesByKey = new Map<string, TypeIdentity>();
+  const typesByNsChain = new Map<string, TypeIdentity[]>();
+  for (const file of files) {
+    const root = projectRootOf(file.filePath);
+    const syms = symbolsByFile.get(file.filePath) ?? [];
+    const nsSyms = syms.filter((s) => s.symbolType === "namespace");
+    for (const n of nsSyms) {
+      // Namespace names are already fully qualified (parser-derived).
+      const full = n.name;
+      // Prefix expansion: `namespace A.B.C` declares A, A.B, and A.B.C.
+      const segs = full.split(".");
+      for (let i = 1; i <= segs.length; i++) {
+        const prefix = segs.slice(0, i).join(".");
+        const set = nsDeclared.get(prefix) ?? new Set<string>();
+        set.add(file.filePath);
+        nsDeclared.set(prefix, set);
+      }
+    }
+    for (const s of syms) {
+      if (!TYPE_KINDS.has(s.symbolType)) continue;
+      const ns = namespaceOf(file.filePath, s);
+      const key = `${root}|${ns}|${s.name}`;
+      let ident = typesByKey.get(key);
+      if (!ident) {
+        ident = { key, root, ns, chain: s.name, parts: [] };
+        typesByKey.set(key, ident);
+        const list = typesByNsChain.get(`${ns}|${s.name}`) ?? [];
+        list.push(ident);
+        typesByNsChain.set(`${ns}|${s.name}`, list);
+      }
+      ident.parts.push({
+        file: file.filePath,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        index: s.index,
+      });
+    }
+
+    // Global usings declared here apply to every file in this file's root.
+    for (const raw of file.importPaths) {
+      const parsed = parseUsing(raw);
+      if (!parsed?.global) continue;
+      let bucket = globalUsingsByRoot.get(root);
+      if (!bucket) {
+        bucket = { aliases: new Map(), ordinary: [], staticTypes: [] };
+        globalUsingsByRoot.set(root, bucket);
+      }
+      if (parsed.kind === "alias") {
+        if (!bucket.aliases.has(parsed.name)) bucket.aliases.set(parsed.name, parsed.target);
+      } else if (parsed.kind === "ordinary") {
+        bucket.ordinary.push(parsed.ns);
+      } else {
+        bucket.staticTypes.push(parsed.target);
+      }
+    }
+  }
+
+  /** In-scope usings: the file's compilation-unit usings plus the global
+   *  usings of the caller's project root. */
+  function scopeUsings(file: string): Usings {
+    const root = projectRootOf(file);
+    const local = usingsByFile.get(file);
+    const globals = globalUsingsByRoot.get(root);
+    if (!globals) {
+      return local ?? { aliases: new Map(), ordinary: [], staticTypes: [] };
+    }
+    const merged: Usings = {
+      aliases: new Map(local?.aliases ?? []),
+      ordinary: [...(local?.ordinary ?? []), ...globals.ordinary],
+      staticTypes: [...(local?.staticTypes ?? []), ...globals.staticTypes],
+    };
+    for (const [k, v] of globals.aliases) {
+      if (!merged.aliases.has(k)) merged.aliases.set(k, v);
+    }
+    return merged;
+  }
+
+  interface MemberCandidate extends CSharpResolvedTarget {
+    /** Emission index of the member symbol — preserves declaration
+     *  occurrence identity even when file, name, and line are identical. */
+    index: number;
+  }
+
+  /**
+   * Symbols `chain::member` inside the parts of one type identity. Ranges
+   * disambiguate same-named types sharing one file across namespaces.
+   */
+  function membersOf(
+    identity: TypeIdentity,
+    member: string,
+    typeOnly: boolean,
+  ): MemberCandidate[] {
+    const found: MemberCandidate[] = [];
+    const full = `${identity.chain}::${member}`;
+    for (const part of identity.parts) {
+      const candidates = nameIndexByFile.get(part.file)?.get(full) ?? [];
+      for (const c of candidates) {
+        if (c.startLine < part.startLine || c.startLine > part.endLine) continue;
+        // Owner attribution by emission order: the member belongs to the
+        // nearest preceding same-named type in its file, so same-named
+        // types sharing one line range keep distinct member sets.
+        if (memberOwnerByFile.get(part.file)?.get(c.index) !== part.index) continue;
+        if (typeOnly && !TYPE_KINDS.has(c.symbolType)) continue;
+        found.push({ filePath: part.file, name: full, index: c.index });
+      }
+    }
+    return found;
+  }
+
+  /**
+   * Unique (file,name,occurrence) targets for member `name` on a set of
+   * type identities. Same-named symbols in one file — overloads, #if/#else
+   * bodies, and declarations sharing a line — stay distinct, so resolution
+   * requires exactly one candidate.
+   */
+  function memberTargets(identities: TypeIdentity[], member: string): MemberCandidate[] {
+    const seen = new Map<string, MemberCandidate>();
+    for (const ident of identities) {
+      for (const target of membersOf(ident, member, false)) {
+        const key = `${target.filePath}\0${target.name}\0${target.index}`;
+        if (!seen.has(key)) seen.set(key, target);
+      }
+    }
+    return [...seen.values()];
+  }
+
+  /** Occurrence result keeps the internal index for node-level routing. */
+  const unwrap = (t: MemberCandidate): CSharpResolvedOccurrence => ({
+    filePath: t.filePath,
+    name: t.name,
+    index: t.index,
+  });
+
+  /** Type identities named `chain` in namespace `ns` across all roots. */
+  function typeIdentitiesIn(ns: string, chain: string): TypeIdentity[] {
+    return typesByNsChain.get(`${ns}|${chain}`) ?? [];
+  }
+
+  interface CallerContext {
+    file: string;
+    ns: string;
+    /** `::`-joined enclosing-type chain of the caller ("" for top-level). */
+    chain: string;
+  }
+
+  /**
+   * Resolve a simple type name through the C# lookup order. Returns the
+   * unique identity, "reserved" when an alias binds the name to a
+   * non-workspace target, or null.
+   */
+  function resolveTypeName(ctx: CallerContext, name: string): TypeIdentity | "reserved" | null {
+    // 1. Member types of enclosing types, innermost outward.
+    if (ctx.chain) {
+      const segs = ctx.chain.split("::");
+      for (let len = segs.length; len >= 1; len--) {
+        const chain = `${segs.slice(0, len).join("::")}::${name}`;
+        const found = typeIdentitiesIn(ctx.ns, chain);
+        if (found.length === 1) return found[0];
+        if (found.length > 1) return null; // ambiguous at this level
+      }
+    }
+
+    // 2. Enclosing namespaces innermost→global: declared types first.
+    const nsParts = ctx.ns ? ctx.ns.split(".") : [];
+    for (let len = nsParts.length; len >= 0; len--) {
+      const nsLevel = nsParts.slice(0, len).join(".");
+      const found = typeIdentitiesIn(nsLevel, name);
+      if (found.length === 1) return found[0];
+      if (found.length > 1) return null; // two distinct workspace types
+    }
+
+    // 3. Usings level: aliases, then ordinary-using namespaces.
+    const usings = scopeUsings(ctx.file);
+    const aliasTarget = usings.aliases.get(name);
+    if (aliasTarget !== undefined) {
+      // The alias binds the name. When its target is not a workspace type
+      // the name is still taken — no fall-through to a workspace namesake.
+      const resolved = resolveQualifiedTypeFromGlobal(aliasTarget);
+      return resolved ?? "reserved";
+    }
+    const viaUsings: TypeIdentity[] = [];
+    for (const ns of usings.ordinary) {
+      for (const ident of typeIdentitiesIn(ns, name)) {
+        if (!viaUsings.includes(ident)) viaUsings.push(ident);
+      }
+    }
+    if (viaUsings.length === 1) return viaUsings[0];
+    if (viaUsings.length > 1) return null;
+    return null;
+  }
+
+  /**
+   * Resolve a qualified path (`Ns.Outer.Inner`) to a unique type identity:
+   * the longest declared-namespace prefixes, then a type in that namespace,
+   * then nested member types. Also tries the global namespace (no prefix).
+   */
+  function resolveQualifiedTypeFromGlobal(pathName: string): TypeIdentity | null {
+    const segs = pathName.split(".");
+    const results = new Map<string, TypeIdentity>();
+    for (let i = segs.length - 1; i >= 0; i--) {
+      const ns = segs.slice(0, i).join(".");
+      if (i > 0 && !nsDeclared.has(ns)) continue;
+      const typeName = segs[i];
+      let current = typeIdentitiesIn(ns, typeName);
+      let alive = current.length > 0;
+      for (let j = i + 1; j < segs.length && alive; j++) {
+        const next: TypeIdentity[] = [];
+        for (const ident of current) {
+          const nested = typesByKey.get(`${ident.root}|${ident.ns}|${ident.chain}::${segs[j]}`);
+          if (nested) next.push(nested);
+        }
+        current = next;
+        alive = current.length > 0;
+      }
+      if (alive) for (const ident of current) results.set(ident.key, ident);
+    }
+    return results.size === 1 ? [...results.values()][0] : null;
+  }
+
+  /**
+   * Resolve `Q1.Q2.…​.M` to member targets. Interpretations:
+   *  (a) type-rooted — Q1 resolves via the lookup order, Q2..Qn-1 are nested
+   *      member types, M is the member;
+   *  (b) ns-rooted — a declared-namespace prefix Q1..Qi, type Qi+1, nested
+   *      member types, member M.
+   * Distinct (file,name) targets across interpretations must total one.
+   */
+  function resolveQualifiedMember(ctx: CallerContext, dotted: string): MemberCandidate[] {
+    const segs = dotted.split(".");
+    const member = segs[segs.length - 1];
+    const mids = segs.slice(0, -1);
+    const targets = new Map<string, MemberCandidate>();
+
+    // (a) type-rooted — Q1 via the lookup order, middle segments nested types.
+    const head = resolveTypeName(ctx, mids[0]);
+    if (head && head !== "reserved") {
+      let current: TypeIdentity[] = [head];
+      let alive = true;
+      for (let j = 1; j < mids.length && alive; j++) {
+        const next: TypeIdentity[] = [];
+        for (const ident of current) {
+          const nested = typesByKey.get(`${ident.root}|${ident.ns}|${ident.chain}::${mids[j]}`);
+          if (nested) next.push(nested);
+        }
+        current = next;
+        alive = current.length > 0;
+      }
+      if (alive) {
+        for (const target of memberTargets(current, member)) {
+          targets.set(`${target.filePath}\0${target.name}\0${target.index}`, target);
+        }
+      }
+    }
+
+    // (b) ns-rooted — every declared-namespace prefix length.
+    for (let i = mids.length - 1; i >= 1; i--) {
+      const ns = mids.slice(0, i).join(".");
+      if (!nsDeclared.has(ns)) continue;
+      let current = typeIdentitiesIn(ns, mids[i]);
+      let alive = current.length > 0;
+      for (let j = i + 1; j < mids.length && alive; j++) {
+        const next: TypeIdentity[] = [];
+        for (const ident of current) {
+          const nested = typesByKey.get(`${ident.root}|${ident.ns}|${ident.chain}::${mids[j]}`);
+          if (nested) next.push(nested);
+        }
+        current = next;
+        alive = current.length > 0;
+      }
+      if (alive) {
+        for (const target of memberTargets(current, member)) {
+          targets.set(`${target.filePath}\0${target.name}\0${target.index}`, target);
+        }
+      }
+    }
+    return [...targets.values()];
+  }
+
+  /** Caller type identity: (root, ns, chain) of the symbol the call sits in. */
+  function callerContext(file: string, callerName: string): CallerContext | null {
+    const syms = nameIndexByFile.get(file)?.get(callerName) ?? [];
+    const chain = callerName.includes("::") ? callerName.slice(0, callerName.lastIndexOf("::")) : "";
+    // Caller must be a single occurrence. Call records carry no position, so
+    // two same-file symbols sharing this label (overloads, #if duplicates,
+    // same-named members) cannot be attributed to their own graph nodes —
+    // the (file,label) caller lookup would collapse them onto one node and
+    // emit an edge from the wrong source. Fail closed: no context, no edge.
+    if (syms.length !== 1) return null;
+    return { file, ns: namespaceOf(file, syms[0]!), chain };
+  }
+
+  function resolveCall(
+    filePath: string,
+    callerName: string,
+    calleeName: string,
+  ): CSharpResolvedTarget | null {
+    const hit = resolveCallOccurrence(filePath, callerName, calleeName);
+    return hit ? { filePath: hit.filePath, name: hit.name } : null;
+  }
+
+  function resolveCallOccurrence(
+    filePath: string,
+    callerName: string,
+    calleeName: string,
+  ): CSharpResolvedOccurrence | null {
+    const ctx = callerContext(filePath, callerName);
+    if (!ctx) return null;
+
+    const isGlobal = calleeName.startsWith("global::");
+    const dotted = isGlobal ? calleeName.slice("global::".length) : calleeName;
+    const segs = dotted.split(".");
+
+    if (segs.length === 1) {
+      // Bare call: same-type member across all partial parts, else
+      // uniquely bound using-static members.
+      const member = segs[0];
+      if (ctx.chain) {
+        const own = typeIdentitiesIn(ctx.ns, ctx.chain).filter(
+          (t) => t.root === projectRootOf(filePath),
+        );
+        for (const ident of own) {
+          const targets = memberTargets([ident], member);
+          // Parts declare the name: unique target wins; duplicates
+          // (overloads, #if/#else bodies, partial parts) are ambiguous and
+          // never fall through to using-static.
+          if (targets.length > 0) return targets.length === 1 ? unwrap(targets[0]) : null;
+        }
+      }
+      const usings = scopeUsings(filePath);
+      const staticTargets = new Map<string, MemberCandidate>();
+      for (const target of usings.staticTypes) {
+        const ident = resolveQualifiedTypeFromGlobal(target);
+        if (!ident) continue;
+        for (const t of memberTargets([ident], member)) {
+          staticTargets.set(`${t.filePath}\0${t.name}\0${t.index}`, t);
+        }
+      }
+      return staticTargets.size === 1 ? unwrap([...staticTargets.values()][0]) : null;
+    }
+
+    // Qualified call.
+    if (segs[0] === "this") {
+      // this.M — same-type member across all parts.
+      if (!ctx.chain || segs.length !== 2) return null;
+      const own = typeIdentitiesIn(ctx.ns, ctx.chain).filter((t) => t.root === projectRootOf(filePath));
+      const targets = new Map<string, MemberCandidate>();
+      for (const ident of own) {
+        for (const t of memberTargets([ident], segs[1])) {
+          targets.set(`${t.filePath}\0${t.name}\0${t.index}`, t);
+        }
+      }
+      return targets.size === 1 ? unwrap([...targets.values()][0]) : null;
+    }
+
+    if (isGlobal) {
+      // global::Ns.Type.M — ns-rooted only.
+      const targets = new Map<string, MemberCandidate>();
+      const mids = segs.slice(0, -1);
+      const member = segs[segs.length - 1];
+      for (let i = mids.length - 1; i >= 1; i--) {
+        const ns = mids.slice(0, i).join(".");
+        if (!nsDeclared.has(ns)) continue;
+        let current = typeIdentitiesIn(ns, mids[i]);
+        let alive = current.length > 0;
+        for (let j = i + 1; j < mids.length && alive; j++) {
+          const next: TypeIdentity[] = [];
+          for (const ident of current) {
+            const nested = typesByKey.get(`${ident.root}|${ident.ns}|${ident.chain}::${mids[j]}`);
+            if (nested) next.push(nested);
+          }
+          current = next;
+          alive = current.length > 0;
+        }
+        if (alive) {
+          for (const t of memberTargets(current, member)) {
+            targets.set(`${t.filePath}\0${t.name}\0${t.index}`, t);
+          }
+        }
+      }
+      return targets.size === 1 ? unwrap([...targets.values()][0]) : null;
+    }
+
+    const targets = resolveQualifiedMember(ctx, dotted);
+    return targets.length === 1 ? unwrap(targets[0]) : null;
+  }
+
+  /**
+   * Imports edges: only an explicit using binding that resolves to exactly
+   * one in-workspace file. Namespaces/types spread over several files, and
+   * namespaces the workspace does not declare, produce no edge.
+   */
+  function resolveImport(filePath: string, directive: string): string | null {
+    const parsed = parseUsing(directive);
+    if (!parsed) return null;
+    if (parsed.kind === "ordinary") {
+      const files = nsDeclared.get(parsed.ns);
+      return files && files.size === 1 ? [...files][0] : null;
+    }
+    if (parsed.kind === "static") {
+      const ident = resolveQualifiedTypeFromGlobal(parsed.target);
+      if (!ident) return null;
+      const files = new Set(ident.parts.map((p) => p.file));
+      return files.size === 1 ? [...files][0] : null;
+    }
+    // alias — target may be a type or a namespace.
+    const ident = resolveQualifiedTypeFromGlobal(parsed.target);
+    if (ident) {
+      const files = new Set(ident.parts.map((p) => p.file));
+      return files.size === 1 ? [...files][0] : null;
+    }
+    const nsFiles = nsDeclared.get(parsed.target);
+    return nsFiles && nsFiles.size === 1 ? [...nsFiles][0] : null;
+  }
+
+  return { resolveCall, resolveCallOccurrence, resolveImport };
+}

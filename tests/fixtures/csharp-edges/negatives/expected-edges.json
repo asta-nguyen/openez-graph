@@ -1,0 +1,6 @@
+{
+  "canary": { "from": "N.cs#C::Run", "to": "N.cs#C::Other" },
+  "edges": [
+    { "from": "N.cs#C::Run", "to": "N.cs#C::Other", "tier": "member" }
+  ]
+}

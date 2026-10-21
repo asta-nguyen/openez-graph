@@ -27,6 +27,7 @@ import { createGoResolver, isGoVendorPath, type GoResolver } from "./go-resolver
 import { markRustCallShadowing } from "./languages";
 import { createRustResolver, type RustResolver } from "./rust-resolver";
 import { createCppResolver, type CppResolver } from "./cpp-resolver";
+import { createCSharpResolver, type CSharpResolver } from "./csharp-resolver";
 import {
   createPythonModuleResolver,
   createPythonResolver,
@@ -61,6 +62,11 @@ const PARSER_VERSION_OXC = "oxc-v5";
 const PARSER_VERSION_NATIVE = "native-v6";
 const PARSER_VERSION_FALLBACK = "fallback-v6";
 
+/** C++ headers reject the full native parse on any syntax error. */
+function nativeBatchLanguage(language: string, relativePath: string): string {
+  return language === "cpp" && relativePath.endsWith(".h") ? "cpp-header" : language;
+}
+
 /** OXC-family languages that share binding extraction, module-aware call
  *  resolution, and lifted graph caps. JS/JSX callers keep the JS-only target
  *  policy; TS/TSX callers may reach any OXC-family module. */
@@ -79,15 +85,6 @@ function indexLeaseExpiry(): string {
  * is optional (platform-specific .node binary); when unavailable the indexer
  * falls back to the WASM/regex parsers and tags cache rows `fallback-v6`.
  */
-/**
- * Native batch language tag: `.h` files parse through the cpp grammar with a
- * strict any-error fallback (mirrors the WASM cppHeaderConfig); every other
- * C++ extension keeps partial trees.
- */
-function nativeBatchLanguage(language: string, relativePath: string): string {
-  return language === "cpp" && relativePath.endsWith(".h") ? "cpp-header" : language;
-}
-
 export interface NativeParser {
   readonly id: "native-v6";
   parseCodeBatch(items: Array<{ language: string; content: string }>): Array<{
@@ -138,7 +135,7 @@ export function resetNativeParserCache(): void {
  * `fallback-v6`, and every other parser (oxc, markdown, config, regex)
  * is grouped under `oxc-v5` since they share the same chunking/call-
  * extraction contract. Non-native tree-sitter/regex fallbacks for
- * Python/Go/Rust use `fallback-v6` so cache validation matches the
+ * Python/Go/Rust/Ruby/C# use `fallback-v6` so cache validation matches the
  * expected version when the native extension is unavailable.
  */
 function parserVersionFor(parserName: string): string {
@@ -221,12 +218,6 @@ export function createWorkspaceFileResolver(
         );
       }
 
-      if (language === "cpp") {
-        // C++ quoted includes resolve through cpp-resolver.ts only — the
-        // generic relative-import path must never capture a C++ edge.
-        return null;
-      }
-
       if (language === "ruby") {
         // require_relative resolves literal paths to .rb files only — a
         // same-stem .md or other extension never captures the edge.
@@ -236,6 +227,8 @@ export function createWorkspaceFileResolver(
         });
         return rubyImportResolver.resolveImport(importerRelativePath, importPath);
       }
+
+      if (language === "cpp") return null; // C++ includes resolve in the TU-aware resolver.
 
       if (importPath.startsWith(".")) {
         return resolveRelativeImport(importerRelativePath, importPath);
@@ -409,8 +402,8 @@ async function parseInline(
 ): Promise<Map<string, ParseResult>> {
   const results = new Map<string, ParseResult>();
 
-  // ── Batch native tree-sitter parse for Python/Go/Rust/Ruby files ──
-  const TS_LANGS = new Set(["python", "go", "rust", "ruby", "cpp"]);
+  // ── Batch native tree-sitter parse for Python/Go/Rust/Ruby/C# files ──
+  const TS_LANGS = new Set(["python", "go", "rust", "ruby", "csharp", "cpp"]);
   const native = resolveNativeParser();
 
   const batchTasks: ParseTask[] = [];
@@ -432,10 +425,7 @@ async function parseInline(
   if (batchTasks.length > 0) {
     const _batchStart = Date.now();
     const batchItems = batchTasks.map((t) => ({
-      language: nativeBatchLanguage(
-        inferDocumentKind(t.relativePath).language!,
-        t.relativePath,
-      ),
+      language: nativeBatchLanguage(inferDocumentKind(t.relativePath).language!, t.relativePath),
       content: t.content,
     }));
     // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust/Ruby
@@ -471,14 +461,14 @@ async function parseInline(
         chunks = boundChunks(chunks, task.targetTokens, task.overlapTokens, task.counter);
         // Python keeps qualified call names + all calls (graph caps are
         // lifted for Python only) and gets bindings + shadow marks here —
-        // the native result shape is unchanged. Ruby and Rust are also
-        // uncapped (C++ too); Rust calls carry the same shadow marker.
+        // the native result shape is unchanged. Ruby, Rust, and C# are also
+        // uncapped; Rust calls carry the same shadow marker.
         const isPython = lang === "python";
         const isRuby = lang === "ruby";
         const isRust = lang === "rust";
         const isCpp = lang === "cpp";
         const callExpressions =
-          lang === "go" || isPython || isRuby || isRust || isCpp
+          lang === "go" || isPython || isRuby || isRust || lang === "csharp" || isCpp
             ? nr.callExpressions
             : nr.callExpressions.slice(0, 20);
         if (isPython) markPythonCallShadowing(task.content, symbols, callExpressions);
@@ -1141,8 +1131,8 @@ export async function buildGraphGeneration(
   // Read file contents
   const fs = await import("node:fs/promises");
 
-  // Split documents: native-parseable (python/go/rust/ruby) vs registry-parseable
-  const NATIVE_LANGS = new Set(["python", "go", "rust", "ruby", "cpp"]);
+  // Split documents: native-parseable (python/go/rust/ruby/csharp) vs registry-parseable
+  const NATIVE_LANGS = new Set(["python", "go", "rust", "ruby", "csharp", "cpp"]);
   const nativeDocs: typeof graphDocs = [];
   const registryDocs: typeof graphDocs = [];
   for (const doc of graphDocs) {
@@ -1319,14 +1309,14 @@ export async function buildGraphGeneration(
           // Python keeps qualified call names + every call; bindings and
           // shadow marks are derived in TypeScript so the native result
           // shape stays unchanged. Calls ride through the shared imports
-          // envelope so cached native rows keep their bindings. Ruby and
-          // Rust and C++ are also uncapped; Rust calls carry the shadow marker.
+          // envelope so cached native rows keep their bindings. Ruby, Rust,
+          // and C# are also uncapped; Rust calls carry the same shadow marker.
           const isPython = lang === "python";
           const isRuby = lang === "ruby";
           const isRust = lang === "rust";
           const isCpp = lang === "cpp";
           const callExpressions =
-            lang === "go" || isPython || isRuby || isRust || isCpp
+            lang === "go" || isPython || isRuby || isRust || lang === "csharp" || isCpp
               ? nr.callExpressions
               : nr.callExpressions.slice(0, 20);
           if (isPython)
@@ -1482,11 +1472,9 @@ export async function buildGraphGeneration(
       : null;
 
   // C++ translation-unit resolution: quoted includes build a per-file
-  // visibility closure; calls resolve to unique function/method targets —
-  // see cpp-resolver.ts.
-  const cppFiles = [...parsedFiles.keys()].filter(
-    (p) => parsedFiles.get(p)?.language === "cpp",
-  );
+  // visibility closure; calls resolve to unique targets visible from the
+  // translation unit — see cpp-resolver.ts.
+  const cppFiles = [...parsedFiles.keys()].filter((p) => parsedFiles.get(p)?.language === "cpp");
   const cppResolver: CppResolver | null =
     cppFiles.length > 0
       ? createCppResolver({
@@ -1498,12 +1486,42 @@ export async function buildGraphGeneration(
         })
       : null;
 
+  // C# call resolution is namespace/using-aware with project-root scoping —
+  // see csharp-resolver.ts. Same-type partial calls, explicitly qualified
+  // calls, and uniquely bound using-static calls resolve; everything else
+  // (variable receivers, inherited members, overloads, ambiguous or
+  // cross-root-duplicate identities, external names) produces no edge.
+  const csharpFiles = [...parsedFiles.keys()].filter(
+    (p) => parsedFiles.get(p)?.language === "csharp",
+  );
+  const csharpResolver: CSharpResolver | null =
+    csharpFiles.length > 0
+      ? createCSharpResolver(
+          csharpFiles.map((file) => {
+            const parsed = parsedFiles.get(file);
+            return {
+              filePath: file,
+              symbols: (parsed?.definedSymbols ?? []).map((s) => ({
+                ...s,
+                type: s.symbolType,
+              })),
+              importPaths: parsed?.importPaths ?? [],
+            };
+          }),
+          rootPath,
+        )
+      : null;
+
   // ── Build nodes ──
   const allNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> =
     [];
   const allEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> =
     [];
   const symbolNodeIdsByFileAndName = new Map<string, string>();
+  // C# occurrence routing: `${file}\0${emissionIndex}` -> node id, so same
+  // (file,label) symbols (same-named members in one file) map to their own
+  // graph node instead of collapsing to the label's last writer.
+  const symbolNodeIdsByFileAndIndex = new Map<string, string>();
   const pendingCallEdges: Array<{
     callerName: string;
     calleeName: string;
@@ -1556,7 +1574,7 @@ export async function buildGraphGeneration(
     });
 
     // Symbol nodes (cap 30 for non-OXC languages; Go, Python, Ruby, Rust,
-    // and C++ are uncapped).
+    // and C# are uncapped).
     const isOxcFile = OXC_GRAPH_LANGUAGES.has(language);
     const uncapped =
       isOxcFile ||
@@ -1564,6 +1582,7 @@ export async function buildGraphGeneration(
       language === "python" ||
       language === "ruby" ||
       language === "rust" ||
+      language === "csharp" ||
       language === "cpp";
     const symbols = uncapped ? parsed.definedSymbols : parsed.definedSymbols.slice(0, 30);
     const symNodeStart = allNodeInputs.length;
@@ -1583,7 +1602,7 @@ export async function buildGraphGeneration(
     }
 
     // Call expressions (cap 20 for non-OXC languages; Go, Python, Ruby,
-    // Rust, and C++ uncapped)
+    // Rust, and C# uncapped)
     const callExpressions = uncapped ? parsed.callExpressions : parsed.callExpressions.slice(0, 20);
     for (const call of callExpressions) {
       pendingCallEdges.push({
@@ -1615,6 +1634,7 @@ export async function buildGraphGeneration(
         `${meta.filePath}\0${allNodeInputs[meta.symNodeStart + si].label}`,
         symNodeId,
       );
+      symbolNodeIdsByFileAndIndex.set(`${meta.filePath}\0${si}`, symNodeId);
       if (fileNodeId && symNodeId && fileNodeId !== symNodeId) {
         allEdges.push({ fromNodeId: fileNodeId, toNodeId: symNodeId, type: "defines" });
       }
@@ -1716,8 +1736,13 @@ export async function buildGraphGeneration(
    *  resolver for everything else. */
   function resolveModuleSpecifier(fromFile: string, specifier: string): string | null {
     const language = parsedFiles.get(fromFile)?.language ?? "";
-    if (TS_GRAPH_LANGUAGES.has(language)) return tsResolver.resolve(fromFile, specifier);
+    // C# importPaths carry full using-directive text — only a binding that
+    // resolves to exactly one in-workspace file produces an imports edge.
+    // The generic resolver returns null for non-relative specifiers anyway;
+    // routing here keeps that guarantee explicit.
+    if (language === "csharp") return csharpResolver?.resolveImport(fromFile, specifier) ?? null;
     if (language === "cpp") return cppResolver?.resolveImport(fromFile, specifier) ?? null;
+    if (TS_GRAPH_LANGUAGES.has(language)) return tsResolver.resolve(fromFile, specifier);
     return resolver.resolveImport(fromFile, specifier, language);
   }
 
@@ -1956,6 +1981,7 @@ export async function buildGraphGeneration(
     const isRubyCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "ruby";
     const isRustCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "rust";
     const isCppCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "cpp";
+    const isCSharpCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "csharp";
     let calleeNodeId: string | undefined;
     if (isGoCaller) {
       calleeNodeId = resolveGoCall(call) ?? undefined;
@@ -1975,9 +2001,7 @@ export async function buildGraphGeneration(
         ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.symbolName}`)
         : undefined;
     } else if (isCppCaller) {
-      // C++ never uses lexical-name guessing or the global symbol map —
-      // resolution is translation-unit aware via cpp-resolver.ts and
-      // emits only unique targets visible through quoted includes.
+      // C++ uses translation-unit visibility and unique target resolution.
       const target = cppResolver?.resolveCall({
         filePath: call.filePath,
         callerName: call.callerName,
@@ -1998,6 +2022,19 @@ export async function buildGraphGeneration(
       );
       calleeNodeId = target
         ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.name}`)
+        : undefined;
+    } else if (isCSharpCaller) {
+      // C# never uses lexical-name guessing, OXC bindings, or the global
+      // symbol map — resolution is namespace/using-aware via
+      // csharp-resolver.ts and emits only unique targets.
+      const target = csharpResolver?.resolveCallOccurrence(
+        call.filePath,
+        call.callerName,
+        call.calleeName,
+      );
+      calleeNodeId = target
+        ? (symbolNodeIdsByFileAndIndex.get(`${target.filePath}\0${target.index}`) ??
+          symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.name}`))
         : undefined;
     } else {
       calleeNodeId = lexicalNames
