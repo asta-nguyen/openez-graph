@@ -1,0 +1,195 @@
+tests/fixtures/cpp-edges/abovecap/expected-edges.json
+  s_5d53e981891c8b::t_762ba8db5756a3 1-39
+tests/fixtures/cpp-edges/pairing/lib.cpp
+  s_5d53e981891c8b::t_693c889e10e0e0 1-6
+tests/fixtures/cpp-edges/headers/ok.h
+  s_5d53e981891c8b::t_762ba8db5756a3 1-5
+tests/fixtures/cpp-edges/scopes/expected-edges.json
+  s_5d53e981891c8b::t_ea91d9fdbbd695 5
+  s_5d53e981891c8b::t_b6d631968810b3 1-4,6-8
+tests/fixtures/cpp-edges/includes/baseline.json
+  s_5d53e981891c8b::t_693c889e10e0e0 1-5
+packages/indexer/src/index-workspace.ts
+  s_5d53e981891c8b::t_c550b9212c7b92 1329
+  s_5d53e981891c8b::t_86da91de1dda4f 475,1323
+  s_5d53e981891c8b::t_19657f1479c371 29,61-62,80,82-90,92,116,413,435-438,450,479,481,1145,1296,1484-1500,1558-1559,1566-1567,1585-1586,1720,1958,1977-1985
+  s_5d53e981891c8b::t_7de37b5fc1d428 113,137-138,141,1254-1255
+  s_5d53e981891c8b::t_8efcd1cad961b4 1327
+  s_5d53e981891c8b::t_455529763abaec 224-229
+  s_5d53e981891c8b::t_89f00a860afaa8 1986-1988
+tests/fixtures/cpp-edges/pairing/main.cpp
+  s_5d53e981891c8b::t_693c889e10e0e0 1-2
+tests/fixtures/cpp-edges/pairing/expected-edges.json
+  s_5d53e981891c8b::t_ea91d9fdbbd695 2,4
+  s_5d53e981891c8b::t_693c889e10e0e0 1,3,5-8
+tests/fixtures/cpp-edges/includes/angle.cpp
+  s_5d53e981891c8b::t_693c889e10e0e0 1-3
+tests/fixtures/cpp-edges/include-dirs/include/shared/util.h
+  s_5d53e981891c8b::t_b6d631968810b3 1-2
+tests/parsed-documents-cache.test.ts
+  s_5d53e981891c8b::t_4087f790cb1b85 157-158,173,185,189,193,197,204,359,401,409,418
+tests/fixtures/cpp-edges/includes/a.h
+  s_5d53e981891c8b::t_693c889e10e0e0 1-4
+tests/fixtures/cpp-edges/scopes/thiscalls.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-2
+tests/fixtures/parity/cpp/templates.cpp
+  s_5d53e981891c8b::t_ed31c29daa6c79 1-29
+packages/indexer/src/tree-sitter/parse.ts
+  s_5d53e981891c8b::t_fd58da60d79d56 55-58,125-130,229-234,314,366,369-370,391-399,415
+  s_5d53e981891c8b::t_d165dea2372ace 41-43,544-547
+packages/indexer/src/tree-sitter/configs.ts
+  s_5d53e981891c8b::t_7ca62f16df5955 655-659,661,664-665,669-682
+  s_5d53e981891c8b::t_5c8b72689d104f 612-654,660,662-663,666-668,683-896
+tests/fixtures/cpp-edges/include-dirs/other/dup.h
+  s_5d53e981891c8b::t_b6d631968810b3 1-2
+tests/native-wasm-parity.test.ts
+  s_5d53e981891c8b::t_abd6148ab05c04 366-367
+  s_5d53e981891c8b::t_4087f790cb1b85 11,41
+AGENTS.md
+  s_5d53e981891c8b::t_7cfac5c694865e 145-149
+tests/fixtures/parity/cpp/edge.cpp
+  s_5d53e981891c8b::t_ed31c29daa6c79 1-27
+tests/fixtures/cpp-edges/headers/bad.h
+  s_5d53e981891c8b::t_762ba8db5756a3 1-2
+tests/fixtures/cpp-edges/scopes/user.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-6
+tests/fixtures/cpp-edges/headers/upper.C
+  s_5d53e981891c8b::t_eda57de00ac5c8 1
+  s_5d53e981891c8b::t_762ba8db5756a3 2
+packages/indexer/src/tree-sitter/index.ts
+  s_5d53e981891c8b::t_9d16bde312bdfd 3
+packages/native/src/parser.rs
+  s_5d53e981891c8b::t_393b3033138f93 61-64,794-798,800,804-806,812-828,830-831,835,1408-1410,1412,1535,1617,1644
+  s_5d53e981891c8b::t_80d7e3889402e1 1830-1837
+  s_5d53e981891c8b::t_fcb9468e62af59 91-93,116-118,127-130,295,309,321,350,364,378,390,418,432,446,460,474,488,502,516,530,542,705,719,733,747,761,775,787,1579-1582,1585
+  s_5d53e981891c8b::t_26ba8f0d553fe8 788-789,791-793,799,801-803,807-811,829,832-834,836-1136,1297-1311,1853-1856,1867,1904-1907,1945-1947
+  s_5d53e981891c8b::t_b7ef6663ec9219 790,1948
+packages/indexer/package.json
+  s_5d53e981891c8b::t_34717a1fa9f0d1 23
+tests/fixtures/cpp-edges/pairing/baseline.json
+  s_5d53e981891c8b::t_693c889e10e0e0 1-5
+tests/fixtures/cpp-edges/pairing/lib.h
+  s_5d53e981891c8b::t_693c889e10e0e0 1-10
+apps/cli/tsup.config.ts
+  s_5d53e981891c8b::t_b94dd8f8ebcd4b 33
+tests/fixtures/cpp-edges/include-dirs/dup/dup.h
+  s_5d53e981891c8b::t_b6d631968810b3 1-2
+packages/indexer/src/cpp-resolver.ts
+  s_5d53e981891c8b::t_80dbea871ac5cf 71-93
+  s_5d53e981891c8b::t_8a0d7abd6f125d 1-70,94-235
+tests/fixtures/cpp-edges/include-dirs/expected-edges.json
+  s_5d53e981891c8b::t_ea91d9fdbbd695 2,4
+  s_5d53e981891c8b::t_b6d631968810b3 1,3,5-6
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_5d53e981891c8b::t_9d16bde312bdfd 1-2,5-12,15-16,30,50,52-54,56-66,80-85,87-91
+tests/fixtures/cpp-edges/scopes/baseline.json
+  s_5d53e981891c8b::t_b6d631968810b3 1-5
+tests/fixtures/cpp-edges/scopes/math.h
+  s_5d53e981891c8b::t_b6d631968810b3 1-8
+tests/fixtures/cpp-edges/abovecap/baseline.json
+  s_5d53e981891c8b::t_762ba8db5756a3 1-5
+tests/cpp-edge-accuracy.test.ts
+  s_5d53e981891c8b::t_ef835e2dfefc7e 14,210-297
+  s_5d53e981891c8b::t_7b6db22b663252 1-13,15-209,298
+tests/fixtures/parity/cpp/example.cpp
+  s_5d53e981891c8b::t_ed31c29daa6c79 1-25
+apps/cli/README.md
+  s_5d53e981891c8b::t_7cfac5c694865e 12,17,136,144
+tests/fixtures/cpp-edges/abovecap/big.cpp
+  s_5d53e981891c8b::t_762ba8db5756a3 1-35
+tests/fixtures/cpp-edges/headers/use.cpp
+  s_5d53e981891c8b::t_762ba8db5756a3 1-3
+tests/fixtures/parity/cpp/operators.cpp
+  s_5d53e981891c8b::t_3969038353c9b1 1-8
+tests/fixtures/cpp-edges/include-dirs/src/dupu.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-2
+tests/fixtures/cpp-edges/includes/c.h
+  s_5d53e981891c8b::t_693c889e10e0e0 1-2
+tests/fixtures/parity/cpp/edge.h
+  s_5d53e981891c8b::t_ed31c29daa6c79 1-2
+tests/fixtures/cpp-edges/headers/expected-edges.json
+  s_5d53e981891c8b::t_762ba8db5756a3 1-3,6-7
+  s_5d53e981891c8b::t_eda57de00ac5c8 4-5
+tests/fixtures/cpp-edges/include-dirs/src/app.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-2
+packages/indexer/src/languages.ts
+  s_5d53e981891c8b::t_306b79d26b74db 36-48,84-87
+tests/fixtures/cpp-edges/includes/a.cpp
+  s_5d53e981891c8b::t_693c889e10e0e0 1-3
+tests/fixtures/parity/cpp/siblings.cpp
+  s_5d53e981891c8b::t_3969038353c9b1 1-5
+tests/fixtures/cpp-edges/includes/invisible.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1
+tests/fixtures/cpp-edges/include-dirs/src/out.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-3
+tests/fixtures/cpp-edges/includes/d.h
+  s_5d53e981891c8b::t_693c889e10e0e0 1-3
+tests/cpp-resolver.test.ts
+  s_5d53e981891c8b::t_6070226aaa83e5 1-183,185-186,188-217
+  s_5d53e981891c8b::t_80dbea871ac5cf 184,187
+apps/cli/package.json
+  s_5d53e981891c8b::t_34717a1fa9f0d1 4,52
+tests/fixtures/cpp-edges/includes/expected-edges.json
+  s_5d53e981891c8b::t_693c889e10e0e0 1-9
+docs/agent-devkit/changes/2026-10-20-39-cpp-indexing-accuracy/tasks.md
+  s_5d53e981891c8b::t_898e3fc268a9d4 76,95-96
+  s_5d53e981891c8b::t_6ed4e629decc15 23-24,29,39-40
+  s_5d53e981891c8b::t_b3a8860d9dd054 97
+  s_5d53e981891c8b::t_2ed5d757c21b5a 75,90-94
+  s_5d53e981891c8b::t_501759477c68fe 48-49,57-58,66-67
+tests/fixtures/cpp-edges/includes/b.h
+  s_5d53e981891c8b::t_693c889e10e0e0 1-3
+tests/fixtures/cpp-edges/include-dirs/src/root.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-2
+packages/native/Cargo.toml
+  s_5d53e981891c8b::t_97ac18deb0f53e 19
+tests/fixtures/cpp-edges/include-dirs/baseline.json
+  s_5d53e981891c8b::t_b6d631968810b3 1-5
+tests/fixtures/parity/cpp/util.h
+  s_5d53e981891c8b::t_ed31c29daa6c79 1-2
+tests/fixtures/cpp-edges/scopes/ov.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-2
+tests/fixtures/cpp-edges/headers/baseline.json
+  s_5d53e981891c8b::t_762ba8db5756a3 1,3-5
+  s_5d53e981891c8b::t_eda57de00ac5c8 2
+tests/fixtures/cpp-edges/scopes/calc.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-4
+tests/cpp-indexer.test.ts
+  s_5d53e981891c8b::t_023c40427b31b5 1-108,111-132,187-294
+  s_5d53e981891c8b::t_346dd4a7336ca3 109-110
+  s_5d53e981891c8b::t_9b1a4392b3f9fa 133-186
+tests/fixtures/cpp-edges/scopes/unknown.cpp
+  s_5d53e981891c8b::t_b6d631968810b3 1-8
+tests/fixtures/cpp-edges/scopes/overloaded.h
+  s_5d53e981891c8b::t_b6d631968810b3 1-3
+tests/fixtures/parity/cpp/header.h
+  s_5d53e981891c8b::t_ed31c29daa6c79 1-21
+packages/native/Cargo.lock
+  s_5d53e981891c8b::t_d8cfc2545bcf13 254,434-443
+pnpm-lock.yaml
+  s_39270ae3bb7555::t_a4929dd48115bf 77-79,398-400,4532-4547,8942-8952
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "11ab3f4bc48f0e3b3cf111a433e7f2630c4c8eba",
+  "prompts": {},
+  "sessions": {
+    "s_39270ae3bb7555": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15a40-3655-7e73-98c0-e06c51fe4bf7",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_5d53e981891c8b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "ember-octave",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
