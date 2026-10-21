@@ -1,0 +1,238 @@
+tests/fixtures/csharp-edges/roots/B/B.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+tests/parsed-documents-cache.test.ts
+  s_92923413e21ca2::t_23c05a96e0402d 157-158,173,185,189,193,197,204,359,401,409,418
+  s_92923413e21ca2::t_62a8162fdd963c 426-518
+tests/fixtures/csharp-edges/dup-caller/baseline.json
+  s_92923413e21ca2::t_900f94e9b0e146 1
+tests/fixtures/csharp-edges/roots/X/C.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/mixed-depth/expected-edges.json
+  s_92923413e21ca2::t_63a15f759713df 1-6
+tests/fixtures/csharp-edges/file-scoped-csx/Scoped.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/roots/R1/Dup.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-4
+tests/fixtures/csharp-edges/negatives/expected-edges.json
+  s_92923413e21ca2::t_36db37a6948a26 1-6
+tests/fixtures/csharp-edges/same-line/App.csproj
+  s_92923413e21ca2::t_520e65d6d730ec 1
+packages/indexer/src/languages.ts
+  s_92923413e21ca2::t_7f9ba52c5d174c 36-37,1638-1653
+  s_92923413e21ca2::t_174da9f0fc09c3 1654
+tests/fixtures/csharp-edges/basic/App.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+tests/fixtures/csharp-edges/negatives/N.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-19
+tests/csharp-indexer.test.ts
+  s_92923413e21ca2::t_84ab1dcf85b4b0 31,45-46,53,59,64,74,97,127,129,131-136,138-148,150-162,166,172,186,194-195,200,202,217,288,293,296,301,304,317,342,347
+  s_92923413e21ca2::t_c6cc7a4961f8ff 57-58,116-121,123,236-287
+  s_92923413e21ca2::t_8d03840a7a09d8 66-70,130,137,149
+  s_92923413e21ca2::t_cbcb7fbd8f7ad1 1-30,32-44,47-52,54-56,60-63,65,71-73,75-96,98-115,122,124-126,128,163-165,167-171,173-185,187-193,196-199,201,203-216,218-235,289-292,294-295,297-300,302-303,305-316,318-341,343-346,348
+tests/csharp-edge-accuracy.test.ts
+  s_92923413e21ca2::t_72cd86e4236792 83-85,115-116,118-119,215-242
+  s_92923413e21ca2::t_6511b089532267 243-267
+  s_92923413e21ca2::t_02eec34c9dcfe3 1-82,86-114,117,120-214,268
+packages/indexer/src/tree-sitter/loader.ts
+  s_92923413e21ca2::t_7f9ba52c5d174c 51-60,62-65,67,72
+tests/fixtures/csharp-edges/negatives/baseline.json
+  s_92923413e21ca2::t_f21291f899bac9 1-11
+tests/fixtures/parity/csharp/file-scoped.cs
+  s_92923413e21ca2::t_02eec34c9dcfe3 1-12
+tests/fixtures/csharp-edges/dup-label/expected-edges.json
+  s_92923413e21ca2::t_63a15f759713df 1-6
+tests/fixtures/csharp-edges/roots/B/C.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/roots/A/globals.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-2
+tests/fixtures/csharp-edges/roots/A/Helper.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/above-cap/App.csproj
+  s_92923413e21ca2::t_065bbd632bcb73 1
+tests/fixtures/csharp-edges/basic/baseline.json
+  s_92923413e21ca2::t_f21291f899bac9 1-11
+packages/indexer/src/tree-sitter/index.ts
+  s_92923413e21ca2::t_ad51c9f9c43d50 3
+tests/fixtures/csharp-edges/using-forms/C/Consumer.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-19
+tests/native-wasm-parity.test.ts
+  s_92923413e21ca2::t_02eec34c9dcfe3 11,41,366-367
+tests/csharp-resolver.test.ts
+  s_92923413e21ca2::t_581c7b5ff71f05 216,221-222,232-240,247-249,251-255
+  s_92923413e21ca2::t_99b4bd2545ab7b 420-484,600
+  s_92923413e21ca2::t_098106fd9c6666 1-215,217-220,223-231,241-246,250,256-419
+  s_92923413e21ca2::t_46a888ced1cdde 485-509,587-599
+  s_92923413e21ca2::t_db06049c05a5eb 510-533,557-586
+  s_92923413e21ca2::t_1c49374cddfa23 534-556
+tests/fixtures/csharp-edges/dup-caller/expected-edges.json
+  s_92923413e21ca2::t_900f94e9b0e146 1-6
+tests/fixtures/csharp-edges/file-scoped-csx/baseline.json
+  s_92923413e21ca2::t_f21291f899bac9 1-11
+tests/fixtures/csharp-edges/roots/R2/R2.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+tests/fixtures/csharp-edges/negatives/App.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+tests/fixtures/csharp-edges/using-forms/expected-edges.json
+  s_92923413e21ca2::t_36db37a6948a26 1-8
+AGENTS.md
+  s_92923413e21ca2::t_7e6764414befb4 145
+  s_92923413e21ca2::t_1e2393709569c9 146-149
+tests/fixtures/csharp-edges/dup-caller/Types.cs
+  s_92923413e21ca2::t_900f94e9b0e146 1-4
+packages/indexer/src/tree-sitter/parse.ts
+  s_92923413e21ca2::t_7ea8dd43657508 397
+  s_92923413e21ca2::t_53b3e0d6c23447 122-133,230-232,540-543
+  s_92923413e21ca2::t_38d53b410fd8e8 51-55,234-240,319,395-396,398,413
+  s_92923413e21ca2::t_4d91a09d611d1c 233
+tests/fixtures/csharp-edges/using-forms/U/Helper.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-8
+tests/fixtures/csharp-edges/same-line/Main.cs
+  s_92923413e21ca2::t_520e65d6d730ec 1-11
+tests/fixtures/csharp-edges/mixed-depth/Program.cs
+  s_92923413e21ca2::t_63a15f759713df 1
+apps/cli/tsup.config.ts
+  s_92923413e21ca2::t_23c05a96e0402d 33
+packages/indexer/src/index-workspace.ts
+  s_92923413e21ca2::t_7e6c72ae4bdc02 29,61-62,80,83,104,107,128-129,132,397-398,456,462,1125-1126,1235-1236,1303-1304,1309,1464-1489,1551-1552,1559-1560,1578-1579,1713-1717,1956,1988-1991
+  s_92923413e21ca2::t_eeecf98d30704e 1496-1499,1611,1992-1999
+  s_92923413e21ca2::t_e63065a3a3b091 2000
+tests/fixtures/csharp-edges/roots/R2/Dup.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-4
+tests/fixtures/csharp-edges/using-forms/S/Math2.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/conditionals/App.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+tests/fixtures/csharp-edges/above-cap/expected-edges.json
+  s_92923413e21ca2::t_065bbd632bcb73 1-133
+tests/fixtures/csharp-edges/roots/expected-edges.json
+  s_92923413e21ca2::t_36db37a6948a26 1-6
+tests/fixtures/csharp-edges/file-scoped-csx/App.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+packages/native/Cargo.toml
+  s_92923413e21ca2::t_03980674f986dc 19
+packages/indexer/src/parsers/tree-sitter-parser.ts
+  s_92923413e21ca2::t_ad51c9f9c43d50 3-10,13,27,66-73,85
+tests/fixtures/csharp-edges/mixed-depth/Types.cs
+  s_92923413e21ca2::t_63a15f759713df 1
+tests/fixtures/csharp-edges/conditionals/expected-edges.json
+  s_92923413e21ca2::t_36db37a6948a26 1-6
+tests/fixtures/csharp-edges/using-forms/App.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+tests/fixtures/csharp-edges/basic/Core/Widget.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-14
+tests/fixtures/csharp-edges/dup-label/baseline.json
+  s_92923413e21ca2::t_63a15f759713df 1
+tests/fixtures/csharp-edges/roots/A/C.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/above-cap/Big.cs
+  s_92923413e21ca2::t_065bbd632bcb73 1-42
+packages/indexer/src/tree-sitter/configs.ts
+  s_92923413e21ca2::t_099698e03590b9 3-7,616-643,674-730,732-736,738-838
+  s_92923413e21ca2::t_2d072aba2c2206 644-673,731,737
+  s_92923413e21ca2::t_cd9556a8a59e68 839
+tests/fixtures/csharp-edges/same-line/baseline.json
+  s_92923413e21ca2::t_ee4333ab905c1a 1-11
+tests/fixtures/parity/csharp/example.cs
+  s_92923413e21ca2::t_02eec34c9dcfe3 1-58
+tests/fixtures/csharp-edges/mixed-depth/baseline.json
+  s_92923413e21ca2::t_63a15f759713df 1
+tests/fixtures/csharp-edges/using-forms/baseline.json
+  s_92923413e21ca2::t_f21291f899bac9 1-11
+packages/native/src/parser.rs
+  s_92923413e21ca2::t_8415f4e4bdf906 74-76,121,125,129,137-138,528,1200,1479-1514,1620-1627
+  s_92923413e21ca2::t_0b67d529bf7500 1150
+  s_92923413e21ca2::t_03980674f986dc 113-116,313,379,522,761,922-935,1005-1007,1033-1038,1449-1450,1452-1457,1466,1474-1478,1515-1544,1550-1560,1565-1567,1570-1619,1628-1720,1729,1740,1767-1773,1781,1808-1814,1823
+  s_92923413e21ca2::t_4658c8b7c2555c 1451
+  s_92923413e21ca2::t_8682243437827b 1545-1549,1561-1564,1568
+  s_92923413e21ca2::t_efa1d1088c2b64 61-63,1040-1042,1044,1167,1244,1271
+  s_92923413e21ca2::t_93ae8269d542ea 1569
+tests/fixtures/csharp-edges/file-scoped-csx/script.csx
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+apps/cli/package.json
+  s_92923413e21ca2::t_23c05a96e0402d 52
+tests/fixtures/csharp-edges/same-line/Types.cs
+  s_92923413e21ca2::t_520e65d6d730ec 1
+tests/fixtures/csharp-edges/dup-label/Types.cs
+  s_92923413e21ca2::t_63a15f759713df 1-6
+tests/fixtures/csharp-edges/roots/baseline.json
+  s_92923413e21ca2::t_f21291f899bac9 1-11
+tests/fixtures/csharp-edges/same-line/expected-edges.json
+  s_92923413e21ca2::t_520e65d6d730ec 1-8
+tests/fixtures/csharp-edges/above-cap/baseline.json
+  s_92923413e21ca2::t_f21291f899bac9 1-11
+tests/fixtures/csharp-edges/roots/A/A.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+docs/agent-devkit/changes/2026-10-20-39-csharp-indexing-accuracy/tasks.md
+  s_92923413e21ca2::t_044c1231fe44cb 65,82,99,110,112-113,122-174
+  s_92923413e21ca2::t_a71695f3c9b68a 256-284
+  s_92923413e21ca2::t_c991a4b8eaef57 215-255
+  s_92923413e21ca2::t_7d4e47cb5b6efa 81,96,175-213
+  s_92923413e21ca2::t_8adeca0171669b 40-41,93-94,97-98,107-109,111,114-121
+  s_92923413e21ca2::t_9a47aa79e1b568 57-64,73-80,83-85
+  s_92923413e21ca2::t_fd8defd3fc208d 23,30,42-49,95,214
+tests/fixtures/csharp-edges/basic/Util/Helper.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/file-scoped-csx/expected-edges.json
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/dup-caller/Program.cs
+  s_92923413e21ca2::t_900f94e9b0e146 1-3
+tests/fixtures/csharp-edges/conditionals/baseline.json
+  s_92923413e21ca2::t_f21291f899bac9 1-11
+tests/fixtures/csharp-edges/dup-label/Program.cs
+  s_92923413e21ca2::t_63a15f759713df 1-8
+tests/fixtures/csharp-edges/basic/expected-edges.json
+  s_92923413e21ca2::t_36db37a6948a26 1-8
+tests/fixtures/csharp-edges/file-scoped-csx/Util.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+tests/fixtures/csharp-edges/roots/R1/R1.csproj
+  s_92923413e21ca2::t_36db37a6948a26 1
+tests/fixtures/csharp-edges/dup-caller/Helpers.cs
+  s_92923413e21ca2::t_900f94e9b0e146 1-2
+apps/cli/README.md
+  s_92923413e21ca2::t_7c1808fcfb95ae 136,144,149
+tests/fixtures/csharp-edges/conditionals/F.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-13
+tests/fixtures/csharp-edges/basic/Core/Widget2.cs
+  s_92923413e21ca2::t_36db37a6948a26 1-7
+packages/indexer/src/csharp-resolver.ts
+  s_92923413e21ca2::t_828f73d749e07e 548-554
+  s_92923413e21ca2::t_d1f4a094dd93a8 680
+  s_92923413e21ca2::t_950cc5c221d04f 178-191,343,347-358,375,380-384,386,411,415,457,461,472-473,475,477-478,485,492,499-514,583-590,652,656
+  s_92923413e21ca2::t_d88e27aa9fa5a2 394-395,397-398,591,603,617,645-649
+  s_92923413e21ca2::t_3cc103ee9f83d5 205-207,212,217-219,221-226,228,273-274
+  s_92923413e21ca2::t_4ae9f6141aba48 36,41,43-56,58,173,192,208-211,220,262,321,341,373,390,392-393,396,402,409,455,483,542,555,558-560,562-570,650,678,681
+  s_92923413e21ca2::t_f6442e68351911 493
+  s_92923413e21ca2::t_1d806b8334c0df 76-151,167,170,196-204,213-216,227,229-261,282-284,295-302,312,319-320,331,339,344-346,364-371,376-379,385,387-388,425-426,435,445,450-451,479,481,515-537,539-540,593,600,602,604,614,616,618,641,644,663,669,675
+  s_92923413e21ca2::t_41949a8270021c 497,595,611,622
+  s_92923413e21ca2::t_bfc0b7fc2fd5fb 1-35,37-40,42,57,59-75,152-166,168-169,171-172,174-177,193-195,263-272,275-281,285-294,303-311,313-318,322-330,332-338,340,342,359-363,372,374,389,391,399-401,403-408,410,412-414,416-424,427-434,436-444,446-449,452-454,456,458-460,462-471,474,476,480,482,484,486-491,494-496,498,538,541,543-547,556-557,561,571-582,592,594,596-599,601,605-610,612-613,615,619-621,623-640,642-643,651,653-655,657-662,664-668,670-674,676-677,679
+packages/native/Cargo.lock
+  s_92923413e21ca2::t_3f1a1f58d30ffe 254,434-443
+packages/indexer/package.json
+  s_40482f44189743::t_b68de7025abb4c 23
+pnpm-lock.yaml
+  s_40482f44189743::t_cd50e32423d7b9 395-397,4529-4536,8931-8935
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5a85e4ea90b353b9c69432712674e352df26c9a2",
+  "prompts": {},
+  "sessions": {
+    "s_40482f44189743": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a158e1-cb44-7020-aa8f-5329933881f3",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_92923413e21ca2": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "neat-keyboard",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
