@@ -1,0 +1,24 @@
+packages/indexer/src/index-workspace.ts
+  s_92cc0b46fd3f2a::t_c1dd4d8ef85e52 1312
+  s_92cc0b46fd3f2a::t_1e5d76d7122ead 1163
+tests/parsed-documents-cache.test.ts
+  s_92cc0b46fd3f2a::t_aa2bbb6a16bf2d 474-536
+docs/agent-devkit/changes/2026-10-20-39-csharp-indexing-accuracy/tasks.md
+  s_92cc0b46fd3f2a::t_c793e029de76da 393-437
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2106b622458ee0c3ffd3355a645c0a22563785e7",
+  "prompts": {},
+  "sessions": {
+    "s_92cc0b46fd3f2a": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "spangled-wool",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
