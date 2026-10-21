@@ -1,8 +1,16 @@
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
-import { parseGo, parsePython, parseRuby, parseRust, type IndexedCodeResult } from "../languages";
+import {
+  makeFallbackChunks,
+  parseGo,
+  parsePython,
+  parseRuby,
+  parseRust,
+  type IndexedCodeResult,
+} from "../languages";
 import { extractPythonBindings, markPythonCallShadowing } from "../python-resolver";
 import {
+  csharpConfig,
   goConfig,
   parseWithTreeSitter,
   pythonConfig,
@@ -16,6 +24,7 @@ const LANGUAGE_CONFIGS = {
   go: goConfig,
   rust: rustConfig,
   ruby: rubyConfig,
+  csharp: csharpConfig,
 } as const;
 
 const REGEX_FALLBACKS: Record<
@@ -54,7 +63,14 @@ export class TreeSitterParser implements CodeParser {
 
     const config = LANGUAGE_CONFIGS[language];
     const tsResult = await parseWithTreeSitter(config, input.content, counter);
-    const result = tsResult ?? REGEX_FALLBACKS[language](input.content, counter);
+    // C# has no regex fallback: when the WASM parse fails (grammar missing,
+    // parse error), generic text chunks keep the file searchable with no
+    // symbols, imports, or calls — parsing never throws.
+    const result =
+      tsResult ??
+      (language === "csharp"
+        ? makeFallbackChunks(input.content, input.content.split("\n"), counter)
+        : REGEX_FALLBACKS[language](input.content, counter));
 
     // Python bindings and local-shadow marks are extracted once in
     // TypeScript over the source so the WASM and regex paths agree; see
@@ -66,7 +82,7 @@ export class TreeSitterParser implements CodeParser {
     }
 
     return {
-      parser: tsResult ? this.name : "regex",
+      parser: tsResult ? this.name : language === "csharp" ? "fallback" : "regex",
       language,
       kind: "code",
       chunks: result.chunks,

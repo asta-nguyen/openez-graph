@@ -154,8 +154,8 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
     resetNativeParserCache();
   });
 
-  test("second graph build reuses fallback-v5 cache and performs zero fallback parses", async () => {
-    // Only assert fallback-v5 behavior when the native extension is unavailable.
+  test("second graph build reuses fallback-v6 cache and performs zero fallback parses", async () => {
+    // Only assert fallback-v6 behavior when the native extension is unavailable.
     resetNativeParserCache();
     if (resolveNativeParser()) return;
 
@@ -170,7 +170,7 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
     const doc = await repo.getDocumentByPath("src/app.py");
     expect(doc).not.toBeNull();
 
-    // Overwrite the cached parse result with a fallback-v5 tag, simulating a
+    // Overwrite the cached parse result with a fallback-v6 tag, simulating a
     // prior build that parsed via the fallback parser (the version
     // buildGraphGeneration expects when native is unavailable).
     repo.insertParsedDocument({
@@ -182,26 +182,26 @@ describe("parsed_documents fallback cache (native parser unavailable)", () => {
       imports: "[]",
       calls: "[]",
       calledIdentifiers: "[]",
-      parserVersion: "fallback-v5",
+      parserVersion: "fallback-v6",
     });
 
     const cachedBefore = repo.getParsedDocument(doc!.id);
-    expect(cachedBefore?.parserVersion).toBe("fallback-v5");
+    expect(cachedBefore?.parserVersion).toBe("fallback-v6");
     const parsedAtFirst = cachedBefore!.parsedAt;
     const symbolsBefore = cachedBefore!.symbols;
 
-    // First graph build: cache hit (fallback-v5 matches expected version) —
+    // First graph build: cache hit (fallback-v6 matches expected version) —
     // no re-parse, so parsed_at must not advance.
     await buildGraphGeneration(workspace.id, workspaceRoot, 1, 1);
     const cachedAfterFirst = repo.getParsedDocument(doc!.id);
-    expect(cachedAfterFirst?.parserVersion).toBe("fallback-v5");
+    expect(cachedAfterFirst?.parserVersion).toBe("fallback-v6");
     expect(cachedAfterFirst!.parsedAt).toBe(parsedAtFirst);
     expect(cachedAfterFirst!.symbols).toBe(symbolsBefore);
 
     // Second graph build: still a cache hit — zero fallback parses.
     await buildGraphGeneration(workspace.id, workspaceRoot, 2, 2);
     const cachedAfterSecond = repo.getParsedDocument(doc!.id);
-    expect(cachedAfterSecond?.parserVersion).toBe("fallback-v5");
+    expect(cachedAfterSecond?.parserVersion).toBe("fallback-v6");
     expect(cachedAfterSecond!.parsedAt).toBe(parsedAtFirst);
     expect(cachedAfterSecond!.symbols).toBe(symbolsBefore);
   });
@@ -356,7 +356,7 @@ describe("Rust shadowedLocal marker round-trip", () => {
     expect(doc).not.toBeNull();
 
     const cached = repo.getParsedDocument(doc!.id);
-    expect(cached?.parserVersion).toBe("native-v5");
+    expect(cached?.parserVersion).toBe("native-v6");
     const calls = JSON.parse(cached!.calls!);
     expect(calls).toContainEqual({
       callerName: "caller",
@@ -398,7 +398,7 @@ describe("Rust shadowedLocal marker round-trip", () => {
     });
     await buildGraphGeneration(workspace.id, workspaceRoot, 2, 2);
     const reparsed = repo.getParsedDocument(doc!.id);
-    expect(reparsed?.parserVersion).toBe("native-v5");
+    expect(reparsed?.parserVersion).toBe("native-v6");
     expect(JSON.parse(reparsed!.calls!)).toContainEqual({
       callerName: "caller",
       calleeName: "helper",
@@ -406,7 +406,7 @@ describe("Rust shadowedLocal marker round-trip", () => {
     });
   });
 
-  test("fallback rows store the marker under fallback-v5", async () => {
+  test("fallback rows store the marker under fallback-v6", async () => {
     process.env.OPENEZ_NATIVE = "0";
     resetNativeParserCache();
 
@@ -415,11 +415,104 @@ describe("Rust shadowedLocal marker round-trip", () => {
     expect(doc).not.toBeNull();
 
     const cached = repo.getParsedDocument(doc!.id);
-    expect(cached?.parserVersion).toBe("fallback-v5");
+    expect(cached?.parserVersion).toBe("fallback-v6");
     expect(JSON.parse(cached!.calls!)).toContainEqual({
       callerName: "caller",
       calleeName: "helper",
       shadowedLocal: true,
     });
+  });
+});
+
+describe("C# parsed-documents cache", () => {
+  let registryRoot: string;
+  let workspaceRoot: string;
+
+  const CSHARP_SRC = [
+    "namespace Acme",
+    "{",
+    "    public class C",
+    "    {",
+    "        public void Run() { Step(); }",
+    "        private void Step() { }",
+    "    }",
+    "}",
+    "",
+  ].join("\n");
+
+  async function indexCSharpWorkspace() {
+    fs.mkdirSync(path.join(workspaceRoot, "src"), { recursive: true });
+    fs.writeFileSync(path.join(workspaceRoot, "src", "main.cs"), CSHARP_SRC);
+    const workspace = await createRegistryRepository().ensureWorkspace({
+      rootPath: workspaceRoot,
+    });
+    await indexWorkspace({ workspaceId: workspace.id });
+    return { workspace, repo: createWorkspaceRepository(workspaceRoot) };
+  }
+
+  beforeEach(() => {
+    registryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-csharp-cache-reg-"));
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-csharp-cache-ws-"));
+    process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(registryRoot, "registry.sqlite");
+    process.env.EMBEDDING_PROVIDER = "none";
+    closeRegistryDb();
+    closeAllWorkspaceDbs();
+    resetNativeParserCache();
+  });
+
+  afterEach(() => {
+    closeAllWorkspaceDbs();
+    closeRegistryDb();
+    rmTempDir(registryRoot);
+    rmTempDir(workspaceRoot);
+    delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    delete process.env.EMBEDDING_PROVIDER;
+    delete process.env.OPENEZ_NATIVE;
+    resetNativeParserCache();
+  });
+
+  test(".cs files are indexed and cached under the current parser tag", async () => {
+    resetNativeParserCache();
+    const nativeAvailable = Boolean(resolveNativeParser());
+
+    const { workspace, repo } = await indexCSharpWorkspace();
+    const doc = await repo.getDocumentByPath("src/main.cs");
+    expect(doc).not.toBeNull();
+    expect(doc!.language).toBe("csharp");
+
+    const cached = repo.getParsedDocument(doc!.id);
+    expect(cached).not.toBeNull();
+    expect(cached?.parserVersion).toBe(nativeAvailable ? "native-v6" : "fallback-v6");
+    const symbols = JSON.parse(cached!.symbols!);
+    expect(symbols.map((s: { name: string }) => s.name)).toEqual(
+      expect.arrayContaining(["Acme", "C", "C::Run", "C::Step"]),
+    );
+    expect(JSON.parse(cached!.calls!)).toContainEqual({
+      callerName: "C::Run",
+      calleeName: "Step",
+    });
+
+    // Cache hit: a second graph build reuses the row (parsedAt unchanged).
+    const parsedAt = cached!.parsedAt;
+    await buildGraphGeneration(workspace.id, workspaceRoot, 1, 1);
+    const afterFirst = repo.getParsedDocument(doc!.id);
+    expect(afterFirst!.parsedAt).toBe(parsedAt);
+
+    // Stale row under the previous tag reparses.
+    repo.insertParsedDocument({
+      documentId: doc!.id,
+      contentHash: doc!.contentHash,
+      symbols: "[]",
+      imports: "[]",
+      calls: "[]",
+      calledIdentifiers: "[]",
+      parserVersion: nativeAvailable ? "native-v5" : "fallback-v5",
+    });
+    await buildGraphGeneration(workspace.id, workspaceRoot, 2, 2);
+    const reparsed = repo.getParsedDocument(doc!.id);
+    expect(reparsed?.parserVersion).toBe(nativeAvailable ? "native-v6" : "fallback-v6");
+    expect(JSON.parse(reparsed!.symbols!).map((s: { name: string }) => s.name)).toContain(
+      "C::Step",
+    );
   });
 });

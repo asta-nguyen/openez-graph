@@ -30,6 +30,7 @@ export default defineConfig({
     "@openez-graph/native",
     "web-tree-sitter",
     "tree-sitter-python",
+    "tree-sitter-c-sharp",
     "tree-sitter-go",
     "tree-sitter-rust",
     "tree-sitter-ruby",
