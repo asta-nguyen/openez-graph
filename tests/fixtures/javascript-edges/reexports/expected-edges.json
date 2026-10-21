@@ -1,0 +1,9 @@
+{
+  "canary": { "from": "importer.js#use", "to": "importer.js#local" },
+  "edges": [
+    { "from": "importer.js#use", "to": "importer.js#local" },
+    { "from": "importer.js#use", "to": "a.js#a" },
+    { "from": "importer.js#use", "to": "b.js#bFn" },
+    { "from": "importer.js#use", "to": "barrel.js#internal" }
+  ]
+}

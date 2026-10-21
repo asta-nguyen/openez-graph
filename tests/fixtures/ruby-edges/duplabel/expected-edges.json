@@ -1,0 +1,14 @@
+{
+  "canary": {
+    "type": "calls",
+    "from": "a/report.rb#Rep::Report::generate",
+    "to": "a/report.rb#Rep::Report::stamp"
+  },
+  "calls": [
+    {
+      "from": "a/report.rb#Rep::Report::generate",
+      "to": "a/report.rb#Rep::Report::stamp"
+    }
+  ],
+  "imports": []
+}

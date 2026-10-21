@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "caller.ts#run", "to": "shapes.ts#realFn" },
+  "edges": [
+    { "from": "caller.ts#run", "to": "shapes.ts#realFn" },
+    { "from": "caller.ts#run", "to": "mixed.ts#mixedFn" }
+  ]
+}

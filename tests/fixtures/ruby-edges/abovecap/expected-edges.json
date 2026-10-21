@@ -1,0 +1,346 @@
+{
+  "canary": {
+    "type": "calls",
+    "from": "big.rb#Big::m01",
+    "to": "big.rb#Big::m02"
+  },
+  "calls": [
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c01"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c02"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c03"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c04"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c05"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c06"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c07"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c08"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c09"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c10"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c11"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c12"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c13"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c14"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c15"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c16"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c17"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c18"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c19"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c20"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c21"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c22"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c23"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c24"
+    },
+    {
+      "from": "big.rb#Big::chain",
+      "to": "big.rb#Big::c25"
+    },
+    {
+      "from": "big.rb#Big::m01",
+      "to": "big.rb#Big::m02"
+    },
+    {
+      "from": "big.rb#Big::m02",
+      "to": "big.rb#Big::m03"
+    },
+    {
+      "from": "big.rb#Big::m03",
+      "to": "big.rb#Big::m04"
+    },
+    {
+      "from": "big.rb#Big::m04",
+      "to": "big.rb#Big::m05"
+    },
+    {
+      "from": "big.rb#Big::m05",
+      "to": "big.rb#Big::m06"
+    },
+    {
+      "from": "big.rb#Big::m06",
+      "to": "big.rb#Big::m07"
+    },
+    {
+      "from": "big.rb#Big::m07",
+      "to": "big.rb#Big::m08"
+    },
+    {
+      "from": "big.rb#Big::m08",
+      "to": "big.rb#Big::m09"
+    },
+    {
+      "from": "big.rb#Big::m09",
+      "to": "big.rb#Big::m10"
+    },
+    {
+      "from": "big.rb#Big::m10",
+      "to": "big.rb#Big::m11"
+    },
+    {
+      "from": "big.rb#Big::m11",
+      "to": "big.rb#Big::m12"
+    },
+    {
+      "from": "big.rb#Big::m12",
+      "to": "big.rb#Big::m13"
+    },
+    {
+      "from": "big.rb#Big::m13",
+      "to": "big.rb#Big::m14"
+    },
+    {
+      "from": "big.rb#Big::m14",
+      "to": "big.rb#Big::m15"
+    },
+    {
+      "from": "big.rb#Big::m15",
+      "to": "big.rb#Big::m16"
+    },
+    {
+      "from": "big.rb#Big::m16",
+      "to": "big.rb#Big::m17"
+    },
+    {
+      "from": "big.rb#Big::m17",
+      "to": "big.rb#Big::m18"
+    },
+    {
+      "from": "big.rb#Big::m18",
+      "to": "big.rb#Big::m19"
+    },
+    {
+      "from": "big.rb#Big::m19",
+      "to": "big.rb#Big::m20"
+    },
+    {
+      "from": "big.rb#Big::m20",
+      "to": "big.rb#Big::m21"
+    },
+    {
+      "from": "big.rb#Big::m21",
+      "to": "big.rb#Big::m22"
+    },
+    {
+      "from": "big.rb#Big::m22",
+      "to": "big.rb#Big::m23"
+    },
+    {
+      "from": "big.rb#Big::m23",
+      "to": "big.rb#Big::m24"
+    },
+    {
+      "from": "big.rb#Big::m24",
+      "to": "big.rb#Big::m25"
+    },
+    {
+      "from": "big.rb#Big::m25",
+      "to": "big.rb#Big::m26"
+    },
+    {
+      "from": "big.rb#Big::m26",
+      "to": "big.rb#Big::m27"
+    },
+    {
+      "from": "big.rb#Big::m27",
+      "to": "big.rb#Big::m28"
+    },
+    {
+      "from": "big.rb#Big::m28",
+      "to": "big.rb#Big::m29"
+    },
+    {
+      "from": "big.rb#Big::m29",
+      "to": "big.rb#Big::m30"
+    },
+    {
+      "from": "big.rb#Big::m30",
+      "to": "big.rb#Big::m31"
+    },
+    {
+      "from": "big.rb#Big::m31",
+      "to": "big.rb#Big::m32"
+    },
+    {
+      "from": "big.rb#Big::m32",
+      "to": "big.rb#Big::m33"
+    },
+    {
+      "from": "big.rb#Big::m33",
+      "to": "big.rb#Big::m34"
+    },
+    {
+      "from": "big.rb#Big::m34",
+      "to": "big.rb#Big::m35"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q01"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q02"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q03"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q04"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q05"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q06"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q07"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q08"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q09"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q10"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q11"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q12"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q13"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q14"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q15"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q16"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q17"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q18"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q19"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q20"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q21"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q22"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q23"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q24"
+    },
+    {
+      "from": "capped.py#pump",
+      "to": "capped.py#q25"
+    }
+  ],
+  "imports": []
+}

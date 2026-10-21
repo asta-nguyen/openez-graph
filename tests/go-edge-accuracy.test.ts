@@ -124,6 +124,25 @@ async function indexFixtureAndReadEdges(fixtureName: string): Promise<Set<string
     const toFile = JSON.parse(row.toMeta as string).filePath as string;
     edges.add(edgeKey(`${fromFile}#${row.fromLabel}`, `${toFile}#${row.toLabel}`));
   }
+
+  // Go files under a vendor path produce no graph nodes or edges while their
+  // documents and text chunks remain indexed.
+  const vendorNodes = await repo.queryRaw(
+    `SELECT count(*) AS c FROM graph_nodes
+      WHERE (type = 'file' AND json_extract(metadata, '$.path') LIKE '%vendor/%')
+         OR (type = 'symbol' AND json_extract(metadata, '$.filePath') LIKE '%vendor/%')`,
+  );
+  expect(Number(vendorNodes[0]?.c ?? 0), "vendor Go file leaked a graph node").toBe(0);
+  const vendorChunks = await repo.queryRaw(
+    `SELECT count(*) AS c FROM chunks c
+      JOIN documents d ON d.id = c.document_id
+     WHERE d.path LIKE '%vendor/%'`,
+  );
+  if (fs.existsSync(path.join(fixtureDir, "vendor"))) {
+    expect(Number(vendorChunks[0]?.c ?? 0), "vendor Go file lost its text chunks").toBeGreaterThan(
+      0,
+    );
+  }
   return edges;
 }
 

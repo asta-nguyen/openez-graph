@@ -1,0 +1,9 @@
+{
+  // Root base config — inherited through one relative `extends` hop.
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@root/*": ["shared/*"]
+    }
+  }
+}

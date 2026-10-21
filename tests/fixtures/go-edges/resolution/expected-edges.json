@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "u/u.go#Use", "to": "gen/gen.go#F" },
+  "edges": [
+    { "from": "u/u.go#Use", "to": "gen/gen.go#F", "tier": "package" },
+    { "from": "u/u.go#Use", "to": "gen/gen.go#M", "tier": "package" }
+  ]
+}

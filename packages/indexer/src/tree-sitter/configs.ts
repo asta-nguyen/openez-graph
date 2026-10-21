@@ -1,5 +1,6 @@
 import type { Node } from "web-tree-sitter";
 
+import { markRustCallShadowing, normalizeRustCallName } from "../languages";
 import type { ContextFrame, LanguageConfig, ImportRule } from "./parse";
 
 // ── Python ──
@@ -51,8 +52,9 @@ const PYTHON_CALL_IGNORES = new Set([
 ]);
 
 function normalizePythonCallName(value: string): string {
-  const parts = value.split(".").filter(Boolean);
-  return parts[parts.length - 1] ?? value;
+  // Python keeps the qualified dotted callee (`pkg.func`, `self.m`) —
+  // keepQualifiedCallee records the last segment as the called identifier.
+  return value;
 }
 
 function extractPythonImports(node: Node): string[] {
@@ -78,14 +80,18 @@ function extractPythonImports(node: Node): string[] {
     // by comparing position (web-tree-sitter returns new wrapper objects).
     const moduleStart = moduleNode?.startIndex ?? -1;
     const moduleEnd = moduleNode?.endIndex ?? -1;
+    // Relative imports: modulePath already ends in dots (`from . import x`
+    // gives `.`) — joining with another dot would corrupt the level count.
+    const join = (name: string) =>
+      modulePath.endsWith(".") ? `${modulePath}${name}` : `${modulePath}.${name}`;
     for (const child of node.namedChildren) {
       if (child.type === "dotted_name") {
         if (child.startIndex === moduleStart && child.endIndex === moduleEnd) continue;
-        if (modulePath) paths.push(`${modulePath}.${child.text}`);
+        if (modulePath) paths.push(join(child.text));
       } else if (child.type === "aliased_import") {
         const nameNode = child.childForFieldName("name");
         if (nameNode && modulePath) {
-          paths.push(`${modulePath}.${nameNode.text}`);
+          paths.push(join(nameNode.text));
         }
       } else if (child.type === "wildcard_import") {
         // from foo import * — just track the module
@@ -121,6 +127,7 @@ export const pythonConfig: LanguageConfig = {
   callRule: { nodeType: "call", functionField: "function" },
   callIgnores: PYTHON_CALL_IGNORES,
   normalizeCallName: normalizePythonCallName,
+  keepQualifiedCallee: true,
   contextNodeTypes: new Set(["function_definition", "class_definition"]),
   contextNameField: "name",
 };
@@ -170,8 +177,9 @@ const GO_CALL_IGNORES = new Set([
 ]);
 
 function normalizeGoCallName(value: string): string {
-  const parts = value.split(".").filter(Boolean);
-  return parts[parts.length - 1] ?? value;
+  // Strip generic instantiation (`pkg.F[T]` → `pkg.F`); keep the selector so
+  // graph resolution can map the qualifier to an import binding.
+  return value.split("[")[0] ?? value;
 }
 
 function extractGoImports(node: Node): string[] {
@@ -199,6 +207,16 @@ function extractGoImports(node: Node): string[] {
   return paths;
 }
 
+/** All identifiers declared by a const/var spec. `identifier_list` is a
+ *  hidden grammar rule, so `name` maps to flat identifier children. */
+function goSpecNames(node: Node): string[] {
+  return node
+    .childrenForFieldName("name")
+    .filter((child) => child.type === "identifier")
+    .map((child) => child.text)
+    .filter((text) => text !== "_");
+}
+
 export const goConfig: LanguageConfig = {
   language: "go",
   symbolRules: [
@@ -224,9 +242,33 @@ export const goConfig: LanguageConfig = {
       nameField: "name",
       isExported: (name) => name[0] >= "A" && name[0] <= "Z",
     },
+    {
+      nodeType: "const_spec",
+      symbolType: "const",
+      extractNames: goSpecNames,
+      topLevelOnly: true,
+      isExported: (name) => name[0] >= "A" && name[0] <= "Z",
+    },
+    {
+      nodeType: "var_spec",
+      symbolType: "var",
+      extractNames: goSpecNames,
+      topLevelOnly: true,
+      isExported: (name) => name[0] >= "A" && name[0] <= "Z",
+    },
   ],
   importRules: [{ nodeType: "import_declaration", extract: extractGoImports }],
-  callRule: { nodeType: "call_expression", functionField: "function" },
+  callRule: {
+    nodeType: "call_expression",
+    functionField: "function",
+    // Bare generic instantiation (`Map[int](x)`) parses as
+    // type_conversion_expression, not call_expression.
+    typeConversion: {
+      nodeType: "type_conversion_expression",
+      typeField: "type",
+      requiredTypeKind: "generic_type",
+    },
+  },
   callIgnores: GO_CALL_IGNORES,
   normalizeCallName: normalizeGoCallName,
   contextNodeTypes: new Set(["function_declaration", "method_declaration"]),
@@ -266,14 +308,6 @@ const RUST_CALL_IGNORES = new Set([
   "true",
   "false",
 ]);
-
-function normalizeRustCallName(value: string): string {
-  // Handle both :: and . separators
-  const pathParts = value.split("::").filter(Boolean);
-  const last = pathParts[pathParts.length - 1] ?? value;
-  const dotParts = last.split(".");
-  return dotParts[dotParts.length - 1] ?? last;
-}
 
 function extractRustImports(node: Node): string[] {
   const paths: string[] = [];
@@ -371,6 +405,8 @@ export const rustConfig: LanguageConfig = {
   callRule: { nodeType: "call_expression", functionField: "function" },
   callIgnores: RUST_CALL_IGNORES,
   normalizeCallName: normalizeRustCallName,
+  keepQualifiedCallee: true,
+  markCallShadowing: markRustCallShadowing,
   contextNodeTypes: new Set(["function_item", "trait_item", "impl_item"]),
   contextNameField: "name",
 };
@@ -406,6 +442,13 @@ const RUBY_CALL_IGNORES = new Set([
   "define_method",
   "lambda",
   "proc",
+  "send",
+  "public_send",
+  "method_missing",
+  "eval",
+  "const_get",
+  "respond_to",
+  "respond_to?",
   "super",
   "self",
   "nil",
@@ -458,14 +501,25 @@ function rubyQualifyCall(
   contextStack: ReadonlyArray<ContextFrame>,
 ): string | null {
   const receiverNode = callNode.childForFieldName("receiver");
-  if (!receiverNode || receiverNode.text !== "self") return null;
-  for (let i = contextStack.length - 1; i >= 0; i--) {
-    const frame = contextStack[i];
-    if (frame.kind === "class" || frame.kind === "module") {
-      return `${frame.name}::${normalized}`;
+  if (!receiverNode) return null;
+  const receiverText = receiverNode.text;
+  if (receiverText === "self") {
+    for (let i = contextStack.length - 1; i >= 0; i--) {
+      const frame = contextStack[i];
+      if (frame.kind === "class" || frame.kind === "module") {
+        return `${frame.name}::${normalized}`;
+      }
     }
+    return null;
   }
-  return null;
+  // Constant receivers keep the scope-qualified target name:
+  // Invoice.build → Invoice::build, Billing::Invoice.build → Billing::Invoice::build.
+  if (receiverNode.type === "constant" || receiverNode.type === "scope_resolution") {
+    return `${receiverText}::${normalized}`;
+  }
+  // Ordinary receivers (locals, ivars, expressions, &.) never resolve to a
+  // method statically — return "" to suppress the call entirely.
+  return "";
 }
 
 export const rubyConfig: LanguageConfig = {

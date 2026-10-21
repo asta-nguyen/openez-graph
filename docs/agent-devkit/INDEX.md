@@ -2,7 +2,17 @@
 
 ## Changes
 
+- [C++ indexing accuracy and native parity](changes/2026-10-20-39-cpp-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39)
+- [C# indexing accuracy and native parity](changes/2026-10-20-39-csharp-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39)
+- [Java indexing accuracy and native parity](changes/2026-10-20-39-java-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39)
+
 ## Archived changes
 
+- [Go indexing accuracy and native parity](changes/archive/2026-10-20-39-go-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), archived 2026-10-21 per user request (native CI matrix pending)
+- [Python indexing accuracy](changes/archive/2026-10-20-39-python-index-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21
+- [Rust indexing accuracy](changes/archive/2026-10-20-39-rust-index-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-20
+- [Ruby native indexing and parity](changes/archive/2026-10-20-39-ruby-native-indexing/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-20
+- [JavaScript indexing accuracy](changes/archive/2026-10-20-39-javascript-index-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-20
+- [TypeScript indexing accuracy](changes/archive/2026-10-20-39-typescript-index-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-20
 - [Native parity tests and multi-platform native CI](changes/archive/2026-10-19-native-parity-and-ci/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-19
 - [Remove Superpowers and adopt agent-devkit](changes/archive/2026-10-19-replace-superpowers-with-agent-devkit/design.md) — completed 2026-10-19

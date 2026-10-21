@@ -11,6 +11,7 @@ import {
   goConfig,
   parseWithTreeSitter,
   pythonConfig,
+  rubyConfig,
   rustConfig,
   type LanguageConfig,
 } from "../packages/indexer/src/tree-sitter";
@@ -35,6 +36,7 @@ const LANG_CONFIG: Record<string, LanguageConfig> = {
   python: pythonConfig,
   go: goConfig,
   rust: rustConfig,
+  ruby: rubyConfig,
 };
 
 // ── Pure difference computation ──
@@ -352,6 +354,34 @@ describe("native-wasm parity", () => {
 
   test("parity fixtures are discovered (suite cannot pass vacuously)", () => {
     expect(listFixtureCases().length).toBeGreaterThan(0);
+  });
+
+  test("required parity fixtures are present and pin keys are exact", () => {
+    // A missing required fixture, an orphaned pin key, or an all-empty pin
+    // entry fails instead of silently reducing coverage. Each fixture file
+    // yields a `file` and `file#crlf` case; the manifest lists file keys.
+    const REQUIRED_FIXTURES = [
+      "go/example.go",
+      "python/example.py",
+      "ruby/example.rb",
+      "ruby/torture.rb",
+      "rust/example.rs",
+    ];
+    const keys = new Set(listFixtureCases().map((c) => c.key));
+    for (const required of REQUIRED_FIXTURES) {
+      expect(keys.has(required), `required fixture ${required} is missing`).toBe(true);
+      expect(keys.has(`${required}#crlf`), `required fixture ${required}#crlf is missing`).toBe(
+        true,
+      );
+    }
+    const pins = readPins();
+    for (const pinKey of Object.keys(pins)) {
+      expect(keys.has(pinKey), `pin ${pinKey} has no matching fixture case`).toBe(true);
+      expect(
+        isEmptyDiff(normalizePin(pins[pinKey])),
+        `pin ${pinKey} records an empty difference`,
+      ).toBe(false);
+    }
   });
 
   const pins = readPins();

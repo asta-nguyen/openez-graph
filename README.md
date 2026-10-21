@@ -126,7 +126,7 @@ The project-local `.openez` directory is generated state and should not be commi
 ## Supported content
 
 - TypeScript and JavaScript: rich AST indexing with Rust-based `oxc-parser`
-- Python, Go, Rust, and Ruby: tree-sitter AST parsing with regex fallback
+- Python, Go, Rust, and Ruby: tree-sitter AST parsing with regex fallback; call edges resolve through language-aware import/module bindings (Rust resolves `crate`/`self`/`super`/`use` paths to unique in-crate symbols)
 - CoffeeScript, Slim, CSS, SCSS, SASS, LESS, and Haml: scanned and chunked via fallback parser
 - YAML, JSON, and TOML: structure-aware chunks
 - Markdown: section-oriented chunks

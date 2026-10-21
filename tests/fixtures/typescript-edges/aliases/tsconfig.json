@@ -1,0 +1,14 @@
+{
+  // JSONC: comments and trailing commas must parse.
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@lib/*": ["src/lib/*"],
+      "@exact": ["src/exact.ts"],
+      "@first/*": ["src/nothing/*", "src/second/*"],
+      "@app/*": ["src/app/*"],
+      "@app/special/*": ["src/special/*"], // longest literal prefix wins
+      "note": "a /* not-a-comment */ string",
+    },
+  },
+}

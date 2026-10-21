@@ -34,6 +34,10 @@ export interface SymbolRule {
   receiverField?: string;
   /** transform receiver text (e.g. strip parens) */
   normalizeReceiver?: (text: string) => string;
+  /** emit one symbol per identifier (Go const/var specs) */
+  extractNames?: (node: Node) => string[];
+  /** emit symbols only at package level (empty context stack) */
+  topLevelOnly?: boolean;
 }
 
 /**
@@ -59,6 +63,12 @@ export interface CallRule {
   nodeType: string;
   /** field containing the callable expression */
   functionField: string;
+  /**
+   * Optional second node type treated as a call only when its `typeField`
+   * child has `requiredTypeKind` — Go generic instantiations surface as
+   * `type_conversion_expression` with a `generic_type` type node.
+   */
+  typeConversion?: { nodeType: string; typeField: string; requiredTypeKind: string };
 }
 
 export interface LanguageConfig {
@@ -88,6 +98,23 @@ export interface LanguageConfig {
     normalized: string,
     contextStack: ReadonlyArray<ContextFrame>,
   ) => string | null;
+  /**
+   * When true, `callExpressions[].calleeName` keeps the qualified dotted
+   * name (`pkg.func`, `self.m`) while `calledIdentifiers` records the last
+   * segment; the call-ignore list is applied to the raw, normalized, and
+   * last-segment forms. Python only — resolution consumes the qualifier.
+   */
+  keepQualifiedCallee?: boolean;
+  /**
+   * Optional post-pass that marks `call.shadowedLocal` for calls whose
+   * last segment is bound as a local inside the caller's symbol range.
+   * Runs once per file on the walker's output — Rust only.
+   */
+  markCallShadowing?: (
+    content: string,
+    symbols: ExtractedSymbol[],
+    calls: Array<{ callerName: string; calleeName: string; shadowedLocal?: boolean }>,
+  ) => void;
 }
 
 // ── Extraction core ──
@@ -116,11 +143,30 @@ function getNodeName(node: Node, field: string): string | null {
   return firstChild?.text ?? null;
 }
 
+/**
+ * Last segment of a qualified callee: `pkg.func` → `func`,
+ * `crate::util::run` → `run`, `x.run` → `run`. Used for calledIdentifiers
+ * when `keepQualifiedCallee` keeps the full path in callExpressions.
+ */
+function lastPathSegment(value: string): string {
+  return value.split(/[.:]/).filter(Boolean).pop() ?? value;
+}
+
 function isCallNode(node: Node, callRule: CallRule): boolean {
-  return node.type === callRule.nodeType;
+  if (node.type === callRule.nodeType) return true;
+  const tc = callRule.typeConversion;
+  return (
+    tc !== undefined &&
+    node.type === tc.nodeType &&
+    node.childForFieldName(tc.typeField)?.type === tc.requiredTypeKind
+  );
 }
 
 function extractCallName(node: Node, callRule: CallRule): string | null {
+  const tc = callRule.typeConversion;
+  if (tc && node.type === tc.nodeType) {
+    return node.childForFieldName(tc.typeField)?.text ?? null;
+  }
   const funcNode = node.childForFieldName(callRule.functionField);
   if (!funcNode) return null;
   return funcNode.text;
@@ -218,8 +264,19 @@ function walkTree(
             // @lru_cache or @app.route → normalize the expression text
             decName = config.normalizeCallName(expr.text);
           }
-          if (decName && !config.callIgnores.has(decName) && decName !== innerName) {
-            calledIdentifiers.add(decName);
+          const decIdentifier = decName
+            ? config.keepQualifiedCallee
+              ? lastPathSegment(decName)
+              : decName
+            : null;
+          if (
+            decName &&
+            decIdentifier &&
+            !config.callIgnores.has(decName) &&
+            !config.callIgnores.has(decIdentifier) &&
+            decName !== innerName
+          ) {
+            calledIdentifiers.add(decIdentifier);
             callExpressions.push({ callerName: innerName, calleeName: decName });
           }
         }
@@ -241,6 +298,22 @@ function walkTree(
           });
         }
         // Skip symbol emission and call extraction — context-only.
+      } else if (symbolRule.extractNames) {
+        // Multi-name declarations (Go const/var specs). These are values,
+        // not callables: emit symbols but never contexts or call edges.
+        if (!symbolRule.topLevelOnly || contextStack.length === 0) {
+          for (const specName of symbolRule.extractNames(node)) {
+            if (!specName || specName === "_") continue;
+            symbols.push({
+              name: specName,
+              symbolType: symbolRule.symbolType,
+              type: symbolRule.symbolType,
+              exported: symbolRule.isExported ? symbolRule.isExported(specName, node) : false,
+              startLine: startRow,
+              endLine: endRow,
+            });
+          }
+        }
       } else {
         const name = symbolRule.extractName
           ? symbolRule.extractName(node)
@@ -319,16 +392,25 @@ function walkTree(
         }
       }
     } else if (isCallNode(node, config.callRule)) {
-      // Top-level call not inside a symbol — still track it
+      // Top-level call not inside a symbol — still track it. Go calls
+      // through the active method receiver qualify as Type::method, matching
+      // the native walker's calledIdentifiers output.
       const calleeName = extractCallName(node, config.callRule);
       if (calleeName) {
         const normalized = config.normalizeCallName(calleeName);
+        const trackedId = config.keepQualifiedCallee ? lastPathSegment(normalized) : normalized;
         if (
           normalized &&
           !config.callIgnores.has(calleeName) &&
-          !config.callIgnores.has(normalized)
+          !config.callIgnores.has(normalized) &&
+          !config.callIgnores.has(trackedId)
         ) {
-          calledIdentifiers.add(normalized);
+          const receiver = contextStack[contextStack.length - 1]?.receiver;
+          const tracked =
+            receiver && calleeName.startsWith(`${receiver.varName}.`)
+              ? `${receiver.typeName}::${normalized.split(".").pop()}`
+              : normalized;
+          calledIdentifiers.add(config.keepQualifiedCallee ? trackedId : tracked);
         }
       }
     }
@@ -370,7 +452,18 @@ function extractCallsInNode(
       );
     });
 
-  const callNodes = symbolNode.descendantsOfType(config.callRule.nodeType);
+  const callNodes = [
+    ...symbolNode.descendantsOfType(config.callRule.nodeType),
+    ...(config.callRule.typeConversion
+      ? symbolNode
+          .descendantsOfType(config.callRule.typeConversion.nodeType)
+          .filter(
+            (node) =>
+              node.childForFieldName(config.callRule.typeConversion!.typeField)?.type ===
+              config.callRule.typeConversion!.requiredTypeKind,
+          )
+      : []),
+  ];
   for (const callNode of callNodes) {
     // Skip calls inside nested symbols — they'll be extracted when processing
     // the nested symbol itself.
@@ -389,21 +482,24 @@ function extractCallsInNode(
     // targeting the wrong same-named method on a different type.
     const qualifiedCallee =
       receiverInfo && calleeName.startsWith(`${receiverInfo.varName}.`)
-        ? `${receiverInfo.typeName}::${normalized}`
+        ? `${receiverInfo.typeName}::${normalized.split(".").pop()}`
         : normalized;
 
     const hookQualified = config.qualifyCall?.(callNode, calleeName, normalized, contextStack);
     const finalCallee = hookQualified ?? qualifiedCallee;
+    const callIdentifier = config.keepQualifiedCallee ? lastPathSegment(finalCallee) : finalCallee;
 
     if (
       !normalized ||
+      !finalCallee ||
       config.callIgnores.has(calleeName) ||
       config.callIgnores.has(normalized) ||
+      (config.keepQualifiedCallee && config.callIgnores.has(callIdentifier)) ||
       finalCallee === callerName
     ) {
       continue;
     }
-    calledIdentifiers.add(finalCallee);
+    calledIdentifiers.add(callIdentifier);
     callExpressions.push({ callerName, calleeName: finalCallee });
   }
 }
@@ -425,6 +521,7 @@ export async function parseWithTreeSitter(
       config,
       lines,
     );
+    config.markCallShadowing?.(content, symbols, callExpressions);
 
     const chunks = createSymbolChunks(symbols, lines, config.language, counter);
     if (chunks.length === 0) {

@@ -1,0 +1,18 @@
+{
+  "canary": {
+    "type": "calls",
+    "from": "x/one.rb#Billing::Invoice::a",
+    "to": "y/two.rb#Billing::Invoice::helper_b"
+  },
+  "calls": [
+    {
+      "from": "x/one.rb#Billing::Invoice::a",
+      "to": "y/two.rb#Billing::Invoice::helper_b"
+    },
+    {
+      "from": "x/one.rb#Billing::Invoice::a",
+      "to": "y/two.rb#Billing::Invoice::sweep"
+    }
+  ],
+  "imports": []
+}

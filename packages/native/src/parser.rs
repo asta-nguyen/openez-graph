@@ -1,5 +1,5 @@
 use napi_derive::napi;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tree_sitter::{Node, Parser};
 
 // ── NAPI output types ──
@@ -46,6 +46,24 @@ pub struct NativeParseAndChunkResult {
 
 // ── Language config (ported from configs.ts) ──
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ContextKind {
+  Class,
+  Module,
+}
+
+/// One frame of the walker's context stack. `kind` is set only for Ruby
+/// class/module contexts so `class << self` and `self.foo` hooks can walk
+/// back to the nearest namespace frame.
+#[derive(Clone)]
+struct ContextFrame {
+  name: String,
+  end_row: usize,
+  kind: Option<ContextKind>,
+  /// Go method receiver (var_name, type_name) for Type::method qualification.
+  receiver: Option<(String, String)>,
+}
+
 struct SymbolRule {
   node_type: &'static str,
   symbol_type: &'static str,
@@ -53,14 +71,20 @@ struct SymbolRule {
   establishes_context: bool,
   /// (name, node_text_first_20) -> is_exported
   is_exported: fn(&str, &str) -> bool,
-  /// For Rust impl_item: custom name extraction
+  /// For Rust impl_item / Ruby assignment: custom name extraction
   extract_name: Option<fn(&Node, &[u8]) -> Option<String>>,
-  /// For Rust impl_item: context name (type name, not full "impl X for Y")
-  extract_context_name: Option<fn(&Node, &[u8]) -> Option<String>>,
+  /// For Rust impl_item: context name (type name, not full "impl X for Y");
+  /// for Ruby singleton_class: nearest class/module frame name.
+  extract_context_name: Option<fn(&Node, &[u8], &[ContextFrame]) -> Option<String>>,
   /// For Go method_declaration: receiver field
   receiver_field: Option<&'static str>,
   /// Normalize receiver text (strip parens for Go)
   normalize_receiver: Option<fn(&str) -> String>,
+  /// Push a context frame without emitting a symbol or extracting calls
+  /// (Ruby `class << self` singleton context).
+  context_only: bool,
+  /// Context kind carried by frames this rule pushes (Ruby class/module).
+  context_kind: Option<ContextKind>,
 }
 
 struct LanguageConfig {
@@ -71,6 +95,18 @@ struct LanguageConfig {
   call_ignores: HashSet<&'static str>,
   normalize_call_name: fn(&str) -> String,
   context_node_types: Vec<&'static str>,
+  /// WASM parity mode: callExpressions are attributed to the symbol node
+  /// whose subtree contains the call (skipping nested symbol ranges),
+  /// matching extractCallsInNode in parse.ts. When false, calls encountered
+  /// during DFS attribute to the innermost context frame.
+  per_symbol_calls: bool,
+  /// (call_node, source, raw callee, normalized callee, context stack) ->
+  /// qualified callee name override (Ruby self.foo -> C::foo).
+  qualify_call: Option<fn(&Node, &[u8], &str, &str, &[ContextFrame]) -> Option<String>>,
+  /// When true, call_expressions keep the qualified callee name
+  /// (`pkg.func`, `self.m`) while called_identifiers record the last
+  /// segment; ignores apply to the raw and last-segment forms. Python only.
+  keep_qualified_calls: bool,
 }
 
 // ── Exported checks ──
@@ -107,7 +143,11 @@ fn rust_impl_name(node: &Node, source: &[u8]) -> Option<String> {
   Some(format!("impl {}", type_name))
 }
 
-fn rust_impl_context_name(node: &Node, source: &[u8]) -> Option<String> {
+fn rust_impl_context_name(
+  node: &Node,
+  source: &[u8],
+  _stack: &[ContextFrame],
+) -> Option<String> {
   node.child_by_field_name("type").map(|n| text_of(&n, source))
 }
 
@@ -147,23 +187,68 @@ fn go_receiver_type(text: &str) -> Option<String> {
 
 // ── Call name normalization ──
 
-fn normalize_dot_call(value: &str) -> String {
-  value
-    .split('.')
-    .filter(|s| !s.is_empty())
-    .last()
-    .unwrap_or(value)
-    .to_string()
+/// Python keeps the qualified dotted callee (`pkg.func`, `self.m`) —
+/// keep_qualified_calls records the last segment as the called identifier.
+fn python_normalize_call(value: &str) -> String {
+  value.to_string()
 }
 
+/// Go call names keep their package selector (`pkg.Func`) for graph-level
+/// import resolution; only generic instantiation `[T]` is stripped.
+fn go_normalize_call(value: &str) -> String {
+  value.split('[').next().unwrap_or(value).to_string()
+}
+
+/// Last `::`/`.`-separated segment of a normalized Rust call path.
+/// `crate::util::run` → `run`, `x.run` → `run`.
+fn last_rust_call_segment(value: &str) -> &str {
+  value
+    .rsplit(|c| c == ':' || c == '.')
+    .find(|s| !s.is_empty())
+    .unwrap_or(value)
+}
+
+/// Preserve the qualified Rust call path (`crate::util::run`, `x.run`,
+/// `Self::new`) with whitespace removed and turbofish arguments stripped
+/// (`parse::<u8>` → `parse`). Returns "" when the callee is not a plain
+/// identifier path (`iter().map`, `[1].iter`) — those never resolve.
+/// keep_qualified_calls records the last segment as the called identifier.
 fn normalize_rust_call(value: &str) -> String {
-  let last_path = value.split("::").filter(|s| !s.is_empty()).last().unwrap_or(value);
-  last_path
-    .split('.')
-    .filter(|s| !s.is_empty())
-    .last()
-    .unwrap_or(last_path)
-    .to_string()
+  let stripped: String = value.chars().filter(|c| !c.is_whitespace()).collect();
+  let bytes = stripped.as_bytes();
+  let mut result = String::with_capacity(bytes.len());
+  let mut depth: i32 = 0;
+  let mut i = 0;
+  while i < bytes.len() {
+    if depth == 0
+      && i + 2 < bytes.len()
+      && bytes[i] == b':'
+      && bytes[i + 1] == b':'
+      && bytes[i + 2] == b'<'
+    {
+      depth = 1;
+      i += 3;
+      continue;
+    }
+    if depth > 0 {
+      match bytes[i] {
+        b'<' => depth += 1,
+        b'>' => depth -= 1,
+        _ => {}
+      }
+      i += 1;
+      continue;
+    }
+    result.push(bytes[i] as char);
+    i += 1;
+  }
+  // Valid callees are identifier paths joined by :: or . (\w+(::\w+)*(\.\w+)*).
+  let valid = !result.is_empty()
+    && result
+      .split("::")
+      .flat_map(|p| p.split('.'))
+      .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+  if valid { result } else { String::new() }
 }
 
 // ── Config builders ──
@@ -192,6 +277,8 @@ fn python_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "class_definition",
@@ -203,14 +290,19 @@ fn python_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
     ],
     import_node_types: vec!["import_statement", "import_from_statement"],
     call_node_type: "call",
     call_function_field: "function",
     call_ignores,
-    normalize_call_name: normalize_dot_call,
+    normalize_call_name: python_normalize_call,
     context_node_types: vec!["function_definition", "class_definition"],
+    per_symbol_calls: false,
+    qualify_call: None,
+    keep_qualified_calls: true,
   }
 }
 
@@ -237,6 +329,8 @@ fn go_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "method_declaration",
@@ -248,6 +342,8 @@ fn go_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: Some("receiver"),
         normalize_receiver: Some(go_normalize_receiver),
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "type_spec",
@@ -259,14 +355,19 @@ fn go_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
     ],
     import_node_types: vec!["import_declaration"],
     call_node_type: "call_expression",
     call_function_field: "function",
     call_ignores,
-    normalize_call_name: normalize_dot_call,
+    normalize_call_name: go_normalize_call,
     context_node_types: vec!["function_declaration", "method_declaration"],
+    per_symbol_calls: false,
+    qualify_call: None,
+    keep_qualified_calls: false,
   }
 }
 
@@ -292,6 +393,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "struct_item",
@@ -303,6 +406,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "enum_item",
@@ -314,6 +419,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "trait_item",
@@ -325,6 +432,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "impl_item",
@@ -336,6 +445,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: Some(rust_impl_context_name),
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "type_item",
@@ -347,6 +458,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "const_item",
@@ -358,6 +471,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "static_item",
@@ -369,6 +484,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
       SymbolRule {
         node_type: "mod_item",
@@ -380,6 +497,8 @@ fn rust_config() -> LanguageConfig {
         extract_context_name: None,
         receiver_field: None,
         normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
       },
     ],
     import_node_types: vec!["use_declaration"],
@@ -388,16 +507,251 @@ fn rust_config() -> LanguageConfig {
     call_ignores,
     normalize_call_name: normalize_rust_call,
     context_node_types: vec!["function_item", "trait_item", "impl_item"],
+    per_symbol_calls: false,
+    qualify_call: None,
+    keep_qualified_calls: true,
+  }
+}
+
+// ── Ruby config (ported from rubyConfig in configs.ts) ──
+
+fn ruby_exported(name: &str, _text: &str) -> bool {
+  name
+    .chars()
+    .next()
+    .map(|c| c.is_ascii_uppercase())
+    .unwrap_or(false)
+}
+
+/// JS: value.split(/[.::]/).filter(Boolean).pop() ?? value — the regex char
+/// class splits on every '.' or ':' character.
+fn normalize_ruby_call(value: &str) -> String {
+  value
+    .split(|c| c == '.' || c == ':')
+    .filter(|s| !s.is_empty())
+    .last()
+    .unwrap_or(value)
+    .to_string()
+}
+
+/// `x = lambda {}` / `x = proc {}` / `x = Proc.new {}` → the left-hand name.
+fn ruby_assignment_name(node: &Node, source: &[u8]) -> Option<String> {
+  let right = node.child_by_field_name("right")?;
+  let left_name = || {
+    node
+      .child_by_field_name("left")
+      .map(|n| text_of(&n, source))
+  };
+  match right.kind() {
+    "lambda" => left_name(),
+    "call" => {
+      let method = right
+        .child_by_field_name("method")
+        .map(|m| text_of(&m, source));
+      if matches!(method.as_deref(), Some("proc") | Some("lambda")) {
+        return left_name();
+      }
+      let receiver = right
+        .child_by_field_name("receiver")
+        .map(|r| text_of(&r, source));
+      if receiver.as_deref() == Some("Proc") && method.as_deref() == Some("new") {
+        return left_name();
+      }
+      None
+    }
+    _ => None,
+  }
+}
+
+/// `class << self` — context name is the nearest enclosing class/module frame.
+fn ruby_singleton_context_name(
+  _node: &Node,
+  _source: &[u8],
+  stack: &[ContextFrame],
+) -> Option<String> {
+  for frame in stack.iter().rev() {
+    if matches!(frame.kind, Some(ContextKind::Class) | Some(ContextKind::Module)) {
+      return Some(frame.name.clone());
+    }
+  }
+  None
+}
+
+/// `self.foo` inside a class/module context → `ClassName::foo`.
+/// Constant receivers keep the scope-qualified name: `Invoice.build` →
+/// `Invoice::build`, `Billing::Invoice.build` → `Billing::Invoice::build`.
+/// Ordinary receivers (locals, ivars, expressions, `&.`) can never resolve —
+/// returns `""` so the caller suppresses the call entirely.
+fn ruby_qualify_call(
+  call_node: &Node,
+  source: &[u8],
+  _callee_raw: &str,
+  normalized: &str,
+  stack: &[ContextFrame],
+) -> Option<String> {
+  let receiver = call_node.child_by_field_name("receiver")?;
+  if text_of(&receiver, source) == "self" {
+    for frame in stack.iter().rev() {
+      if matches!(frame.kind, Some(ContextKind::Class) | Some(ContextKind::Module)) {
+        return Some(format!("{}::{}", frame.name, normalized));
+      }
+    }
+    return None;
+  }
+  if receiver.kind() == "constant" || receiver.kind() == "scope_resolution" {
+    return Some(format!("{}::{}", text_of(&receiver, source), normalized));
+  }
+  Some(String::new())
+}
+
+fn ruby_config() -> LanguageConfig {
+  let call_ignores: HashSet<&str> = [
+    "if",
+    "unless",
+    "while",
+    "until",
+    "for",
+    "return",
+    "yield",
+    "break",
+    "next",
+    "redo",
+    "retry",
+    "puts",
+    "pp",
+    "p",
+    "print",
+    "raise",
+    "require",
+    "require_relative",
+    "load",
+    "autoload",
+    "attr_accessor",
+    "attr_reader",
+    "attr_writer",
+    "include",
+    "extend",
+    "define_method",
+    "lambda",
+    "proc",
+    "send",
+    "public_send",
+    "method_missing",
+    "eval",
+    "const_get",
+    "respond_to",
+    "respond_to?",
+    "super",
+    "self",
+    "nil",
+    "true",
+    "false",
+    "new",
+    "Array",
+    "Hash",
+    "String",
+    "Integer",
+    "Float",
+    "Symbol",
+  ]
+  .iter()
+  .copied()
+  .collect();
+
+  LanguageConfig {
+    symbol_rules: vec![
+      SymbolRule {
+        node_type: "class",
+        symbol_type: "class",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: ruby_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: Some(ContextKind::Class),
+      },
+      SymbolRule {
+        node_type: "module",
+        symbol_type: "module",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: ruby_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: Some(ContextKind::Module),
+      },
+      SymbolRule {
+        node_type: "method",
+        symbol_type: "function",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: always_false,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+      },
+      SymbolRule {
+        node_type: "singleton_method",
+        symbol_type: "function",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: always_false,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+      },
+      SymbolRule {
+        node_type: "singleton_class",
+        symbol_type: "class",
+        name_field: "name",
+        establishes_context: false,
+        is_exported: always_false,
+        extract_name: None,
+        extract_context_name: Some(ruby_singleton_context_name),
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: true,
+        context_kind: None,
+      },
+      SymbolRule {
+        node_type: "assignment",
+        symbol_type: "lambda",
+        name_field: "name",
+        establishes_context: false,
+        is_exported: always_false,
+        extract_name: Some(ruby_assignment_name),
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+      },
+    ],
+    import_node_types: vec!["call"],
+    call_node_type: "call",
+    call_function_field: "method",
+    call_ignores,
+    normalize_call_name: normalize_ruby_call,
+    context_node_types: vec!["class", "module", "method", "singleton_method"],
+    per_symbol_calls: true,
+    qualify_call: Some(ruby_qualify_call),
+    keep_qualified_calls: false,
   }
 }
 
 // ── Helpers ──
-
-fn node_text(node: &Node, source: &[u8]) -> String {
-  let start = node.start_byte();
-  let end = node.end_byte();
-  String::from_utf8_lossy(&source[start..end]).to_string()
-}
 
 fn get_node_name(node: &Node, field: &str, source: &[u8]) -> Option<String> {
   if let Some(name_node) = node.child_by_field_name(field) {
@@ -434,7 +788,7 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
   match language {
     "python" => {
       if node.kind() == "import_statement" {
-        let mut cursor = node.walk();
+        let cursor = node.walk();
         for i in 0..node.named_child_count() {
           if let Some(child) = node.named_child(i) {
             match child.kind() {
@@ -467,6 +821,15 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
           .map(|n| n.end_byte())
           .unwrap_or(0);
 
+        // Relative imports: module_path already ends in dots (`from . import x`
+        // gives `.`) — joining with another dot would corrupt the level count.
+        let join = |name: &str| {
+          if module_path.ends_with('.') {
+            format!("{}{}", module_path, name)
+          } else {
+            format!("{}.{}", module_path, name)
+          }
+        };
         for i in 0..node.named_child_count() {
           if let Some(child) = node.named_child(i) {
             if child.start_byte() == module_start && child.end_byte() == module_end {
@@ -475,13 +838,13 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
             match child.kind() {
               "dotted_name" => {
                 if !module_path.is_empty() {
-                  paths.push(format!("{}.{}", module_path, text_of(&child, source)));
+                  paths.push(join(&text_of(&child, source)));
                 }
               }
               "aliased_import" => {
                 if let Some(name_node) = child.child_by_field_name("name") {
                   if !module_path.is_empty() {
-                    paths.push(format!("{}.{}", module_path, text_of(&name_node, source)));
+                    paths.push(join(&text_of(&name_node, source)));
                   }
                 }
               }
@@ -545,6 +908,61 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
         paths.push(cleaned.to_string());
       }
     }
+    "ruby" => {
+      // Only require_relative produces import edges — require (gem), load,
+      // and autoload do not resolve to local files (extractRubyImports).
+      if node.kind() == "call" {
+        let is_require_relative = node
+          .child_by_field_name("method")
+          .map(|m| text_of(&m, source) == "require_relative")
+          .unwrap_or(false);
+        if is_require_relative {
+          if let Some(args) = node.child_by_field_name("arguments") {
+            let mut string_node: Option<Node> = None;
+            for i in 0..args.named_child_count() {
+              if let Some(c) = args.named_child(i) {
+                if c.kind() == "string" || c.kind() == "argument_list" {
+                  string_node = Some(c);
+                  break;
+                }
+              }
+            }
+            let target = string_node.and_then(|sn| {
+              if sn.kind() == "string" {
+                Some(sn)
+              } else {
+                (0..sn.named_child_count()).find_map(|i| {
+                  sn.named_child(i).filter(|c| c.kind() == "string")
+                })
+              }
+            });
+            if let Some(t) = target {
+              // JS: text.replace(/^['"]|['"]$/g, "") — strip at most one
+              // leading and one trailing quote character.
+              let text = text_of(&t, source);
+              let bytes = text.as_bytes();
+              let start =
+                if !bytes.is_empty() && (bytes[0] == b'\'' || bytes[0] == b'"') {
+                  1
+                } else {
+                  0
+                };
+              let end = if bytes.len() > start
+                && (bytes[bytes.len() - 1] == b'\'' || bytes[bytes.len() - 1] == b'"')
+              {
+                bytes.len() - 1
+              } else {
+                bytes.len()
+              };
+              let stripped = &text[start..end];
+              if !stripped.is_empty() {
+                paths.push(stripped.to_string());
+              }
+            }
+          }
+        }
+      }
+    }
     _ => {}
   }
 
@@ -566,8 +984,9 @@ fn walk_tree(
 
   // Context stack for nested symbol naming.
   // Carries optional receiver (var_name, type_name) for Go methods so calls
-  // through the receiver variable can be qualified as Type::method.
-  let mut context_stack: Vec<(String, usize, Option<(String, String)>)> = Vec::new();
+  // through the receiver variable can be qualified as Type::method, plus an
+  // optional ContextKind for Ruby class/module frames.
+  let mut context_stack: Vec<ContextFrame> = Vec::new();
 
   // Build lookup maps
   let symbol_rule_map: Vec<(&str, &SymbolRule)> = config
@@ -586,8 +1005,8 @@ fn walk_tree(
     let end_row = node.end_position().row + 1;
 
     // Pop expired contexts
-    while let Some((_, ctx_end, _)) = context_stack.last() {
-      if start_row > *ctx_end {
+    while let Some(frame) = context_stack.last() {
+      if start_row > frame.end_row {
         context_stack.pop();
       } else {
         break;
@@ -613,7 +1032,7 @@ fn walk_tree(
           if child_kind == "function_definition" || child_kind == "class_definition" {
             if let Some(name_node) = child.child_by_field_name("name") {
               let raw_name = text_of(&name_node, source);
-              let parent_name = context_stack.last().map(|(n, _, _)| n.clone());
+              let parent_name = context_stack.last().map(|f| f.name.clone());
               inner_name = Some(
                 parent_name
                   .map(|p| format!("{}::{}", p, raw_name))
@@ -653,11 +1072,17 @@ fn walk_tree(
                 }
               };
               if let Some(dec) = dec_name {
+                let dec_id = if config.keep_qualified_calls {
+                  last_rust_call_segment(&dec).to_string()
+                } else {
+                  dec.clone()
+                };
                 if !dec.is_empty()
                   && !config.call_ignores.contains(dec.as_str())
+                  && !config.call_ignores.contains(dec_id.as_str())
                   && dec != *def_name
                 {
-                  called_identifiers.insert(dec.clone());
+                  called_identifiers.insert(dec_id);
                   call_expressions.push(NativeCallExpression {
                     caller_name: def_name.clone(),
                     callee_name: dec,
@@ -670,16 +1095,55 @@ fn walk_tree(
       }
     }
 
-    // Check for symbol
-    if let Some((_, rule)) = symbol_rule_map.iter().find(|(t, _)| *t == node_kind) {
-      let name = if let Some(extract) = rule.extract_name {
-        extract(&node, source)
+    // Go const/var specs: each identifier in the spec's identifier_list is a
+    // package-level symbol. Specs inside a function body (non-empty context
+    // stack) and the blank identifier are not graph symbols.
+    if language == "go" && (node_kind == "const_spec" || node_kind == "var_spec") {
+      if context_stack.is_empty() {
+        // `name` maps to every identifier in the (hidden) identifier_list.
+        let mut cursor = node.walk();
+        for ident in node.children_by_field_name("name", &mut cursor) {
+          if ident.kind() != "identifier" {
+            continue;
+          }
+          let name = text_of(&ident, source);
+          if name == "_" {
+            continue;
+          }
+          let sym_type = if node_kind == "const_spec" { "const" } else { "var" };
+          symbols.push(NativeSymbol {
+            exported: go_exported(&name, ""),
+            name,
+            symbol_type: sym_type.to_string(),
+            start_line: start_row as i32,
+            end_line: end_row as i32,
+            receiver: None,
+          });
+        }
+      }
+    } else if let Some((_, rule)) = symbol_rule_map.iter().find(|(t, _)| *t == node_kind) {
+      if rule.context_only {
+        // Context-only rules (Ruby `class << self`) push a plain context
+        // frame when extractContextName resolves — no symbol, no calls.
+        if let Some(extract_ctx) = rule.extract_context_name {
+          if let Some(context_name) = extract_ctx(&node, source, &context_stack) {
+            context_stack.push(ContextFrame {
+              name: context_name,
+              end_row,
+              kind: rule.context_kind,
+              receiver: None,
+            });
+          }
+        }
       } else {
-        get_node_name(&node, rule.name_field, source)
-      };
+        let name = if let Some(extract) = rule.extract_name {
+          extract(&node, source)
+        } else {
+          get_node_name(&node, rule.name_field, source)
+        };
 
-      if let Some(name) = name {
-        let parent_name = context_stack.last().map(|(n, _, _)| n.clone());
+        if let Some(name) = name {
+          let parent_name = context_stack.last().map(|f| f.name.clone());
 
         // Extract receiver info for Go methods
         let receiver_raw = rule.receiver_field.and_then(|field| {
@@ -718,36 +1182,94 @@ fn walk_tree(
           receiver,
         });
 
-        // Push context if this node establishes one.
-        // The context stack top is the innermost symbol — calls encountered
-        // while this is on top belong to this symbol.
-        let is_context = rule.establishes_context || context_type_set.contains(node_kind);
-        if is_context {
-          let context_name = if let Some(extract_ctx) = rule.extract_context_name {
-            extract_ctx(&node, source).unwrap_or(full_name.clone())
+          // Push context if this node establishes one.
+          // The context stack top is the innermost symbol — calls encountered
+          // while this is on top belong to this symbol.
+          let is_context = rule.establishes_context || context_type_set.contains(node_kind);
+          let context_name: Option<String> = if is_context {
+            Some(
+              rule
+                .extract_context_name
+                .and_then(|extract_ctx| extract_ctx(&node, source, &context_stack))
+                .unwrap_or_else(|| full_name.clone()),
+            )
           } else {
-            full_name.clone()
+            None
           };
-          // Carry receiver (var, type) so calls through the receiver variable
-          // can be qualified as Type::method.
-          let ctx_receiver = receiver_type
-            .as_ref()
-            .and_then(|rt| receiver_var.as_ref().map(|rv| (rv.clone(), rt.clone())));
-          context_stack.push((context_name, end_row, ctx_receiver));
+
+          // WASM extractCallsInNode parity for configs that opt in (Ruby):
+          // attribute the call descendants of this symbol's subtree to it,
+          // skipping nested symbol ranges. Go/Python/Rust keep DFS-frame
+          // attribution in the call branch below.
+          if config.per_symbol_calls {
+            let call_context: Vec<ContextFrame> =
+              if context_name.is_some() && rule.context_kind.is_some() {
+                let mut v = context_stack.clone();
+                v.push(ContextFrame {
+                  name: context_name.clone().unwrap(),
+                  end_row,
+                  kind: rule.context_kind,
+                  receiver: None,
+                });
+                v
+              } else {
+                context_stack.clone()
+              };
+            extract_calls_in_node(
+              &node,
+              config,
+              &full_name,
+              &mut called_identifiers,
+              &mut call_expressions,
+              &call_context,
+              source,
+            );
+          }
+
+          if is_context {
+            // Carry receiver (var, type) so calls through the receiver variable
+            // can be qualified as Type::method.
+            let ctx_receiver = receiver_type
+              .as_ref()
+              .and_then(|rt| receiver_var.as_ref().map(|rv| (rv.clone(), rt.clone())));
+            context_stack.push(ContextFrame {
+              name: context_name.unwrap_or_else(|| full_name.clone()),
+              end_row,
+              kind: rule.context_kind,
+              receiver: ctx_receiver,
+            });
+          }
         }
       }
-    } else if node_kind == config.call_node_type {
-      // Call node — assign to current context (innermost symbol)
-      if let Some(func_node) = node.child_by_field_name(config.call_function_field) {
+    } else if node_kind == config.call_node_type
+      || (language == "go" && node_kind == "type_conversion_expression")
+    {
+      // Call node — assign to current context (innermost symbol). A Go
+      // type_conversion_expression only counts as a call when its type is a
+      // generic instantiation (Map[int](x) → callee Map); real conversions
+      // like int(x) keep producing no call.
+      let func_node = if node_kind == "type_conversion_expression" {
+        node
+          .child_by_field_name("type")
+          .filter(|t| t.kind() == "generic_type")
+      } else {
+        node.child_by_field_name(config.call_function_field)
+      };
+      if let Some(func_node) = func_node {
         let callee_raw = text_of(&func_node, source);
         let normalized = (config.normalize_call_name)(&callee_raw);
 
         // Qualify calls through the receiver variable: f.Validate() → Foo::Validate
         // This matches the TS parser behavior and prevents call edges from
         // targeting the wrong same-named method on a different type.
-        let qualified_callee = if let Some((_, _, Some((rv, rt)))) = context_stack.last() {
+        let qualified_callee = if let Some((rv, rt)) =
+          context_stack.last().and_then(|f| f.receiver.as_ref())
+        {
           if callee_raw.starts_with(&format!("{}.", rv)) {
-            format!("{}::{}", rt, normalized)
+            // Method name is the last selector segment: n.next.Traverse()
+            // on receiver n *Node qualifies as Node::Traverse.
+            let method = normalized.rsplit('.').next().unwrap_or(&normalized);
+            format!("{}::{}", rt, method)
           } else {
             normalized.clone()
           }
@@ -755,17 +1277,32 @@ fn walk_tree(
           normalized.clone()
         };
 
+        // Last path segment of the normalized callee; splits on '.' and ':'
+        // so Rust `crate::util::run` records `run` as the called identifier.
+        let last_segment = || last_rust_call_segment(&normalized);
         if !normalized.is_empty()
           && !config.call_ignores.contains(callee_raw.as_str())
           && !config.call_ignores.contains(normalized.as_str())
+          && (!config.keep_qualified_calls || !config.call_ignores.contains(last_segment()))
         {
-          called_identifiers.insert(qualified_callee.clone());
-          if let Some((caller, _, _)) = context_stack.last() {
-            if qualified_callee != *caller {
-              call_expressions.push(NativeCallExpression {
-                caller_name: caller.clone(),
-                callee_name: qualified_callee,
-              });
+          // Qualified callees (Python pkg.func/self.m) keep the qualifier in
+          // call_expressions; called_identifiers record the last segment only.
+          called_identifiers.insert(if config.keep_qualified_calls {
+            last_segment().to_string()
+          } else {
+            qualified_callee.clone()
+          });
+          // per_symbol_calls configs (Ruby) attribute edges in
+          // extract_calls_in_node — this DFS branch tracks identifiers only,
+          // matching parse.ts's walkTree.
+          if !config.per_symbol_calls {
+            if let Some(caller) = context_stack.last().map(|f| f.name.clone()) {
+              if qualified_callee != caller {
+                call_expressions.push(NativeCallExpression {
+                  caller_name: caller,
+                  callee_name: qualified_callee,
+                });
+              }
             }
           }
         }
@@ -781,11 +1318,113 @@ fn walk_tree(
     }
   }
 
+  // WASM parse.ts wraps importPaths in `new Set` — dedupe here the same way
+  // (first-occurrence order preserved) so native/WASM agree on repeats.
+  let mut seen_imports: HashSet<String> = HashSet::new();
+  import_paths.retain(|p| seen_imports.insert(p.clone()));
+
   NativeParseResult {
     symbols,
     import_paths,
     called_identifiers: called_identifiers.into_iter().collect(),
     call_expressions,
+  }
+}
+
+/// Pre-order (document-order) descendants of `node` whose kind is in `kinds`,
+/// mirroring web-tree-sitter's descendantsOfType for named node kinds.
+fn collect_descendants<'a>(node: &Node<'a>, kinds: &HashSet<&str>) -> Vec<Node<'a>> {
+  let mut out = Vec::new();
+  let mut stack: Vec<Node<'a>> = Vec::new();
+  for i in (0..node.named_child_count()).rev() {
+    if let Some(c) = node.named_child(i) {
+      stack.push(c);
+    }
+  }
+  while let Some(n) = stack.pop() {
+    if kinds.contains(n.kind()) {
+      out.push(n);
+    }
+    for i in (0..n.named_child_count()).rev() {
+      if let Some(c) = n.named_child(i) {
+        stack.push(c);
+      }
+    }
+  }
+  out
+}
+
+/// Port of extractCallsInNode in parse.ts: attribute every call descendant of
+/// `symbol_node` to `caller_name`, skipping calls inside nested symbol ranges
+/// (contextOnly nodes always count as boundaries; other rules count when they
+/// produce a symbol name). Used only by per_symbol_calls configs — Ruby —
+/// where Go receiverInfo / keepQualifiedCallee have no equivalents.
+fn extract_calls_in_node(
+  symbol_node: &Node,
+  config: &LanguageConfig,
+  caller_name: &str,
+  called_identifiers: &mut HashSet<String>,
+  call_expressions: &mut Vec<NativeCallExpression>,
+  context_stack: &[ContextFrame],
+  source: &[u8],
+) {
+  let rule_kinds: HashSet<&str> = config.symbol_rules.iter().map(|r| r.node_type).collect();
+  let rule_map: HashMap<&str, &SymbolRule> =
+    config.symbol_rules.iter().map(|r| (r.node_type, r)).collect();
+
+  let nested_ranges: Vec<(usize, usize)> = collect_descendants(symbol_node, &rule_kinds)
+    .into_iter()
+    .filter(|n| {
+      if n.start_byte() == symbol_node.start_byte() && n.end_byte() == symbol_node.end_byte() {
+        return false;
+      }
+      let rule = match rule_map.get(n.kind()) {
+        Some(r) => *r,
+        None => return false,
+      };
+      if rule.context_only {
+        return true;
+      }
+      match rule.extract_name {
+        Some(extract) => extract(n, source).is_some(),
+        None => get_node_name(n, rule.name_field, source).is_some(),
+      }
+    })
+    .map(|n| (n.start_byte(), n.end_byte()))
+    .collect();
+
+  let call_kinds: HashSet<&str> = [config.call_node_type].into_iter().collect();
+  for call_node in collect_descendants(symbol_node, &call_kinds) {
+    let inside_nested = nested_ranges
+      .iter()
+      .any(|(s, e)| call_node.start_byte() >= *s && call_node.end_byte() <= *e);
+    if inside_nested {
+      continue;
+    }
+    let func_node = match call_node.child_by_field_name(config.call_function_field) {
+      Some(f) => f,
+      None => continue,
+    };
+    let callee_raw = text_of(&func_node, source);
+    let normalized = (config.normalize_call_name)(&callee_raw);
+    let final_callee = config
+      .qualify_call
+      .and_then(|f| f(&call_node, source, &callee_raw, &normalized, context_stack))
+      .unwrap_or_else(|| normalized.clone());
+
+    if normalized.is_empty()
+      || final_callee.is_empty()
+      || config.call_ignores.contains(callee_raw.as_str())
+      || config.call_ignores.contains(normalized.as_str())
+      || final_callee == caller_name
+    {
+      continue;
+    }
+    called_identifiers.insert(final_callee.clone());
+    call_expressions.push(NativeCallExpression {
+      caller_name: caller_name.to_string(),
+      callee_name: final_callee,
+    });
   }
 }
 
@@ -796,6 +1435,7 @@ fn get_config(language: &str) -> Option<LanguageConfig> {
     "python" => Some(python_config()),
     "go" => Some(go_config()),
     "rust" => Some(rust_config()),
+    "ruby" => Some(ruby_config()),
     _ => None,
   }
 }
@@ -805,6 +1445,7 @@ fn get_language_fn(language: &str) -> Option<tree_sitter::Language> {
     "python" => Some(tree_sitter_python::LANGUAGE.into()),
     "go" => Some(tree_sitter_go::LANGUAGE.into()),
     "rust" => Some(tree_sitter_rust::LANGUAGE.into()),
+    "ruby" => Some(tree_sitter_ruby::LANGUAGE.into()),
     _ => None,
   }
 }

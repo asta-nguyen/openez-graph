@@ -1,6 +1,7 @@
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
 import { parseGo, parsePython, parseRuby, parseRust, type IndexedCodeResult } from "../languages";
+import { extractPythonBindings, markPythonCallShadowing } from "../python-resolver";
 import {
   goConfig,
   parseWithTreeSitter,
@@ -55,6 +56,15 @@ export class TreeSitterParser implements CodeParser {
     const tsResult = await parseWithTreeSitter(config, input.content, counter);
     const result = tsResult ?? REGEX_FALLBACKS[language](input.content, counter);
 
+    // Python bindings and local-shadow marks are extracted once in
+    // TypeScript over the source so the WASM and regex paths agree; see
+    // docs/agent-devkit/changes/2026-10-20-39-python-index-accuracy.
+    const isPython = language === "python";
+    const callExpressions = result.callExpressions ?? [];
+    if (isPython) {
+      markPythonCallShadowing(input.content, result.definedSymbols ?? [], callExpressions);
+    }
+
     return {
       parser: tsResult ? this.name : "regex",
       language,
@@ -64,7 +74,10 @@ export class TreeSitterParser implements CodeParser {
       wikilinks: [],
       definedSymbols: result.definedSymbols,
       calledIdentifiers: result.calledIdentifiers,
-      callExpressions: result.callExpressions,
+      callExpressions,
+      importBindings: isPython
+        ? extractPythonBindings(input.content, result.definedSymbols ?? [])
+        : undefined,
     };
   }
 

@@ -1,0 +1,26 @@
+{
+  "canary": {
+    "type": "calls",
+    "from": "x/w.rb#Widget",
+    "to": "x/w.rb#Widget::helper"
+  },
+  "calls": [
+    {
+      "from": "x/w.rb#Widget",
+      "to": "x/w.rb#Widget::helper"
+    },
+    {
+      "from": "x/w.rb#Outer",
+      "to": "x/w.rb#helper"
+    },
+    {
+      "from": "x/w.rb#Shape",
+      "to": "x/w.rb#Shape::Sub::ping"
+    },
+    {
+      "from": "x/w.rb#Mod",
+      "to": "x/w.rb#Mod::helper"
+    }
+  ],
+  "imports": []
+}
