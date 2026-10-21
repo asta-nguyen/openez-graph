@@ -1,0 +1,30 @@
+packages/native/src/parser.rs
+  s_60be63c546883e::t_4f35c8d333593d 2317
+  s_60be63c546883e::t_4a320d1fc8eb02 130
+  s_60be63c546883e::t_4e072b6e024207 1406
+  s_40482f44189743::t_53c355987c24e2 99-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ddcb897fc506005362ae92aaa8db777a152ea8a3",
+  "prompts": {},
+  "sessions": {
+    "s_40482f44189743": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a158e1-cb44-7020-aa8f-5329933881f3",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_60be63c546883e": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "honey-theory",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
