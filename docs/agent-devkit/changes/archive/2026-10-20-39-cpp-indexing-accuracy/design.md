@@ -26,7 +26,7 @@ I inspected [colbymchenry/codegraph at commit 204315274e7902c713ba3ad61e8df511aa
 
 ### Coordination
 
-This is separate from the archived [Go indexing work (native CI pending)](../archive/2026-10-20-39-go-indexing-accuracy/design.md), archived [Python indexing work](../archive/2026-10-20-39-python-index-accuracy/design.md), and the Java and C# plans of this series; the [Ruby](../archive/2026-10-20-39-ruby-native-indexing/design.md) and [Rust](../archive/2026-10-20-39-rust-index-accuracy/design.md) plans have already landed. These plans share native parser, grammar, cache-version, graph-builder, parity, and CLI packaging files; implement them in isolated worktrees in parallel, then integrate shared files serially. This plan owns the C++ fixtures and resolver branch; advance shared parser tags from the value present on the integration branch (`native-v5`/`fallback-v5` at planning time).
+This is separate from the archived [Go indexing work](../2026-10-20-39-go-indexing-accuracy/design.md), archived [Python indexing work](../2026-10-20-39-python-index-accuracy/design.md), and the Java and C# plans of this series; the [Ruby](../2026-10-20-39-ruby-native-indexing/design.md) and [Rust](../2026-10-20-39-rust-index-accuracy/design.md) plans have already landed. These plans share native parser, grammar, cache-version, graph-builder, parity, and CLI packaging files; implement them in isolated worktrees in parallel, then integrate shared files serially. This plan owns the C++ fixtures and resolver branch; advance shared parser tags from the value present on the integration branch (`native-v5`/`fallback-v5` at planning time).
 
 ## Behavior
 

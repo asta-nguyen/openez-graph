@@ -4,7 +4,7 @@ import path from "node:path";
  * C++ translation-unit include/call resolution for graph edges. A C++ file
  * sees itself plus the recursively reachable literal quoted includes inside
  * the workspace; calls resolve only to unique targets visible through that
- * closure. See docs/agent-devkit/changes/2026-10-20-39-cpp-indexing-accuracy.
+ * closure. See docs/agent-devkit/changes/archive/2026-10-20-39-cpp-indexing-accuracy.
  *
  * - Include resolution: the literal quoted path is tried relative to the
  *   including file's directory, then the workspace root, then a unique
@@ -48,14 +48,7 @@ interface GroupMember {
 
 const CALLABLE_TYPES = new Set(["function", "method", "declaration"]);
 const TYPE_SCOPE_TYPES = new Set(["class", "struct", "union"]);
-const SCOPE_SYMBOL_TYPES = new Set([
-  "namespace",
-  "class",
-  "struct",
-  "union",
-  "enum",
-  "type",
-]);
+const SCOPE_SYMBOL_TYPES = new Set(["namespace", "class", "struct", "union", "enum", "type"]);
 
 export function createCppResolver(options: {
   /** Workspace-relative paths of all parsed C++ files. */
@@ -109,9 +102,7 @@ export function createCppResolver(options: {
       normalizedSpec,
     ]);
     for (const rel of candidates) {
-      const resolved = options.workspaceRelativeFor(
-        path.resolve(options.workspaceRoot, rel),
-      );
+      const resolved = options.workspaceRelativeFor(path.resolve(options.workspaceRoot, rel));
       if (resolved && cppFileSet.has(resolved)) return resolved;
     }
     const suffixMatches = options.cppFiles.filter(

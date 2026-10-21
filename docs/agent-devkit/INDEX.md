@@ -1,14 +1,11 @@
 # Agent Devkit
 
-## Changes
-
-- [C++ indexing accuracy and native parity](changes/2026-10-20-39-cpp-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39)
-- [C# indexing accuracy and native parity](changes/2026-10-20-39-csharp-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39)
-- [Java indexing accuracy and native parity](changes/2026-10-20-39-java-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39)
-
 ## Archived changes
 
-- [Go indexing accuracy and native parity](changes/archive/2026-10-20-39-go-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), archived 2026-10-21 per user request (native CI matrix pending)
+- [Go indexing accuracy and native parity](changes/archive/2026-10-20-39-go-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21
+- [C++ indexing accuracy and native parity](changes/archive/2026-10-20-39-cpp-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21
+- [C# indexing accuracy and native parity](changes/archive/2026-10-20-39-csharp-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21
+- [Java indexing accuracy and native parity](changes/archive/2026-10-20-39-java-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21
 - [Python indexing accuracy](changes/archive/2026-10-20-39-python-index-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21
 - [Rust indexing accuracy](changes/archive/2026-10-20-39-rust-index-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-20
 - [Ruby native indexing and parity](changes/archive/2026-10-20-39-ruby-native-indexing/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-20
