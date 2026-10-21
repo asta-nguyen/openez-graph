@@ -1160,6 +1160,7 @@ export async function buildGraphGeneration(
       exported: boolean;
       startLine?: number;
       endLine?: number;
+      receiver?: string;
     }>;
     importPaths: string[];
     calledIdentifiers: string[];
@@ -1308,6 +1309,7 @@ export async function buildGraphGeneration(
             exported: s.exported,
             startLine: s.startLine,
             endLine: s.endLine,
+            ...(s.receiver ? { receiver: s.receiver } : {}),
           }));
           // Python keeps qualified call names + every call; bindings and
           // shadow marks are derived in TypeScript so the native result
