@@ -344,7 +344,8 @@ export function createCSharpResolver(
   }
 
   /** Enclosing namespace chain for a symbol, precomputed per file from
-   *  emission order + line ranges (see the first pass). */
+   *  receiver-based namespace ancestry — each symbol's `receiver` scope
+   *  key names its innermost enclosing declaration (see the first pass). */
   function namespaceOf(file: string, sym: FileSymbol): string {
     return nsChainByFile.get(file)?.get(sym.index) ?? "";
   }

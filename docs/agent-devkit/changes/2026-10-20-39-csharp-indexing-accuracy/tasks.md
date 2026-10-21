@@ -435,6 +435,25 @@ pass); `pnpm typecheck` 8/8 clean; Prettier clean on changed files;
 `git diff --check` clean. Native binary unchanged (TypeScript-only fix).
 Three-platform native CI gate unchanged — pipeline.
 
+## Review round 8 — stale `namespaceOf` ancestry comment
+
+One documentation-only finding; corrected and re-verified.
+
+1. **`namespaceOf`'s docstring still described line-range ancestry (fixed —
+   comment only).** The JSDoc above `namespaceOf` in
+   `packages/indexer/src/csharp-resolver.ts` read "precomputed per file
+   from emission order + line ranges" — stale since round 6 moved ancestry
+   to parser-serialized `receiver` scope keys (f651ee0): `nsChain` is now
+   `scopeNamespace(s.receiver)`, the semantic namespace of the innermost
+   enclosing declaration. The comment now states receiver-based namespace
+   ancestry. Nearby comments re-audited: the surviving "emission order"
+   mentions cover `memberOwner` attribution and the `name@line#k` ordinal,
+   both still emission-order-driven, and `membersOf`'s range filter is
+   real — no other stale wording.
+
+Post-fix verification (fresh, this worktree): Prettier clean on changed
+files; `git diff --check` clean. Documentation-only; no test rerun.
+
 ## Files inspected, no change
 
 - packages/indexer/src/scanner.ts — builds its file list from codeExtensions (the native scanner matches extensions case-sensitively), so registering .cs/.csx is enough.
