@@ -1,0 +1,32 @@
+docs/agent-devkit/INDEX.md
+  s_40482f44189743::t_13c2df051f0d75 5-8
+docs/agent-devkit/changes/archive/2026-10-20-39-java-indexing-accuracy/design.md
+  s_40482f44189743::t_13c2df051f0d75 1-69
+docs/agent-devkit/changes/archive/2026-10-20-39-csharp-indexing-accuracy/design.md
+  s_40482f44189743::t_13c2df051f0d75 1-72
+.prettierignore
+  s_40482f44189743::t_13c2df051f0d75 17
+docs/agent-devkit/changes/archive/2026-10-20-39-cpp-indexing-accuracy/design.md
+  s_40482f44189743::t_13c2df051f0d75 1-73
+packages/indexer/src/cpp-resolver.ts
+  s_40482f44189743::t_13c2df051f0d75 7
+  s_40482f44189743::t_a57ac4ea2a18c8 51,105
+docs/agent-devkit/changes/archive/2026-10-20-39-cpp-indexing-accuracy/tasks.md
+  s_40482f44189743::t_e394fdabc15c4a 90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0cd44909a8fd1b29de815a96e4925a505efe026c",
+  "prompts": {},
+  "sessions": {
+    "s_40482f44189743": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a158e1-cb44-7020-aa8f-5329933881f3",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
