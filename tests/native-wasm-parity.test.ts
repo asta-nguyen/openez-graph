@@ -8,6 +8,7 @@ import {
   resolveNativeParser,
 } from "../packages/indexer/src/index-workspace";
 import {
+  csharpConfig,
   goConfig,
   parseWithTreeSitter,
   pythonConfig,
@@ -37,6 +38,7 @@ const LANG_CONFIG: Record<string, LanguageConfig> = {
   go: goConfig,
   rust: rustConfig,
   ruby: rubyConfig,
+  csharp: csharpConfig,
 };
 
 // ── Pure difference computation ──
@@ -361,6 +363,8 @@ describe("native-wasm parity", () => {
     // entry fails instead of silently reducing coverage. Each fixture file
     // yields a `file` and `file#crlf` case; the manifest lists file keys.
     const REQUIRED_FIXTURES = [
+      "csharp/example.cs",
+      "csharp/file-scoped.cs",
       "go/example.go",
       "python/example.py",
       "ruby/example.rb",

@@ -48,7 +48,11 @@ export interface SymbolRule {
  */
 export interface ContextFrame {
   name: string;
-  endRow: number;
+  /** Byte offset where this context's node ends — used to pop contexts when
+   *  the walker reaches a sibling that shares the end row (same-line
+   *  declarations), where an end-row-only check cannot tell child from
+   *  sibling. */
+  endByte: number;
   kind?: "class" | "module";
   receiver?: { varName: string; typeName: string };
 }
@@ -115,6 +119,18 @@ export interface LanguageConfig {
     symbols: ExtractedSymbol[],
     calls: Array<{ callerName: string; calleeName: string; shadowedLocal?: boolean }>,
   ) => void;
+  /**
+   * Optional source pre-pass applied only to the text handed to the
+   * tree-sitter parser — chunking still uses the original content. C# uses it
+   * to blank conditional-directive lines while preserving every byte offset.
+   */
+  preprocess?: (content: string) => string;
+  /**
+   * Node types whose symbol span extends to end-of-file instead of the
+   * node's own end row — a C# `namespace Foo;` (file-scoped) covers the rest
+   * of the file even though the grammar node ends at the semicolon.
+   */
+  eofSpanNodeTypes?: ReadonlySet<string>;
 }
 
 // ── Extraction core ──
@@ -211,10 +227,17 @@ function walkTree(
   while (stack.length > 0) {
     const node = stack.pop()!;
     const startRow = node.startPosition.row + 1; // 1-based
-    const endRow = node.endPosition.row + 1;
+    const endRow = config.eofSpanNodeTypes?.has(node.type)
+      ? lines.length
+      : node.endPosition.row + 1;
 
-    // Pop expired contexts
-    while (contextStack.length > 0 && startRow > contextStack[contextStack.length - 1].endRow) {
+    // Pop expired contexts. A context ends where its node ends byte-wise:
+    // a node starting at or after that byte is outside the context even when
+    // it shares the context's end row (same-line sibling declarations).
+    while (
+      contextStack.length > 0 &&
+      node.startIndex >= contextStack[contextStack.length - 1].endByte
+    ) {
       contextStack.pop();
     }
 
@@ -293,7 +316,7 @@ function walkTree(
         if (contextName) {
           contextStack.push({
             name: contextName,
-            endRow,
+            endByte: node.endIndex,
             kind: symbolRule.contextKind,
           });
         }
@@ -369,7 +392,10 @@ function walkTree(
             : null;
           const callContext =
             contextName && symbolRule.contextKind
-              ? [...contextStack, { name: contextName, endRow, kind: symbolRule.contextKind }]
+              ? [
+                  ...contextStack,
+                  { name: contextName, endByte: node.endIndex, kind: symbolRule.contextKind },
+                ]
               : contextStack;
           extractCallsInNode(
             node,
@@ -384,7 +410,7 @@ function walkTree(
           if (isContextNode) {
             contextStack.push({
               name: contextName ?? fullName,
-              endRow,
+              endByte: node.endIndex,
               kind: symbolRule.contextKind,
               receiver: receiverInfo,
             });
@@ -511,7 +537,10 @@ export async function parseWithTreeSitter(
   content: string,
   counter?: TokenCounter,
 ): Promise<IndexedCodeResult | null> {
-  const tree = await parseContent(config.language, content);
+  const tree = await parseContent(
+    config.language,
+    config.preprocess ? config.preprocess(content) : content,
+  );
   if (!tree) return null;
 
   try {

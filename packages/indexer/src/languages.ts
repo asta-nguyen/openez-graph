@@ -33,6 +33,8 @@ export const codeExtensions = new Map<string, string>([
   [".rb", "ruby"],
   [".rake", "ruby"],
   [".gemspec", "ruby"],
+  [".cs", "csharp"],
+  [".csx", "csharp"],
 ]);
 
 export const configExtensions = new Map<string, string>([
@@ -1632,4 +1634,21 @@ export function makeFallbackChunks(
     calledIdentifiers: [],
     callExpressions: [],
   };
+}
+
+/**
+ * Blank C# conditional-compilation directive lines (`#if` / `#elif` / `#else` /
+ * `#endif`) before parsing, keeping both bodies and every byte offset. Other
+ * `#...` directives (`#region`, `#pragma`, `#nullable`, …) parse fine and are
+ * left alone. Replacement preserves byte offsets — directive text becomes
+ * spaces, newlines and leading indentation stay — so symbol line/column data
+ * still maps to the original source. Applied identically by the WASM
+ * (configs.ts preprocess) and native (parser.rs) paths.
+ */
+export function blankCSharpDirectives(source: string): string {
+  if (!source.includes("#")) return source;
+  return source.replace(
+    /^([ \t]*)#[ \t]*(if|elif|else|endif)\b[^\n]*/gm,
+    (m, indent: string) => indent + " ".repeat(m.length - indent.length),
+  );
 }
