@@ -471,6 +471,69 @@ describe("C# parsed-documents cache", () => {
     resetNativeParserCache();
   });
 
+  test("native graph re-parse keeps receiver scope keys (same-line ancestry)", async () => {
+    resetNativeParserCache();
+    if (!resolveNativeParser()) return; // native extension unavailable
+
+    // `using U` reaches the same-line nested `namespace B` (dotnet compiles)
+    // but not the same-line sibling `namespace A.B` — line ranges cannot
+    // tell them apart, only the parser's receiver scope keys can.
+    fs.writeFileSync(path.join(workspaceRoot, "App.csproj"), "");
+    fs.writeFileSync(
+      path.join(workspaceRoot, "Lib.cs"),
+      "namespace U { public static class Thing { public static void F() { } } }\n",
+    );
+    fs.writeFileSync(
+      path.join(workspaceRoot, "Consumer.cs"),
+      [
+        "namespace A { using U; namespace B { public class C { public void M() { Thing.F(); } } } }",
+        "namespace A { using U; } namespace A.B { public class D { public void N() { Thing.F(); } } }",
+        "",
+      ].join("\n"),
+    );
+
+    const workspace = await createRegistryRepository().ensureWorkspace({
+      rootPath: workspaceRoot,
+    });
+    // Index through the fallback parser, then build the graph with the
+    // native binding: the tag mismatch forces buildGraphGeneration's native
+    // re-parse — the path that must keep receiver scope keys for the
+    // resolver and the rewritten cache rows.
+    process.env.OPENEZ_NATIVE = "0";
+    resetNativeParserCache();
+    await indexWorkspace({ workspaceId: workspace.id });
+    delete process.env.OPENEZ_NATIVE;
+    resetNativeParserCache();
+    await buildGraphGeneration(workspace.id, workspaceRoot, 1, 1);
+
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const edges = await repo.queryRaw(
+      `SELECT sf.label AS caller, st.label AS callee,
+              sf.metadata AS fromMeta, st.metadata AS toMeta
+         FROM graph_edges e
+         JOIN graph_nodes sf ON sf.id = e.from_node_id
+         JOIN graph_nodes st ON st.id = e.to_node_id
+        WHERE e.type = 'calls' AND sf.type = 'symbol' AND st.type = 'symbol'`,
+    );
+    const edgeKeys = edges.map(
+      (r) =>
+        `${JSON.parse(r.fromMeta as string).filePath}#${r.caller} -> ${
+          JSON.parse(r.toMeta as string).filePath
+        }#${r.callee}`,
+    );
+    expect(edgeKeys).toContain("Consumer.cs#C::M -> Lib.cs#Thing::F");
+    expect(edgeKeys).not.toContain("Consumer.cs#D::N -> Lib.cs#Thing::F");
+
+    // The re-parsed native cache rows retain receiver scope metadata.
+    const doc = await repo.getDocumentByPath("Consumer.cs");
+    expect(doc).not.toBeNull();
+    const cached = repo.getParsedDocument(doc!.id);
+    expect(cached?.parserVersion).toBe("native-v9");
+    const symbols = JSON.parse(cached!.symbols!);
+    expect(symbols.find((s: { name: string }) => s.name === "C::M")?.receiver).toBe("A.B@1");
+    expect(symbols.find((s: { name: string }) => s.name === "D::N")?.receiver).toBe("A.B@2");
+  });
+
   test(".cs files are indexed and cached under the current parser tag", async () => {
     resetNativeParserCache();
     const nativeAvailable = Boolean(resolveNativeParser());

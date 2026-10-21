@@ -390,6 +390,51 @@ deny-level lints (identical on `bc2289b` — rustc 1.95 toolchain drift,
 none in the changed code). Three-platform native CI gate unchanged — the
 binding rebuild is local and CI builds from source.
 
+## Review round 7 — native graph re-parse dropped receiver scope keys
+
+One remaining finding; fixed and re-verified.
+
+1. **`buildGraphGeneration`'s native re-parse stripped `receiver` (fixed —
+   copy the field through the mapping, like parseInline).** The C# parsers
+   emit `name@line[#k]` scope keys in the optional `receiver` symbol field
+   (round 6) and `CSharpResolverFileInput` expects them, but the
+   `nr.symbols` → `definedSymbols` mapping in `buildGraphGeneration` did not
+   copy it. `indexWorkspace`'s `parseInline` does copy it (L454), so
+   index-written `native-v9` rows carry the keys and cache-hit graph builds
+   masked the bug; it surfaced only when the graph path itself re-parsed
+   natively (e.g. indexed via `fallback-v9` then graphed with the native
+   binding, or a stale-tag row), and the re-parse then persisted the
+   receiver-less shape into `parsed_documents`, keeping later cache hits
+   broken. Without receivers every symbol read as compilation-unit level,
+   so the same-line sibling `namespace A.B` bound `Thing` as a declared
+   type and emitted a `D::N -> Thing::F` edge that must not exist, while
+   the nested case emitted its edge for the wrong reason (declared-type
+   binding instead of the scoped `using U`). The mapping now spreads
+   `receiver` identically to `parseInline`, and `ParsedFile.definedSymbols`
+   declares the optional field so it reaches `createCSharpResolver`. No tag
+   bump: the serialized payload shape already carried `receiver` since v9 —
+   only the graph-path write was non-conformant — and re-parsing on the
+   next content/version change self-heals previously stripped rows.
+   Coverage: `parsed-documents-cache` test — index under
+   `OPENEZ_NATIVE=0`, graph build under native (forcing the real
+   `indexWorkspace`/`buildGraphGeneration` re-parse): `Consumer.cs#C::M ->
+   Lib.cs#Thing::F` edges (same-line nested using), `Consumer.cs#D::N ->
+   Lib.cs#Thing::F` does not (same-line sibling), and the rewritten
+   `native-v9` row keeps `receiver` `A.B@1`/`A.B@2` on `C::M`/`D::N`.
+
+Failing-before proof: the new regression failed pre-fix on the sibling
+assertion — the receiver-less resolver emitted the forbidden
+`Consumer.cs#D::N -> Lib.cs#Thing::F` false positive (and the cache rows
+carried no `receiver`); all assertions pass post-fix.
+
+Post-fix verification (fresh, this worktree): `bun test` 677 pass / 1 skip /
+0 fail (54 files); focused C# suite 95 pass / 0 fail;
+`OPENEZ_NATIVE_EXPECT=1` parity clean incl. `#crlf` on
+`tests/native-wasm-parity.test.ts` + `tests/csharp-indexer.test.ts` (83
+pass); `pnpm typecheck` 8/8 clean; Prettier clean on changed files;
+`git diff --check` clean. Native binary unchanged (TypeScript-only fix).
+Three-platform native CI gate unchanged — pipeline.
+
 ## Files inspected, no change
 
 - packages/indexer/src/scanner.ts — builds its file list from codeExtensions (the native scanner matches extensions case-sensitively), so registering .cs/.csx is enough.
