@@ -1,0 +1,5 @@
+{
+  "truePositives": { "file": 2, "type": 0 },
+  "falseNegatives": { "file": 0, "type": 0 },
+  "falsePositives": 0
+}

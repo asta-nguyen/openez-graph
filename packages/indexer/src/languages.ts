@@ -33,6 +33,19 @@ export const codeExtensions = new Map<string, string>([
   [".rb", "ruby"],
   [".rake", "ruby"],
   [".gemspec", "ruby"],
+  // C++ (no C parser exists, so `.h` maps to cpp; lowercase `.c` stays
+  // unindexed). Uppercase `.C` is added here too — `inferDocumentKind`
+  // preserves the raw-case extension for this key.
+  [".cpp", "cpp"],
+  [".cc", "cpp"],
+  [".cxx", "cpp"],
+  [".c++", "cpp"],
+  [".hpp", "cpp"],
+  [".hh", "cpp"],
+  [".hxx", "cpp"],
+  [".h++", "cpp"],
+  [".h", "cpp"],
+  [".C", "cpp"],
 ]);
 
 export const configExtensions = new Map<string, string>([
@@ -68,7 +81,10 @@ export interface LanguageInfo {
 }
 
 export function inferDocumentKind(filePath: string): LanguageInfo {
-  const extension = path.extname(filePath).toLowerCase();
+  const rawExtension = path.extname(filePath);
+  // `.C` is the only case-sensitive C++ extension — keep its raw case so it
+  // can map to cpp while lowercase `.c` remains unindexed.
+  const extension = rawExtension === ".C" ? rawExtension : rawExtension.toLowerCase();
 
   if (markdownExtensions.has(extension)) {
     return { kind: "markdown", language: "markdown", extension };

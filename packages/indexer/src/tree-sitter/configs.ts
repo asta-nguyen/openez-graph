@@ -609,3 +609,288 @@ export const rubyConfig: LanguageConfig = {
   contextNameField: "name",
   qualifyCall: rubyQualifyCall,
 };
+
+// ── C++ ──
+
+const CPP_CALL_IGNORES = new Set([
+  "if",
+  "for",
+  "while",
+  "switch",
+  "return",
+  "sizeof",
+  "alignof",
+  "decltype",
+  "typeid",
+  "noexcept",
+  "static_cast",
+  "dynamic_cast",
+  "reinterpret_cast",
+  "const_cast",
+  "new",
+  "delete",
+  "throw",
+  "static_assert",
+  "catch",
+  "int",
+  "char",
+  "short",
+  "long",
+  "float",
+  "double",
+  "bool",
+  "void",
+  "unsigned",
+  "signed",
+  "const",
+  "volatile",
+  "auto",
+  "size_t",
+  "nullptr",
+  "true",
+  "false",
+  "this",
+]);
+
+/** Strip `<...>` template argument lists, depth-aware. A `<` that begins
+ *  an operator-name token (`operator<`, `operator<<`, `operator<=`,
+ *  `operator<=>`, `operator<<=`, …) is kept together with the rest of the
+ *  operator symbol run — only `<` that cannot be part of an operator name
+ *  opens a template-argument group. */
+function stripCppTemplateArgs(text: string): string {
+  const OP_SYMS = "+-*/%^&|~!=<>,";
+  let depth = 0;
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (depth > 0) {
+      if (ch === "<") depth++;
+      else if (ch === ">") depth--;
+      continue;
+    }
+    if (ch === "<") {
+      const before = out[out.length - "operator".length - 1];
+      const operatorTail =
+        out.endsWith("operator") && (before === undefined || !/[\w]/.test(before));
+      if (operatorTail) {
+        out += ch;
+        while (i + 1 < text.length && OP_SYMS.includes(text[i + 1])) {
+          out += text[++i];
+        }
+        continue;
+      }
+      depth++;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/** Descend a declaration/function_definition `declarator` chain to its
+ *  function_declarator. Pointer and reference layers unwrap; anything else
+ *  (init_declarator, parenthesized function pointers, plain variables)
+ *  yields null so non-function declarations emit no symbol. */
+function cppFunctionDeclarator(node: Node): Node | null {
+  let cur: Node | null | undefined = node.childForFieldName("declarator");
+  while (cur) {
+    if (cur.type === "function_declarator") return cur;
+    if (cur.type === "pointer_declarator" || cur.type === "reference_declarator") {
+      cur = cur.childForFieldName("declarator");
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
+/** Name text of a function_declarator's declarator field — identifier,
+ *  field_identifier, qualified_identifier, destructor_name, operator_name,
+ *  or template_function (its `name` field) — with whitespace and template
+ *  arguments stripped (`a::b::f`, `~A`, `operator==`, `id<int>` → `id`). */
+function cppFunctionName(node: Node): string | null {
+  const declarator = cppFunctionDeclarator(node);
+  const nameNode = declarator?.childForFieldName("declarator");
+  if (!declarator || !nameNode) return null;
+  const raw =
+    nameNode.type === "template_function"
+      ? (nameNode.childForFieldName("name")?.text ?? nameNode.text)
+      : nameNode.text;
+  const stripped = stripCppTemplateArgs(raw.replace(/\s+/g, ""));
+  return stripped || null;
+}
+
+/** class/struct/union/enum specifier name — only when the specifier has a
+ *  `body`, so elaborated type uses (`class Foo *p`) and forward
+ *  declarations emit no symbol. */
+function cppTypeName(node: Node): string | null {
+  if (!node.childForFieldName("body")) return null;
+  return node.childForFieldName("name")?.text ?? null;
+}
+
+/** namespace_definition name — anonymous namespaces emit no symbol and no
+ *  context (their members keep the enclosing scope). `namespace a::b`
+ *  qualified names keep all segments. */
+function cppNamespaceName(node: Node): string | null {
+  const nameNode = node.childForFieldName("name");
+  if (!nameNode) return null;
+  return nameNode.text.replace(/\s+/g, "") || null;
+}
+
+/** function_definition → "method" when the declarator is qualified
+ *  (`A::m`) or it sits directly inside a class/struct/union context;
+ *  otherwise "function". */
+function cppFunctionType(
+  node: Node,
+  contextStack: ReadonlyArray<ContextFrame>,
+): string {
+  const declarator = cppFunctionDeclarator(node);
+  const nameNode = declarator?.childForFieldName("declarator");
+  if (nameNode?.type === "qualified_identifier") return "method";
+  const top = contextStack[contextStack.length - 1];
+  return top?.kind === "class" ? "method" : "function";
+}
+
+/** Quoted `#include "..."` paths only — angle/system includes
+ *  (system_lib_string) and macro-computed paths produce no import path. */
+function extractCppImports(node: Node): string[] {
+  const paths: string[] = [];
+  if (node.type !== "preproc_include") return paths;
+  const pathNode = node.childForFieldName("path");
+  if (pathNode?.type === "string_literal") {
+    paths.push(pathNode.text.replace(/^"|"$/g, ""));
+  }
+  return paths;
+}
+
+/**
+ * Normalize a call-expression function child to its callee name: strip
+ * whitespace and template args, convert `->` to `.`, then keep only simple
+ * identifier paths (`f`, `a::b::f`, `::f`, `obj.f`, `this.f`, `~A`,
+ * `A::operator==`). Anything else (`(*fp)`, `arr[i].f`, casts already
+ * covered by callIgnores) returns "" and is dropped.
+ */
+function normalizeCppCallName(value: string): string {
+  const stripped = stripCppTemplateArgs(value.replace(/\s+/g, ""));
+  const text = stripped.replace(/->/g, ".");
+  if (!text) return "";
+  const scopeParts = text.split("::");
+  const leadingGlobal = scopeParts[0] === "";
+  const parts = leadingGlobal ? scopeParts.slice(1) : scopeParts;
+  if (parts.length === 0) return "";
+  for (const part of parts) {
+    for (const seg of part.split(".")) {
+      if (seg === "") return "";
+      if (seg.startsWith("operator") && seg.length > 8) continue;
+      if (!/^[\w~]+$/.test(seg)) return "";
+    }
+  }
+  return text;
+}
+
+export const cppConfig: LanguageConfig = {
+  language: "cpp",
+  symbolRules: [
+    {
+      nodeType: "namespace_definition",
+      symbolType: "namespace",
+      nameField: "name",
+      extractName: cppNamespaceName,
+      establishesContext: true,
+      contextKind: "module",
+      isExported: () => true,
+    },
+    {
+      nodeType: "class_specifier",
+      symbolType: "class",
+      nameField: "name",
+      extractName: cppTypeName,
+      establishesContext: true,
+      contextKind: "class",
+      isExported: () => true,
+    },
+    {
+      nodeType: "struct_specifier",
+      symbolType: "struct",
+      nameField: "name",
+      extractName: cppTypeName,
+      establishesContext: true,
+      contextKind: "class",
+      isExported: () => true,
+    },
+    {
+      nodeType: "union_specifier",
+      symbolType: "union",
+      nameField: "name",
+      extractName: cppTypeName,
+      establishesContext: true,
+      contextKind: "class",
+      isExported: () => true,
+    },
+    {
+      nodeType: "enum_specifier",
+      symbolType: "enum",
+      nameField: "name",
+      extractName: cppTypeName,
+      establishesContext: true,
+      isExported: () => true,
+    },
+    {
+      nodeType: "alias_declaration",
+      symbolType: "type",
+      nameField: "name",
+      isExported: () => true,
+    },
+    {
+      nodeType: "type_definition",
+      symbolType: "type",
+      nameField: "declarator",
+      isExported: () => true,
+    },
+    {
+      nodeType: "function_definition",
+      symbolType: "function",
+      nameField: "name",
+      extractName: cppFunctionName,
+      symbolTypeFor: cppFunctionType,
+      establishesContext: true,
+      isExported: () => true,
+    },
+    {
+      nodeType: "declaration",
+      symbolType: "declaration",
+      nameField: "name",
+      extractName: cppFunctionName,
+      isExported: () => true,
+    },
+    {
+      nodeType: "field_declaration",
+      symbolType: "declaration",
+      nameField: "name",
+      extractName: cppFunctionName,
+      isExported: () => true,
+    },
+  ],
+  importRules: [{ nodeType: "preproc_include", extract: extractCppImports }],
+  callRule: { nodeType: "call_expression", functionField: "function" },
+  callIgnores: CPP_CALL_IGNORES,
+  normalizeCallName: normalizeCppCallName,
+  keepQualifiedCallee: true,
+  contextNodeTypes: new Set([
+    "namespace_definition",
+    "class_specifier",
+    "struct_specifier",
+    "union_specifier",
+    "enum_specifier",
+    "function_definition",
+  ]),
+  contextNameField: "name",
+};
+
+/**
+ * `.h` files are shared between C and C++ and get parsed without a
+ * compilation context; any syntax error rejects the whole parse so the
+ * document falls back to generic text chunks with no graph records — the
+ * same contract the native `cpp-header` config enforces.
+ */
+export const cppHeaderConfig: LanguageConfig = { ...cppConfig, errorFailsParse: true };
