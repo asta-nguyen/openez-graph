@@ -174,12 +174,93 @@ describe("java-resolver overload and member blocking", () => {
       ),
       file("src/x/Util.java", "x", [
         ["Util", CALL.class],
-        ["Util::format", CALL.function],
+        ["Util::format", "static_function"],
       ]),
     ]);
     expect(
       r.resolveCall({ filePath: "src/a/S.java", callerName: "S::go", calleeName: "format" }),
     ).toEqual({ filePath: "src/x/Util.java", symbolName: "Util::format" });
+  });
+
+  test("a static import never resolves an instance method", () => {
+    const r = createJavaResolver([
+      file(
+        "src/a/S.java",
+        "a",
+        [
+          ["S", CALL.class],
+          ["S::go", CALL.function],
+        ],
+        ["static x.Util.inst"],
+      ),
+      file("src/x/Util.java", "x", [
+        ["Util", CALL.class],
+        ["Util::inst", CALL.function],
+      ]),
+    ]);
+    expect(
+      r.resolveCall({ filePath: "src/a/S.java", callerName: "S::go", calleeName: "inst" }),
+    ).toBeNull();
+  });
+
+  test("a static import binds the static overload, not the instance one", () => {
+    const r = createJavaResolver([
+      file(
+        "src/a/S.java",
+        "a",
+        [
+          ["S", CALL.class],
+          ["S::go", CALL.function],
+        ],
+        ["static x.Util.fmt"],
+      ),
+      file("src/x/Util.java", "x", [
+        ["Util", CALL.class],
+        ["Util::fmt", "static_function"],
+        ["Util::fmt", CALL.function],
+      ]),
+    ]);
+    expect(
+      r.resolveCall({ filePath: "src/a/S.java", callerName: "S::go", calleeName: "fmt" }),
+    ).toEqual({ filePath: "src/x/Util.java", symbolName: "Util::fmt" });
+  });
+
+  test("two static overloads under one static import stay ambiguous", () => {
+    const r = createJavaResolver([
+      file(
+        "src/a/S.java",
+        "a",
+        [
+          ["S", CALL.class],
+          ["S::go", CALL.function],
+        ],
+        ["static x.Util.fmt"],
+      ),
+      file("src/x/Util.java", "x", [
+        ["Util", CALL.class],
+        ["Util::fmt", "static_function"],
+        ["Util::fmt", "static_function"],
+      ]),
+    ]);
+    expect(
+      r.resolveCall({ filePath: "src/a/S.java", callerName: "S::go", calleeName: "fmt" }),
+    ).toBeNull();
+  });
+
+  test("same-type lookup still resolves both instance and static methods", () => {
+    const r = createJavaResolver([
+      file("src/a/S.java", "a", [
+        ["S", CALL.class],
+        ["S::go", CALL.function],
+        ["S::inst", CALL.function],
+        ["S::stat", "static_function"],
+      ]),
+    ]);
+    const at = (calleeName: string) =>
+      r.resolveCall({ filePath: "src/a/S.java", callerName: "S::go", calleeName });
+    expect(at("inst")).toEqual({ filePath: "src/a/S.java", symbolName: "S::inst" });
+    expect(at("stat")).toEqual({ filePath: "src/a/S.java", symbolName: "S::stat" });
+    expect(at("this.stat")).toEqual({ filePath: "src/a/S.java", symbolName: "S::stat" });
   });
 
   test("external static imports produce no edge", () => {
@@ -528,7 +609,7 @@ describe("java-resolver conflicting imports", () => {
     const withTwo = file("src/app/Util.java", "app", [
       ["Util", CALL.class],
       ["Util::format", CALL.function],
-      ["Util::parse", CALL.function],
+      ["Util::parse", "static_function"],
     ]);
     const r = createJavaResolver([
       withTwo,
@@ -544,8 +625,12 @@ describe("java-resolver conflicting imports", () => {
   });
 
   test("duplicate identical static imports still resolve", () => {
+    const staticUtilA = file("src/app/Util.java", "app", [
+      ["Util", CALL.class],
+      ["Util::format", "static_function"],
+    ]);
     const r = createJavaResolver([
-      utilA,
+      staticUtilA,
       callerWith(["static app.Util.format", "static app.Util.format"]),
     ]);
     expect(

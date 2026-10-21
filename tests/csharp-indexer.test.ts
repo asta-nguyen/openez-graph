@@ -67,7 +67,9 @@ describe("csharp symbols", () => {
     // `namespace A.B` is `A.B.C`.
     expect(names).toEqual(expect.arrayContaining(["A.B", "A.B.C", "Inner", "Top", "T"]));
     const ab = result?.definedSymbols?.find((s) => s.name === "A.B");
-    const c = result?.definedSymbols?.find((s) => s.name === "A.B.C" && s.symbolType === "namespace");
+    const c = result?.definedSymbols?.find(
+      (s) => s.name === "A.B.C" && s.symbolType === "namespace",
+    );
     expect(ab?.startLine).toBe(1);
     expect(ab?.endLine).toBe(7);
     expect(c?.startLine).toBe(3);
@@ -127,22 +129,13 @@ describe("csharp symbols", () => {
   });
 
   test("nested namespace symbols carry fully qualified names", async () => {
-    const res = await PARSE(
-      `namespace A { class X { } namespace B { class Y { } } }`,
-    );
+    const res = await PARSE(`namespace A { class X { } namespace B { class Y { } } }`);
     const names = res.definedSymbols!.map((s) => s.name);
     // Same-line nesting is exact: B's emitted name is `A.B` (parser-derived
     // ancestor walk), not `B` — and same-line siblings stay top-level.
     expect(names).toEqual(["A", "X", "A.B", "Y"]);
-    const sib = await PARSE(
-      `namespace A { class W { } } namespace B { class W { } }`,
-    );
-    expect(sib.definedSymbols!.map((s) => s.name)).toEqual([
-      "A",
-      "W",
-      "B",
-      "W",
-    ]);
+    const sib = await PARSE(`namespace A { class W { } } namespace B { class W { } }`);
+    expect(sib.definedSymbols!.map((s) => s.name)).toEqual(["A", "W", "B", "W"]);
   });
 
   test("exported reflects the public modifier token, not attribute text", async () => {
@@ -158,6 +151,17 @@ describe("csharp symbols", () => {
     expect(byName.get("P")).toBe(true);
     expect(byName.get("P::Run")).toBe(true);
     expect(byName.get("P::Hide")).toBe(false);
+  });
+
+  test("static methods emit the internal static_method type", async () => {
+    const result = await PARSE(
+      "namespace N { public class C { public static int Sq(int x) => x * x; public int Inst(int x) => x; } }\n",
+    );
+    const byName = new Map(result!.definedSymbols!.map((s) => [s.name, s]));
+    // Internal symbolType distinction so `using static` never binds an
+    // instance member; graph/public shapes are unchanged.
+    expect(byName.get("C::Sq")?.symbolType).toBe("static_method");
+    expect(byName.get("C::Inst")?.symbolType).toBe("method");
   });
 
   test("local declarators are never field symbols", async () => {
@@ -194,10 +198,35 @@ namespace N { class C { } }
     ]);
   });
 
-  test("usings nested inside a block namespace are dropped", async () => {
+  test("usings inside a block namespace carry their enclosing scope", async () => {
     const result = await PARSE(
-      "using Top;\nnamespace N\n{\n    using Inner;\n    class C { }\n}\n",
+      "using Top;\nnamespace N\n{\n    using Inner;\n    using H = Inner.Helper;\n    using static Inner.St;\n    class C { }\n}\n",
     );
+    // importPaths stays string[] — a namespace-scoped directive is encoded
+    // `<qualified-name>@<decl-line>\0<verbatim directive>` so the resolver can
+    // apply it inside exactly the namespace block that declared it.
+    expect(result?.importPaths).toEqual([
+      "using Top;",
+      "N@2\0using Inner;",
+      "N@2\0using H = Inner.Helper;",
+      "N@2\0using static Inner.St;",
+    ]);
+  });
+
+  test("nested namespace usings carry the fully qualified scope", async () => {
+    const result = await PARSE(
+      "namespace A\n{\n    namespace B\n    {\n        using X;\n        class C { }\n    }\n}\n",
+    );
+    expect(result?.importPaths).toEqual(["A.B@3\0using X;"]);
+  });
+
+  test("usings after a file-scoped namespace are scoped to it", async () => {
+    const result = await PARSE("namespace Acme;\nusing Util;\nclass C { }\n");
+    expect(result?.importPaths).toEqual(["Acme@1\0using Util;"]);
+  });
+
+  test("usings before a file-scoped namespace stay compilation-unit level", async () => {
+    const result = await PARSE("using Top;\nnamespace Acme;\nclass C { }\n");
     expect(result?.importPaths).toEqual(["using Top;"]);
   });
 });

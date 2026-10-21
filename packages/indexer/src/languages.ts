@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
+import { publicSymbolKind } from "@openez-graph/db";
 
 import { hashContent } from "./hash";
 import { extractPythonBindings, pythonImpliedImportPaths } from "./python-resolver";
@@ -1599,13 +1600,16 @@ export function createSymbolChunks(
       tokenCount: counter.count(content),
       contentHash: hashContent(content),
       symbolName: symbol.name,
-      symbolType: symbol.symbolType,
+      // Chunk labels keep the public kind vocabulary — internal parser
+      // markers (static_method/static_function) are normalized here and
+      // everywhere else symbolType crosses into public metadata.
+      symbolType: publicSymbolKind(symbol.symbolType),
       metadata: {
         kind: "code",
         searchText: codeSearchText(content),
         language,
         symbolName: symbol.name,
-        symbolType: symbol.symbolType,
+        symbolType: publicSymbolKind(symbol.symbolType),
         exported: symbol.exported,
         startLine: symbol.startLine,
         endLine: symbol.endLine,

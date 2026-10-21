@@ -58,6 +58,9 @@ interface JavaFileIndex {
   staticImports: Map<string, Set<string>>;
   /** owner symbol label → method simple-name → count */
   methodsByOwner: Map<string, Map<string, number>>;
+  /** owner symbol label → method simple-name → count of `static` methods
+   *  only (the parser's internal `static_function` distinction) */
+  staticMethodsByOwner: Map<string, Map<string, number>>;
   /** owner symbol label → all member simple-names (methods/fields/types/consts) */
   membersByOwner: Map<string, Set<string>>;
 }
@@ -69,6 +72,7 @@ const MEMBER_OWNED_TYPES = new Set([
   "enum",
   "record",
   "function",
+  "static_function",
   "constructor",
   "field",
   "const",
@@ -103,6 +107,7 @@ export function createJavaResolver(files: JavaResolverFile[]): JavaResolver {
       singleTypeImports: new Map(),
       staticImports: new Map(),
       methodsByOwner: new Map(),
+      staticMethodsByOwner: new Map(),
       membersByOwner: new Map(),
     };
 
@@ -117,11 +122,16 @@ export function createJavaResolver(files: JavaResolverFile[]): JavaResolver {
         let set = idx.membersByOwner.get(owner);
         if (!set) idx.membersByOwner.set(owner, (set = new Set()));
         set.add(simpleOf(sym.name));
-        if (sym.symbolType === "function") {
+        if (sym.symbolType === "function" || sym.symbolType === "static_function") {
           let m = idx.methodsByOwner.get(owner);
           if (!m) idx.methodsByOwner.set(owner, (m = new Map()));
           const simple = simpleOf(sym.name);
           m.set(simple, (m.get(simple) ?? 0) + 1);
+          if (sym.symbolType === "static_function") {
+            let sm = idx.staticMethodsByOwner.get(owner);
+            if (!sm) idx.staticMethodsByOwner.set(owner, (sm = new Map()));
+            sm.set(simple, (sm.get(simple) ?? 0) + 1);
+          }
         }
       }
     }
@@ -214,6 +224,15 @@ export function createJavaResolver(files: JavaResolverFile[]): JavaResolver {
     return fileIdxOfType.methodsByOwner.get(ownerName)?.get(member) ?? 0;
   }
 
+  /** Static methods only — `import static` never binds an instance method. */
+  function staticMethodCount(
+    fileIdxOfType: JavaFileIndex,
+    ownerName: string,
+    member: string,
+  ): number {
+    return fileIdxOfType.staticMethodsByOwner.get(ownerName)?.get(member) ?? 0;
+  }
+
   function declaresMember(
     fileIdxOfType: JavaFileIndex,
     ownerName: string,
@@ -261,6 +280,18 @@ export function createJavaResolver(files: JavaResolverFile[]): JavaResolver {
     return { filePath: type.filePath, symbolName: `${type.symbolName}::${member}` };
   }
 
+  /** Same as methodsEdge but counts only `static` methods — the target of
+   *  an explicit `import static` binding. */
+  function staticMethodsEdge(
+    type: JavaTypeRef,
+    member: string,
+  ): { filePath: string; symbolName: string } | null {
+    const idx = fileIndex.get(type.filePath);
+    if (!idx) return null;
+    if (staticMethodCount(idx, type.symbolName, member) !== 1) return null;
+    return { filePath: type.filePath, symbolName: `${type.symbolName}::${member}` };
+  }
+
   return {
     resolveCall({ filePath, callerName, calleeName }) {
       const fileIdx = fileIndex.get(filePath);
@@ -293,7 +324,7 @@ export function createJavaResolver(files: JavaResolverFile[]): JavaResolver {
         const typeQuals = fileIdx.staticImports.get(member);
         if (typeQuals === undefined || typeQuals.size !== 1) return null;
         const target = resolveQualified([...typeQuals][0]);
-        return target ? methodsEdge(target, member) : null;
+        return target ? staticMethodsEdge(target, member) : null;
       }
 
       // qualified receiver

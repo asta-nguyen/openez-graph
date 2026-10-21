@@ -1,0 +1,23 @@
+{
+  "canary": {
+    "from": "src/shop/Ok.java#Ok::go",
+    "to": "src/app/Util.java#Util::fmt"
+  },
+  "edges": [
+    {
+      "from": "src/shop/Ok.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Bad.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Ok.java#Ok::go",
+      "to": "src/app/Util.java#Util::fmt",
+      "tier": "type"
+    }
+  ]
+}

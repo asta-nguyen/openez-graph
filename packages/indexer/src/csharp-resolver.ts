@@ -14,10 +14,14 @@ import path from "node:path";
  *
  * The resolver consumes only parsed-document fields: symbols carry
  * `Owner::member` names plus 1-based line ranges; importPaths carry the full
- * using-directive text (global/alias/static modifiers included). Each C#
- * file's project root is the nearest ancestor directory containing a
- * `*.csproj` file (directories are listed once and memoized; project files
- * are never read) or the workspace root when none exists.
+ * using-directive text (global/alias/static modifiers included). Directives
+ * inside a block namespace (or after a file-scoped namespace) carry their
+ * enclosing declaration encoded as `<qualified-name>@<decl-line>\0<text>`;
+ * such a using applies inside that declaration block and its nested
+ * namespaces only, and its target resolves relative to that namespace.
+ * Each C# file's project root is the nearest ancestor directory containing
+ * a `*.csproj` file (directories are listed once and memoized; project
+ * files are never read) or the workspace root when none exists.
  */
 
 // ── Public types ──
@@ -67,8 +71,12 @@ const TYPE_KINDS = new Set(["class", "struct", "interface", "record", "enum", "d
 
 /** Call targets are methods only: fields, properties, nested type
  *  declarations (including delegates), and constructors/destructors share
- *  member names but an invocation never targets them. */
-const CALLABLE_MEMBER_KINDS = new Set(["method"]);
+ *  member names but an invocation never targets them. `static_method` is
+ *  the parser's internal distinction for members declared `static`. */
+const CALLABLE_MEMBER_KINDS = new Set(["method", "static_method"]);
+
+/** `using static` binds only members parsed as static. */
+const STATIC_MEMBER_KINDS = new Set(["static_method"]);
 
 interface FileSymbol {
   name: string;
@@ -137,6 +145,26 @@ function stripGlobal(value: string): string {
   return value.startsWith("global::") ? value.slice("global::".length) : value;
 }
 
+/**
+ * Split an encoded using entry into its scope key and directive text.
+ * Entries are either verbatim (`using X;`) or scope-prefixed
+ * (`<qualified-name>@<decl-line>\0<verbatim>`); the scope key identifies
+ * the enclosing namespace *declaration* — two same-named blocks in one
+ * file stay distinct unless they share a start line.
+ */
+function splitUsingScope(raw: string): { scopeKey: string; text: string } {
+  const sep = raw.indexOf("\0");
+  return sep === -1
+    ? { scopeKey: "", text: raw }
+    : { scopeKey: raw.slice(0, sep), text: raw.slice(sep + 1) };
+}
+
+/** Semantic namespace part of a scope key (`"A.B"` out of `"A.B@3"`). */
+function scopeNamespace(scopeKey: string): string {
+  const at = scopeKey.lastIndexOf("@");
+  return at > 0 ? scopeKey.slice(0, at) : "";
+}
+
 export function createCSharpResolver(
   files: CSharpResolverFileInput[],
   rootPath: string,
@@ -154,7 +182,18 @@ export function createCSharpResolver(
   /** symbol index → enclosing namespace chain (dotted), per file. */
   const nsChainByFile = new Map<string, Map<number, string>>();
   const projectRootByFile = new Map<string, string>();
-  const usingsByFile = new Map<string, Usings>();
+  /** file → scope key (`""` for compilation-unit level, `"Q@line"` for the
+   *  namespace declaration containing the directive) → resolved usings. */
+  const usingsByFileScope = new Map<string, Map<string, Usings>>();
+  /** file → scope key → non-global usings collected in pass one, resolved
+   *  into `usingsByFileScope` once the type/namespace indices exist. */
+  const rawUsingsByFile = new Map<string, Map<string, Usings>>();
+  /** symbol index → enclosing namespace declarations (qualified name +
+   *  declaration start line), innermost→outermost, per file. */
+  const nsAncestorsByFile = new Map<
+    string,
+    Map<number, Array<{ name: string; startLine: number }>>
+  >();
   const globalUsingsByRoot = new Map<string, Usings>();
 
   const dirCsproj = new Map<string, boolean>();
@@ -215,15 +254,24 @@ export function createCSharpResolver(
     // declarations arrive already carrying their parent path.
     const nsSyms = syms.filter((x) => x.symbolType === "namespace");
     const nsChain = new Map<number, string>();
+    const nsAncestors = new Map<number, Array<{ name: string; startLine: number }>>();
     const lastTypeIdx = new Map<string, number>();
     const memberOwner = new Map<number, number>();
     for (const s of syms) {
       let best: FileSymbol | null = null;
+      const containing: FileSymbol[] = [];
       for (const n of nsSyms) {
         if (n.index >= s.index) break;
-        if (n.startLine <= s.startLine && n.endLine >= s.endLine) best = n;
+        if (n.startLine <= s.startLine && n.endLine >= s.endLine) {
+          best = n;
+          containing.push(n);
+        }
       }
       nsChain.set(s.index, best?.name ?? "");
+      nsAncestors.set(
+        s.index,
+        containing.reverse().map((n) => ({ name: n.name, startLine: n.startLine })),
+      );
       const sep = s.name.lastIndexOf("::");
       if (sep > 0) {
         const owner = lastTypeIdx.get(s.name.slice(0, sep));
@@ -233,6 +281,7 @@ export function createCSharpResolver(
     }
     memberOwnerByFile.set(file.filePath, memberOwner);
     nsChainByFile.set(file.filePath, nsChain);
+    nsAncestorsByFile.set(file.filePath, nsAncestors);
     const byName = new Map<string, FileSymbol[]>();
     for (const s of syms) {
       const list = byName.get(s.name) ?? [];
@@ -241,22 +290,29 @@ export function createCSharpResolver(
     }
     nameIndexByFile.set(file.filePath, byName);
 
-    const usings: Usings = { aliases: new Map(), ordinary: [], staticTypes: [] };
+    // Usings are collected per enclosing-declaration scope key but only
+    // resolved after the type/namespace indices exist (third pass).
+    const rawUsings = new Map<string, Usings>();
     for (const raw of file.importPaths) {
-      const parsed = parseUsing(raw);
-      if (!parsed) continue;
-      const bucket = parsed.global ? null : usings;
-      if (parsed.kind === "alias" && bucket) {
+      const { scopeKey, text } = splitUsingScope(raw);
+      const parsed = parseUsing(text);
+      if (!parsed || parsed.global) continue;
+      let bucket = rawUsings.get(scopeKey);
+      if (!bucket) {
+        bucket = { aliases: new Map(), ordinary: [], staticTypes: [] };
+        rawUsings.set(scopeKey, bucket);
+      }
+      if (parsed.kind === "alias") {
         // Last alias wins locally only for collection; duplicates are a
         // compile error, keep first for determinism.
         if (!bucket.aliases.has(parsed.name)) bucket.aliases.set(parsed.name, parsed.target);
-      } else if (parsed.kind === "ordinary" && bucket) {
+      } else if (parsed.kind === "ordinary") {
         bucket.ordinary.push(parsed.ns);
-      } else if (parsed.kind === "static" && bucket) {
+      } else if (parsed.kind === "static") {
         bucket.staticTypes.push(parsed.target);
       }
     }
-    usingsByFile.set(file.filePath, usings);
+    rawUsingsByFile.set(file.filePath, rawUsings);
   }
 
   /** Enclosing namespace chain for a symbol, precomputed per file from
@@ -307,7 +363,7 @@ export function createCSharpResolver(
 
     // Global usings declared here apply to every file in this file's root.
     for (const raw of file.importPaths) {
-      const parsed = parseUsing(raw);
+      const parsed = parseUsing(splitUsingScope(raw).text);
       if (!parsed?.global) continue;
       let bucket = globalUsingsByRoot.get(root);
       if (!bucket) {
@@ -324,23 +380,46 @@ export function createCSharpResolver(
     }
   }
 
-  /** In-scope usings: the file's compilation-unit usings plus the global
-   *  usings of the caller's project root. */
-  function scopeUsings(file: string): Usings {
-    const root = projectRootOf(file);
-    const local = usingsByFile.get(file);
-    const globals = globalUsingsByRoot.get(root);
-    if (!globals) {
-      return local ?? { aliases: new Map(), ordinary: [], staticTypes: [] };
+  // Resolve each file's non-global usings at the scope where they were
+  // declared: a using inside `namespace A.B` searches A.B, then A, then
+  // the global namespace — the same order C# applies inside the block.
+  // Runs after the type/namespace indices so targets can bind eagerly.
+  for (const [filePath, rawUsings] of rawUsingsByFile) {
+    const resolved = new Map<string, Usings>();
+    for (const [scopeKey, bucket] of rawUsings) {
+      const ns = scopeNamespace(scopeKey);
+      const u: Usings = { aliases: new Map(), ordinary: [], staticTypes: [] };
+      for (const [name, target] of bucket.aliases) {
+        u.aliases.set(name, resolveScopedAlias(ns, target));
+      }
+      for (const target of bucket.ordinary) u.ordinary.push(resolveScopedNs(ns, target));
+      for (const target of bucket.staticTypes) u.staticTypes.push(resolveScopedType(ns, target));
+      resolved.set(scopeKey, u);
     }
-    const merged: Usings = {
-      aliases: new Map(local?.aliases ?? []),
-      ordinary: [...(local?.ordinary ?? []), ...globals.ordinary],
-      staticTypes: [...(local?.staticTypes ?? []), ...globals.staticTypes],
+    usingsByFileScope.set(filePath, resolved);
+  }
+
+  /** In-scope usings for a caller symbol: each enclosing namespace
+   *  declaration's usings (innermost→outermost, matched by the
+   *  declaration's own `name@line` scope key), then compilation-unit
+   *  usings, then the caller's project-root globals. Inner bindings win:
+   *  outer aliases only fill names not already bound. */
+  function scopeUsings(file: string, sym: FileSymbol): Usings {
+    const scoped = usingsByFileScope.get(file);
+    const merged: Usings = { aliases: new Map(), ordinary: [], staticTypes: [] };
+    const mergeInto = (u: Usings | undefined) => {
+      if (!u) return;
+      for (const [k, v] of u.aliases) {
+        if (!merged.aliases.has(k)) merged.aliases.set(k, v);
+      }
+      merged.ordinary.push(...u.ordinary);
+      merged.staticTypes.push(...u.staticTypes);
     };
-    for (const [k, v] of globals.aliases) {
-      if (!merged.aliases.has(k)) merged.aliases.set(k, v);
+    for (const anc of nsAncestorsByFile.get(file)?.get(sym.index) ?? []) {
+      mergeInto(scoped?.get(`${anc.name}@${anc.startLine}`));
     }
+    mergeInto(scoped?.get(""));
+    mergeInto(globalUsingsByRoot.get(projectRootOf(file)));
     return merged;
   }
 
@@ -384,10 +463,14 @@ export function createCSharpResolver(
    * sharing a line — stay distinct, so resolution requires exactly one
    * candidate.
    */
-  function memberTargets(identities: TypeIdentity[], member: string): MemberCandidate[] {
+  function memberTargets(
+    identities: TypeIdentity[],
+    member: string,
+    kinds: ReadonlySet<string> = CALLABLE_MEMBER_KINDS,
+  ): MemberCandidate[] {
     const seen = new Map<string, MemberCandidate>();
     for (const ident of identities) {
-      for (const target of membersOf(ident, member, CALLABLE_MEMBER_KINDS)) {
+      for (const target of membersOf(ident, member, kinds)) {
         const key = `${target.filePath}\0${target.name}\0${target.index}`;
         if (!seen.has(key)) seen.set(key, target);
       }
@@ -412,6 +495,8 @@ export function createCSharpResolver(
     ns: string;
     /** `::`-joined enclosing-type chain of the caller ("" for top-level). */
     chain: string;
+    /** The caller symbol — anchors namespace-scoped using visibility. */
+    sym: FileSymbol;
   }
 
   /**
@@ -441,7 +526,7 @@ export function createCSharpResolver(
     }
 
     // 3. Usings level: aliases, then ordinary-using namespaces.
-    const usings = scopeUsings(ctx.file);
+    const usings = scopeUsings(ctx.file, ctx.sym);
     const aliasTarget = usings.aliases.get(name);
     if (aliasTarget !== undefined) {
       // The alias binds the name. When its target is not a workspace type
@@ -486,6 +571,46 @@ export function createCSharpResolver(
       if (alive) for (const ident of current) results.set(ident.key, ident);
     }
     return results.size === 1 ? [...results.values()][0] : null;
+  }
+
+  /** Candidate qualified names for a target declared inside namespace
+   *  `ns`: each enclosing prefix innermost→global (the last candidate is
+   *  the verbatim target itself, i.e. the global namespace level). */
+  function scopedCandidates(ns: string, target: string): string[] {
+    const segs = ns ? ns.split(".") : [];
+    const out: string[] = [];
+    for (let i = segs.length; i >= 0; i--) {
+      out.push(i === 0 ? target : `${segs.slice(0, i).join(".")}.${target}`);
+    }
+    return out;
+  }
+
+  /** Namespace target of an ordinary using, resolved relative to its
+   *  declaration scope; no match keeps the verbatim target so a declared
+   *  namespace can still bind verbatim. */
+  function resolveScopedNs(ns: string, target: string): string {
+    for (const c of scopedCandidates(ns, target)) {
+      if (nsDeclared.has(c)) return c;
+    }
+    return target;
+  }
+
+  /** `using static` target, resolved relative to its declaration scope —
+   *  first candidate that resolves to a type identity, else verbatim. */
+  function resolveScopedType(ns: string, target: string): string {
+    for (const c of scopedCandidates(ns, target)) {
+      if (resolveQualifiedTypeFromGlobal(c)) return c;
+    }
+    return target;
+  }
+
+  /** Alias target, which may be a type or a namespace — first candidate
+   *  matching either, else verbatim. */
+  function resolveScopedAlias(ns: string, target: string): string {
+    for (const c of scopedCandidates(ns, target)) {
+      if (resolveQualifiedTypeFromGlobal(c) || nsDeclared.has(c)) return c;
+    }
+    return target;
   }
 
   /**
@@ -559,7 +684,7 @@ export function createCSharpResolver(
     // the (file,label) caller lookup would collapse them onto one node and
     // emit an edge from the wrong source. Fail closed: no context, no edge.
     if (syms.length !== 1) return null;
-    return { file, ns: namespaceOf(file, syms[0]!), chain };
+    return { file, ns: namespaceOf(file, syms[0]!), chain, sym: syms[0]! };
   }
 
   function resolveCall(
@@ -599,12 +724,12 @@ export function createCSharpResolver(
           if (targets.length > 0) return targets.length === 1 ? unwrap(targets[0]) : null;
         }
       }
-      const usings = scopeUsings(filePath);
+      const usings = scopeUsings(filePath, ctx.sym);
       const staticTargets = new Map<string, MemberCandidate>();
       for (const target of usings.staticTypes) {
         const ident = resolveQualifiedTypeFromGlobal(target);
         if (!ident) continue;
-        for (const t of memberTargets([ident], member)) {
+        for (const t of memberTargets([ident], member, STATIC_MEMBER_KINDS)) {
           staticTargets.set(`${t.filePath}\0${t.name}\0${t.index}`, t);
         }
       }
@@ -665,25 +790,28 @@ export function createCSharpResolver(
    * namespaces the workspace does not declare, produce no edge.
    */
   function resolveImport(filePath: string, directive: string): string | null {
-    const parsed = parseUsing(directive);
+    const { scopeKey, text } = splitUsingScope(directive);
+    const parsed = parseUsing(text);
     if (!parsed) return null;
+    const scopeNs = scopeKey ? scopeNamespace(scopeKey) : "";
     if (parsed.kind === "ordinary") {
-      const files = nsDeclared.get(parsed.ns);
+      const files = nsDeclared.get(resolveScopedNs(scopeNs, parsed.ns));
       return files && files.size === 1 ? [...files][0] : null;
     }
     if (parsed.kind === "static") {
-      const ident = resolveQualifiedTypeFromGlobal(parsed.target);
+      const ident = resolveQualifiedTypeFromGlobal(resolveScopedType(scopeNs, parsed.target));
       if (!ident) return null;
       const files = new Set(ident.parts.map((p) => p.file));
       return files.size === 1 ? [...files][0] : null;
     }
     // alias — target may be a type or a namespace.
-    const ident = resolveQualifiedTypeFromGlobal(parsed.target);
+    const target = resolveScopedAlias(scopeNs, parsed.target);
+    const ident = resolveQualifiedTypeFromGlobal(target);
     if (ident) {
       const files = new Set(ident.parts.map((p) => p.file));
       return files.size === 1 ? [...files][0] : null;
     }
-    const nsFiles = nsDeclared.get(parsed.target);
+    const nsFiles = nsDeclared.get(target);
     return nsFiles && nsFiles.size === 1 ? [...nsFiles][0] : null;
   }
 

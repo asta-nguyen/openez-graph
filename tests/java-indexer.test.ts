@@ -137,6 +137,22 @@ record Point(int x) {
     expect(names).toContain("A::m::Local::inside");
   });
 
+  test("static methods emit the internal static_function type", async () => {
+    const { definedSymbols } = await parseJava(`package a;
+public class Util {
+    public static void format() {
+    }
+    public void inst() {
+    }
+}
+`);
+    const types = Object.fromEntries(definedSymbols.map((s) => [s.name, s.symbolType]));
+    // Internal symbolType distinction so `import static` never binds an
+    // instance member; ordinary member lookup keeps counting both kinds.
+    expect(types["Util::format"]).toBe("static_function");
+    expect(types["Util::inst"]).toBe("function");
+  });
+
   test("public modifier marks exported symbols", async () => {
     const { definedSymbols } = await parseJava(BASIC);
     const exported = Object.fromEntries(definedSymbols.map((s) => [s.name, s.exported]));
