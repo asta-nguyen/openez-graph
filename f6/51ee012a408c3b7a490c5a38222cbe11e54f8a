@@ -1,0 +1,75 @@
+tests/fixtures/csharp-edges/ns-precedence/A.cs
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1
+tests/fixtures/csharp-edges/ns-nested-sameline/Consumer.cs
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1-2
+tests/fixtures/csharp-edges/ns-nested-sameline/expected-edges.json
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1-4
+tests/fixtures/parity/csharp/malformed-using.cs
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1-3
+tests/native-wasm-parity.test.ts
+  s_6255e5e22f2502::t_2d8707f6dbe010 374
+packages/indexer/src/tree-sitter/parse.ts
+  s_6255e5e22f2502::t_2dfd2818dbb962 122-129
+  s_6255e5e22f2502::t_54302bc494d5af 399,407
+  s_6255e5e22f2502::t_a11ff0ac002da5 121
+docs/agent-devkit/changes/2026-10-20-39-csharp-indexing-accuracy/tasks.md
+  s_6255e5e22f2502::t_825cef22a2e9e5 321-392
+tests/fixtures/csharp-edges/ns-nested-sameline/Lib.cs
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1
+tests/fixtures/csharp-edges/ns-precedence/App.csproj
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1
+tests/fixtures/csharp-edges/ns-precedence/C.cs
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1
+tests/fixtures/csharp-edges/ns-precedence/baseline.json
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1-11
+tests/parsed-documents-cache.test.ts
+  s_6255e5e22f2502::t_82e1fd4689f3ab 157-158,173,185,189,193,197,204,359,401,409,418,485,513
+tests/csharp-indexer.test.ts
+  s_6255e5e22f2502::t_dfc79221e5860b 242-263,265-274,276-281,284-286
+  s_6255e5e22f2502::t_beddc0cf6e3e4e 264,275,282-283
+packages/native/src/parser.rs
+  s_6255e5e22f2502::t_ad836b00d7f06b 1678-1693
+  s_6255e5e22f2502::t_269d1a5a4cc3a0 2053-2094
+  s_6255e5e22f2502::t_132cf694d56182 1356,1361
+tests/csharp-resolver.test.ts
+  s_6255e5e22f2502::t_b05dc78c276321 944-1071
+tests/fixtures/csharp-edges/ns-nested-sameline/App.csproj
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1
+packages/indexer/src/tree-sitter/configs.ts
+  s_6255e5e22f2502::t_8d00cefcb219e1 1211
+  s_6255e5e22f2502::t_f783ca8965aea6 996-1007,1016-1017,1020,1024-1025,1030,1037-1064,1074-1077
+packages/indexer/src/csharp-resolver.ts
+  s_6255e5e22f2502::t_01883fb32191d4 260-265,267-269,282-283,289-300,302
+  s_6255e5e22f2502::t_d5362656b278b3 43
+  s_6255e5e22f2502::t_36965835f7b66a 253
+  s_6255e5e22f2502::t_fdc31c2fe31233 534-540,554-564,571-572,575-604,611-622,624-625
+  s_6255e5e22f2502::t_271adc9a796628 95-98
+  s_6255e5e22f2502::t_beb6a70e06345d 9-14,24-26
+tests/fixtures/csharp-edges/ns-precedence/U.cs
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1
+AGENTS.md
+  s_6255e5e22f2502::t_13e3ee10b072a0 145-149,151
+  s_6255e5e22f2502::t_a8932ac645f7d6 150
+packages/indexer/src/index-workspace.ts
+  s_6255e5e22f2502::t_8d862d25b95b11 64-65,88,91,112,115,136-137,140,1247-1248
+tests/fixtures/csharp-edges/ns-precedence/expected-edges.json
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1-4
+tests/fixtures/csharp-edges/ns-nested-sameline/baseline.json
+  s_6255e5e22f2502::t_33ec71a9e82ed6 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f651ee012a408c3b7a490c5a38222cbe11e54f8a",
+  "prompts": {},
+  "sessions": {
+    "s_6255e5e22f2502": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "storm-sassafras",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
