@@ -1,0 +1,21 @@
+docs/agent-devkit/changes/2026-10-20-39-csharp-indexing-accuracy/tasks.md
+  s_fa14a7f7781943::t_46384e6575919b 438-456
+packages/indexer/src/csharp-resolver.ts
+  s_fa14a7f7781943::t_1782ded3c30cdd 347-348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2dd486cf452d96459644814e49b6618a56f14c3",
+  "prompts": {},
+  "sessions": {
+    "s_fa14a7f7781943": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "indigo-hubcap",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
