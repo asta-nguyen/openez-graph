@@ -1,0 +1,6 @@
+{
+  "canary": { "from": "m/main.go#main", "to": "p/p.go#Ping" },
+  "edges": [
+    { "from": "m/main.go#main", "to": "p/p.go#Ping", "tier": "package" }
+  ]
+}

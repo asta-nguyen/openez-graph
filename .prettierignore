@@ -14,3 +14,4 @@ packages/native/*.node
 .omo/
 .agents/
 sol-review.md
+tests/fixtures/typescript-edges/**/tsconfig*.json

@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "tscaller.ts#run", "to": "jsmod.js#jsFn" },
+  "edges": [
+    { "from": "tscaller.ts#run", "to": "jsmod.js#jsFn" },
+    { "from": "tscaller.ts#run", "to": "cjsmod.cjs#cjsFn" }
+  ]
+}

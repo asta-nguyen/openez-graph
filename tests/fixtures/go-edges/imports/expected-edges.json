@@ -1,0 +1,10 @@
+{
+  "canary": { "from": "imp/a.go#A", "to": "client/v3/v3.go#Do" },
+  "edges": [
+    { "from": "imp/a.go#A", "to": "client/v3/v3.go#Do", "tier": "package" },
+    { "from": "imp/a.go#A", "to": "client/v3/v3.go#Ändern", "tier": "package" },
+    { "from": "imp/b.go#B", "to": "client/v3/v3.go#Do", "tier": "package" },
+    { "from": "imp/c.go#C", "to": "client/v3/v3.go#Do", "tier": "package" },
+    { "from": "imp/d.go#D", "to": "client/v3/v3.go#Do", "tier": "package" }
+  ]
+}

@@ -116,6 +116,99 @@ func real() {
     expect(result.callExpressions).toEqual([]);
   });
 
+  it("preserves package selectors and strips generic instantiation in call names", () => {
+    const result = parseGo(`
+package main
+
+func main() {
+  client.Do()
+  net.Conn.Close()
+  _ = Map[int](1)
+  _ = pkg.F[int, string](1, "a")
+}
+`);
+    expect(result.callExpressions).toEqual(
+      expect.arrayContaining([
+        { callerName: "main", calleeName: "client.Do" },
+        { callerName: "main", calleeName: "net.Conn.Close" },
+        { callerName: "main", calleeName: "Map" },
+        { callerName: "main", calleeName: "pkg.F" },
+      ]),
+    );
+  });
+
+  it("extracts grouped and multi-name const/var at package level only", () => {
+    const result = parseGo(`
+package d
+
+const (
+	Alpha = 1
+	Beta, Gamma = 2, 3
+	_ = unused
+)
+
+var (
+	sharedF = newF()
+	sharedG, sharedH = g(), h()
+)
+
+var single, pair = f(), g()
+
+func useG() {
+	var inside = 1
+	const alsoInside = 2
+	_, _ = inside, alsoInside
+}
+`);
+    const names = result.definedSymbols.map((s) => `${s.name}:${s.symbolType}`);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "Alpha:const",
+        "Beta:const",
+        "Gamma:const",
+        "sharedF:var",
+        "sharedG:var",
+        "sharedH:var",
+        "single:var",
+        "pair:var",
+      ]),
+    );
+    expect(names).not.toContain("_:var");
+    expect(names).not.toContain("inside:var");
+    expect(names).not.toContain("alsoInside:const");
+  });
+
+  it("marks uppercase const/var names as exported", () => {
+    const result = parseGo(`
+package d
+
+const Exported = 1
+const unexported = 2
+var ExportedVar = 3
+var unexportedVar = 4
+`);
+    const byName = new Map(result.definedSymbols.map((s) => [s.name, s]));
+    expect(byName.get("Exported")?.exported).toBe(true);
+    expect(byName.get("unexported")?.exported).toBe(false);
+    expect(byName.get("ExportedVar")?.exported).toBe(true);
+    expect(byName.get("unexportedVar")?.exported).toBe(false);
+  });
+
+  it("extracts pointer and generic receivers", () => {
+    const result = parseGo(`
+package main
+
+type Stack[T any] struct{ items []T }
+
+func (s *Stack[T]) Push(item T) {}
+func (s Stack[T]) Peek() T { return s.items[0] }
+`);
+    const names = result.definedSymbols.map((s) => s.name);
+    expect(names).toEqual(expect.arrayContaining(["Stack[T]::Push", "Stack[T]::Peek"]));
+    const push = result.definedSymbols.find((s) => s.name === "Stack[T]::Push");
+    expect(push?.receiver).toBe("s *Stack[T]");
+  });
+
   it("includes searchText in chunk metadata", () => {
     const result = parseGo(`
 func process_payment() {

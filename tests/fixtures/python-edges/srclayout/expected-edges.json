@@ -1,0 +1,9 @@
+{
+  "canary": { "from": "src/tests/test_models.py#test_it", "to": "src/app/models.py#fetch" },
+  "edges": [
+    { "from": "src/tests/test_models.py#test_it", "to": "src/tests/test_models.py#local_target" },
+    { "from": "src/tests/test_models.py#test_it", "to": "src/app/models.py#fetch" },
+    { "from": "src/tests/test_models.py#test_it", "to": "src/app/models.py#other" },
+    { "from": "pkg/user.py#use", "to": "pkg/user.py#local_target" }
+  ]
+}

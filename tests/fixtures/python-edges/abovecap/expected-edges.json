@@ -1,0 +1,289 @@
+{
+  "canary": {
+    "from": "big.py#f00",
+    "to": "big.py#f01"
+  },
+  "edges": [
+    {
+      "from": "big.py#f00",
+      "to": "big.py#f01"
+    },
+    {
+      "from": "big.py#f01",
+      "to": "big.py#f02"
+    },
+    {
+      "from": "big.py#f02",
+      "to": "big.py#f03"
+    },
+    {
+      "from": "big.py#f03",
+      "to": "big.py#f04"
+    },
+    {
+      "from": "big.py#f04",
+      "to": "big.py#f05"
+    },
+    {
+      "from": "big.py#f05",
+      "to": "big.py#f06"
+    },
+    {
+      "from": "big.py#f06",
+      "to": "big.py#f07"
+    },
+    {
+      "from": "big.py#f07",
+      "to": "big.py#f08"
+    },
+    {
+      "from": "big.py#f08",
+      "to": "big.py#f09"
+    },
+    {
+      "from": "big.py#f09",
+      "to": "big.py#f10"
+    },
+    {
+      "from": "big.py#f10",
+      "to": "big.py#f11"
+    },
+    {
+      "from": "big.py#f11",
+      "to": "big.py#f12"
+    },
+    {
+      "from": "big.py#f12",
+      "to": "big.py#f13"
+    },
+    {
+      "from": "big.py#f13",
+      "to": "big.py#f14"
+    },
+    {
+      "from": "big.py#f14",
+      "to": "big.py#f15"
+    },
+    {
+      "from": "big.py#f15",
+      "to": "big.py#f16"
+    },
+    {
+      "from": "big.py#f16",
+      "to": "big.py#f17"
+    },
+    {
+      "from": "big.py#f17",
+      "to": "big.py#f18"
+    },
+    {
+      "from": "big.py#f18",
+      "to": "big.py#f19"
+    },
+    {
+      "from": "big.py#f19",
+      "to": "big.py#f20"
+    },
+    {
+      "from": "big.py#f20",
+      "to": "big.py#f21"
+    },
+    {
+      "from": "big.py#f21",
+      "to": "big.py#f22"
+    },
+    {
+      "from": "big.py#f22",
+      "to": "big.py#f23"
+    },
+    {
+      "from": "big.py#f23",
+      "to": "big.py#f24"
+    },
+    {
+      "from": "big.py#f24",
+      "to": "big.py#f25"
+    },
+    {
+      "from": "big.py#f25",
+      "to": "big.py#f26"
+    },
+    {
+      "from": "big.py#f26",
+      "to": "big.py#f27"
+    },
+    {
+      "from": "big.py#f27",
+      "to": "big.py#f28"
+    },
+    {
+      "from": "big.py#f28",
+      "to": "big.py#f29"
+    },
+    {
+      "from": "big.py#f29",
+      "to": "big.py#f30"
+    },
+    {
+      "from": "big.py#f30",
+      "to": "big.py#f31"
+    },
+    {
+      "from": "big.py#f31",
+      "to": "big.py#f32"
+    },
+    {
+      "from": "big.py#f32",
+      "to": "big.py#f33"
+    },
+    {
+      "from": "big.py#f33",
+      "to": "big.py#f34"
+    },
+    {
+      "from": "big.rs#cf0",
+      "to": "big.rs#cf1"
+    },
+    {
+      "from": "big.rs#cf1",
+      "to": "big.rs#cf2"
+    },
+    {
+      "from": "big.rs#cf2",
+      "to": "big.rs#cf3"
+    },
+    {
+      "from": "big.rs#cf3",
+      "to": "big.rs#cf4"
+    },
+    {
+      "from": "big.rs#cf4",
+      "to": "big.rs#cf5"
+    },
+    {
+      "from": "big.rs#cf5",
+      "to": "big.rs#cf6"
+    },
+    {
+      "from": "big.rs#cf6",
+      "to": "big.rs#cf7"
+    },
+    {
+      "from": "big.rs#cf7",
+      "to": "big.rs#cf8"
+    },
+    {
+      "from": "big.rs#cf8",
+      "to": "big.rs#cf9"
+    },
+    {
+      "from": "big.rs#cf9",
+      "to": "big.rs#cf10"
+    },
+    {
+      "from": "big.rs#cf10",
+      "to": "big.rs#cf11"
+    },
+    {
+      "from": "big.rs#cf11",
+      "to": "big.rs#cf12"
+    },
+    {
+      "from": "big.rs#cf12",
+      "to": "big.rs#cf13"
+    },
+    {
+      "from": "big.rs#cf13",
+      "to": "big.rs#cf14"
+    },
+    {
+      "from": "big.rs#cf14",
+      "to": "big.rs#cf15"
+    },
+    {
+      "from": "big.rs#cf15",
+      "to": "big.rs#cf16"
+    },
+    {
+      "from": "big.rs#cf16",
+      "to": "big.rs#cf17"
+    },
+    {
+      "from": "big.rs#cf17",
+      "to": "big.rs#cf18"
+    },
+    {
+      "from": "big.rs#cf18",
+      "to": "big.rs#cf19"
+    },
+    {
+      "from": "big.rs#cf19",
+      "to": "big.rs#cf20"
+    },
+    {
+      "from": "big.rs#cf20",
+      "to": "big.rs#cf21"
+    },
+    {
+      "from": "big.rs#cf21",
+      "to": "big.rs#cf22"
+    },
+    {
+      "from": "big.rs#cf22",
+      "to": "big.rs#cf23"
+    },
+    {
+      "from": "big.rs#cf23",
+      "to": "big.rs#cf24"
+    },
+    {
+      "from": "big.rs#cf24",
+      "to": "big.rs#cf25"
+    },
+    {
+      "from": "big.rs#cf25",
+      "to": "big.rs#cf26"
+    },
+    {
+      "from": "big.rs#cf26",
+      "to": "big.rs#cf27"
+    },
+    {
+      "from": "big.rs#cf27",
+      "to": "big.rs#cf28"
+    },
+    {
+      "from": "big.rs#cf28",
+      "to": "big.rs#cf29"
+    },
+    {
+      "from": "big.rs#cf29",
+      "to": "big.rs#cf30"
+    },
+    {
+      "from": "big.rs#cf30",
+      "to": "big.rs#cf31"
+    },
+    {
+      "from": "big.rs#cf31",
+      "to": "big.rs#cf32"
+    },
+    {
+      "from": "big.rs#cf32",
+      "to": "big.rs#cf33"
+    },
+    {
+      "from": "big.rs#cf33",
+      "to": "big.rs#cf34"
+    }
+  ],
+  "counts": {
+    "big.py": {
+      "symbols": 35
+    },
+    "big.rs": {
+      "symbols": 35,
+      "maxCallsOut": 34
+    }
+  }
+}

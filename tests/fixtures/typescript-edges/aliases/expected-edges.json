@@ -1,0 +1,21 @@
+{
+  "canary": { "from": "caller.ts#run", "to": "src/lib/util.ts#aliasFn" },
+  "edges": [
+    { "from": "caller.ts#run", "to": "src/lib/util.ts#aliasFn" },
+    { "from": "caller.ts#run", "to": "src/exact.ts#exactFn" },
+    { "from": "caller.ts#run", "to": "src/second/deep.ts#deepFn" },
+    { "from": "caller.ts#run", "to": "src/app/plain.ts#appFn" },
+    { "from": "caller.ts#run", "to": "src/special/sp.ts#specialFn" },
+    { "from": "caller.ts#run", "to": "src/base/base.ts#baseFn" }
+  ],
+  "fileImports": {
+    "caller.ts": [
+      "src/lib/util.ts",
+      "src/exact.ts",
+      "src/second/deep.ts",
+      "src/app/plain.ts",
+      "src/special/sp.ts",
+      "src/base/base.ts"
+    ]
+  }
+}

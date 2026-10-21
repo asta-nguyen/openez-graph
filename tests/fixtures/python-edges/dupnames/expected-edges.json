@@ -1,0 +1,9 @@
+{
+  "canary": { "from": "main.py#run", "to": "main.py#local_target" },
+  "edges": [
+    { "from": "main.py#run", "to": "main.py#local_target" },
+    { "from": "main.py#run", "to": "pkg1/util.py#unique_one" },
+    { "from": "main.py#run", "to": "pkg1/util.py#helper" },
+    { "from": "main.py#run", "to": "pkg2/util.py#helper" }
+  ]
+}

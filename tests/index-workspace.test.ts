@@ -116,11 +116,17 @@ describe("indexWorkspace", () => {
       "export function helper() { return 1; }\n",
     );
     const callerPath = path.join(workspaceRoot, "caller.ts");
-    fs.writeFileSync(callerPath, "export function caller() { return helper(); }\n");
+    fs.writeFileSync(
+      callerPath,
+      "import { helper } from './helper';\nexport function caller() { return helper(); }\n",
+    );
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
-    fs.writeFileSync(callerPath, "export function caller() { return helper() + 1; }\n");
+    fs.writeFileSync(
+      callerPath,
+      "import { helper } from './helper';\nexport function caller() { return helper() + 1; }\n",
+    );
     await indexWorkspace({ workspaceId: workspace.id });
     await ensureGraphReady(workspace.id);
 
@@ -137,7 +143,7 @@ describe("indexWorkspace", () => {
     fs.writeFileSync(helperPath, "export function helper() { return 1; }\n");
     fs.writeFileSync(
       path.join(workspaceRoot, "caller.ts"),
-      "export function caller() { return helper(); }\n",
+      "import { helper } from './helper';\nexport function caller() { return helper(); }\n",
     );
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
@@ -201,7 +207,7 @@ describe("indexWorkspace", () => {
     fs.writeFileSync(helperPath, "export function helper() { return 1; }\n");
     fs.writeFileSync(
       path.join(workspaceRoot, "caller.ts"),
-      "export function caller() { return helper(); }\n",
+      "import { helper } from './helper';\nexport function caller() { return helper(); }\n",
     );
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
@@ -548,7 +554,7 @@ describe("indexWorkspace", () => {
     fs.writeFileSync(helperPath, "export function helper() { return 1; }\n");
     fs.writeFileSync(
       path.join(workspaceRoot, "caller.ts"),
-      "export function caller() { return helper(); }\n",
+      "import { helper } from './helper';\nexport function caller() { return helper(); }\n",
     );
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 

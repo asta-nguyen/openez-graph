@@ -1,0 +1,4 @@
+{
+  "canary": { "from": "caller.ts#run", "to": "util.ts#utilFn" },
+  "edges": [{ "from": "caller.ts#run", "to": "util.ts#utilFn" }]
+}

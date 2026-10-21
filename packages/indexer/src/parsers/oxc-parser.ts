@@ -1,11 +1,14 @@
 import { exactTokenCounter } from "@openez-graph/core";
 
 import { hashContent } from "../hash";
-import { codeSearchText, createSymbolChunks, type ExtractedSymbol } from "../languages";
+import { createSymbolChunks, type ExtractedSymbol } from "../languages";
 import type { IndexedChunk } from "../types";
-import type { CodeParser, ParseInput, ParsedDocument } from "./types";
+import type { CodeParser, ExportBinding, ImportBinding, ParseInput, ParsedDocument } from "./types";
 
 const TS_LANGUAGES = new Set(["typescript", "tsx", "javascript", "jsx"]);
+// Type-only import/export specifiers (`import type`, `export type`) only exist
+// in TypeScript — the flag stays absent on JavaScript payloads.
+const TS_ONLY_LANGUAGES = new Set(["typescript", "tsx"]);
 
 // Lazy-load oxc-parser
 let _oxc: any | null | undefined;
@@ -39,7 +42,14 @@ function getNodeId(node: OxcNode): string | null {
  * enough for subtree selection during call extraction. The node retains the
  * raw `start`/`end` offsets and the full subtree we need to walk.
  */
-type SymbolAst = { symbol: ExtractedSymbol; node: OxcNode; capturesClassThis?: boolean };
+type SymbolAst = {
+  symbol: ExtractedSymbol;
+  node: OxcNode;
+  capturesClassThis?: boolean;
+  /** Set when extracted via `export default <decl>` — the symbol's own name
+   *  is not a named export (only "default" is). */
+  defaultExport?: boolean;
+};
 
 /**
  * Extract top-level (and exported) symbols from the program body.
@@ -65,9 +75,48 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
     if (node.type === "ExportDefaultDeclaration") {
       if (node.declaration) {
         const inner = extractSymbols([node.declaration as OxcNode], source);
-        for (const s of inner) {
-          s.symbol.exported = true;
-          results.push(s);
+        if (inner.length > 0) {
+          for (const s of inner) {
+            s.symbol.exported = true;
+            s.defaultExport = true;
+            results.push(s);
+          }
+        } else if ((node.declaration as OxcNode).type !== "Identifier") {
+          // Anonymous `export default <expr>` — give it a stable "default"
+          // symbol so default imports of anonymous callables (and other
+          // expressions) resolve to a real graph node. `default` is a
+          // reserved word so the name cannot collide with user symbols.
+          const decl = node.declaration as OxcNode;
+          const isClass = decl.type === "ClassDeclaration" || decl.type === "ClassExpression";
+          const symbolType = isClass
+            ? "class"
+            : FUNCTION_NODE_TYPES.has(decl.type)
+              ? "function"
+              : "variable";
+          const startLine = source.slice(0, decl.start).split("\n").length;
+          const endLine = source.slice(0, decl.end).split("\n").length;
+          results.push({
+            symbol: {
+              name: "default",
+              symbolType,
+              type: symbolType,
+              exported: true,
+              startLine,
+              endLine,
+            },
+            node: decl,
+            defaultExport: true,
+          });
+          // Anonymous default classes expose methods as `default.<name>` so
+          // member calls inside them attribute to a real graph symbol —
+          // same naming a named default-export class would produce.
+          if (isClass) {
+            for (const methodAst of extractClassMethods(decl, "default", source)) {
+              methodAst.symbol.exported = true;
+              methodAst.defaultExport = true;
+              results.push(methodAst);
+            }
+          }
         }
       }
       continue;
@@ -321,39 +370,202 @@ function collectPatternBindings(pattern: OxcNode | undefined, bindings: Set<stri
   }
 }
 
-function collectLocalBindings(node: OxcNode, skippedScopes: WeakSet<object>): Set<string> {
-  const bindings = new Set<string>();
-  collectPatternBindings(node.id as OxcNode | undefined, bindings);
-  for (const parameter of node.params ?? []) {
-    collectPatternBindings(parameter as OxcNode, bindings);
+const FUNCTION_NODE_TYPES = new Set([
+  "FunctionDeclaration",
+  "FunctionExpression",
+  "ArrowFunctionExpression",
+]);
+
+/** `= require("...")` initializer → static specifier, else null. */
+function requireCallModule(init: OxcNode | undefined): string | null {
+  const callee = init?.callee as OxcNode | undefined;
+  const firstArg = init?.arguments?.[0] as OxcNode | undefined;
+  return init?.type === "CallExpression" &&
+    callee?.type === "Identifier" &&
+    callee.name === "require" &&
+    firstArg?.type === "Literal" &&
+    typeof firstArg.value === "string"
+    ? firstArg.value
+    : null;
+}
+
+/** Names hoisted to a function's whole body: params, a named
+ *  FunctionExpression's self-name, and every `var` declarator in the subtree
+ *  (stopping at nested function boundaries — their `var`s are theirs). */
+function collectFunctionScopeNames(fnNode: OxcNode, visited: WeakSet<object>): Set<string> {
+  const names = new Set<string>();
+  collectPatternBindings(fnNode.id as OxcNode | undefined, names);
+  for (const parameter of fnNode.params ?? []) {
+    collectPatternBindings(parameter as OxcNode, names);
   }
-  walkNodes(
-    node,
-    (current: OxcNode) => {
-      if (current.type === "VariableDeclarator") {
-        collectPatternBindings(current.id as OxcNode | undefined, bindings);
-      } else if (current.type === "CatchClause") {
-        collectPatternBindings(current.param as OxcNode | undefined, bindings);
+  const collectVars = (value: unknown): void => {
+    if (value === null || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value) collectVars(item);
+      return;
+    }
+    if (visited.has(value as object)) return;
+    visited.add(value as object);
+    const node = value as OxcNode;
+    if (FUNCTION_NODE_TYPES.has(node.type)) return; // nested function boundary
+    if (node.type === "VariableDeclaration" && node.kind === "var") {
+      for (const decl of (node.declarations ?? []) as OxcNode[]) {
+        // `var x = require(...)` is a module binding only when `require` is unbound.
+        if (!names.has("require") && requireCallModule(decl.init as OxcNode | undefined) !== null) {
+          continue;
+        }
+        collectPatternBindings(decl.id as OxcNode | undefined, names);
       }
-    },
-    new WeakSet<object>(),
-    skippedScopes,
-    true,
-  );
-  return bindings;
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (key === "parent") continue;
+      collectVars(child);
+    }
+  };
+  collectVars(fnNode.body);
+  return names;
+}
+
+interface ScopeFrame {
+  /** Names visible inside this frame's subtree. */
+  names: Set<string>;
+  /** The node that opened the frame — its [start,end] range is the scope's
+   *  visibility region for function-local require bindings. */
+  node: OxcNode;
+  /** Optional visibility override for require-binding ranges — e.g. a
+   *  switch's case-scope starts at its first case, after the discriminant. */
+  scopeStart?: number;
+  scopeEnd?: number;
+}
+
+interface ScopedRequireBinding {
+  local: string;
+  module: string;
+  imported: string;
+  scopeStart: number;
+  scopeEnd: number;
+}
+
+interface ScopedWalkState {
+  scopes: ScopeFrame[];
+  /** Stack of indexes into `scopes` that are function frames — `var` targets
+   *  the innermost one. */
+  fnScopeStack: number[];
+  skippedScopes: WeakSet<object>;
+  visited: WeakSet<object>;
+  /** VariableDeclaration nodes already collected by an enclosing scope
+   *  opener — the generic visit must not re-collect them. */
+  collectedDecls: WeakSet<object>;
+  rootNode: OxcNode;
+  requireBindings: ScopedRequireBinding[];
+  requirePaths: string[];
+}
+
+/** Collect declaration names owned by a VariableDeclaration into the right
+ *  scope — `var` hoists to the innermost function scope, `let`/`const` stay
+ *  in the current block frame. `= require("...")` declarators produce scoped
+ *  module bindings instead of shadow names when `require` is unbound. */
+function collectDeclaratorNames(
+  node: OxcNode,
+  blockScope: ScopeFrame,
+  state: ScopedWalkState,
+): void {
+  if (state.collectedDecls.has(node)) return;
+  state.collectedDecls.add(node);
+  const target =
+    node.kind === "var"
+      ? state.scopes[state.fnScopeStack[state.fnScopeStack.length - 1]]
+      : blockScope;
+  for (const decl of (node.declarations ?? []) as OxcNode[]) {
+    const requireShadowed = state.scopes.some((scope) => scope.names.has("require"));
+    const module = requireShadowed ? null : requireCallModule(decl.init as OxcNode | undefined);
+    if (module !== null) {
+      state.requirePaths.push(module);
+      // The binding's visibility matches the declaration's scope: `var`
+      // require bindings are visible across the whole function, `let`/`const`
+      // only inside their block.
+      const id = decl.id as OxcNode | undefined;
+      const addBinding = (local: string, imported: string) =>
+        state.requireBindings.push({
+          local,
+          module,
+          imported,
+          scopeStart: target.scopeStart ?? target.node.start,
+          scopeEnd: target.scopeEnd ?? target.node.end,
+        });
+      if (id?.type === "Identifier" && typeof id.name === "string") {
+        addBinding(id.name, "*");
+      } else if (id?.type === "ObjectPattern") {
+        for (const prop of (id.properties ?? []) as OxcNode[]) {
+          const key = prop.key as OxcNode | undefined;
+          const value = prop.value as OxcNode | undefined;
+          const keyName =
+            key?.type === "Identifier"
+              ? key.name
+              : key?.type === "Literal" && typeof key.value === "string"
+                ? key.value
+                : null;
+          if (prop.type === "Property" && keyName && value?.type === "Identifier") {
+            addBinding(value.name, keyName);
+          }
+        }
+      }
+      continue;
+    }
+    collectPatternBindings(decl.id as OxcNode | undefined, target.names);
+  }
+}
+
+/** Eagerly collect the declarations a block owns — block-scoped bindings
+ *  cover their whole block (TDZ), so a `let`/`const`/function/class declared
+ *  later in the same block still shadows earlier call sites. */
+function collectBlockScopeNames(
+  statements: OxcNode[],
+  frame: ScopeFrame,
+  state: ScopedWalkState,
+): void {
+  for (const stmt of statements) {
+    if (stmt.type === "VariableDeclaration") {
+      collectDeclaratorNames(stmt, frame, state);
+    } else if (
+      (stmt.type === "FunctionDeclaration" ||
+        stmt.type === "ClassDeclaration" ||
+        stmt.type === "TSEnumDeclaration") &&
+      stmt.id?.type === "Identifier"
+    ) {
+      frame.names.add(stmt.id.name);
+    }
+  }
 }
 
 /**
  * Walk each symbol's AST subtree and collect call expressions, attributing
- * calls to the owning symbol. Calls nested inside a nested callable
- * declaration are skipped so they attribute to the inner function instead.
+ * calls to the owning symbol. Scope tracking is lexical: a call is marked
+ * `shadowedLocal` only when its callee root is bound by a scope that actually
+ * encloses the call site — a `const` in a sibling block does not suppress a
+ * valid import resolution. Calls nested inside a nested callable declaration
+ * are skipped so they attribute to the inner function instead.
  */
 function extractCalls(symbolAsts: SymbolAst[]): {
-  callExpressions: Array<{ callerName: string; calleeName: string }>;
+  callExpressions: Array<{
+    callerName: string;
+    calleeName: string;
+    start: number;
+    shadowedLocal?: boolean;
+  }>;
   calledIdentifiers: Set<string>;
+  scopedRequireBindings: ScopedRequireBinding[];
+  scopedRequirePaths: string[];
 } {
-  const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
+  const callExpressions: Array<{
+    callerName: string;
+    calleeName: string;
+    start: number;
+    shadowedLocal?: boolean;
+  }> = [];
   const calledIdentifiers = new Set<string>();
+  const scopedRequireBindings: ScopedRequireBinding[] = [];
+  const scopedRequirePaths: string[] = [];
   const staticSymbolNames = new Set(
     symbolAsts.map(({ symbol }) => symbol.name).filter((name) => name.includes(".static.")),
   );
@@ -366,52 +578,172 @@ function extractCalls(symbolAsts: SymbolAst[]): {
   for (const { symbol, node, capturesClassThis } of symbolAsts) {
     // Only function-like symbols can contain calls.
     if (symbol.symbolType !== "function" && symbol.symbolType !== "method") continue;
-    const visited = new WeakSet<object>();
     const skippedScopes = new WeakSet<object>(
       symbolAsts.filter((entry) => entry.node !== node).map((entry) => entry.node),
     );
-    const localBindings = collectLocalBindings(node, skippedScopes);
-    walkNodes(
+    const state: ScopedWalkState = {
+      scopes: [],
+      fnScopeStack: [],
+      skippedScopes,
+      visited: new WeakSet<object>(),
+      collectedDecls: new WeakSet<object>(),
+      rootNode: node,
+      requireBindings: scopedRequireBindings,
+      requirePaths: scopedRequirePaths,
+    };
+    // The symbol's own function scope: params, self-name, hoisted `var`s.
+    const rootFrame: ScopeFrame = {
+      names: collectFunctionScopeNames(node, new WeakSet<object>([node])),
       node,
-      (current: OxcNode) => {
-        if (current.type === "CallExpression") {
-          const rawName = calleeName(current.callee as OxcNode);
-          const className = symbol.name.includes(".") ? symbol.name.split(".")[0] : null;
-          let name = rawName;
-          if (
-            rawName?.startsWith("this.") &&
-            (symbol.symbolType === "method" || capturesClassThis === true) &&
-            className
-          ) {
-            const memberName = rawName.slice("this.".length);
-            name = symbol.name.includes(".static.")
-              ? `${className}.static.${memberName}`
-              : `${className}.${memberName}`;
-          } else if (rawName && rawName.includes(".")) {
-            const [receiver, ...memberParts] = rawName.split(".");
-            const staticName = `${receiver}.static.${memberParts.join(".")}`;
-            if (
-              classNames.has(receiver) &&
-              !localBindings.has(receiver) &&
-              staticSymbolNames.has(staticName)
-            ) {
-              name = staticName;
-            }
-          }
-          if (name) {
-            callExpressions.push({ callerName: symbol.name, calleeName: name });
-            calledIdentifiers.add(name);
+    };
+    state.scopes.push(rootFrame);
+    state.fnScopeStack.push(0);
+
+    const inScope = (name: string): boolean => state.scopes.some((s) => s.names.has(name));
+
+    const visit = (value: unknown): void => {
+      if (value === null || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+        return;
+      }
+      if (state.visited.has(value as object)) return;
+      state.visited.add(value as object);
+      if (value !== node && skippedScopes.has(value as object)) return; // nested symbol
+      const current = value as OxcNode;
+
+      // Nested (non-symbol) functions open their own scope.
+      if (current !== node && FUNCTION_NODE_TYPES.has(current.type)) {
+        const frame: ScopeFrame = {
+          names: collectFunctionScopeNames(current, new WeakSet<object>()),
+          node: current,
+        };
+        state.scopes.push(frame);
+        state.fnScopeStack.push(state.scopes.length - 1);
+        for (const [key, child] of Object.entries(current)) {
+          if (key === "parent") continue;
+          visit(child);
+        }
+        state.fnScopeStack.pop();
+        state.scopes.pop();
+        return;
+      }
+
+      if (current.type === "BlockStatement" || current.type === "StaticBlock") {
+        const frame: ScopeFrame = { names: new Set(), node: current };
+        state.scopes.push(frame);
+        collectBlockScopeNames((current.body ?? []) as OxcNode[], frame, state);
+        for (const [key, child] of Object.entries(current)) {
+          if (key === "parent") continue;
+          visit(child);
+        }
+        state.scopes.pop();
+        return;
+      }
+
+      if (current.type === "SwitchStatement") {
+        // The discriminant is evaluated in the enclosing scope — case-block
+        // declarations must not shadow it, and require bindings inside cases
+        // must not cover the discriminant's position either.
+        visit(current.discriminant);
+        const firstCase = (current.cases ?? [])[0] as OxcNode | undefined;
+        const frame: ScopeFrame = {
+          names: new Set(),
+          node: current,
+          scopeStart: firstCase?.start ?? current.end,
+          scopeEnd: current.end,
+        };
+        state.scopes.push(frame);
+        const statements = ((current.cases ?? []) as OxcNode[]).flatMap(
+          (c) => (c.consequent ?? []) as OxcNode[],
+        );
+        collectBlockScopeNames(statements, frame, state);
+        for (const caze of (current.cases ?? []) as OxcNode[]) {
+          visit(caze);
+        }
+        state.scopes.pop();
+        return;
+      }
+
+      if (
+        current.type === "ForStatement" ||
+        current.type === "ForInStatement" ||
+        current.type === "ForOfStatement"
+      ) {
+        const frame: ScopeFrame = { names: new Set(), node: current };
+        state.scopes.push(frame);
+        const decl = (current.type === "ForStatement" ? current.init : current.left) as
+          | OxcNode
+          | undefined;
+        if (decl?.type === "VariableDeclaration") collectDeclaratorNames(decl, frame, state);
+        for (const [key, child] of Object.entries(current)) {
+          if (key === "parent") continue;
+          visit(child);
+        }
+        state.scopes.pop();
+        return;
+      }
+
+      if (current.type === "CatchClause") {
+        const frame: ScopeFrame = { names: new Set(), node: current };
+        state.scopes.push(frame);
+        collectPatternBindings(current.param as OxcNode | undefined, frame.names);
+        for (const [key, child] of Object.entries(current)) {
+          if (key === "parent") continue;
+          visit(child);
+        }
+        state.scopes.pop();
+        return;
+      }
+
+      if (current.type === "VariableDeclaration") {
+        // Stragglers not collected by a block/for opener (e.g. `label: let x`).
+        const top = state.scopes[state.scopes.length - 1];
+        collectDeclaratorNames(current, top, state);
+      }
+
+      if (current.type === "CallExpression") {
+        const rawName = calleeName(current.callee as OxcNode);
+        const className = symbol.name.includes(".") ? symbol.name.split(".")[0] : null;
+        let name = rawName;
+        if (
+          rawName?.startsWith("this.") &&
+          (symbol.symbolType === "method" || capturesClassThis === true) &&
+          className
+        ) {
+          const memberName = rawName.slice("this.".length);
+          name = symbol.name.includes(".static.")
+            ? `${className}.static.${memberName}`
+            : `${className}.${memberName}`;
+        } else if (rawName && rawName.includes(".")) {
+          const [receiver, ...memberParts] = rawName.split(".");
+          const staticName = `${receiver}.static.${memberParts.join(".")}`;
+          if (classNames.has(receiver) && !inScope(receiver) && staticSymbolNames.has(staticName)) {
+            name = staticName;
           }
         }
-      },
-      visited,
-      skippedScopes,
-      // The symbol's own node is the root — never skip it.
-      true,
-    );
+        if (name) {
+          const rootName = name.split(".")[0];
+          callExpressions.push({
+            callerName: symbol.name,
+            calleeName: name,
+            start: current.start,
+            ...(inScope(rootName) ? { shadowedLocal: true } : {}),
+          });
+          calledIdentifiers.add(name);
+        }
+      }
+
+      for (const [key, child] of Object.entries(current)) {
+        if (key === "parent") continue;
+        visit(child);
+      }
+    };
+
+    visit(node);
   }
 
-  return { callExpressions, calledIdentifiers };
+  return { callExpressions, calledIdentifiers, scopedRequireBindings, scopedRequirePaths };
 }
 
 /**
@@ -539,6 +871,283 @@ function discoverNestedCallables(topLevel: SymbolAst[], source: string): SymbolA
 }
 
 /**
+ * Extract static module bindings (ESM imports/re-exports and CommonJS
+ * require/exports) alongside the symbols the exports declare.
+ *
+ * importBindings: local name -> { module specifier, imported export name }
+ *   ("default" for default imports, "*" for namespace imports and plain
+ *   `const x = require()` bindings).
+ * exportBindings: this file's export table — `local` maps an export name to a
+ *   same-file symbol, `reexport` forwards to another module's export, and
+ *   `star` is a wildcard re-export expanded at graph build time.
+ * extraSymbolAsts: function/class values assigned via `exports.foo = ...`,
+ *   `module.exports.foo = ...`, or object-literal `module.exports` — each is a
+ *   real local declaration the property name identifies, so it becomes a
+ *   first-class exported symbol (and produces a derived `local` export entry
+ *   through its `exported` flag downstream).
+ * requirePaths: static `require("...")` specifiers — recorded as import paths
+ *   like ESM sources. Computed/dynamic requires are ignored.
+ */
+interface ExtractedBindings {
+  importBindings: ImportBinding[];
+  exportBindings: ExportBinding[];
+  extraSymbolAsts: SymbolAst[];
+  requirePaths: string[];
+}
+
+function symbolAstFromValue(name: string, value: OxcNode, source: string): SymbolAst | null {
+  const symbolType = value.type === "ClassExpression" ? "class" : "function";
+  if (
+    value.type !== "FunctionExpression" &&
+    value.type !== "ArrowFunctionExpression" &&
+    value.type !== "ClassExpression"
+  ) {
+    return null;
+  }
+  const startLine = source.slice(0, value.start).split("\n").length;
+  const endLine = source.slice(0, value.end).split("\n").length;
+  return {
+    symbol: {
+      name,
+      symbolType,
+      type: symbolType,
+      exported: true,
+      startLine,
+      endLine,
+    },
+    node: value,
+  };
+}
+
+/** Classify the left side of a CommonJS export assignment: Identifier
+ *  `exports.name` and `module.exports.name` -> {kind:"member"} with the
+ *  property name; bare `module.exports` -> {kind:"self"}; anything else
+ *  (computed, different root) -> null. */
+function commonjsExportTarget(
+  left: OxcNode,
+): { kind: "member"; name: string } | { kind: "self" } | null {
+  if (left.type !== "MemberExpression" || left.computed === true) return null;
+  const object = left.object as OxcNode | undefined;
+  const property = left.property as OxcNode | undefined;
+  if (object?.type === "Identifier" && object.name === "exports") {
+    return property?.type === "Identifier" ? { kind: "member", name: property.name } : null;
+  }
+  if (object?.type === "Identifier" && object.name === "module") {
+    return property?.type === "Identifier" && property.name === "exports" ? { kind: "self" } : null;
+  }
+  if (
+    object?.type === "MemberExpression" &&
+    object.computed !== true &&
+    (object.object as OxcNode | undefined)?.type === "Identifier" &&
+    (object.object as OxcNode).name === "module" &&
+    (object.property as OxcNode | undefined)?.type === "Identifier" &&
+    (object.property as OxcNode).name === "exports"
+  ) {
+    return property?.type === "Identifier" ? { kind: "member", name: property.name } : null;
+  }
+  return null;
+}
+
+function extractModuleBindings(
+  body: OxcNode[],
+  source: string,
+  isTypeScript: boolean,
+): ExtractedBindings {
+  const importBindings: ImportBinding[] = [];
+  const exportBindings: ExportBinding[] = [];
+  const extraSymbolAsts: SymbolAst[] = [];
+  const requirePaths: string[] = [];
+  // Type-only state is per specifier: `import { type A, B }` marks A only.
+  const typeOnly = (declKind: unknown, specKind: unknown): true | undefined =>
+    isTypeScript && (declKind === "type" || specKind === "type") ? true : undefined;
+
+  for (const node of body) {
+    if (node.type === "ImportDeclaration") {
+      const module = typeof node.source?.value === "string" ? node.source.value : null;
+      if (!module) continue;
+      for (const spec of (node.specifiers ?? []) as OxcNode[]) {
+        const flag = typeOnly(node.importKind, spec.importKind);
+        if (spec.type === "ImportDefaultSpecifier" && typeof spec.local?.name === "string") {
+          importBindings.push({
+            local: spec.local.name,
+            module,
+            imported: "default",
+            ...(flag ? { typeOnly: true } : {}),
+          });
+        } else if (
+          spec.type === "ImportNamespaceSpecifier" &&
+          typeof spec.local?.name === "string"
+        ) {
+          importBindings.push({
+            local: spec.local.name,
+            module,
+            imported: "*",
+            ...(flag ? { typeOnly: true } : {}),
+          });
+        } else if (
+          spec.type === "ImportSpecifier" &&
+          typeof spec.local?.name === "string" &&
+          typeof spec.imported?.name === "string"
+        ) {
+          importBindings.push({
+            local: spec.local.name,
+            module,
+            imported: spec.imported.name,
+            ...(flag ? { typeOnly: true } : {}),
+          });
+        }
+      }
+      continue;
+    }
+
+    if (node.type === "ExportNamedDeclaration" && !node.declaration) {
+      const module = typeof node.source?.value === "string" ? node.source.value : null;
+      for (const spec of (node.specifiers ?? []) as OxcNode[]) {
+        if (
+          spec.type !== "ExportSpecifier" ||
+          typeof spec.exported?.name !== "string" ||
+          typeof spec.local?.name !== "string"
+        ) {
+          continue;
+        }
+        const flag = typeOnly(node.exportKind, spec.exportKind);
+        if (module) {
+          exportBindings.push({
+            name: spec.exported.name,
+            kind: "reexport",
+            module,
+            imported: spec.local.name,
+            ...(flag ? { typeOnly: true } : {}),
+          });
+        } else {
+          exportBindings.push({
+            name: spec.exported.name,
+            kind: "local",
+            local: spec.local.name,
+            ...(flag ? { typeOnly: true } : {}),
+          });
+        }
+      }
+      continue;
+    }
+
+    if (node.type === "ExportDefaultDeclaration" && node.declaration) {
+      const decl = node.declaration as OxcNode;
+      const declName = getNodeId(decl);
+      if (declName) {
+        const flag =
+          isTypeScript &&
+          (decl.type === "TSInterfaceDeclaration" || decl.type === "TSTypeAliasDeclaration");
+        exportBindings.push({
+          name: "default",
+          kind: "local",
+          local: declName,
+          ...(flag ? { typeOnly: true } : {}),
+        });
+      } else if (decl.type !== "Identifier") {
+        // Anonymous declaration — extractSymbols synthesized a "default" symbol.
+        exportBindings.push({ name: "default", kind: "local", local: "default" });
+      }
+      continue;
+    }
+
+    if (node.type === "ExportAllDeclaration" && typeof node.source?.value === "string") {
+      // `export * as ns from` exports a namespace object, not top-level
+      // re-exports — leave it unresolved rather than mis-expanding members.
+      if (node.exported) continue;
+      exportBindings.push({
+        name: "*",
+        kind: "star",
+        module: node.source.value,
+        ...(typeOnly(node.exportKind, undefined) ? { typeOnly: true } : {}),
+      });
+      continue;
+    }
+
+    // CommonJS require bindings: `const x = require("...")` and
+    // `const { a, b: c } = require("...")`. Only string-literal specifiers at
+    // top level are static; computed requires produce no bindings.
+    if (node.type === "VariableDeclaration") {
+      for (const decl of (node.declarations ?? []) as OxcNode[]) {
+        const module = requireCallModule(decl.init as OxcNode | undefined);
+        if (module === null) continue;
+        requirePaths.push(module);
+        const id = decl.id as OxcNode | undefined;
+        if (id?.type === "Identifier" && typeof id.name === "string") {
+          importBindings.push({ local: id.name, module, imported: "*" });
+        } else if (id?.type === "ObjectPattern") {
+          for (const prop of (id.properties ?? []) as OxcNode[]) {
+            const key = prop.key as OxcNode | undefined;
+            const value = prop.value as OxcNode | undefined;
+            const keyName =
+              key?.type === "Identifier"
+                ? key.name
+                : key?.type === "Literal" && typeof key.value === "string"
+                  ? key.value
+                  : null;
+            if (prop.type === "Property" && keyName && value?.type === "Identifier") {
+              importBindings.push({ local: value.name, module, imported: keyName });
+            }
+          }
+        }
+      }
+      continue;
+    }
+
+    // CommonJS exports: `exports.foo = X`, `module.exports.foo = X`, and
+    // `module.exports = {foo: X}`. A property resolves only when its value
+    // maps to exactly one local declaration.
+    if (node.type === "ExpressionStatement") {
+      const expr = node.expression as OxcNode | undefined;
+      // Bare `require("lit")` is a static dependency (no local binding).
+      if (expr?.type === "CallExpression") {
+        const callee = expr.callee as OxcNode | undefined;
+        const firstArg = expr.arguments?.[0] as OxcNode | undefined;
+        if (
+          callee?.type === "Identifier" &&
+          callee.name === "require" &&
+          firstArg?.type === "Literal" &&
+          typeof firstArg.value === "string"
+        ) {
+          requirePaths.push(firstArg.value);
+        }
+        continue;
+      }
+      if (expr?.type !== "AssignmentExpression" || expr.operator !== "=") continue;
+      const left = expr.left as OxcNode | undefined;
+      const right = expr.right as OxcNode | undefined;
+      if (!left || !right) continue;
+      const target = commonjsExportTarget(left);
+      if (!target) continue;
+      if (target.kind === "member") {
+        const valueSymbol = symbolAstFromValue(target.name, right, source);
+        if (valueSymbol) {
+          extraSymbolAsts.push(valueSymbol);
+        } else if (right.type === "Identifier" && typeof right.name === "string") {
+          exportBindings.push({ name: target.name, kind: "local", local: right.name });
+        }
+      } else if (right.type === "ObjectExpression") {
+        for (const prop of (right.properties ?? []) as OxcNode[]) {
+          if (prop.type !== "Property" || prop.computed === true) continue;
+          const key = prop.key as OxcNode | undefined;
+          const value = prop.value as OxcNode | undefined;
+          if (key?.type !== "Identifier" || !value) continue;
+          const valueSymbol = symbolAstFromValue(key.name, value, source);
+          if (valueSymbol) {
+            extraSymbolAsts.push(valueSymbol);
+          } else if (value.type === "Identifier" && typeof value.name === "string") {
+            exportBindings.push({ name: key.name, kind: "local", local: value.name });
+          }
+        }
+      }
+      continue;
+    }
+  }
+
+  return { importBindings, exportBindings, extraSymbolAsts, requirePaths };
+}
+
+/**
  * Extract local import binding names for call resolution.
  * - ImportDefaultSpecifier  -> .local.name
  * - ImportNamespaceSpecifier -> .local.name
@@ -601,14 +1210,44 @@ export class OxcParser implements CodeParser {
     const body = result.program.body as OxcNode[];
     const symbolAsts = extractSymbols(body, input.content);
     const importPaths = extractImports(body);
+    const bindings = extractModuleBindings(
+      body,
+      input.content,
+      TS_ONLY_LANGUAGES.has(language ?? ""),
+    );
+    importPaths.push(...bindings.requirePaths);
+    // Declarations exported directly (`export function f`) produce derived
+    // `local` export entries from their `exported` flag; specifier re-exports,
+    // default exports, and CommonJS identifier mappings are explicit entries.
+    // A default-exported declaration only exports "default" — its own name is
+    // not a named export.
+    for (const ast of [...symbolAsts, ...bindings.extraSymbolAsts]) {
+      if (ast.symbol.exported && !ast.defaultExport) {
+        bindings.exportBindings.push({
+          name: ast.symbol.name,
+          kind: "local",
+          local: ast.symbol.name,
+        });
+      }
+    }
     // Discover nested callable declarations so calls inside them attribute to
     // the inner symbol, not the outer one. These nested callables are now
     // included in the public definedSymbols list so they appear as first-class
     // graph symbols (nodes + call edges).
-    const nestedCallables = discoverNestedCallables(symbolAsts, input.content);
-    const allSymbolAsts = [...symbolAsts, ...nestedCallables];
+    const nestedCallables = discoverNestedCallables(
+      [...symbolAsts, ...bindings.extraSymbolAsts],
+      input.content,
+    );
+    const allSymbolAsts = [...symbolAsts, ...bindings.extraSymbolAsts, ...nestedCallables];
     const allSymbols = allSymbolAsts.map((s) => s.symbol);
-    const { callExpressions, calledIdentifiers } = extractCalls(allSymbolAsts);
+    const { callExpressions, calledIdentifiers, scopedRequireBindings, scopedRequirePaths } =
+      extractCalls(allSymbolAsts);
+    // Function-local `const x = require("...")` bindings carry the byte range
+    // of their owning scope — call sites match by position, innermost wins.
+    for (const binding of scopedRequireBindings) bindings.importBindings.push(binding);
+    for (const specifier of scopedRequirePaths) {
+      if (!importPaths.includes(specifier)) importPaths.push(specifier);
+    }
     const lines = input.content.split("\n");
 
     const chunks = createSymbolChunks(allSymbols, lines, language ?? "typescript", counter);
@@ -623,6 +1262,8 @@ export class OxcParser implements CodeParser {
       definedSymbols: allSymbols,
       calledIdentifiers: [...calledIdentifiers],
       callExpressions,
+      importBindings: bindings.importBindings,
+      exportBindings: bindings.exportBindings,
     };
   }
 }

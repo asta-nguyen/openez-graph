@@ -1,0 +1,2 @@
+def act():
+    return "c"

@@ -1,0 +1,14 @@
+{
+  "canary": {
+    "type": "calls",
+    "from": "neg/main.rb#Service::run",
+    "to": "neg/main.rb#Helper::run"
+  },
+  "calls": [
+    {
+      "from": "neg/main.rb#Service::run",
+      "to": "neg/main.rb#Helper::run"
+    }
+  ],
+  "imports": []
+}

@@ -1,0 +1,8 @@
+{
+  "canary": { "from": "pkg/sub/worker.py#use", "to": "pkg/sub/worker.py#local_target" },
+  "edges": [
+    { "from": "pkg/sub/worker.py#use", "to": "pkg/sub/worker.py#local_target" },
+    { "from": "pkg/sub/worker.py#use", "to": "pkg/sub/deep.py#deep_fn" },
+    { "from": "pkg/sub/worker.py#use", "to": "pkg/sibling.py#sibling_fn" }
+  ]
+}

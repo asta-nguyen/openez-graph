@@ -1,0 +1,30 @@
+{
+  "canary": { "from": "other/src/inner.rs#check", "to": "other/src/inner.rs#run" },
+  "edges": [
+    { "from": "app/src/lib.rs#bootstrap", "to": "app/src/util.rs#run" },
+    { "from": "app/src/sub/deep.rs#go", "to": "app/src/sub/mod.rs#sub_helper" },
+    { "from": "app/src/sub/deep.rs#go", "to": "app/src/sub/deep.rs#go2" },
+    { "from": "app/src/sub/deep.rs#go", "to": "app/src/util.rs#run" },
+    { "from": "app/src/sub/deep.rs#go", "to": "app/src/helper.rs#tool" },
+    { "from": "app/src/sub/deep.rs#go", "to": "app/src/helper.rs#other" },
+    { "from": "app/src/sub/deep.rs#go", "to": "app/src/shapes.rs#Circle::new" },
+    { "from": "app/src/shapes.rs#Circle::draw", "to": "app/src/shapes.rs#paint" },
+    { "from": "app/src/shapes.rs#Circle::area", "to": "app/src/shapes.rs#Circle::draw" },
+    { "from": "app/src/shapes.rs#Circle::area", "to": "app/src/shapes.rs#Circle::helper_method" },
+    { "from": "app/src/shapes.rs#Circle::area", "to": "app/src/shapes.rs#Circle::new" },
+    { "from": "app/src/shapes_ext.rs#Circle::describe", "to": "app/src/shapes.rs#Circle::draw" },
+    { "from": "app/src/shapes_ext.rs#Circle::describe", "to": "app/src/shapes.rs#Circle::new" },
+    { "from": "app/src/callers.rs#call_sites", "to": "app/src/callers.rs#run" },
+    { "from": "app/src/callers.rs#call_sites", "to": "app/src/util.rs#run" },
+    { "from": "app/src/callers.rs#call_sites", "to": "app/src/shapes.rs#Circle::new" },
+    { "from": "app/src/callers.rs#call_sites", "to": "app/src/helper.rs#tool" },
+    { "from": "app/src/main.rs#main", "to": "app/src/util.rs#run" },
+    { "from": "app/src/main.rs#main", "to": "app/src/helper.rs#tool" },
+    { "from": "app/src/main.rs#main", "to": "app/src/main.rs#local_fn" },
+    { "from": "app/src/main.rs#main", "to": "app/src/shapes.rs#paint" },
+    { "from": "app/src/bin/extra.rs#main", "to": "app/src/bin/extra.rs#bin_helper" },
+    { "from": "app/src/orphan.rs#orphan_fn", "to": "app/src/orphan.rs#helper" },
+    { "from": "other/src/inner.rs#check", "to": "other/src/inner.rs#run" },
+    { "from": "other/src/inner.rs#check", "to": "other/src/lib.rs#run" }
+  ]
+}

@@ -1,0 +1,2 @@
+def conflict():
+    return "other"
