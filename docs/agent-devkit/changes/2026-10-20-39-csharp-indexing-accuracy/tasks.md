@@ -318,6 +318,78 @@ Post-fix verification (fresh, this worktree): `bun test` 659 pass / 1 skip /
 `git diff --check` clean. Three-platform native CI gate unchanged — the
 binding rebuild is local and CI builds from source.
 
+## Review round 6 — per-level precedence, malformed using parity, true ancestry
+
+Three independently confirmed findings; all fixed and re-verified.
+
+1. **Using directives bound only after all enclosing namespace declarations
+   (fixed — per-level precedence).** `resolveTypeName` checked declared
+   types at every enclosing level before consulting any usings, so
+   `A.Thing` captured `Thing.F()` inside
+   `namespace A.B { using U; ... }` even though `A.B.U.Thing` binds at the
+   inner level (dotnet compiles that case unambiguously). The resolver now
+   walks namespace levels innermost→global and, at each level, checks that
+   level's declared types then that level's alias, ordinary, and
+   using-static bindings; the first level that binds the name decides —
+   an ambiguous or reserved inner binding ends the lookup rather than
+   falling outward. Compilation-unit usings plus the project root's global
+   usings bind only after all enclosing levels. Coverage: resolver tests —
+   inner using beats outer declaration (edge lands on `A.B.U.Thing.F`, not
+   `A.Thing.F`), ambiguous inner usings produce no edge rather than the
+   outer type, an inner external alias reserves the name, an inner
+   workspace alias beats outer declarations, and a same-level declared
+   type still beats its own level's usings; edge fixture
+   `ns-precedence/` pins the three-file repro.
+
+2. **A malformed `using` inside a non-namespace declaration list leaked
+   compilation-unit text on WASM (fixed — drop, native parity).**
+   `class C { using A; ... }` lands the directive in a class-body
+   `declaration_list`; native dropped it while WASM returned an empty
+   scope and emitted `importPaths: ["using A;"]`. WASM now returns a null
+   scope for any `declaration_list` not owned by a
+   `namespace_declaration` and drops the entry, matching native;
+   legitimate compilation-unit and namespace usings are unaffected.
+   Coverage: parser tests — dropped directive, surviving legitimate
+   usings; parity fixture `csharp/malformed-using.cs` (LF+CRLF) proves
+   identical native/WASM output.
+
+3. **Same-line nested namespaces failed closed out of their enclosing
+   usings (fixed — parser-serialized ancestry).** On one physical line,
+   `A{using U; B{}}` (nested — dotnet compiles) and `A{using U;} A.B{}`
+   (sibling — CS0103) emit byte-identical symbol payloads, so no resolver
+   rule over line ranges can distinguish them. Both parsers now serialize
+   each symbol's innermost enclosing namespace declaration as the
+   `name@line[#k]` scope key in the existing optional `ParsedSymbol.receiver`
+   field (a namespace declaration carries its *parent's* key; file-scoped
+   members find their declaration via the nearest preceding sibling, since
+   they are compilation-unit siblings rather than children). The resolver
+   rebuilds true lexical ancestors by walking that chain instead of
+   inferring from ranges, so the nested case binds `using U` while the
+   sibling case still cannot see it. `ParsedDocument`/`ParsedSymbol`
+   shape, DB schema, and graph kind vocabulary are unchanged — `receiver`
+   was already an optional serialized field. Cache tags bumped
+   `native-v8`/`fallback-v8` → `native-v9`/`fallback-v9` because the
+   serialized symbol payload changed; `packages/native/index.darwin-arm64.node`
+   rebuilt. Coverage: parser tests — receiver keys on nested, file-scoped,
+   and same-named sibling declarations; resolver tests — same-line nested
+   usings reach members (multi-level chain included) while a closed
+   same-line sibling's usings do not reach a dotted declaration; edge
+   fixture `ns-nested-sameline/` pins both outcomes in one workspace.
+
+Failing-before proof: 13 focused regressions failed for the expected
+reasons before the fix (both edge fixtures, both malformed-using tests,
+three receiver tests, both same-line ancestry tests, four of five
+per-level precedence tests) and all pass after.
+
+Post-fix verification (fresh, this worktree): `bun test` 676 pass / 1 skip /
+0 fail (54 files); focused C# suite 148 pass / 0 fail;
+`OPENEZ_NATIVE_EXPECT=1` parity clean incl. `malformed-using.cs` and
+`#crlf`; `tsc` clean for `packages/indexer`; Prettier clean on changed
+files; `git diff --check` clean. `cargo clippy` reports 19 pre-existing
+deny-level lints (identical on `bc2289b` — rustc 1.95 toolchain drift,
+none in the changed code). Three-platform native CI gate unchanged — the
+binding rebuild is local and CI builds from source.
+
 ## Files inspected, no change
 
 - packages/indexer/src/scanner.ts — builds its file list from codeExtensions (the native scanner matches extensions case-sensitively), so registering .cs/.csx is enough.

@@ -6,11 +6,12 @@ import path from "node:path";
  *
  * Callees keep their qualified dotted path (`Ns.Type.M`, `this.M`, `Alias.M`)
  * and resolve through the C# lookup order — member types of enclosing types,
- * enclosing namespaces innermost→global, then compilation-unit usings plus
- * the global usings of the caller's project root — never a global name
- * lookup. Only unique targets produce edges: duplicates across partial
- * parts, overloads, same identity in two project roots, ambiguous paths, and
- * reserved alias names all drop.
+ * then each enclosing namespace level innermost→global (that level's
+ * declared types, then its own alias/ordinary/using-static bindings), and
+ * finally compilation-unit usings plus the global usings of the caller's
+ * project root — never a global name lookup. Only unique targets produce
+ * edges: duplicates across partial parts, overloads, same identity in two
+ * project roots, ambiguous paths, and reserved alias names all drop.
  *
  * The resolver consumes only parsed-document fields: symbols carry
  * `Owner::member` names plus 1-based line ranges; importPaths carry the full
@@ -20,6 +21,9 @@ import path from "node:path";
  * (with a `#<ordinal>` suffix when earlier declarations share that name and
  * line); such a using applies inside that declaration block and its nested
  * namespaces only, and its target resolves relative to that namespace.
+ * Symbols carry the same `name@line[#k]` scope key in `receiver`, naming
+ * their innermost enclosing namespace declaration — true lexical ancestry
+ * for cases line ranges cannot express (same-line nesting vs siblings).
  * Each C# file's project root is the nearest ancestor directory containing
  * a `*.csproj` file (directories are listed once and memoized; project
  * files are never read) or the workspace root when none exists.
@@ -36,6 +40,7 @@ export interface CSharpResolverFileInput {
     exported: boolean;
     startLine?: number;
     endLine?: number;
+    receiver?: string;
   }>;
   importPaths: string[];
 }
@@ -87,6 +92,10 @@ interface FileSymbol {
   /** Position in the file's emitted symbol array (DFS order). Distinguishes
    *  declaration occurrences that share file, name, and line. */
   index: number;
+  /** Scope key (`name@line[#k]`) of the innermost enclosing namespace
+   *  declaration — parser-derived true ancestry (for a namespace
+   *  declaration itself, the *parent* declaration's key). */
+  receiver?: string;
 }
 
 interface Usings {
@@ -241,20 +250,23 @@ export function createCSharpResolver(
       startLine: s.startLine ?? 1,
       endLine: s.endLine ?? s.startLine ?? 1,
       index: i,
+      receiver: s.receiver,
     }));
     symbolsByFile.set(file.filePath, syms);
 
     // Namespace symbols emit fully qualified names (`A.B` for `namespace B`
     // nested in `A`, `B` for a same-line sibling — the parser walks ancestor
     // declarations, so no guessing is needed here). A symbol's enclosing
-    // namespace is the latest declaration emitted before it whose line
-    // range still contains it: later declarations supersede earlier same-
-    // line siblings (`A.B {X} B {Y}` puts Y in B), while nested
-    // declarations arrive already carrying their parent path.
+    // namespace comes from its `receiver` scope key — the parser serializes
+    // the innermost enclosing namespace *declaration* as `name@line[#k]`
+    // (for a namespace declaration itself, its parent's key). Line ranges
+    // alone cannot distinguish same-line nesting (`A{using U; B{}}`) from
+    // same-line siblings (`A{using U;} B{}`): the emitted payloads would be
+    // identical, yet C# scopes the first inside A and the second outside.
     const nsSyms = syms.filter((x) => x.symbolType === "namespace");
-    // Scope keys are `name@line` plus `#k` when earlier declarations share
-    // that name and line — the same ordinal the parser appends to a using's
-    // scope tag, recomputed from symbol emission order.
+    // A declaration's own scope key uses the same `name@line` + `#k`
+    // ordinal the parser emits into using-directive scope tags, recomputed
+    // from symbol emission order.
     const nsOrdinal = new Map<number, number>();
     const nsSeen = new Map<string, number>();
     for (const n of nsSyms) {
@@ -267,55 +279,27 @@ export function createCSharpResolver(
       const ord = nsOrdinal.get(n.index) ?? 0;
       return ord > 0 ? `${n.name}@${n.startLine}#${ord}` : `${n.name}@${n.startLine}`;
     };
+    const declByScopeKey = new Map<string, FileSymbol>();
+    for (const n of nsSyms) declByScopeKey.set(nsScopeKey(n), n);
     const nsChain = new Map<number, string>();
     const nsAncestors = new Map<number, string[]>();
     const lastTypeIdx = new Map<string, number>();
     const memberOwner = new Map<number, number>();
     for (const s of syms) {
-      let best: FileSymbol | null = null;
-      const containing: FileSymbol[] = [];
-      for (const n of nsSyms) {
-        if (n.index >= s.index) break;
-        if (n.startLine <= s.startLine && n.endLine >= s.endLine) {
-          best = n;
-          containing.push(n);
-        }
+      // Semantic namespace = the receiver scope key's namespace part.
+      nsChain.set(s.index, scopeNamespace(s.receiver ?? ""));
+      // Lexical ancestor declarations: the receiver names the innermost
+      // enclosing declaration; each declaration's own receiver names its
+      // parent — the chain walks innermost→outermost until the top level.
+      const ancestors: string[] = [];
+      let key = s.receiver;
+      const seen = new Set<string>();
+      while (key && !seen.has(key)) {
+        seen.add(key);
+        ancestors.push(key);
+        key = declByScopeKey.get(key)?.receiver;
       }
-      nsChain.set(s.index, best?.name ?? "");
-      // The lexical ancestor *declarations* of `best`: a sibling block
-      // (e.g. `namespace N {} namespace N {}` on one line) covers `s`
-      // line-wise but is not an ancestor. Each proper dotted prefix of
-      // `best.name` names the next enclosing declaration outward; accept
-      // the nearest preceding declaration of that name only when its
-      // range encloses the inner declaration's and extends past the line
-      // the inner one starts on — a sibling's range ends there or is
-      // identical, a true parent's always runs further. Same-line chains
-      // that no prefix slot can prove fall out (fail closed: a missed
-      // ancestor using is never a wrong edge).
-      const ancestors: FileSymbol[] = [];
-      if (best) {
-        ancestors.push(best);
-        let cur = best;
-        const segs = best.name.split(".");
-        for (let i = segs.length - 1; i >= 1; i--) {
-          const prefix = segs.slice(0, i).join(".");
-          const upto = containing.indexOf(cur);
-          for (let j = upto - 1; j >= 0; j--) {
-            const d = containing[j];
-            if (
-              d.name === prefix &&
-              d.startLine <= cur.startLine &&
-              d.endLine >= cur.endLine &&
-              d.endLine > cur.startLine
-            ) {
-              ancestors.push(d);
-              cur = d;
-              break;
-            }
-          }
-        }
-      }
-      nsAncestors.set(s.index, ancestors.map(nsScopeKey));
+      nsAncestors.set(s.index, ancestors);
       const sep = s.name.lastIndexOf("::");
       if (sep > 0) {
         const owner = lastTypeIdx.get(s.name.slice(0, sep));
@@ -547,6 +531,13 @@ export function createCSharpResolver(
    * Resolve a simple type name through the C# lookup order. Returns the
    * unique identity, "reserved" when an alias binds the name to a
    * non-workspace target, or null.
+   *
+   * Lookup is per namespace level: member types of enclosing types, then
+   * at each level innermost→global the declared types, then that level's
+   * alias, ordinary-using, and using-static bindings — and only after all
+   * enclosing levels the compilation-unit and project-root global usings.
+   * The first level that binds the name decides: an ambiguous or reserved
+   * inner binding ends the lookup rather than falling outward.
    */
   function resolveTypeName(ctx: CallerContext, name: string): TypeIdentity | "reserved" | null {
     // 1. Member types of enclosing types, innermost outward.
@@ -560,33 +551,78 @@ export function createCSharpResolver(
       }
     }
 
-    // 2. Enclosing namespaces innermost→global: declared types first.
+    // 2. Namespace levels innermost→global: at each level the declared
+    //    types first, then the usings declared inside that namespace
+    //    declaration. The caller's ancestor scope keys carry the level
+    //    each scoped using belongs to.
+    const scoped = usingsByFileScope.get(ctx.file);
+    const levelUsings = new Map<string, Usings>();
+    for (const key of nsAncestorsByFile.get(ctx.file)?.get(ctx.sym.index) ?? []) {
+      const level = scopeNamespace(key);
+      const u = scoped?.get(key);
+      if (u && !levelUsings.has(level)) levelUsings.set(level, u);
+    }
     const nsParts = ctx.ns ? ctx.ns.split(".") : [];
     for (let len = nsParts.length; len >= 0; len--) {
       const nsLevel = nsParts.slice(0, len).join(".");
       const found = typeIdentitiesIn(nsLevel, name);
       if (found.length === 1) return found[0];
       if (found.length > 1) return null; // two distinct workspace types
+      const hit = resolveViaUsings(levelUsings.get(nsLevel), name);
+      if (hit !== undefined) return hit;
     }
 
-    // 3. Usings level: aliases, then ordinary-using namespaces.
-    const usings = scopeUsings(ctx.file, ctx.sym);
-    const aliasTarget = usings.aliases.get(name);
+    // 3. Compilation-unit usings plus the project root's global usings.
+    const tier: Usings = { aliases: new Map(), ordinary: [], staticTypes: [] };
+    const mergeTier = (u: Usings | undefined) => {
+      if (!u) return;
+      for (const [k, v] of u.aliases) {
+        if (!tier.aliases.has(k)) tier.aliases.set(k, v);
+      }
+      tier.ordinary.push(...u.ordinary);
+      tier.staticTypes.push(...u.staticTypes);
+    };
+    mergeTier(scoped?.get(""));
+    mergeTier(globalUsingsByRoot.get(projectRootOf(ctx.file)));
+    const hit = resolveViaUsings(tier, name);
+    return hit === undefined ? null : hit;
+  }
+
+  /**
+   * Bind a type name through one level's using directives: the level's
+   * alias binds first (an external target reserves the name), then the
+   * pooled ordinary-using namespaces and using-static nested types decide
+   * by uniqueness. `undefined` means this level binds nothing — lookup
+   * continues outward; `null` means the level binds ambiguously; a
+   * "reserved" alias ends the lookup without a type.
+   */
+  function resolveViaUsings(
+    u: Usings | undefined,
+    name: string,
+  ): TypeIdentity | "reserved" | null | undefined {
+    if (!u) return undefined;
+    const aliasTarget = u.aliases.get(name);
     if (aliasTarget !== undefined) {
       // The alias binds the name. When its target is not a workspace type
       // the name is still taken — no fall-through to a workspace namesake.
       const resolved = resolveQualifiedTypeFromGlobal(aliasTarget);
       return resolved ?? "reserved";
     }
-    const viaUsings: TypeIdentity[] = [];
-    for (const ns of usings.ordinary) {
-      for (const ident of typeIdentitiesIn(ns, name)) {
-        if (!viaUsings.includes(ident)) viaUsings.push(ident);
-      }
+    const found: TypeIdentity[] = [];
+    const push = (ident: TypeIdentity) => {
+      if (!found.includes(ident)) found.push(ident);
+    };
+    for (const ns of u.ordinary) {
+      for (const ident of typeIdentitiesIn(ns, name)) push(ident);
     }
-    if (viaUsings.length === 1) return viaUsings[0];
-    if (viaUsings.length > 1) return null;
-    return null;
+    for (const target of u.staticTypes) {
+      const ident = resolveQualifiedTypeFromGlobal(target);
+      if (!ident) continue;
+      const nested = typesByKey.get(`${ident.root}|${ident.ns}|${ident.chain}::${name}`);
+      if (nested) push(nested);
+    }
+    if (found.length === 0) return undefined;
+    return found.length === 1 ? found[0] : null;
   }
 
   /**

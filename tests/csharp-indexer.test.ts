@@ -239,6 +239,51 @@ namespace N { class C { } }
     const result = await PARSE("using Top;\nnamespace Acme;\nclass C { }\n");
     expect(result?.importPaths).toEqual(["using Top;"]);
   });
+
+  test("a using inside a non-namespace declaration list is dropped", async () => {
+    // Malformed recovery: `class C { using A; ... }` puts the directive in
+    // a class body, not a namespace body — the using is invalid C# and both
+    // parsers drop it instead of treating it as compilation-unit text.
+    const result = await PARSE("class C { using A; public void Go() { } }\n");
+    expect(result?.importPaths).toEqual([]);
+  });
+
+  test("legitimate compilation-unit and namespace usings survive a dropped one", async () => {
+    const result = await PARSE(
+      "using B;\nclass C { using A; public void Go() { } }\nnamespace N { using D; class E { } }\n",
+    );
+    expect(result?.importPaths).toEqual(["using B;", "N@3\0using D;"]);
+  });
+});
+
+describe("csharp symbol scopes", () => {
+  test("symbols carry the enclosing namespace declaration as receiver scope key", async () => {
+    const result = await PARSE(
+      "namespace A { using U; namespace B { public class C { public void M() { } } } }\n",
+    );
+    const recv = (name: string) => result?.definedSymbols?.find((s) => s.name === name)?.receiver;
+    // A namespace declaration's receiver is its *enclosing* declaration's
+    // scope key — the same `name@line[#ord]` encoding usings carry.
+    expect(recv("A")).toBeUndefined();
+    expect(recv("A.B")).toBe("A@1");
+    expect(recv("C")).toBe("A.B@1");
+    expect(recv("C::M")).toBe("A.B@1");
+  });
+
+  test("file-scoped members carry the file-scoped declaration's scope", async () => {
+    const result = await PARSE("namespace Acme; public class C { public void M() { } }\n");
+    const recv = (name: string) => result?.definedSymbols?.find((s) => s.name === name)?.receiver;
+    expect(recv("Acme")).toBeUndefined();
+    expect(recv("C")).toBe("Acme@1");
+    expect(recv("C::M")).toBe("Acme@1");
+  });
+
+  test("same-named sibling declarations produce distinct receiver keys", async () => {
+    const result = await PARSE("namespace N { class C { } } namespace N { class D { } }\n");
+    const recv = (name: string) => result?.definedSymbols?.find((s) => s.name === name)?.receiver;
+    expect(recv("C")).toBe("N@1");
+    expect(recv("D")).toBe("N@1#1");
+  });
 });
 
 describe("csharp conditional directives", () => {

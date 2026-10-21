@@ -371,6 +371,7 @@ describe("native-wasm parity", () => {
       "cpp/header.h",
       "csharp/example.cs",
       "csharp/file-scoped.cs",
+      "csharp/malformed-using.cs",
       "csharp/sibling-ns.cs",
       "go/example.go",
       "python/example.py",

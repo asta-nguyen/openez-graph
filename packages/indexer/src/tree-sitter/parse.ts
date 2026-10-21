@@ -119,6 +119,15 @@ export interface LanguageConfig {
    */
   keepQualifiedCallee?: boolean;
   /**
+   * Optional per-symbol enclosing-declaration scope key (C#): the scope
+   * key of the innermost namespace declaration containing the symbol —
+   * the same `name@line[#ord]` encoding used for scoped usings —
+   * serialized as the symbol's `receiver`. Lets the resolver rebuild true
+   * lexical ancestry where line ranges cannot (same-line nesting vs
+   * same-line siblings).
+   */
+  enclosingScope?: (node: Node) => string | undefined;
+  /**
    * Optional post-pass that marks `call.shadowedLocal` for calls whose
    * last segment is bound as a local inside the caller's symbol range.
    * Runs once per file on the walker's output — Rust only.
@@ -387,6 +396,7 @@ function walkTree(
               : name;
 
           const symType = symbolRule.symbolTypeFor?.(node, contextStack) ?? symbolRule.symbolType;
+          const effectiveReceiver = receiver ?? config.enclosingScope?.(node);
           symbols.push({
             name: fullName,
             symbolType: symType,
@@ -394,7 +404,7 @@ function walkTree(
             exported,
             startLine: startRow,
             endLine: endRow,
-            ...(receiver ? { receiver } : {}),
+            ...(effectiveReceiver ? { receiver: effectiveReceiver } : {}),
           });
 
           // Extract calls within this symbol's body, skipping calls that are

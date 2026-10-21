@@ -1353,28 +1353,12 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
             return paths;
           }
           let ns_node = owner.unwrap();
-          if let Some(qual) = csharp_ns_name(&ns_node, source) {
-            let base = format!("{}@{}", qual, ns_node.start_position().row + 1);
-            let ord = csharp_decl_ordinal(&ns_node, source, &qual);
-            scope = Some(if ord > 0 {
-              format!("{}#{}", base, ord)
-            } else {
-              base
-            });
-          }
+          scope = csharp_scope_key(&ns_node, source);
         } else if node.parent().map(|p| p.kind()) == Some("compilation_unit") {
           let mut sib = node.prev_named_sibling();
           while let Some(s) = sib {
             if s.kind() == "file_scoped_namespace_declaration" {
-              if let Some(qual) = csharp_ns_name(&s, source) {
-                let base = format!("{}@{}", qual, s.start_position().row + 1);
-                let ord = csharp_decl_ordinal(&s, source, &qual);
-                scope = Some(if ord > 0 {
-                  format!("{}#{}", base, ord)
-                } else {
-                  base
-                });
-              }
+              scope = csharp_scope_key(&s, source);
               break;
             }
             sib = s.prev_named_sibling();
@@ -1691,13 +1675,22 @@ fn walk_tree(
 
         let exported = (rule.is_exported)(&node, source, &name);
 
-        let receiver = receiver_raw.as_deref().map(|raw| {
-          if let Some(normalize) = rule.normalize_receiver {
-            normalize(raw)
-          } else {
-            raw.to_string()
-          }
-        });
+        let receiver = receiver_raw
+          .as_deref()
+          .map(|raw| {
+            if let Some(normalize) = rule.normalize_receiver {
+              normalize(raw)
+            } else {
+              raw.to_string()
+            }
+          })
+          .or_else(|| {
+            if language == "csharp" {
+              csharp_enclosing_scope(&node, source)
+            } else {
+              None
+            }
+          });
 
         let sym_type = rule
           .symbol_type_fn
@@ -2055,6 +2048,48 @@ fn csharp_decl_ordinal(owner: &Node, source: &[u8], qualified: &str) -> usize {
     }
   }
   ordinal
+}
+
+/// Scope key of a namespace declaration: `<qualified-name>@<decl-start-
+/// line>` plus `#<ordinal>` when earlier declarations share that name and
+/// line. Shared by using-directive scopes and symbol receivers.
+/// Mirrors csharpScopeKey in configs.ts.
+fn csharp_scope_key(ns_node: &Node, source: &[u8]) -> Option<String> {
+  let qual = csharp_ns_name(ns_node, source)?;
+  let base = format!("{}@{}", qual, ns_node.start_position().row + 1);
+  let ord = csharp_decl_ordinal(ns_node, source, &qual);
+  Some(if ord > 0 { format!("{}#{}", base, ord) } else { base })
+}
+
+/// Scope key of the innermost namespace declaration enclosing `node` —
+/// serialized as each C# symbol's `receiver` so the resolver rebuilds true
+/// lexical ancestry where line ranges cannot (same-line nesting vs same-
+/// line siblings). Members of a file-scoped namespace are comp-unit
+/// siblings of the declaration node, so at compilation-unit level the
+/// scope belongs to the nearest preceding file-scoped declaration.
+/// Mirrors csharpEnclosingScope in configs.ts.
+fn csharp_enclosing_scope(node: &Node, source: &[u8]) -> Option<String> {
+  let mut inner = *node;
+  let mut cur = node.parent();
+  while let Some(parent) = cur {
+    if parent.kind() == "namespace_declaration" || parent.kind() == "file_scoped_namespace_declaration"
+    {
+      return csharp_scope_key(&parent, source);
+    }
+    if parent.kind() == "compilation_unit" {
+      let mut sib = inner.prev_named_sibling();
+      while let Some(s) = sib {
+        if s.kind() == "file_scoped_namespace_declaration" {
+          return csharp_scope_key(&s, source);
+        }
+        sib = s.prev_named_sibling();
+      }
+      return None;
+    }
+    inner = parent;
+    cur = parent.parent();
+  }
+  None
 }
 
 /// `static` modifier → internal `static_method` so `using static` binds
