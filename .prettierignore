@@ -14,4 +14,5 @@ packages/native/*.node
 .omo/
 .agents/
 sol-review.md
+docs/agent-devkit/changes/2026-10-20-39-csharp-indexing-accuracy/tasks.md
 tests/fixtures/typescript-edges/**/tsconfig*.json

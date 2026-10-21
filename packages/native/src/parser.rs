@@ -1338,8 +1338,10 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
       // `declaration_list` belongs to its enclosing block `namespace`, and
       // one following a file-scoped namespace belongs to it; those carry
       // the enclosing declaration's scope as
-      // `<qualified-name>@<decl-start-line>\0<verbatim>` so the resolver can
-      // apply the using inside exactly the block that declared it.
+      // `<qualified-name>@<decl-start-line>\0<verbatim>` (with a `#<ordinal>`
+      // suffix when earlier declarations share that name and line) so the
+      // resolver can apply the using inside exactly the block that declared
+      // it.
       // Mirrors extractCSharpImports in configs.ts.
       if node.kind() == "using_directive" {
         let mut scope: Option<String> = None;
@@ -1352,18 +1354,26 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
           }
           let ns_node = owner.unwrap();
           if let Some(qual) = csharp_ns_name(&ns_node, source) {
-            scope = Some(format!("{}@{}", qual, ns_node.start_position().row + 1));
+            let base = format!("{}@{}", qual, ns_node.start_position().row + 1);
+            let ord = csharp_decl_ordinal(&ns_node, source, &qual);
+            scope = Some(if ord > 0 {
+              format!("{}#{}", base, ord)
+            } else {
+              base
+            });
           }
         } else if node.parent().map(|p| p.kind()) == Some("compilation_unit") {
           let mut sib = node.prev_named_sibling();
           while let Some(s) = sib {
             if s.kind() == "file_scoped_namespace_declaration" {
-              if let Some(n) = s.child_by_field_name("name") {
-                scope = Some(format!(
-                  "{}@{}",
-                  text_of(&n, source),
-                  s.start_position().row + 1
-                ));
+              if let Some(qual) = csharp_ns_name(&s, source) {
+                let base = format!("{}@{}", qual, s.start_position().row + 1);
+                let ord = csharp_decl_ordinal(&s, source, &qual);
+                scope = Some(if ord > 0 {
+                  format!("{}#{}", base, ord)
+                } else {
+                  base
+                });
               }
               break;
             }
@@ -2012,6 +2022,39 @@ fn csharp_ns_name(node: &Node, source: &[u8]) -> Option<String> {
     p = par.parent();
   }
   Some(parts.join("."))
+}
+
+/// Ordinal of `owner` among the namespace declarations that share its
+/// qualified name and start row. Sibling blocks on one line
+/// (`namespace N {} namespace N {}`) would otherwise emit identical
+/// `N@line` scope keys; the suffix `#k` keeps them distinct. Same-named
+/// declarations on one row are never nested (a nested declaration's
+/// qualified name includes its ancestors), so document order is byte order.
+/// The resolver recomputes this ordinal from symbol emission order.
+/// Mirrors csharpDeclOrdinal in configs.ts.
+fn csharp_decl_ordinal(owner: &Node, source: &[u8], qualified: &str) -> usize {
+  let mut root = *owner;
+  while let Some(p) = root.parent() {
+    root = p;
+  }
+  let owner_row = owner.start_position().row;
+  let owner_start = owner.start_byte();
+  let mut ordinal = 0usize;
+  let mut stack = vec![root];
+  while let Some(n) = stack.pop() {
+    if (n.kind() == "namespace_declaration" || n.kind() == "file_scoped_namespace_declaration")
+      && n.start_byte() < owner_start
+      && n.start_position().row == owner_row
+      && csharp_ns_name(&n, source).as_deref() == Some(qualified)
+    {
+      ordinal += 1;
+    }
+    let mut cursor = n.walk();
+    for child in n.named_children(&mut cursor) {
+      stack.push(child);
+    }
+  }
+  ordinal
 }
 
 /// `static` modifier → internal `static_method` so `using static` binds
