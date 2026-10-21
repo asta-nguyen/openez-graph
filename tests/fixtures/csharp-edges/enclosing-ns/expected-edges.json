@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "consumer.cs#C::Go", "to": "nested.cs#T::M" },
+  "edges": [
+    { "from": "consumer.cs#C::Go", "to": "nested.cs#T::M", "tier": "binding" },
+    { "from": "consumer.cs#C::Go", "to": "global.cs#T::M", "tier": "binding" }
+  ]
+}

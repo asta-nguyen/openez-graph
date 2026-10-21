@@ -178,6 +178,57 @@ describe("csharp-resolver qualified calls and lookup order", () => {
     expect(r.resolveCall("a.cs", "Outer::Run", "global::Acme.Outer.Inner.M")).toEqual(target);
   });
 
+  test("a qualified head binds an enclosing namespace before the global one", async () => {
+    // `A` is declared both globally (global.cs) and nested inside
+    // `Acme.Consumer` (nested.cs). The head segment of `A.B.T.M` follows
+    // enclosing-namespace lookup: inside `Acme.Consumer` it binds
+    // `Acme.Consumer.A`, not the global `A`. `global::` pins the global
+    // binding, and callers outside `Acme.Consumer` keep the global target.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "global.cs": `namespace A.B { public static class T { public static void M() { } } }`,
+      "nested.cs": `namespace Acme.Consumer { namespace A.B { public static class T { public static void M() { } } } }`,
+      "consumer.cs": `namespace Acme.Consumer { public class C { public void Go() { A.B.T.M(); global::A.B.T.M(); } } }`,
+      "acme.cs": `namespace Acme { public class D { public void Go() { A.B.T.M(); } } }`,
+      "main.cs": `class Program { static void Main() { A.B.T.M(); } }`,
+    });
+    const r = await resolverFor(root);
+    // Inside Acme.Consumer the inner `A` decides — nested.cs, not global.cs.
+    expect(r.resolveCall("consumer.cs", "C::Go", "A.B.T.M")).toEqual({
+      filePath: "nested.cs",
+      name: "T::M",
+    });
+    // `global::` always pins the global namespace.
+    expect(r.resolveCall("consumer.cs", "C::Go", "global::A.B.T.M")).toEqual({
+      filePath: "global.cs",
+      name: "T::M",
+    });
+    // `Acme` declares no `A`, so callers there and at the global level keep
+    // the global `A.B.T`.
+    expect(r.resolveCall("acme.cs", "D::Go", "A.B.T.M")).toEqual({
+      filePath: "global.cs",
+      name: "T::M",
+    });
+    expect(r.resolveCall("main.cs", "Program::Main", "A.B.T.M")).toEqual({
+      filePath: "global.cs",
+      name: "T::M",
+    });
+  });
+
+  test("an enclosing-namespace head that dead-ends emits no edge", async () => {
+    // The first level that binds the head decides — it does not fall
+    // through to an outer or global namesake. `A` inside `Acme.Consumer`
+    // binds `Acme.Consumer.A`, which contains no `B`, so the path fails
+    // (dotnet: error) instead of reaching the global `A.B.T`.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "global.cs": `namespace A.B { public static class T { public static void M() { } } }`,
+      "c.cs": `namespace Acme.Consumer { namespace A { } public class C { public void Go() { A.B.T.M(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Go", "A.B.T.M")).toBeNull();
+  });
+
   test("using binds a namespace for qualified names", async () => {
     const root = makeWorkspace({
       "App.csproj": "<Project />",

@@ -7,9 +7,13 @@ import path from "node:path";
  * Callees keep their qualified dotted path (`Ns.Type.M`, `this.M`, `Alias.M`)
  * and resolve through the C# lookup order — member types of enclosing types,
  * then each enclosing namespace level innermost→global (that level's
- * declared types, then its own alias/ordinary/using-static bindings), and
- * finally compilation-unit usings plus the global usings of the caller's
- * project root — never a global name lookup. Only unique targets produce
+ * declared types and namespaces, then its own alias/ordinary/using-static
+ * bindings), and finally compilation-unit usings plus the global usings of
+ * the caller's project root — never a global name lookup. A qualified
+ * path's head segment binds once through that order: a namespace binding
+ * descends into the path's next segment, a type binding walks nested
+ * member types, and the first level that binds decides — there is no
+ * fall-through to an outer or global namesake. Only unique targets produce
  * edges: duplicates across partial parts, overloads, same identity in two
  * project roots, ambiguous paths, and reserved alias names all drop.
  *
@@ -528,34 +532,42 @@ export function createCSharpResolver(
     sym: FileSymbol;
   }
 
+  /** What a qualified path's head segment bound to: a type identity, or a
+   *  namespace declared at some enclosing level. */
+  type HeadBinding = { kind: "type"; ident: TypeIdentity } | { kind: "ns"; ns: string };
+
   /**
-   * Resolve a simple type name through the C# lookup order. Returns the
-   * unique identity, "reserved" when an alias binds the name to a
-   * non-workspace target, or null.
+   * Resolve a qualified path's head segment through the C# lookup order.
+   * Returns the bound type or namespace, "reserved" when an alias binds
+   * the name to a non-workspace target, or null when the name is unbound
+   * or binds ambiguously.
    *
    * Lookup is per namespace level: member types of enclosing types, then
-   * at each level innermost→global the declared types, then that level's
-   * alias, ordinary-using, and using-static bindings — and only after all
-   * enclosing levels the compilation-unit and project-root global usings.
-   * The first level that binds the name decides: an ambiguous or reserved
-   * inner binding ends the lookup rather than falling outward.
+   * at each level innermost→global the declared types and namespaces (one
+   * declaration space — a type and a nested namespace cannot share a
+   * name), then that level's alias, ordinary-using, and using-static
+   * bindings — and only after all enclosing levels the compilation-unit
+   * and project-root global usings. The first level that binds the name
+   * decides: an ambiguous or reserved inner binding ends the lookup
+   * rather than falling outward.
    */
-  function resolveTypeName(ctx: CallerContext, name: string): TypeIdentity | "reserved" | null {
-    // 1. Member types of enclosing types, innermost outward.
+  function resolveHeadName(ctx: CallerContext, name: string): HeadBinding | "reserved" | null {
+    // 1. Member types of enclosing types, innermost outward. Types cannot
+    //    contain namespaces, so this tier binds types only.
     if (ctx.chain) {
       const segs = ctx.chain.split("::");
       for (let len = segs.length; len >= 1; len--) {
         const chain = `${segs.slice(0, len).join("::")}::${name}`;
         const found = typeIdentitiesIn(ctx.ns, chain);
-        if (found.length === 1) return found[0];
+        if (found.length === 1) return { kind: "type", ident: found[0] };
         if (found.length > 1) return null; // ambiguous at this level
       }
     }
 
     // 2. Namespace levels innermost→global: at each level the declared
-    //    types first, then the usings declared inside that namespace
-    //    declaration. The caller's ancestor scope keys carry the level
-    //    each scoped using belongs to.
+    //    types and namespaces first, then the usings declared inside that
+    //    namespace declaration. The caller's ancestor scope keys carry
+    //    the level each scoped using belongs to.
     const scoped = usingsByFileScope.get(ctx.file);
     const levelUsings = new Map<string, Usings>();
     for (const key of nsAncestorsByFile.get(ctx.file)?.get(ctx.sym.index) ?? []) {
@@ -567,10 +579,20 @@ export function createCSharpResolver(
     for (let len = nsParts.length; len >= 0; len--) {
       const nsLevel = nsParts.slice(0, len).join(".");
       const found = typeIdentitiesIn(nsLevel, name);
-      if (found.length === 1) return found[0];
-      if (found.length > 1) return null; // two distinct workspace types
+      const nestedNs = nsLevel ? `${nsLevel}.${name}` : name;
+      const candidates = found.length + (nsDeclared.has(nestedNs) ? 1 : 0);
+      if (candidates === 1) {
+        return found.length === 1
+          ? { kind: "type", ident: found[0] }
+          : { kind: "ns", ns: nestedNs };
+      }
+      if (candidates > 1) return null; // ambiguous at this level
       const hit = resolveViaUsings(levelUsings.get(nsLevel), name);
-      if (hit !== undefined) return hit;
+      if (hit !== undefined) {
+        if (hit === "reserved") return "reserved";
+        if (hit === null) return null; // ambiguous at this level
+        return { kind: "type", ident: hit };
+      }
     }
 
     // 3. Compilation-unit usings plus the project root's global usings.
@@ -586,7 +608,8 @@ export function createCSharpResolver(
     mergeTier(scoped?.get(""));
     mergeTier(globalUsingsByRoot.get(projectRootOf(ctx.file)));
     const hit = resolveViaUsings(tier, name);
-    return hit === undefined ? null : hit;
+    if (hit === undefined || hit === null) return null;
+    return hit === "reserved" ? "reserved" : { kind: "type", ident: hit };
   }
 
   /**
@@ -695,62 +718,64 @@ export function createCSharpResolver(
   }
 
   /**
-   * Resolve `Q1.Q2.…​.M` to member targets. Interpretations:
-   *  (a) type-rooted — Q1 resolves via the lookup order, Q2..Qn-1 are nested
-   *      member types, M is the member;
-   *  (b) ns-rooted — a declared-namespace prefix Q1..Qi, type Qi+1, nested
-   *      member types, member M.
-   * Distinct (file,name) targets across interpretations must total one.
+   * Resolve `Q1.Q2.…​.M` to member targets. The head segment binds once
+   * through the enclosing-namespace lookup — whatever it binds to decides:
+   * a type head walks nested member types, and a namespace head walks its
+   * members segment by segment (each a nested namespace or a type).
+   * A dead end or ambiguity produces no target rather than falling through
+   * to an outer interpretation — C# reports an error for those instead.
    */
   function resolveQualifiedMember(ctx: CallerContext, dotted: string): MemberCandidate[] {
     const segs = dotted.split(".");
     const member = segs[segs.length - 1];
     const mids = segs.slice(0, -1);
-    const targets = new Map<string, MemberCandidate>();
+    const head = resolveHeadName(ctx, mids[0]);
+    if (!head || head === "reserved") return [];
 
-    // (a) type-rooted — Q1 via the lookup order, middle segments nested types.
-    const head = resolveTypeName(ctx, mids[0]);
-    if (head && head !== "reserved") {
-      let current: TypeIdentity[] = [head];
-      let alive = true;
-      for (let j = 1; j < mids.length && alive; j++) {
+    // Segments beneath a bound type are nested member types only.
+    const walkTypes = (initial: TypeIdentity[], start: number): TypeIdentity[] | null => {
+      let current = initial;
+      for (let j = start; j < mids.length; j++) {
         const next: TypeIdentity[] = [];
         for (const ident of current) {
           const nested = typesByKey.get(`${ident.root}|${ident.ns}|${ident.chain}::${mids[j]}`);
           if (nested) next.push(nested);
         }
+        if (next.length === 0) return null;
         current = next;
-        alive = current.length > 0;
       }
-      if (alive) {
-        for (const target of memberTargets(current, member)) {
-          targets.set(`${target.filePath}\0${target.name}\0${target.index}`, target);
-        }
-      }
-    }
+      return current;
+    };
 
-    // (b) ns-rooted — every declared-namespace prefix length.
-    for (let i = mids.length - 1; i >= 1; i--) {
-      const ns = mids.slice(0, i).join(".");
-      if (!nsDeclared.has(ns)) continue;
-      let current = typeIdentitiesIn(ns, mids[i]);
-      let alive = current.length > 0;
-      for (let j = i + 1; j < mids.length && alive; j++) {
-        const next: TypeIdentity[] = [];
-        for (const ident of current) {
-          const nested = typesByKey.get(`${ident.root}|${ident.ns}|${ident.chain}::${mids[j]}`);
-          if (nested) next.push(nested);
+    let current: TypeIdentity[] | null;
+    if (head.kind === "type") {
+      current = walkTypes([head.ident], 1);
+    } else {
+      // Descend from the bound namespace: each segment binds to that
+      // namespace's unique nested namespace or declared type — a segment
+      // that binds neither (dead end) or both (impossible in valid C#)
+      // ends the path with no target.
+      let ns = head.ns;
+      current = null;
+      let j = 1;
+      for (; j < mids.length; j++) {
+        const seg = mids[j];
+        const types = typeIdentitiesIn(ns, seg);
+        const nestedNs = `${ns}.${seg}`;
+        const nsHit = nsDeclared.has(nestedNs);
+        if (types.length + (nsHit ? 1 : 0) !== 1) return [];
+        if (nsHit) {
+          ns = nestedNs;
+        } else {
+          current = types;
+          j++;
+          break;
         }
-        current = next;
-        alive = current.length > 0;
       }
-      if (alive) {
-        for (const target of memberTargets(current, member)) {
-          targets.set(`${target.filePath}\0${target.name}\0${target.index}`, target);
-        }
-      }
+      // A path that ends inside a namespace has no type to hold a member.
+      if (current) current = walkTypes(current, j);
     }
-    return [...targets.values()];
+    return current ? memberTargets(current, member) : [];
   }
 
   /** Caller type identity: (root, ns, chain) of the symbol the call sits in. */
