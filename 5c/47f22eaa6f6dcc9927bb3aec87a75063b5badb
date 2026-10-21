@@ -1,0 +1,25 @@
+packages/indexer/src/csharp-resolver.ts
+  s_f6dd7129747dfa::t_3ecd7ec59e9e3b 390
+  s_f6dd7129747dfa::t_c5af66e5091254 354-356,361,373
+  s_f6dd7129747dfa::t_fdadd43e36de41 51-55,66-71,107-109,382-385,553-555,618-620
+tests/fixtures/csharp-edges/negatives/N.cs
+  s_f6dd7129747dfa::t_2b2bfa0f024e26 7-8,19-20
+tests/csharp-resolver.test.ts
+  s_f6dd7129747dfa::t_954099af9bd264 53,386-450
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c47f22eaa6f6dcc9927bb3aec87a75063b5badb",
+  "prompts": {},
+  "sessions": {
+    "s_f6dd7129747dfa": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "probable-shamrock",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
