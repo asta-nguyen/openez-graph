@@ -1,0 +1,23 @@
+{
+  "canary": {
+    "from": "src/shop/User.java#User::go",
+    "to": "src/shop/Helper.java#Helper::act"
+  },
+  "edges": [
+    {
+      "from": "src/shop/User.java#User::go",
+      "to": "src/shop/Helper.java#Helper::act",
+      "tier": "package"
+    },
+    {
+      "from": "src/other/Main.java#imports",
+      "to": "src/other/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/other/Main.java#Main::go",
+      "to": "src/other/app/Util.java#Util::format",
+      "tier": "type"
+    }
+  ]
+}

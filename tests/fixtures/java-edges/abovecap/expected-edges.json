@@ -1,0 +1,133 @@
+{
+  "canary": {
+    "from": "src/cap/Big.java#Big::caller",
+    "to": "src/cap/Big.java#Big::m0"
+  },
+  "edges": [
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m0",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m1",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m2",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m3",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m4",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m5",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m6",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m7",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m8",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m9",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m10",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m11",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m12",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m13",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m14",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m15",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m16",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m17",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m18",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m19",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m20",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m21",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m22",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m23",
+      "tier": "package"
+    },
+    {
+      "from": "src/cap/Big.java#Big::caller",
+      "to": "src/cap/Big.java#Big::m24",
+      "tier": "package"
+    }
+  ]
+}

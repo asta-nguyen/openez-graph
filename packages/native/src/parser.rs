@@ -123,6 +123,9 @@ struct LanguageConfig {
   /// `#endif`) before parsing — identical to the WASM preprocess so native
   /// and WASM agree. Offsets preserved: directive text becomes spaces.
   blank_directives: bool,
+  /// Optional override for callee extraction when the call node's callee is
+  /// not a single field (Java method_invocation: `name` + `object`/`super`).
+  call_extract: Option<fn(&Node, &[u8]) -> Option<String>>,
 }
 
 // ── Exported checks ──
@@ -327,6 +330,7 @@ fn python_config() -> LanguageConfig {
     keep_qualified_calls: true,
     error_fails_parse: false,
     blank_directives: false,
+    call_extract: None,
   }
 }
 
@@ -397,6 +401,7 @@ fn go_config() -> LanguageConfig {
     keep_qualified_calls: false,
     error_fails_parse: false,
     blank_directives: false,
+    call_extract: None,
   }
 }
 
@@ -550,6 +555,7 @@ fn rust_config() -> LanguageConfig {
     keep_qualified_calls: true,
     error_fails_parse: false,
     blank_directives: false,
+    call_extract: None,
   }
 }
 
@@ -796,6 +802,7 @@ fn ruby_config() -> LanguageConfig {
     keep_qualified_calls: false,
     error_fails_parse: false,
     blank_directives: false,
+    call_extract: None,
   }
 }
 
@@ -1146,6 +1153,8 @@ fn cpp_config(error_fails_parse: bool) -> LanguageConfig {
     keep_qualified_calls: true,
     error_fails_parse,
     blank_directives: false,
+    call_extract: None,
+
   }
 }
 
@@ -1390,6 +1399,19 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
         }
       }
     }
+    "java" => {
+      // `import static app.Util.format;` → "static app.Util.format"
+      let text = text_of(&node, source);
+      let spec = text
+        .strip_prefix("import")
+        .unwrap_or(text.as_str())
+        .trim_end_matches(';')
+        .trim();
+      let collapsed = spec.split_whitespace().collect::<Vec<_>>().join(" ");
+      if !collapsed.is_empty() {
+        paths.push(collapsed);
+      }
+    }
     _ => {}
   }
 
@@ -1557,6 +1579,33 @@ fn walk_tree(
           });
         }
       }
+    } else if language == "java"
+      && (node_kind == "field_declaration" || node_kind == "constant_declaration")
+    {
+      // Java field/constant declarations emit one symbol per declarator,
+      // qualified by the enclosing context (Owner::member).
+      let parent_name = context_stack.last().map(|f| f.name.clone());
+      for i in 0..node.named_child_count() {
+        if let Some(d) = node.named_child(i) {
+          if d.kind() != "variable_declarator" {
+            continue;
+          }
+          if let Some(name_node) = d.child_by_field_name("name") {
+            let name = text_of(&name_node, source);
+            symbols.push(NativeSymbol {
+              exported: java_node_exported(&node, source),
+              name: parent_name
+                .as_ref()
+                .map(|p| format!("{}::{}", p, name))
+                .unwrap_or(name),
+              symbol_type: "field".to_string(),
+              start_line: start_row as i32,
+              end_line: end_row as i32,
+              receiver: None,
+            });
+          }
+        }
+      }
     } else if let Some((_, rule)) = symbol_rule_map.iter().find(|(t, _)| *t == node_kind) {
       if rule.context_only {
         // Context-only rules (Ruby `class << self`) push a plain context
@@ -1624,7 +1673,12 @@ fn walk_tree(
           // Push context if this node establishes one.
           // The context stack top is the innermost symbol — calls encountered
           // while this is on top belong to this symbol.
-          let is_context = rule.establishes_context || context_type_set.contains(node_kind);
+          // Java enum constants only scope a constant-specific class body —
+          // a bodiless constant must not leak a frame into same-line siblings.
+          let is_context = (rule.establishes_context || context_type_set.contains(node_kind))
+            && !(language == "java"
+              && node_kind == "enum_constant"
+              && node.child_by_field_name("body").is_none());
           let context_name: Option<String> = if is_context {
             Some(
               rule
@@ -1687,15 +1741,19 @@ fn walk_tree(
       // type_conversion_expression only counts as a call when its type is a
       // generic instantiation (Map[int](x) → callee Map); real conversions
       // like int(x) keep producing no call.
-      let func_node = if node_kind == "type_conversion_expression" {
-        node
-          .child_by_field_name("type")
-          .filter(|t| t.kind() == "generic_type")
+      let callee_opt: Option<String> = if let Some(extract) = config.call_extract {
+        extract(&node, source)
       } else {
-        node.child_by_field_name(config.call_function_field)
+        let func_node = if node_kind == "type_conversion_expression" {
+          node
+            .child_by_field_name("type")
+            .filter(|t| t.kind() == "generic_type")
+        } else {
+          node.child_by_field_name(config.call_function_field)
+        };
+        func_node.map(|f| text_of(&f, source))
       };
-      if let Some(func_node) = func_node {
-        let callee_raw = text_of(&func_node, source);
+      if let Some(callee_raw) = callee_opt {
         let normalized = (config.normalize_call_name)(&callee_raw);
 
         // Qualify calls through the receiver variable: f.Validate() → Foo::Validate
@@ -1840,43 +1898,40 @@ fn extract_calls_in_node(
     if inside_nested {
       continue;
     }
-    let func_node = match call_node.child_by_field_name(config.call_function_field) {
-      Some(f) => f,
-      None => continue,
+    let callee_raw: String = if let Some(extract) = config.call_extract {
+      match extract(&call_node, source) {
+        Some(c) => c,
+        None => continue,
+      }
+    } else {
+      match call_node.child_by_field_name(config.call_function_field) {
+        Some(f) => text_of(&f, source),
+        None => continue,
+      }
     };
-    let callee_raw = text_of(&func_node, source);
     let normalized = (config.normalize_call_name)(&callee_raw);
     let final_callee = config
       .qualify_call
       .and_then(|f| f(&call_node, source, &callee_raw, &normalized, context_stack))
       .unwrap_or_else(|| normalized.clone());
+    let call_identifier = if config.keep_qualified_calls {
+      last_rust_call_segment(&final_callee)
+    } else {
+      final_callee.as_str()
+    };
 
     // keepQualifiedCallee parity with parse.ts: the call-ignore list also
     // applies to the last-segment form, and called_identifiers record it.
-    let mut call_id = final_callee.clone();
-    if config.keep_qualified_calls {
-      call_id = last_rust_call_segment(&final_callee).to_string();
-      if config.call_ignores.contains(call_id.as_str()) {
-        continue;
-      }
-    }
     if normalized.is_empty()
       || final_callee.is_empty()
       || config.call_ignores.contains(callee_raw.as_str())
       || config.call_ignores.contains(normalized.as_str())
+      || (config.keep_qualified_calls && config.call_ignores.contains(call_identifier))
       || final_callee == caller_name
     {
       continue;
     }
-    // keepQualifiedCallee parity with parse.ts extractCallsInNode: record
-    // the last path segment as the called identifier for C++ (Ruby keeps
-    // the full name via keep_qualified_calls = false).
-    called_identifiers.insert(if config.keep_qualified_calls {
-      last_rust_call_segment(&final_callee).to_string()
-    } else {
-      final_callee.clone()
-    });
-    called_identifiers.insert(call_id);
+    called_identifiers.insert(call_identifier.to_string());
     call_expressions.push(NativeCallExpression {
       caller_name: caller_name.to_string(),
       callee_name: final_callee,
@@ -2088,6 +2143,7 @@ fn csharp_config() -> LanguageConfig {
     keep_qualified_calls: true,
     error_fails_parse: false,
     blank_directives: true,
+    call_extract: None,
   }
 }
 
@@ -2134,6 +2190,348 @@ fn blank_csharp_directives(source: &str) -> String {
   out
 }
 
+// ── Java ──
+
+/// `public` modifier token on the declaration's `modifiers` child → exported.
+/// Only the actual keyword token counts — annotation contents such as
+/// `@Doc("public API")` must not mark a declaration exported.
+/// `package_declaration` and `enum_constant` are always exported.
+fn java_node_exported(node: &Node, _source: &[u8]) -> bool {
+  match node.kind() {
+    "package_declaration" | "enum_constant" => return true,
+    _ => {}
+  }
+  for i in 0..node.named_child_count() {
+    if let Some(c) = node.named_child(i) {
+      if c.kind() != "modifiers" {
+        continue;
+      }
+      for j in 0..c.child_count() {
+        if let Some(m) = c.child(j) {
+          if m.kind() == "public" {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  false
+}
+
+fn java_exported(node: &Node, source: &[u8], _name: &str) -> bool {
+  java_node_exported(node, source)
+}
+
+fn java_package_name(node: &Node, source: &[u8]) -> Option<String> {
+  for i in 0..node.named_child_count() {
+    if let Some(c) = node.named_child(i) {
+      if c.kind() == "scoped_identifier" || c.kind() == "identifier" {
+        return Some(text_of(&c, source));
+      }
+    }
+  }
+  None
+}
+
+/// `new X() { ... }` pushes an `<anonymous>` context only when a class body
+/// is present; plain `new X()` pushes nothing.
+fn java_object_context(node: &Node, _source: &[u8], stack: &[ContextFrame]) -> Option<String> {
+  for i in 0..node.named_child_count() {
+    if let Some(c) = node.named_child(i) {
+      if c.kind() == "class_body" {
+        return Some(match stack.last() {
+          Some(f) => format!("{}::<anonymous>", f.name),
+          None => "<anonymous>".to_string(),
+        });
+      }
+    }
+  }
+  None
+}
+
+/// `obj.m()` → `obj.m`; `this.m()`/`super.m()`/`x.super.m()` keep their
+/// receivers; `m()` → `m`.
+fn java_call_name(call_node: &Node, source: &[u8]) -> Option<String> {
+  let name_node = call_node.child_by_field_name("name")?;
+  let name = text_of(&name_node, source);
+  let obj = call_node.child_by_field_name("object");
+  let mut receiver = obj.map(|o| text_of(&o, source));
+  for i in 0..call_node.child_count() {
+    if let Some(c) = call_node.child(i) {
+      if c.kind() == "super" && obj.map(|o| o.id()) != Some(c.id()) {
+        receiver = Some(match receiver {
+          Some(r) => format!("{}.super", r),
+          None => "super".to_string(),
+        });
+      }
+    }
+  }
+  Some(match receiver {
+    Some(r) => format!("{}.{}", r, name),
+    None => name,
+  })
+}
+
+fn java_is_qualified_name(v: &str) -> bool {
+  if v.is_empty() {
+    return false;
+  }
+  v.split('.').all(|seg| {
+    let mut chars = seg.chars();
+    match chars.next() {
+      Some(c) if c == '_' || c == '$' || c.is_ascii_alphabetic() => {}
+      _ => return false,
+    }
+    chars.all(|c| c == '_' || c == '$' || c.is_ascii_alphanumeric())
+  })
+}
+
+fn normalize_java_call(value: &str) -> String {
+  let v: String = value.split_whitespace().collect();
+  if java_is_qualified_name(&v) {
+    v
+  } else {
+    String::new()
+  }
+}
+
+/// Anonymous-class suppression: a bare or `this.` callee whose innermost
+/// enclosing type-body belongs to `object_creation_expression` or
+/// `enum_constant` may come from the supertype → suppress (returns Some("")).
+fn java_qualify_call(
+  call_node: &Node,
+  _source: &[u8],
+  _callee_raw: &str,
+  normalized: &str,
+  _stack: &[ContextFrame],
+) -> Option<String> {
+  const BODY_TYPES: [&str; 5] = [
+    "class_body",
+    "interface_body",
+    "enum_body",
+    "enum_body_declarations",
+    "annotation_type_body",
+  ];
+  if normalized.is_empty()
+    || !(normalized.starts_with("this.") || !normalized.contains('.'))
+  {
+    return None;
+  }
+  let mut parent = call_node.parent();
+  while let Some(node) = parent {
+    if BODY_TYPES.contains(&node.kind()) {
+      if node.kind() == "class_body" {
+        if let Some(owner) = node.parent() {
+          if owner.kind() == "object_creation_expression" || owner.kind() == "enum_constant" {
+            return Some(String::new());
+          }
+        }
+      }
+      break;
+    }
+    parent = node.parent();
+  }
+  None
+}
+
+fn java_config() -> LanguageConfig {
+  LanguageConfig {
+    symbol_rules: vec![
+      SymbolRule {
+        node_type: "package_declaration",
+        symbol_type: "package",
+        name_field: "name",
+        establishes_context: false,
+        is_exported: java_exported,
+        extract_name: Some(java_package_name),
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "class_declaration",
+        symbol_type: "class",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "interface_declaration",
+        symbol_type: "interface",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "enum_declaration",
+        symbol_type: "enum",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "record_declaration",
+        symbol_type: "record",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "enum_constant",
+        symbol_type: "const",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "method_declaration",
+        symbol_type: "function",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "constructor_declaration",
+        symbol_type: "constructor",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "compact_constructor_declaration",
+        symbol_type: "constructor",
+        name_field: "name",
+        establishes_context: true,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: None,
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: false,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+      SymbolRule {
+        node_type: "object_creation_expression",
+        symbol_type: "anonymous",
+        name_field: "name",
+        establishes_context: false,
+        is_exported: java_exported,
+        extract_name: None,
+        extract_context_name: Some(java_object_context),
+        receiver_field: None,
+        normalize_receiver: None,
+        context_only: true,
+        context_kind: None,
+        symbol_type_fn: None,
+      },
+    ],
+    import_node_types: vec!["import_declaration"],
+    call_node_type: "method_invocation",
+    call_function_field: "name",
+    call_ignores: [
+      "if",
+      "for",
+      "while",
+      "switch",
+      "catch",
+      "return",
+      "throw",
+      "new",
+      "super",
+      "this",
+      "assert",
+      "synchronized",
+      "try",
+      "do",
+      "else",
+      "case",
+      "instanceof",
+      "null",
+      "true",
+      "false",
+      "void",
+      "break",
+      "continue",
+      "default",
+      "finally",
+      "package",
+      "import",
+    ]
+    .into_iter()
+    .collect(),
+    normalize_call_name: normalize_java_call,
+    context_node_types: vec![
+      "class_declaration",
+      "interface_declaration",
+      "enum_declaration",
+      "record_declaration",
+      "enum_constant",
+      "method_declaration",
+      "constructor_declaration",
+      "compact_constructor_declaration",
+    ],
+    per_symbol_calls: true,
+    qualify_call: Some(java_qualify_call),
+    keep_qualified_calls: true,
+    error_fails_parse: false,
+    blank_directives: false,
+    call_extract: Some(java_call_name),
+  }
+}
+
 // ── Language detection from config ──
 
 fn get_config(language: &str) -> Option<LanguageConfig> {
@@ -2147,6 +2545,7 @@ fn get_config(language: &str) -> Option<LanguageConfig> {
     // file falls back to generic chunks with no graph records.
     "cpp-header" => Some(cpp_config(true)),
     "csharp" => Some(csharp_config()),
+    "java" => Some(java_config()),
     _ => None,
   }
 }
@@ -2159,6 +2558,7 @@ fn get_language_fn(language: &str) -> Option<tree_sitter::Language> {
     "ruby" => Some(tree_sitter_ruby::LANGUAGE.into()),
     "cpp" | "cpp-header" => Some(tree_sitter_cpp::LANGUAGE.into()),
     "csharp" => Some(tree_sitter_c_sharp::LANGUAGE.into()),
+    "java" => Some(tree_sitter_java::LANGUAGE.into()),
     _ => None,
   }
 }

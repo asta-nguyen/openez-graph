@@ -1,0 +1,28 @@
+{
+  "canary": {
+    "from": "src/app/Outer.java#Outer::caller",
+    "to": "src/app/Outer.java#Outer::helper"
+  },
+  "edges": [
+    {
+      "from": "src/app/Outer.java#Outer::caller",
+      "to": "src/app/Outer.java#Outer::helper",
+      "tier": "package"
+    },
+    {
+      "from": "src/app/Outer.java#Outer::caller",
+      "to": "src/app/Outer.java#Outer::local",
+      "tier": "package"
+    },
+    {
+      "from": "src/app/Outer.java#Outer::Inner::m",
+      "to": "src/app/Outer.java#Outer::Inner::deep",
+      "tier": "package"
+    },
+    {
+      "from": "src/app/Use.java#Use::run",
+      "to": "src/app/Outer.java#Outer::Inner::staticCall",
+      "tier": "type"
+    }
+  ]
+}
