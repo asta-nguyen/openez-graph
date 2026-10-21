@@ -136,8 +136,8 @@ export function resetNativeParserCache(): void {
  * `fallback-v6`, and every other parser (oxc, markdown, config, regex)
  * is grouped under `oxc-v5` since they share the same chunking/call-
  * extraction contract. Non-native tree-sitter/regex fallbacks for
- * Python/Go/Rust/Ruby/C#/Java use `fallback-v6` so cache validation matches the
- * expected version when the native extension is unavailable.
+ * Python/Go/Rust/Ruby/C++/C#/Java use `fallback-v6` so cache validation matches
+ * the expected version when the native extension is unavailable.
  */
 function parserVersionFor(parserName: string): string {
   if (parserName === "tree-sitter-native") return PARSER_VERSION_NATIVE;
