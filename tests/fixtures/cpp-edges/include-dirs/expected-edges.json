@@ -1,0 +1,6 @@
+{
+  "canary": { "from": "src/app.cpp#app_fn", "to": "include/shared/util.h#util" },
+  "edges": [
+    { "from": "src/app.cpp#app_fn", "to": "include/shared/util.h#util", "tier": "file" }
+  ]
+}

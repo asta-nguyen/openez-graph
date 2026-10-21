@@ -1,0 +1,9 @@
+{
+  "canary": { "from": "a.cpp#fa", "to": "b.h#fb" },
+  "edges": [
+    { "from": "a.cpp#fa", "to": "b.h#fb", "tier": "file" },
+    { "from": "a.cpp#fa", "to": "c.h#fc", "tier": "file" },
+    { "from": "a.cpp#fa", "to": "d.h#fd", "tier": "file" },
+    { "from": "angle.cpp#fang", "to": "a.h#fa", "tier": "file" }
+  ]
+}

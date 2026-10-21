@@ -74,6 +74,9 @@ importers:
       oxc-parser:
         specifier: ^0.143.0
         version: 0.143.0
+      tree-sitter-cpp:
+        specifier: ^0.23.4
+        version: 0.23.4
       tree-sitter-go:
         specifier: ^0.25.0
         version: 0.25.0
@@ -392,6 +395,9 @@ importers:
       toml:
         specifier: ^4.1.1
         version: 4.1.1
+      tree-sitter-cpp:
+        specifier: ^0.23.4
+        version: 0.23.4
       tree-sitter-go:
         specifier: ^0.25.0
         version: 0.25.0
@@ -4522,6 +4528,22 @@ packages:
   tree-kill@1.2.2:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
     hasBin: true
+
+  tree-sitter-c@0.23.6:
+    resolution: {integrity: sha512-0dxXKznVyUA0s6PjNolJNs2yF87O5aL538A/eR6njA5oqX3C3vH4vnx3QdOKwuUdpKEcFdHuiDpRKLLCA/tjvQ==}
+    peerDependencies:
+      tree-sitter: ^0.22.1
+    peerDependenciesMeta:
+      tree-sitter:
+        optional: true
+
+  tree-sitter-cpp@0.23.4:
+    resolution: {integrity: sha512-qR5qUDyhZ5jJ6V8/umiBxokRbe89bCGmcq/dk94wI4kN86qfdV8k0GHIUEKaqWgcu42wKal5E97LKpLeVW8sKw==}
+    peerDependencies:
+      tree-sitter: ^0.21.1
+    peerDependenciesMeta:
+      tree-sitter:
+        optional: true
 
   tree-sitter-go@0.25.0:
     resolution: {integrity: sha512-APBc/Dq3xz/e35Xpkhb1blu5UgW+2E3RyGWawZSCNcbGwa7jhSQPS8KsUupuzBla8PCo8+lz9W/JDJjmfRa2tw==}
@@ -8916,6 +8938,17 @@ snapshots:
   toml@4.1.1: {}
 
   tree-kill@1.2.2: {}
+
+  tree-sitter-c@0.23.6:
+    dependencies:
+      node-addon-api: 8.9.1
+      node-gyp-build: 4.8.4
+
+  tree-sitter-cpp@0.23.4:
+    dependencies:
+      node-addon-api: 8.9.1
+      node-gyp-build: 4.8.4
+      tree-sitter-c: 0.23.6
 
   tree-sitter-go@0.25.0:
     dependencies:
