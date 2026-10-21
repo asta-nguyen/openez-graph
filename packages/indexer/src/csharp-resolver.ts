@@ -16,8 +16,9 @@ import path from "node:path";
  * `Owner::member` names plus 1-based line ranges; importPaths carry the full
  * using-directive text (global/alias/static modifiers included). Directives
  * inside a block namespace (or after a file-scoped namespace) carry their
- * enclosing declaration encoded as `<qualified-name>@<decl-line>\0<text>`;
- * such a using applies inside that declaration block and its nested
+ * enclosing declaration encoded as `<qualified-name>@<decl-line>\0<text>`
+ * (with a `#<ordinal>` suffix when earlier declarations share that name and
+ * line); such a using applies inside that declaration block and its nested
  * namespaces only, and its target resolves relative to that namespace.
  * Each C# file's project root is the nearest ancestor directory containing
  * a `*.csproj` file (directories are listed once and memoized; project
@@ -148,9 +149,10 @@ function stripGlobal(value: string): string {
 /**
  * Split an encoded using entry into its scope key and directive text.
  * Entries are either verbatim (`using X;`) or scope-prefixed
- * (`<qualified-name>@<decl-line>\0<verbatim>`); the scope key identifies
- * the enclosing namespace *declaration* — two same-named blocks in one
- * file stay distinct unless they share a start line.
+ * (`<qualified-name>@<decl-line>\0<verbatim>`, plus a `#<ordinal>` suffix
+ * when earlier declarations share that name and line); the scope key
+ * identifies the enclosing namespace *declaration*, so two same-named
+ * sibling blocks in one file always stay distinct.
  */
 function splitUsingScope(raw: string): { scopeKey: string; text: string } {
   const sep = raw.indexOf("\0");
@@ -159,7 +161,7 @@ function splitUsingScope(raw: string): { scopeKey: string; text: string } {
     : { scopeKey: raw.slice(0, sep), text: raw.slice(sep + 1) };
 }
 
-/** Semantic namespace part of a scope key (`"A.B"` out of `"A.B@3"`). */
+/** Semantic namespace part of a scope key (`"A.B"` out of `"A.B@3#1"`). */
 function scopeNamespace(scopeKey: string): string {
   const at = scopeKey.lastIndexOf("@");
   return at > 0 ? scopeKey.slice(0, at) : "";
@@ -182,18 +184,15 @@ export function createCSharpResolver(
   /** symbol index → enclosing namespace chain (dotted), per file. */
   const nsChainByFile = new Map<string, Map<number, string>>();
   const projectRootByFile = new Map<string, string>();
-  /** file → scope key (`""` for compilation-unit level, `"Q@line"` for the
-   *  namespace declaration containing the directive) → resolved usings. */
+  /** file → scope key (`""` for compilation-unit level, `"Q@line[#k]"` for
+   *  the namespace declaration containing the directive) → resolved usings. */
   const usingsByFileScope = new Map<string, Map<string, Usings>>();
   /** file → scope key → non-global usings collected in pass one, resolved
    *  into `usingsByFileScope` once the type/namespace indices exist. */
   const rawUsingsByFile = new Map<string, Map<string, Usings>>();
-  /** symbol index → enclosing namespace declarations (qualified name +
-   *  declaration start line), innermost→outermost, per file. */
-  const nsAncestorsByFile = new Map<
-    string,
-    Map<number, Array<{ name: string; startLine: number }>>
-  >();
+  /** symbol index → scope keys of the enclosing namespace *declarations*
+   *  (`name@line`/`name@line#k`), innermost→outermost, per file. */
+  const nsAncestorsByFile = new Map<string, Map<number, string[]>>();
   const globalUsingsByRoot = new Map<string, Usings>();
 
   const dirCsproj = new Map<string, boolean>();
@@ -253,8 +252,23 @@ export function createCSharpResolver(
     // line siblings (`A.B {X} B {Y}` puts Y in B), while nested
     // declarations arrive already carrying their parent path.
     const nsSyms = syms.filter((x) => x.symbolType === "namespace");
+    // Scope keys are `name@line` plus `#k` when earlier declarations share
+    // that name and line — the same ordinal the parser appends to a using's
+    // scope tag, recomputed from symbol emission order.
+    const nsOrdinal = new Map<number, number>();
+    const nsSeen = new Map<string, number>();
+    for (const n of nsSyms) {
+      const seenKey = `${n.name}\0${n.startLine}`;
+      const ord = nsSeen.get(seenKey) ?? 0;
+      nsOrdinal.set(n.index, ord);
+      nsSeen.set(seenKey, ord + 1);
+    }
+    const nsScopeKey = (n: FileSymbol): string => {
+      const ord = nsOrdinal.get(n.index) ?? 0;
+      return ord > 0 ? `${n.name}@${n.startLine}#${ord}` : `${n.name}@${n.startLine}`;
+    };
     const nsChain = new Map<number, string>();
-    const nsAncestors = new Map<number, Array<{ name: string; startLine: number }>>();
+    const nsAncestors = new Map<number, string[]>();
     const lastTypeIdx = new Map<string, number>();
     const memberOwner = new Map<number, number>();
     for (const s of syms) {
@@ -268,10 +282,40 @@ export function createCSharpResolver(
         }
       }
       nsChain.set(s.index, best?.name ?? "");
-      nsAncestors.set(
-        s.index,
-        containing.reverse().map((n) => ({ name: n.name, startLine: n.startLine })),
-      );
+      // The lexical ancestor *declarations* of `best`: a sibling block
+      // (e.g. `namespace N {} namespace N {}` on one line) covers `s`
+      // line-wise but is not an ancestor. Each proper dotted prefix of
+      // `best.name` names the next enclosing declaration outward; accept
+      // the nearest preceding declaration of that name only when its
+      // range encloses the inner declaration's and extends past the line
+      // the inner one starts on — a sibling's range ends there or is
+      // identical, a true parent's always runs further. Same-line chains
+      // that no prefix slot can prove fall out (fail closed: a missed
+      // ancestor using is never a wrong edge).
+      const ancestors: FileSymbol[] = [];
+      if (best) {
+        ancestors.push(best);
+        let cur = best;
+        const segs = best.name.split(".");
+        for (let i = segs.length - 1; i >= 1; i--) {
+          const prefix = segs.slice(0, i).join(".");
+          const upto = containing.indexOf(cur);
+          for (let j = upto - 1; j >= 0; j--) {
+            const d = containing[j];
+            if (
+              d.name === prefix &&
+              d.startLine <= cur.startLine &&
+              d.endLine >= cur.endLine &&
+              d.endLine > cur.startLine
+            ) {
+              ancestors.push(d);
+              cur = d;
+              break;
+            }
+          }
+        }
+      }
+      nsAncestors.set(s.index, ancestors.map(nsScopeKey));
       const sep = s.name.lastIndexOf("::");
       if (sep > 0) {
         const owner = lastTypeIdx.get(s.name.slice(0, sep));
@@ -401,7 +445,7 @@ export function createCSharpResolver(
 
   /** In-scope usings for a caller symbol: each enclosing namespace
    *  declaration's usings (innermost→outermost, matched by the
-   *  declaration's own `name@line` scope key), then compilation-unit
+   *  declaration's own `name@line[#k]` scope key), then compilation-unit
    *  usings, then the caller's project-root globals. Inner bindings win:
    *  outer aliases only fill names not already bound. */
   function scopeUsings(file: string, sym: FileSymbol): Usings {
@@ -415,8 +459,8 @@ export function createCSharpResolver(
       merged.ordinary.push(...u.ordinary);
       merged.staticTypes.push(...u.staticTypes);
     };
-    for (const anc of nsAncestorsByFile.get(file)?.get(sym.index) ?? []) {
-      mergeInto(scoped?.get(`${anc.name}@${anc.startLine}`));
+    for (const key of nsAncestorsByFile.get(file)?.get(sym.index) ?? []) {
+      mergeInto(scoped?.get(key));
     }
     mergeInto(scoped?.get(""));
     mergeInto(globalUsingsByRoot.get(projectRootOf(file)));

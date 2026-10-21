@@ -896,4 +896,49 @@ namespace Acme.Consumer
     // An undeclared scoped using still yields no edge.
     expect(r.resolveImport("c.cs", "Acme.Consumer@1\0using Missing;")).toBeNull();
   });
+
+  test("same-named sibling blocks on one line do not share usings", async () => {
+    // `namespace N { using A; C } namespace N { D }` on one physical line:
+    // both declarations share qualified name and start line, so their
+    // scope keys collide on `N@1` unless the declaration ordinal splits
+    // them (`N@1` vs `N@1#1`), and the second block's members must not
+    // count the first block as a line-covering ancestor. `using A` binds
+    // inside the first block only.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace A { public class Thing { public static void F() { } } }`,
+      "c.cs": `namespace N { using A; public class C { public void Caller() { Thing.F(); } } } namespace N { public class D { public void Caller() { Thing.F(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Caller", "Thing.F")).toEqual({
+      filePath: "u.cs",
+      name: "Thing::F",
+    });
+    expect(r.resolveCall("c.cs", "D::Caller", "Thing.F")).toBeNull();
+  });
+
+  test("same-named sibling blocks keep distinct using scopes", async () => {
+    // Both sibling `namespace N` blocks on one line declare a using — each
+    // applies inside its own block only, in both directions.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace A { public class Thing { public static void F() { } } } namespace B { public class Other { public static void G() { } } }`,
+      "c.cs": `namespace N { using A; public class C { public void Caller() { Thing.F(); Other.G(); } } } namespace N { using B; public class D { public void Caller() { Thing.F(); Other.G(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Caller", "Thing.F")).toEqual({
+      filePath: "u.cs",
+      name: "Thing::F",
+    });
+    expect(r.resolveCall("c.cs", "C::Caller", "Other.G")).toBeNull();
+    expect(r.resolveCall("c.cs", "D::Caller", "Other.G")).toEqual({
+      filePath: "u.cs",
+      name: "Other::G",
+    });
+    expect(r.resolveCall("c.cs", "D::Caller", "Thing.F")).toBeNull();
+    // Imports edges stay owned by the declaring file; the second block's
+    // directive carries the disambiguated `N@1#1` scope key.
+    expect(r.resolveImport("c.cs", "N@1\0using A;")).toBe("u.cs");
+    expect(r.resolveImport("c.cs", "N@1#1\0using B;")).toBe("u.cs");
+  });
 });

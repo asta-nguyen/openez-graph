@@ -961,8 +961,42 @@ function csharpFieldDeclaratorName(node: Node): string | null {
 }
 
 /**
+ * Ordinal of `owner` among the namespace declarations that share its
+ * qualified name and start row. Sibling blocks on one line
+ * (`namespace N {} namespace N {}`) would otherwise emit identical
+ * `N@line` scope keys; the suffix `#k` keeps them distinct. Same-named
+ * declarations on one row are never nested (a nested declaration's
+ * qualified name includes its ancestors), so document order is byte order.
+ * The resolver recomputes this ordinal from symbol emission order.
+ * Mirrors csharp_decl_ordinal in parser.rs.
+ */
+function csharpDeclOrdinal(owner: Node, qualified: string): number {
+  let root = owner;
+  while (root.parent) root = root.parent;
+  const ownerRow = owner.startPosition.row;
+  const ownerStart = owner.startIndex;
+  let ordinal = 0;
+  const stack: Node[] = [root];
+  while (stack.length > 0) {
+    const n = stack.pop()!;
+    if (
+      (n.type === "namespace_declaration" || n.type === "file_scoped_namespace_declaration") &&
+      n.startIndex < ownerStart &&
+      n.startPosition.row === ownerRow &&
+      csharpNamespaceName(n) === qualified
+    ) {
+      ordinal++;
+    }
+    const children = n.namedChildren;
+    for (let i = children.length - 1; i >= 0; i--) stack.push(children[i]);
+  }
+  return ordinal;
+}
+
+/**
  * Enclosing declaration scope for a `using` directive, encoded as
- * `<qualified-name>@<decl-start-line>`. A directive inside a
+ * `<qualified-name>@<decl-start-line>` plus `#<ordinal>` when earlier
+ * declarations share that name and line. A directive inside a
  * `declaration_list` belongs to the enclosing block `namespace`, and one
  * that follows a file-scoped namespace belongs to it; both keep their
  * scope so the resolver applies the using inside exactly the declaration
@@ -976,13 +1010,19 @@ function csharpUsingScope(node: Node): string {
     const owner = parent.parent;
     if (owner?.type !== "namespace_declaration") return "";
     const qual = csharpNamespaceName(owner);
-    return qual ? `${qual}@${owner.startPosition.row + 1}` : "";
+    if (!qual) return "";
+    const ord = csharpDeclOrdinal(owner, qual);
+    const base = `${qual}@${owner.startPosition.row + 1}`;
+    return ord > 0 ? `${base}#${ord}` : base;
   }
   if (parent?.type === "compilation_unit") {
     for (let sib = node.previousNamedSibling; sib; sib = sib.previousNamedSibling) {
       if (sib.type === "file_scoped_namespace_declaration") {
-        const name = sib.childForFieldName("name")?.text;
-        return name ? `${name}@${sib.startPosition.row + 1}` : "";
+        const qual = csharpNamespaceName(sib);
+        if (!qual) return "";
+        const ord = csharpDeclOrdinal(sib, qual);
+        const base = `${qual}@${sib.startPosition.row + 1}`;
+        return ord > 0 ? `${base}#${ord}` : base;
       }
     }
   }

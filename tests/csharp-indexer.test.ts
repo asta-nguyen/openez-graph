@@ -225,6 +225,16 @@ namespace N { class C { } }
     expect(result?.importPaths).toEqual(["Acme@1\0using Util;"]);
   });
 
+  test("same-named sibling blocks disambiguate scope keys by ordinal", async () => {
+    // Two `namespace N` blocks on one line share the `N@1` scope key, so
+    // the second declaration's directives carry a `#<ordinal>` suffix —
+    // the resolver computes the same ordinal from symbol emission order.
+    const result = await PARSE(
+      "namespace N { using X; class C { } } namespace N { using Y; class D { } }\n",
+    );
+    expect(result?.importPaths).toEqual(["N@1\0using X;", "N@1#1\0using Y;"]);
+  });
+
   test("usings before a file-scoped namespace stay compilation-unit level", async () => {
     const result = await PARSE("using Top;\nnamespace Acme;\nclass C { }\n");
     expect(result?.importPaths).toEqual(["using Top;"]);

@@ -283,6 +283,41 @@ matched on both paths); `pnpm typecheck` 8/8 clean; `git diff --check`
 clean. Native binary unchanged (TypeScript-only fix). Three-platform
 native CI gate unchanged — pipeline.
 
+## Review round 5 — same-line sibling namespace scopes
+
+One remaining finding; fixed and re-verified.
+
+1. **A namespace-scoped using leaked into a sibling same-name declaration
+   sharing its start line (fixed — declaration identity + true ancestors).**
+   Scope keys were `<qualified-name>@<decl-line>` and symbol ancestors were
+   inferred from line ranges, so `namespace N { using A; C } namespace N { D }`
+   on one line gave both blocks the key `N@1` and counted the first block as
+   a covering ancestor of the second block's members — `D::Caller` resolved
+   through a using it never saw. Both parsers now suffix the scope key with
+   `#<ordinal>` (ordinal of the declaration among same-named, same-line
+   declarations — document order parser-side, emission order resolver-side),
+   and the resolver builds each symbol's lexical ancestor chain by realizing
+   the innermost declaration's dotted prefixes: a candidate must precede and
+   enclose the next-inner declaration, and its range must extend past the
+   line the inner declaration starts on (a same-line sibling's range always
+   ends there or is identical; a true parent's always runs further).
+   Unprovable same-line nesting falls out fail-closed — a missed ancestor
+   using is never a wrong edge. Cache tags bumped `native-v7`/`fallback-v7`
+   → `native-v8`/`fallback-v8` since the importPaths payload encoding
+   changed; `packages/native/index.darwin-arm64.node` rebuilt. Coverage:
+   resolver tests — one-line sibling blocks do not share usings and keep
+   distinct scopes in both directions incl. `#1` imports-edge ownership;
+   indexer test — sibling blocks emit `N@1`/`N@1#1`; edge fixture
+   `ns-same-line` (binding tier, 0 FP) and parity fixture
+   `csharp/sibling-ns.cs` prove identical native/WASM output.
+
+Post-fix verification (fresh, this worktree): `bun test` 659 pass / 1 skip /
+0 fail (54 files); focused C# suite 131 pass / 0 fail;
+`OPENEZ_NATIVE_EXPECT=1` parity clean incl. `sibling-ns.cs` and `#crlf`;
+`pnpm typecheck` 8/8 clean; Prettier clean on changed files;
+`git diff --check` clean. Three-platform native CI gate unchanged — the
+binding rebuild is local and CI builds from source.
+
 ## Files inspected, no change
 
 - packages/indexer/src/scanner.ts — builds its file list from codeExtensions (the native scanner matches extensions case-sensitively), so registering .cs/.csx is enough.
