@@ -1,0 +1,122 @@
+tests/parsed-documents-cache.test.ts
+  s_3a65f485c1521b::t_a45609cf61efd2 157-158,173,185,189,193,197,204,359,401,409,418,485,513
+packages/indexer/src/index-workspace.ts
+  s_3a65f485c1521b::t_1a06807c07690b 1623-1625
+  s_3a65f485c1521b::t_a45609cf61efd2 64-65,88,91,112,115,136-137,140,1247-1248
+  s_3a65f485c1521b::t_087146da90a115 11
+tests/fixtures/csharp-edges/ns-scope/C/Consumer.cs
+  s_3a65f485c1521b::t_b45d6dea45ea69 1-16
+tests/fixtures/csharp-edges/ns-scope/expected-edges.json
+  s_3a65f485c1521b::t_4e40646806d135 1-7
+tests/fixtures/parity/csharp/example.cs
+  s_3a65f485c1521b::t_5a8b81855f6b5b 26-27
+tests/fixtures/java-edges/static-member/src/app/Util.java
+  s_3a65f485c1521b::t_d61db42ae5f413 1-8
+tests/java-indexer.test.ts
+  s_3a65f485c1521b::t_a52a7caeac3ab7 140-155
+packages/core/src/diff-context.ts
+  s_3a65f485c1521b::t_60d7e0e5d0461f 661
+  s_3a65f485c1521b::t_7de97dcf7af4eb 612
+  s_3a65f485c1521b::t_b9b9b5100c2645 6
+  s_3a65f485c1521b::t_544a28b5e130e3 687
+tests/code-outline.test.ts
+  s_3a65f485c1521b::t_6aceef3a9c8e75 258-307
+packages/indexer/src/languages.ts
+  s_3a65f485c1521b::t_277d36a4107f60 1603-1606,1612
+  s_3a65f485c1521b::t_6007e403cfc28d 4
+packages/db/src/sqlite/document-repository.ts
+  s_3a65f485c1521b::t_c1207f5b30de75 180
+  s_3a65f485c1521b::t_442e95aeebcf49 6
+  s_3a65f485c1521b::t_e937cec4c4941c 200-204
+packages/db/src/sqlite/index.ts
+  s_3a65f485c1521b::t_ac98b5adc6a897 21
+tests/fixtures/java-edges/static-member/baseline.json
+  s_3a65f485c1521b::t_0e6c0001dca444 1-11
+tests/fixtures/csharp-edges/ns-scope/S/St.cs
+  s_3a65f485c1521b::t_44d369756ed16e 1-8
+packages/indexer/src/csharp-resolver.ts
+  s_3a65f485c1521b::t_2f4273c72230b4 727,732
+  s_3a65f485c1521b::t_424f561ef6d27c 576-615
+  s_3a65f485c1521b::t_5198d57e3e6a0a 17-24
+  s_3a65f485c1521b::t_defe0b0aad40e4 273,802
+  s_3a65f485c1521b::t_f0654b361e22a9 185-187,191-196
+  s_3a65f485c1521b::t_ed9aa244e7f587 498-499
+  s_3a65f485c1521b::t_017ac306ed193c 466-470,473
+  s_3a65f485c1521b::t_0030e03321ef99 383-397,399-416,418-419,421-422
+  s_3a65f485c1521b::t_1ad984115fb8d2 188-190
+  s_3a65f485c1521b::t_fa257632e0f55d 366
+  s_3a65f485c1521b::t_8f1d7a01d52411 74-79
+  s_3a65f485c1521b::t_008a3512280882 148-167
+  s_3a65f485c1521b::t_d920fa2ec824bc 293-295,297-305,309,311,315
+  s_3a65f485c1521b::t_ab08eda3acc7f6 793-794,796,798,808-809,814
+  s_3a65f485c1521b::t_31fd587a6244b8 284
+  s_3a65f485c1521b::t_d1ebce2531efcb 687
+  s_3a65f485c1521b::t_a6b63ac56c1a7f 257,262,265-268,271-272,274
+  s_3a65f485c1521b::t_c5adeffd620522 529
+packages/indexer/src/tree-sitter/configs.ts
+  s_3a65f485c1521b::t_056318d186f233 964-991,994-997,1000-1011,1095,1249-1259,1341
+  s_3a65f485c1521b::t_9bb8006fad01b5 963
+tests/fixtures/java-edges/static-member/src/shop/Bad.java
+  s_3a65f485c1521b::t_bfa9bc394b93ad 1-9
+tests/fixtures/java-edges/static-member/expected-edges.json
+  s_3a65f485c1521b::t_f0489754ae5ae0 1-23
+AGENTS.md
+  s_3a65f485c1521b::t_55e974954c48a0 151
+  s_3a65f485c1521b::t_a45609cf61efd2 145-149
+  s_3a65f485c1521b::t_f699593f2dfaf5 150
+tests/fixtures/parity/csharp/file-scoped.cs
+  s_3a65f485c1521b::t_d48047c17b536c 3
+tests/fixtures/csharp-edges/ns-scope/App.csproj
+  s_3a65f485c1521b::t_110104a23d0742 1
+packages/native/src/parser.rs
+  s_3a65f485c1521b::t_090de8e401558d 1337-1343,1345,1347-1375
+  s_3a65f485c1521b::t_c70643b44d45d1 2147-2150
+  s_3a65f485c1521b::t_42886c0cb11943 2501
+  s_3a65f485c1521b::t_dd200f09d1a377 2017-2028
+  s_3a65f485c1521b::t_a3bb75b4a7eb02 2272-2291
+tests/csharp-indexer.test.ts
+  s_3a65f485c1521b::t_8881bc98c0926b 201,203,205,208-209,213-219,221-223,226-228
+  s_3a65f485c1521b::t_69cb8fe78931fe 156-166
+  s_3a65f485c1521b::t_defe0b0aad40e4 70-72,132,137-138,224,229
+  s_3a65f485c1521b::t_15b27a361c64e8 206-207,210-212,220,225
+tests/fixtures/csharp-edges/ns-scope/baseline.json
+  s_3a65f485c1521b::t_3800fde40d2195 1-11
+packages/indexer/src/java-resolver.ts
+  s_3a65f485c1521b::t_a83f2ea70c413c 61-63,75
+  s_3a65f485c1521b::t_a25454e233e76b 327
+  s_3a65f485c1521b::t_061131674d28d5 227-235
+  s_3a65f485c1521b::t_5f9ea631bf0f40 125,130-134
+  s_3a65f485c1521b::t_9892a7b7023eb2 110
+  s_3a65f485c1521b::t_7359f1de8a4b22 283-294
+tests/fixtures/java-edges/static-member/src/shop/Ok.java
+  s_3a65f485c1521b::t_25ede02967bc94 1-9
+tests/csharp-resolver.test.ts
+  s_3a65f485c1521b::t_defe0b0aad40e4 895
+  s_3a65f485c1521b::t_6c9e3070f04a7e 891-894,897
+  s_3a65f485c1521b::t_cf69beab155930 663-890,896,898-899
+tests/fixtures/csharp-edges/ns-scope/U/Helper.cs
+  s_3a65f485c1521b::t_76cdbc05cdb7f4 1-7
+tests/java-resolver.test.ts
+  s_3a65f485c1521b::t_ec2a530e208e13 177,185-264
+  s_3a65f485c1521b::t_ea8ae9b72b31fc 628-631,633
+  s_3a65f485c1521b::t_0cbd09fdc3c92b 612
+  s_3a65f485c1521b::t_75c4edeba67ca0 265
+packages/db/src/sqlite/utils.ts
+  s_3a65f485c1521b::t_39830555d9d36c 65-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a33e4cac8f026afc706f2e99cb3a2257400789d4",
+  "prompts": {},
+  "sessions": {
+    "s_3a65f485c1521b": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "dazed-anchovy",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
