@@ -8,5 +8,6 @@ export {
   cppConfig,
   cppHeaderConfig,
   csharpConfig,
+  javaConfig,
 } from "./configs";
 export { loadLanguage, parseContent } from "./loader";

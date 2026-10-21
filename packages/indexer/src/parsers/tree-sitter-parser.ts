@@ -16,6 +16,7 @@ import {
   cppHeaderConfig,
   csharpConfig,
   goConfig,
+  javaConfig,
   parseWithTreeSitter,
   pythonConfig,
   rubyConfig,
@@ -30,6 +31,7 @@ const LANGUAGE_CONFIGS = {
   ruby: rubyConfig,
   csharp: csharpConfig,
   cpp: cppConfig,
+  java: javaConfig,
 } as const;
 
 const REGEX_FALLBACKS: Record<
@@ -81,14 +83,14 @@ export class TreeSitterParser implements CodeParser {
         ? cppHeaderConfig
         : LANGUAGE_CONFIGS[language];
     const tsResult = await parseWithTreeSitter(config, input.content, counter);
-    // C# has no regex fallback: when the WASM parse fails (grammar missing,
-    // parse error), generic text chunks keep the file searchable with no
-    // symbols, imports, or calls — parsing never throws.
+    // C# and Java have no regex fallback: when the WASM parse fails (grammar
+    // missing, parse error), generic text chunks keep the file searchable with
+    // no symbols, imports, or calls — parsing never throws.
     const result =
       tsResult ??
       (language === "cpp"
         ? cppGenericFallback(input.content, counter)
-        : language === "csharp"
+        : language === "csharp" || language === "java"
           ? makeFallbackChunks(input.content, input.content.split("\n"), counter)
           : REGEX_FALLBACKS[language](input.content, counter));
 
@@ -102,7 +104,11 @@ export class TreeSitterParser implements CodeParser {
     }
 
     return {
-      parser: tsResult ? this.name : language === "csharp" ? "fallback" : "regex",
+      parser: tsResult
+        ? this.name
+        : language === "csharp" || language === "java"
+          ? "fallback"
+          : "regex",
       language,
       kind: "code",
       chunks: result.chunks,

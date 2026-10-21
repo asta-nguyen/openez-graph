@@ -48,6 +48,7 @@ export const codeExtensions = new Map<string, string>([
   [".C", "cpp"],
   [".cs", "csharp"],
   [".csx", "csharp"],
+  [".java", "java"],
 ]);
 
 export const configExtensions = new Map<string, string>([

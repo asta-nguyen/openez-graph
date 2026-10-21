@@ -11,6 +11,7 @@ import {
   cppConfig,
   csharpConfig,
   goConfig,
+  javaConfig,
   parseWithTreeSitter,
   pythonConfig,
   rubyConfig,
@@ -41,6 +42,7 @@ const LANG_CONFIG: Record<string, LanguageConfig> = {
   ruby: rubyConfig,
   cpp: cppConfig,
   csharp: csharpConfig,
+  java: javaConfig,
 };
 
 // ── Pure difference computation ──
@@ -374,6 +376,8 @@ describe("native-wasm parity", () => {
       "ruby/example.rb",
       "ruby/torture.rb",
       "rust/example.rs",
+      "java/example.java",
+      "java/calls.java",
     ];
     const keys = new Set(listFixtureCases().map((c) => c.key));
     for (const required of REQUIRED_FIXTURES) {

@@ -1,0 +1,53 @@
+{
+  "canary": {
+    "from": "src/shop/Single.java#Single::go",
+    "to": "src/app/Util.java#Util::format"
+  },
+  "edges": [
+    {
+      "from": "src/shop/Service.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Service.java#imports",
+      "to": "src/other/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Reversed.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Reversed.java#imports",
+      "to": "src/other/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Statics.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Statics.java#imports",
+      "to": "src/other/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Single.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Service.java#Service::go",
+      "to": "src/shop/Service.java#Service::helper",
+      "tier": "package"
+    },
+    {
+      "from": "src/shop/Single.java#Single::go",
+      "to": "src/app/Util.java#Util::format",
+      "tier": "type"
+    }
+  ]
+}

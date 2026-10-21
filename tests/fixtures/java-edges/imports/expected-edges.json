@@ -1,0 +1,43 @@
+{
+  "canary": {
+    "from": "src/shop/Service.java#Service::go",
+    "to": "src/app/Util.java#Util::format"
+  },
+  "edges": [
+    {
+      "from": "src/shop/Service.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Static.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Service.java#Service::go",
+      "to": "src/app/Util.java#Util::format",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Static.java#Static::go",
+      "to": "src/app/Util.java#Util::format",
+      "tier": "type"
+    },
+    {
+      "from": "src/shop/Blocked.java#Blocked::go",
+      "to": "src/shop/Blocked.java#Blocked::format",
+      "tier": "package"
+    },
+    {
+      "from": "src/shop/Wild.java#Wild::go",
+      "to": "src/shop/Util.java#Util::format",
+      "tier": "package"
+    },
+    {
+      "from": "src/shop/Blocked.java#imports",
+      "to": "src/app/Util.java#imports",
+      "tier": "type"
+    }
+  ]
+}

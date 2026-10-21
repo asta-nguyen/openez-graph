@@ -38,6 +38,9 @@ export interface SymbolRule {
   extractNames?: (node: Node) => string[];
   /** emit symbols only at package level (empty context stack) */
   topLevelOnly?: boolean;
+  /** dynamic symbol type override — C++ function_definition resolves to
+   *  "method" (qualified declarator or class context) vs "function" */
+  symbolTypeFor?: (node: Node, contextStack: ReadonlyArray<ContextFrame>) => string;
 }
 
 /**
@@ -67,6 +70,12 @@ export interface CallRule {
   nodeType: string;
   /** field containing the callable expression */
   functionField: string;
+  /**
+   * Optional override for callee extraction when the call node's callee is
+   * not a single field (Java method_invocation: `name` field plus optional
+   * `object`/`super` receiver). Takes precedence over functionField.
+   */
+  extractCall?: (callNode: Node) => string | null;
   /**
    * Optional second node type treated as a call only when its `typeField`
    * child has `requiredTypeKind` — Go generic instantiations surface as
@@ -131,6 +140,12 @@ export interface LanguageConfig {
    * of the file even though the grammar node ends at the semicolon.
    */
   eofSpanNodeTypes?: ReadonlySet<string>;
+  /**
+   * When true, any syntax error in the tree rejects the whole parse so the
+   * caller falls back to generic chunks with no graph records. Used by the
+   * `.h` C++ config only — other C++ extensions keep their partial trees.
+   */
+  errorFailsParse?: boolean;
 }
 
 // ── Extraction core ──
@@ -179,6 +194,7 @@ function isCallNode(node: Node, callRule: CallRule): boolean {
 }
 
 function extractCallName(node: Node, callRule: CallRule): string | null {
+  if (callRule.extractCall) return callRule.extractCall(node);
   const tc = callRule.typeConversion;
   if (tc && node.type === tc.nodeType) {
     return node.childForFieldName(tc.typeField)?.text ?? null;
@@ -325,10 +341,12 @@ function walkTree(
         // Multi-name declarations (Go const/var specs). These are values,
         // not callables: emit symbols but never contexts or call edges.
         if (!symbolRule.topLevelOnly || contextStack.length === 0) {
+          const parentName =
+            contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
           for (const specName of symbolRule.extractNames(node)) {
             if (!specName || specName === "_") continue;
             symbols.push({
-              name: specName,
+              name: parentName ? `${parentName}::${specName}` : specName,
               symbolType: symbolRule.symbolType,
               type: symbolRule.symbolType,
               exported: symbolRule.isExported ? symbolRule.isExported(specName, node) : false,
@@ -368,10 +386,11 @@ function walkTree(
               ? `${parentName}::${name}`
               : name;
 
+          const symType = symbolRule.symbolTypeFor?.(node, contextStack) ?? symbolRule.symbolType;
           symbols.push({
             name: fullName,
-            symbolType: symbolRule.symbolType,
-            type: symbolRule.symbolType,
+            symbolType: symType,
+            type: symType,
             exported,
             startLine: startRow,
             endLine: endRow,
@@ -385,8 +404,16 @@ function walkTree(
             receiverVar && receiverType
               ? { varName: receiverVar, typeName: receiverType }
               : undefined;
+          // Java enum constants only scope a constant-specific class body —
+          // a bodiless constant (`LOW, HIGH`) must not leak a frame into its
+          // same-line siblings.
           const isContextNode =
-            symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
+            (symbolRule.establishesContext || config.contextNodeTypes.has(node.type)) &&
+            !(
+              config.language === "java" &&
+              node.type === "enum_constant" &&
+              !node.childForFieldName("body")
+            );
           const contextName = isContextNode
             ? (symbolRule.extractContextName?.(node, contextStack) ?? fullName)
             : null;
@@ -542,6 +569,10 @@ export async function parseWithTreeSitter(
     config.preprocess ? config.preprocess(content) : content,
   );
   if (!tree) return null;
+  if (config.errorFailsParse && tree.rootNode.hasError) {
+    tree.delete();
+    return null;
+  }
 
   try {
     const lines = content.split("\n");
