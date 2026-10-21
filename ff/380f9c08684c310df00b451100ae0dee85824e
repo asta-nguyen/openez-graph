@@ -1,0 +1,24 @@
+apps/cli/README.md
+  s_0d1cf1d218786d::t_d14aa0240db5a2 129-141
+  s_0d1cf1d218786d::t_165d87f24edeaa 17
+  s_0d1cf1d218786d::t_a78ab9f42361a6 12
+  s_0d1cf1d218786d::t_29cd0cb51c02be 151-153
+packages/indexer/src/index-workspace.ts
+  s_0d1cf1d218786d::t_4c1735fd07eb03 139-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff380f9c08684c310df00b451100ae0dee85824e",
+  "prompts": {},
+  "sessions": {
+    "s_0d1cf1d218786d": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "olive-aletopelta",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
