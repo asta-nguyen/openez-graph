@@ -61,6 +61,8 @@ struct ContextFrame {
   /// Byte offset where the context node ends. Context expiry compares on
   /// byte position (not row) so same-line sibling declarations don't leak
   /// the previous sibling's scope.
+  /// Byte offset where this context's node ends. Row-only expiry cannot tell
+  /// a same-line sibling from a child, so contexts pop on byte position.
   end_byte: usize,
   kind: Option<ContextKind>,
   /// Go method receiver (var_name, type_name) for Type::method qualification.
@@ -72,8 +74,9 @@ struct SymbolRule {
   symbol_type: &'static str,
   name_field: &'static str,
   establishes_context: bool,
-  /// (name, node_text_first_20) -> is_exported
-  is_exported: fn(&str, &str) -> bool,
+  /// (node, source, name) -> is_exported — mirrors WASM isExported(name,
+  /// node); predicates that only need leading text call text_first_n.
+  is_exported: fn(&Node, &[u8], &str) -> bool,
   /// For Rust impl_item / Ruby assignment: custom name extraction
   extract_name: Option<fn(&Node, &[u8]) -> Option<String>>,
   /// For Rust impl_item: context name (type name, not full "impl X for Y");
@@ -116,23 +119,27 @@ struct LanguageConfig {
   /// `.h` C++ headers only: any syntax error rejects the whole parse so the
   /// document falls back to generic chunks with no graph records.
   error_fails_parse: bool,
+  /// Blank C# conditional-compilation directive lines (`#if`/`#elif`/`#else`/
+  /// `#endif`) before parsing — identical to the WASM preprocess so native
+  /// and WASM agree. Offsets preserved: directive text becomes spaces.
+  blank_directives: bool,
 }
 
 // ── Exported checks ──
 
-fn always_false(_name: &str, _text: &str) -> bool {
+fn always_false(_node: &Node, _source: &[u8], _name: &str) -> bool {
   false
 }
 
-fn always_true(_name: &str, _text: &str) -> bool {
+fn always_true(_node: &Node, _source: &[u8], _name: &str) -> bool {
   true
 }
 
-fn python_exported(name: &str, _text: &str) -> bool {
+fn python_exported(_node: &Node, _source: &[u8], name: &str) -> bool {
   !name.starts_with('_')
 }
 
-fn go_exported(name: &str, _text: &str) -> bool {
+fn go_exported(_node: &Node, _source: &[u8], name: &str) -> bool {
   name
     .chars()
     .next()
@@ -140,8 +147,8 @@ fn go_exported(name: &str, _text: &str) -> bool {
     .unwrap_or(false)
 }
 
-fn rust_pub_check(_name: &str, text: &str) -> bool {
-  text.starts_with("pub ")
+fn rust_pub_check(node: &Node, source: &[u8], _name: &str) -> bool {
+  text_first_n(node, source, 20).starts_with("pub ")
 }
 
 // ── Rust impl_item name extraction ──
@@ -319,6 +326,7 @@ fn python_config() -> LanguageConfig {
     qualify_call: None,
     keep_qualified_calls: true,
     error_fails_parse: false,
+    blank_directives: false,
   }
 }
 
@@ -388,6 +396,7 @@ fn go_config() -> LanguageConfig {
     qualify_call: None,
     keep_qualified_calls: false,
     error_fails_parse: false,
+    blank_directives: false,
   }
 }
 
@@ -540,12 +549,13 @@ fn rust_config() -> LanguageConfig {
     qualify_call: None,
     keep_qualified_calls: true,
     error_fails_parse: false,
+    blank_directives: false,
   }
 }
 
 // ── Ruby config (ported from rubyConfig in configs.ts) ──
 
-fn ruby_exported(name: &str, _text: &str) -> bool {
+fn ruby_exported(_node: &Node, _source: &[u8], name: &str) -> bool {
   name
     .chars()
     .next()
@@ -785,6 +795,7 @@ fn ruby_config() -> LanguageConfig {
     qualify_call: Some(ruby_qualify_call),
     keep_qualified_calls: false,
     error_fails_parse: false,
+    blank_directives: false,
   }
 }
 
@@ -1134,6 +1145,7 @@ fn cpp_config(error_fails_parse: bool) -> LanguageConfig {
     qualify_call: None,
     keep_qualified_calls: true,
     error_fails_parse,
+    blank_directives: false,
   }
 }
 
@@ -1309,6 +1321,20 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
         }
       }
     }
+    "csharp" => {
+      // Full directive text, verbatim — the resolver parses the
+      // global/alias/static modifiers out of it. Directives nested inside a
+      // `declaration_list` (a block-scoped `namespace` body) are dropped:
+      // importPaths carry no positions, so the resolver cannot tell them
+      // apart from compilation-unit usings — carrying them would bind names
+      // in files where the using does not apply.
+      if node.kind() == "using_directive" {
+        if node.parent().map(|p| p.kind()) == Some("declaration_list") {
+          return paths;
+        }
+        paths.push(text_of(&node, source));
+      }
+    }
     "ruby" => {
       // Only require_relative produces import edges — require (gem), load,
       // and autoload do not resolve to local files (extractRubyImports).
@@ -1378,6 +1404,9 @@ fn walk_tree(
   source: &[u8],
   language: &str,
 ) -> NativeParseResult {
+  // Total line count for file-scoped-namespace EOF spans (csharp) —
+  // source.split('\n').length parity: count of \n + 1.
+  let total_lines = source.iter().filter(|&&b| b == b'\n').count() + 1;
   let mut symbols: Vec<NativeSymbol> = Vec::new();
   let mut import_paths: Vec<String> = Vec::new();
   let mut called_identifiers: HashSet<String> = HashSet::new();
@@ -1403,13 +1432,17 @@ fn walk_tree(
 
   while let Some(node) = stack.pop() {
     let start_row = node.start_position().row + 1; // 1-based
-    let end_row = node.end_position().row + 1;
+    let mut end_row = node.end_position().row + 1;
+    // A file-scoped `namespace Foo;` covers the rest of the file even though
+    // the grammar node ends at the semicolon (configs.ts eofSpanNodeTypes).
+    if language == "csharp" && node.kind() == "file_scoped_namespace_declaration" {
+      end_row = total_lines;
+    }
 
-    // Pop expired contexts — byte-position comparison so siblings that
-    // start on the same row the previous context ended on still pop it.
-    let start_byte = node.start_byte();
+    // Pop expired contexts by byte position so same-line siblings do not
+    // inherit the preceding declaration's scope.
     while let Some(frame) = context_stack.last() {
-      if start_byte >= frame.end_byte {
+      if node.start_byte() >= frame.end_byte {
         context_stack.pop();
       } else {
         break;
@@ -1515,7 +1548,7 @@ fn walk_tree(
           }
           let sym_type = if node_kind == "const_spec" { "const" } else { "var" };
           symbols.push(NativeSymbol {
-            exported: go_exported(&name, ""),
+            exported: go_exported(&node, source, &name),
             name,
             symbol_type: sym_type.to_string(),
             start_line: start_row as i32,
@@ -1565,8 +1598,7 @@ fn walk_tree(
             .unwrap_or_else(|| name.clone())
         };
 
-        let node_text_20 = text_first_n(&node, source, 20);
-        let exported = (rule.is_exported)(&name, &node_text_20);
+        let exported = (rule.is_exported)(&node, source, &name);
 
         let receiver = receiver_raw.as_deref().map(|raw| {
           if let Some(normalize) = rule.normalize_receiver {
@@ -1819,6 +1851,15 @@ fn extract_calls_in_node(
       .and_then(|f| f(&call_node, source, &callee_raw, &normalized, context_stack))
       .unwrap_or_else(|| normalized.clone());
 
+    // keepQualifiedCallee parity with parse.ts: the call-ignore list also
+    // applies to the last-segment form, and called_identifiers record it.
+    let mut call_id = final_callee.clone();
+    if config.keep_qualified_calls {
+      call_id = last_rust_call_segment(&final_callee).to_string();
+      if config.call_ignores.contains(call_id.as_str()) {
+        continue;
+      }
+    }
     if normalized.is_empty()
       || final_callee.is_empty()
       || config.call_ignores.contains(callee_raw.as_str())
@@ -1835,11 +1876,262 @@ fn extract_calls_in_node(
     } else {
       final_callee.clone()
     });
+    called_identifiers.insert(call_id);
     call_expressions.push(NativeCallExpression {
       caller_name: caller_name.to_string(),
       callee_name: final_callee,
     });
   }
+}
+
+
+// ── C# config (ported from csharpConfig in configs.ts) ──
+
+/// `public` modifier inside the node's first 20 bytes — matches
+/// csharpExported in configs.ts.
+fn csharp_exported(node: &Node, source: &[u8], _name: &str) -> bool {
+  // Accessibility is carried by `modifier` child nodes — an attribute
+  // argument containing the word "public" cannot fake the modifier.
+  // Mirrors csharpExported in configs.ts.
+  let mut cursor = node.walk();
+  for child in node.children(&mut cursor) {
+    if child.kind() == "modifier" && child.utf8_text(source).unwrap_or("") == "public" {
+      return true;
+    }
+  }
+  false
+}
+
+/// Fully qualified namespace name — walking ancestor namespace declarations
+/// through node.parent() gives the true nesting (`A.B` for `namespace B`
+/// inside `namespace A`, `B` for a same-line sibling), which line ranges
+/// alone cannot recover. Mirrors csharpNamespaceName in configs.ts.
+fn csharp_ns_name(node: &Node, source: &[u8]) -> Option<String> {
+  let name = node
+    .child_by_field_name("name")?
+    .utf8_text(source)
+    .ok()?
+    .to_string();
+  let mut parts = vec![name];
+  let mut p = node.parent();
+  while let Some(par) = p {
+    if par.kind() == "namespace_declaration" || par.kind() == "file_scoped_namespace_declaration" {
+      if let Some(n) = par.child_by_field_name("name") {
+        if let Ok(t) = n.utf8_text(source) {
+          parts.insert(0, t.to_string());
+        }
+      }
+    }
+    p = par.parent();
+  }
+  Some(parts.join("."))
+}
+
+/// Field names come from `variable_declarator` nodes, but only when the
+/// declarator sits inside `field_declaration` — local `var`/`using`
+/// declarators inside methods share the node type and are never members.
+fn csharp_field_name(node: &Node, source: &[u8]) -> Option<String> {
+  let parent = node.parent()?;
+  if parent.kind() != "variable_declaration" {
+    return None;
+  }
+  if parent.parent()?.kind() != "field_declaration" {
+    return None;
+  }
+  node
+    .child_by_field_name("name")
+    .map(|n| text_of(&n, source))
+}
+
+/// Keep the qualified dotted callee (`Ns.Type.M`, `this.M`, `Alias.M`) for
+/// the resolver; strip generic type arguments (`M<T>` → `M`, `X.M<Dict<K,V>>`
+/// → `X.M`). Returns "" when the callee is not a plain identifier path
+/// (`x?.M`, `(expr).M`, `Foo().M` never resolve). Port of
+/// normalizeCSharpCallName in configs.ts.
+fn normalize_csharp_call(value: &str) -> String {
+  let stripped: String = value.chars().filter(|c| !c.is_whitespace()).collect();
+  let mut out = String::with_capacity(stripped.len());
+  let mut depth: i32 = 0;
+  for ch in stripped.chars() {
+    match ch {
+      '<' => depth += 1,
+      '>' => {
+        if depth > 0 {
+          depth -= 1;
+        }
+      }
+      _ => {
+        if depth == 0 {
+          out.push(ch);
+        }
+      }
+    }
+  }
+  let global_prefix = if out.starts_with("global::") { "global::" } else { "" };
+  let dotted = &out[global_prefix.len()..];
+  let valid = !dotted.is_empty()
+    && dotted.split('.').all(|seg| {
+      let mut chars = seg.chars();
+      match chars.next() {
+        None => false,
+        Some(first) => {
+          (first.is_ascii_alphabetic() || first == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        }
+      }
+    });
+  if valid {
+    format!("{}{}", global_prefix, dotted)
+  } else {
+    String::new()
+  }
+}
+
+fn csharp_config() -> LanguageConfig {
+  let call_ignores: HashSet<&str> = [
+    "if",
+    "for",
+    "foreach",
+    "while",
+    "switch",
+    "catch",
+    "using",
+    "lock",
+    "fixed",
+    "return",
+    "throw",
+    "goto",
+    "checked",
+    "unchecked",
+    "sizeof",
+    "typeof",
+    "nameof",
+    "default",
+    "new",
+    "delegate",
+    "stackalloc",
+  ]
+  .iter()
+  .copied()
+  .collect();
+
+  let rule = |node_type: &'static str, symbol_type: &'static str, ctx: bool| SymbolRule {
+    node_type,
+    symbol_type,
+    name_field: "name",
+    establishes_context: ctx,
+    is_exported: csharp_exported,
+    extract_name: None,
+    extract_context_name: None,
+    receiver_field: None,
+    normalize_receiver: None,
+    context_only: false,
+    context_kind: None,
+    symbol_type_fn: None,
+  };
+
+  let mut symbol_rules = vec![
+    SymbolRule {
+      extract_name: Some(csharp_ns_name),
+      ..rule("file_scoped_namespace_declaration", "namespace", false)
+    },
+    SymbolRule {
+      extract_name: Some(csharp_ns_name),
+      ..rule("namespace_declaration", "namespace", false)
+    },
+    rule("class_declaration", "class", true),
+    rule("struct_declaration", "struct", true),
+    rule("interface_declaration", "interface", true),
+    rule("record_declaration", "record", true),
+    rule("enum_declaration", "enum", true),
+    rule("delegate_declaration", "delegate", false),
+    rule("method_declaration", "method", true),
+    rule("constructor_declaration", "constructor", true),
+    rule("destructor_declaration", "destructor", true),
+    rule("property_declaration", "property", false),
+    rule("enum_member_declaration", "field", false),
+  ];
+  symbol_rules.push(SymbolRule {
+    node_type: "variable_declarator",
+    symbol_type: "field",
+    name_field: "name",
+    establishes_context: false,
+    is_exported: csharp_exported,
+    extract_name: Some(csharp_field_name),
+    extract_context_name: None,
+    receiver_field: None,
+    normalize_receiver: None,
+    context_only: false,
+    context_kind: None,
+    symbol_type_fn: None,
+  });
+
+  LanguageConfig {
+    symbol_rules,
+    import_node_types: vec!["using_directive"],
+    call_node_type: "invocation_expression",
+    call_function_field: "function",
+    call_ignores,
+    normalize_call_name: normalize_csharp_call,
+    context_node_types: vec![
+      "class_declaration",
+      "struct_declaration",
+      "interface_declaration",
+      "record_declaration",
+      "enum_declaration",
+      "method_declaration",
+      "constructor_declaration",
+      "destructor_declaration",
+    ],
+    per_symbol_calls: true,
+    qualify_call: None,
+    keep_qualified_calls: true,
+    error_fails_parse: false,
+    blank_directives: true,
+  }
+}
+
+/// Blank C# conditional-compilation directive lines (`#if`/`#elif`/`#else`/
+/// `#endif`) before parsing, keeping both bodies and every byte offset —
+/// identical to blankCSharpDirectives in languages.ts. Only `#if`-family
+/// directive lines are blanked; `#region`/`#pragma`/etc. parse fine already.
+fn blank_csharp_directives(source: &str) -> String {
+  if !source.contains('#') {
+    return source.to_string();
+  }
+  let mut out = String::with_capacity(source.len());
+  for line in source.split_inclusive('\n') {
+    let (body, nl) = match line.strip_suffix('\n') {
+      Some(b) => (b, true),
+      None => (line, false),
+    };
+    let trimmed = body.trim_start_matches([' ', '\t']);
+    let indent_len = body.len() - trimmed.len();
+    let is_directive = trimmed
+      .strip_prefix('#')
+      .map(|rest| rest.trim_start_matches([' ', '\t']))
+      .map(|rest| {
+        ["if", "elif", "else", "endif"].iter().any(|kw| {
+          rest.strip_prefix(kw).map_or(false, |after| {
+            after
+              .chars()
+              .next()
+              .map_or(true, |c| !(c.is_ascii_alphanumeric() || c == '_'))
+          })
+        })
+      })
+      .unwrap_or(false);
+    if is_directive {
+      out.push_str(&body[..indent_len]);
+      out.extend(std::iter::repeat(' ').take(body.len() - indent_len));
+    } else {
+      out.push_str(body);
+    }
+    if nl {
+      out.push('\n');
+    }
+  }
+  out
 }
 
 // ── Language detection from config ──
@@ -1854,6 +2146,7 @@ fn get_config(language: &str) -> Option<LanguageConfig> {
     // `.h` strict header mode: any syntax error rejects the parse so the
     // file falls back to generic chunks with no graph records.
     "cpp-header" => Some(cpp_config(true)),
+    "csharp" => Some(csharp_config()),
     _ => None,
   }
 }
@@ -1865,6 +2158,7 @@ fn get_language_fn(language: &str) -> Option<tree_sitter::Language> {
     "rust" => Some(tree_sitter_rust::LANGUAGE.into()),
     "ruby" => Some(tree_sitter_ruby::LANGUAGE.into()),
     "cpp" | "cpp-header" => Some(tree_sitter_cpp::LANGUAGE.into()),
+    "csharp" => Some(tree_sitter_c_sharp::LANGUAGE.into()),
     _ => None,
   }
 }
@@ -1891,6 +2185,13 @@ pub fn parse_code_native(language: String, content: String) -> Option<NativePars
   let config = get_config(&language)?;
   let lang = get_language_fn(&language)?;
 
+  let owned;
+  let source: &[u8] = if config.blank_directives {
+    owned = blank_csharp_directives(&content);
+    owned.as_bytes()
+  } else {
+    content.as_bytes()
+  };
   let tree = PARSER_CACHE.with(|cache| {
     let mut cache = cache.borrow_mut();
     let parser = cache.entry(language.clone()).or_insert_with(|| {
@@ -1898,7 +2199,7 @@ pub fn parse_code_native(language: String, content: String) -> Option<NativePars
       p.set_language(&lang).ok();
       p
     });
-    parser.parse(content.as_bytes(), None)
+    parser.parse(source, None)
   })?;
 
   if config.error_fails_parse && tree.root_node().has_error() {
@@ -1931,6 +2232,13 @@ pub fn parse_code_batch(items: Vec<ParseBatchItem>) -> Vec<Option<NativeParseRes
         None => return None,
       };
 
+      let owned;
+      let source: &[u8] = if config.blank_directives {
+        owned = blank_csharp_directives(&item.content);
+        owned.as_bytes()
+      } else {
+        item.content.as_bytes()
+      };
       // Each rayon thread gets its own parser via thread_local
       let tree = PARSER_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
@@ -1939,7 +2247,7 @@ pub fn parse_code_batch(items: Vec<ParseBatchItem>) -> Vec<Option<NativeParseRes
           p.set_language(&lang).ok();
           p
         });
-        parser.parse(item.content.as_bytes(), None)
+        parser.parse(source, None)
       })?;
 
       if config.error_fails_parse && tree.root_node().has_error() {

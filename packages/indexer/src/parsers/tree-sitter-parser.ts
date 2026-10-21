@@ -14,6 +14,7 @@ import { extractPythonBindings, markPythonCallShadowing } from "../python-resolv
 import {
   cppConfig,
   cppHeaderConfig,
+  csharpConfig,
   goConfig,
   parseWithTreeSitter,
   pythonConfig,
@@ -27,6 +28,7 @@ const LANGUAGE_CONFIGS = {
   go: goConfig,
   rust: rustConfig,
   ruby: rubyConfig,
+  csharp: csharpConfig,
   cpp: cppConfig,
 } as const;
 
@@ -47,14 +49,11 @@ function isTreeSitterLanguage(language: string): language is TreeSitterLanguage 
 }
 
 /**
- * Parses Python/Go/Rust/Ruby/C++ using tree-sitter (WASM AST).
+ * Parses tree-sitter languages using the WASM AST.
  * Falls back to the regex parser if tree-sitter fails (grammar unavailable,
- * parse error, etc.) — matching the spec's resilience guidance. C++ has no
- * regex parser by design: a failed C++ parse degrades to generic text
- * chunks with no graph records (never throws).
+ * parse error, etc.) — matching the spec's resilience guidance.
+ * C++ has no regex parser: failures degrade to generic chunks with no graph records.
  */
-/** C++ has no regex parser — a failed/unavailable AST degrades to generic
- *  text chunks with no graph records. */
 function cppGenericFallback(content: string, counter: TokenCounter): IndexedCodeResult {
   return {
     ...makeFallbackChunks(content, content.split("\n"), counter),
@@ -77,18 +76,21 @@ export class TreeSitterParser implements CodeParser {
       return this.regexFallback(input, language, counter);
     }
 
-    // `.h` files use the strict header config: any syntax error rejects the
-    // whole parse, matching the native cpp-header behavior.
     const config =
       language === "cpp" && path.extname(input.relativePath) === ".h"
         ? cppHeaderConfig
         : LANGUAGE_CONFIGS[language];
     const tsResult = await parseWithTreeSitter(config, input.content, counter);
+    // C# has no regex fallback: when the WASM parse fails (grammar missing,
+    // parse error), generic text chunks keep the file searchable with no
+    // symbols, imports, or calls — parsing never throws.
     const result =
       tsResult ??
       (language === "cpp"
         ? cppGenericFallback(input.content, counter)
-        : REGEX_FALLBACKS[language](input.content, counter));
+        : language === "csharp"
+          ? makeFallbackChunks(input.content, input.content.split("\n"), counter)
+          : REGEX_FALLBACKS[language](input.content, counter));
 
     // Python bindings and local-shadow marks are extracted once in
     // TypeScript over the source so the WASM and regex paths agree; see
@@ -100,7 +102,7 @@ export class TreeSitterParser implements CodeParser {
     }
 
     return {
-      parser: tsResult ? this.name : "regex",
+      parser: tsResult ? this.name : language === "csharp" ? "fallback" : "regex",
       language,
       kind: "code",
       chunks: result.chunks,

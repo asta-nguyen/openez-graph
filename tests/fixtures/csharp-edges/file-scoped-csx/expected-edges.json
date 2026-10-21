@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "script.csx#T::Go", "to": "Scoped.cs#S::Run" },
+  "edges": [
+    { "from": "Scoped.cs#S::Run", "to": "Util.cs#Helper::Add", "tier": "binding" },
+    { "from": "script.csx#T::Go", "to": "Scoped.cs#S::Run", "tier": "binding" }
+  ]
+}

@@ -1,6 +1,10 @@
 import type { Node } from "web-tree-sitter";
 
-import { markRustCallShadowing, normalizeRustCallName } from "../languages";
+import {
+  blankCSharpDirectives,
+  markRustCallShadowing,
+  normalizeRustCallName,
+} from "../languages";
 import type { ContextFrame, LanguageConfig, ImportRule } from "./parse";
 
 // ── Python ──
@@ -894,3 +898,226 @@ export const cppConfig: LanguageConfig = {
  * same contract the native `cpp-header` config enforces.
  */
 export const cppHeaderConfig: LanguageConfig = { ...cppConfig, errorFailsParse: true };
+// ── C# ──
+
+const CSHARP_CALL_IGNORES = new Set([
+  "if",
+  "for",
+  "foreach",
+  "while",
+  "switch",
+  "catch",
+  "using",
+  "lock",
+  "fixed",
+  "return",
+  "throw",
+  "goto",
+  "checked",
+  "unchecked",
+  "sizeof",
+  "typeof",
+  "nameof",
+  "default",
+  "new",
+  "delegate",
+  "stackalloc",
+]);
+
+function csharpExported(_name: string, node: Node): boolean {
+  // Accessibility is carried by `modifier` child nodes, so an attribute
+  // argument containing the word "public" cannot fake the modifier.
+  // Mirrors csharp_exported in parser.rs.
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (child?.type === "modifier" && child.text === "public") return true;
+  }
+  return false;
+}
+
+/** Fully qualified namespace name — walking ancestor namespace declarations
+ *  through node.parent gives the true nesting (`A.B` for `namespace B`
+ *  inside `namespace A`, `B` for a same-line sibling), which line ranges
+ *  alone cannot recover. Mirrors csharp_ns_name in parser.rs. */
+function csharpNamespaceName(node: Node): string | null {
+  const name = node.childForFieldName("name")?.text;
+  if (!name) return null;
+  const parts = [name];
+  let p = node.parent;
+  while (p) {
+    if (
+      p.type === "namespace_declaration" ||
+      p.type === "file_scoped_namespace_declaration"
+    ) {
+      const pn = p.childForFieldName("name")?.text;
+      if (pn) parts.unshift(pn);
+    }
+    p = p.parent;
+  }
+  return parts.join(".");
+}
+
+/**
+ * Field names come from `variable_declarator` nodes (multi-declarator fields
+ * like `int a, b;` emit one symbol each), but only when the declarator sits
+ * inside `field_declaration` — local `var`/`using` declarators inside methods
+ * share the same node type and are never member symbols.
+ */
+function csharpFieldDeclaratorName(node: Node): string | null {
+  const parent = node.parent;
+  if (!parent || parent.type !== "variable_declaration") return null;
+  if (parent.parent?.type !== "field_declaration") return null;
+  return node.childForFieldName("name")?.text ?? null;
+}
+
+/**
+ * `using` directives are carried verbatim — the resolver parses
+ * global/alias/static modifiers out of the full text. Directives nested
+ * inside a `declaration_list` (a block-scoped `namespace` body) are dropped:
+ * importPaths carry no positions, so the resolver cannot tell them apart
+ * from compilation-unit usings — carrying them would bind names in files
+ * where the using does not apply.
+ */
+function extractCSharpImports(node: Node): string[] {
+  if (node.parent?.type === "declaration_list") return [];
+  return [node.text];
+}
+
+/**
+ * Keep the qualified dotted callee (`Ns.Type.M`, `this.M`, `Alias.M`) so the
+ * resolver can follow the C# lookup order — keepQualifiedCallee records the
+ * last segment as the called identifier. Generic type arguments are stripped
+ * (`M<T>` → `M`, `X.M<Dict<K,V>>` → `X.M`). Returns "" when the callee is not
+ * a plain identifier path: `x?.M`, `(expr).M`, `Foo().M` never resolve.
+ */
+function normalizeCSharpCallName(value: string): string {
+  const stripped = value.replace(/\s+/g, "");
+  let out = "";
+  let depth = 0;
+  for (const ch of stripped) {
+    if (ch === "<") depth += 1;
+    else if (ch === ">") depth = Math.max(0, depth - 1);
+    else if (depth === 0) out += ch;
+  }
+  const globalPrefix = out.startsWith("global::") ? "global::" : "";
+  const dotted = out.slice(globalPrefix.length);
+  const valid =
+    dotted.length > 0 && dotted.split(".").every((seg) => /^[A-Za-z_]\w*$/.test(seg));
+  return valid ? `${globalPrefix}${dotted}` : "";
+}
+
+export const csharpConfig: LanguageConfig = {
+  language: "csharp",
+  symbolRules: [
+    {
+      nodeType: "file_scoped_namespace_declaration",
+      symbolType: "namespace",
+      extractName: csharpNamespaceName,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "namespace_declaration",
+      symbolType: "namespace",
+      extractName: csharpNamespaceName,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "class_declaration",
+      symbolType: "class",
+      nameField: "name",
+      establishesContext: true,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "struct_declaration",
+      symbolType: "struct",
+      nameField: "name",
+      establishesContext: true,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "interface_declaration",
+      symbolType: "interface",
+      nameField: "name",
+      establishesContext: true,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "record_declaration",
+      symbolType: "record",
+      nameField: "name",
+      establishesContext: true,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "enum_declaration",
+      symbolType: "enum",
+      nameField: "name",
+      establishesContext: true,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "delegate_declaration",
+      symbolType: "delegate",
+      nameField: "name",
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "method_declaration",
+      symbolType: "method",
+      nameField: "name",
+      establishesContext: true,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "constructor_declaration",
+      symbolType: "constructor",
+      nameField: "name",
+      establishesContext: true,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "destructor_declaration",
+      symbolType: "destructor",
+      nameField: "name",
+      establishesContext: true,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "property_declaration",
+      symbolType: "property",
+      nameField: "name",
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "variable_declarator",
+      symbolType: "field",
+      extractName: csharpFieldDeclaratorName,
+      isExported: csharpExported,
+    },
+    {
+      nodeType: "enum_member_declaration",
+      symbolType: "field",
+      nameField: "name",
+      isExported: csharpExported,
+    },
+  ],
+  importRules: [{ nodeType: "using_directive", extract: extractCSharpImports }],
+  callRule: { nodeType: "invocation_expression", functionField: "function" },
+  callIgnores: CSHARP_CALL_IGNORES,
+  normalizeCallName: normalizeCSharpCallName,
+  keepQualifiedCallee: true,
+  contextNodeTypes: new Set([
+    "class_declaration",
+    "struct_declaration",
+    "interface_declaration",
+    "record_declaration",
+    "enum_declaration",
+    "method_declaration",
+    "constructor_declaration",
+    "destructor_declaration",
+  ]),
+  contextNameField: "name",
+  preprocess: blankCSharpDirectives,
+  eofSpanNodeTypes: new Set(["file_scoped_namespace_declaration"]),
+};

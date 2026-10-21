@@ -1,0 +1,8 @@
+{
+  "canary": { "from": "Core/Widget2.cs#Widget::Extra", "to": "Core/Widget.cs#Widget::Run" },
+  "edges": [
+    { "from": "Core/Widget.cs#Widget::Run", "to": "Core/Widget.cs#Widget::Step", "tier": "member" },
+    { "from": "Core/Widget.cs#Widget::Run", "to": "Util/Helper.cs#Helper::Add", "tier": "binding" },
+    { "from": "Core/Widget2.cs#Widget::Extra", "to": "Core/Widget.cs#Widget::Run", "tier": "member" }
+  ]
+}

@@ -50,6 +50,7 @@
   "dependencies": {
     "oxc-parser": "^0.143.0",
     "tree-sitter-cpp": "^0.23.4",
+    "tree-sitter-c-sharp": "0.23.5",
     "tree-sitter-go": "^0.25.0",
     "tree-sitter-python": "^0.25.0",
     "tree-sitter-ruby": "^0.23.1",

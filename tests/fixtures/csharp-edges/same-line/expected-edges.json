@@ -1,0 +1,8 @@
+{
+  "canary": { "from": "Main.cs#Program::Main", "to": "Types.cs#Worker::RunA" },
+  "edges": [
+    { "from": "Main.cs#Program::Main", "to": "Types.cs#Worker::RunA", "tier": "member" },
+    { "from": "Main.cs#Program::Main", "to": "Types.cs#Worker::RunB", "tier": "member" },
+    { "from": "Main.cs#Program::Main", "to": "Types.cs#Worker::Shared", "tier": "member" }
+  ]
+}

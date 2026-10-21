@@ -38,9 +38,6 @@ export interface SymbolRule {
   extractNames?: (node: Node) => string[];
   /** emit symbols only at package level (empty context stack) */
   topLevelOnly?: boolean;
-  /** dynamic symbol type override — C++ function_definition resolves to
-   *  "method" (qualified declarator or class context) vs "function" */
-  symbolTypeFor?: (node: Node, contextStack: ReadonlyArray<ContextFrame>) => string;
 }
 
 /**
@@ -51,11 +48,11 @@ export interface SymbolRule {
  */
 export interface ContextFrame {
   name: string;
-  endRow: number;
-  /** Byte offset where the context node ends. Context expiry compares on
-   *  byte position (not row) so same-line sibling declarations don't leak
-   *  the previous sibling's scope. */
-  endIndex: number;
+  /** Byte offset where this context's node ends — used to pop contexts when
+   *  the walker reaches a sibling that shares the end row (same-line
+   *  declarations), where an end-row-only check cannot tell child from
+   *  sibling. */
+  endByte: number;
   kind?: "class" | "module";
   receiver?: { varName: string; typeName: string };
 }
@@ -123,11 +120,17 @@ export interface LanguageConfig {
     calls: Array<{ callerName: string; calleeName: string; shadowedLocal?: boolean }>,
   ) => void;
   /**
-   * When true, any syntax error in the tree rejects the whole parse so the
-   * caller falls back to generic chunks with no graph records. Used by the
-   * `.h` C++ config only — other C++ extensions keep their partial trees.
+   * Optional source pre-pass applied only to the text handed to the
+   * tree-sitter parser — chunking still uses the original content. C# uses it
+   * to blank conditional-directive lines while preserving every byte offset.
    */
-  errorFailsParse?: boolean;
+  preprocess?: (content: string) => string;
+  /**
+   * Node types whose symbol span extends to end-of-file instead of the
+   * node's own end row — a C# `namespace Foo;` (file-scoped) covers the rest
+   * of the file even though the grammar node ends at the semicolon.
+   */
+  eofSpanNodeTypes?: ReadonlySet<string>;
 }
 
 // ── Extraction core ──
@@ -224,13 +227,16 @@ function walkTree(
   while (stack.length > 0) {
     const node = stack.pop()!;
     const startRow = node.startPosition.row + 1; // 1-based
-    const endRow = node.endPosition.row + 1;
+    const endRow = config.eofSpanNodeTypes?.has(node.type)
+      ? lines.length
+      : node.endPosition.row + 1;
 
-    // Pop expired contexts — byte-position comparison so siblings that
-    // start on the same row the previous context ended on still pop it.
+    // Pop expired contexts. A context ends where its node ends byte-wise:
+    // a node starting at or after that byte is outside the context even when
+    // it shares the context's end row (same-line sibling declarations).
     while (
       contextStack.length > 0 &&
-      node.startIndex >= contextStack[contextStack.length - 1].endIndex
+      node.startIndex >= contextStack[contextStack.length - 1].endByte
     ) {
       contextStack.pop();
     }
@@ -310,8 +316,7 @@ function walkTree(
         if (contextName) {
           contextStack.push({
             name: contextName,
-            endRow,
-            endIndex: node.endIndex,
+            endByte: node.endIndex,
             kind: symbolRule.contextKind,
           });
         }
@@ -363,11 +368,10 @@ function walkTree(
               ? `${parentName}::${name}`
               : name;
 
-          const symType = symbolRule.symbolTypeFor?.(node, contextStack) ?? symbolRule.symbolType;
           symbols.push({
             name: fullName,
-            symbolType: symType,
-            type: symType,
+            symbolType: symbolRule.symbolType,
+            type: symbolRule.symbolType,
             exported,
             startLine: startRow,
             endLine: endRow,
@@ -390,12 +394,7 @@ function walkTree(
             contextName && symbolRule.contextKind
               ? [
                   ...contextStack,
-                  {
-                    name: contextName,
-                    endRow,
-                    endIndex: node.endIndex,
-                    kind: symbolRule.contextKind,
-                  },
+                  { name: contextName, endByte: node.endIndex, kind: symbolRule.contextKind },
                 ]
               : contextStack;
           extractCallsInNode(
@@ -411,8 +410,7 @@ function walkTree(
           if (isContextNode) {
             contextStack.push({
               name: contextName ?? fullName,
-              endRow,
-              endIndex: node.endIndex,
+              endByte: node.endIndex,
               kind: symbolRule.contextKind,
               receiver: receiverInfo,
             });
@@ -539,12 +537,11 @@ export async function parseWithTreeSitter(
   content: string,
   counter?: TokenCounter,
 ): Promise<IndexedCodeResult | null> {
-  const tree = await parseContent(config.language, content);
+  const tree = await parseContent(
+    config.language,
+    config.preprocess ? config.preprocess(content) : content,
+  );
   if (!tree) return null;
-  if (config.errorFailsParse && tree.rootNode.hasError) {
-    tree.delete();
-    return null;
-  }
 
   try {
     const lines = content.split("\n");

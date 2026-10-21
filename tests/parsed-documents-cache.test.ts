@@ -423,3 +423,96 @@ describe("Rust shadowedLocal marker round-trip", () => {
     });
   });
 });
+
+describe("C# parsed-documents cache", () => {
+  let registryRoot: string;
+  let workspaceRoot: string;
+
+  const CSHARP_SRC = [
+    "namespace Acme",
+    "{",
+    "    public class C",
+    "    {",
+    "        public void Run() { Step(); }",
+    "        private void Step() { }",
+    "    }",
+    "}",
+    "",
+  ].join("\n");
+
+  async function indexCSharpWorkspace() {
+    fs.mkdirSync(path.join(workspaceRoot, "src"), { recursive: true });
+    fs.writeFileSync(path.join(workspaceRoot, "src", "main.cs"), CSHARP_SRC);
+    const workspace = await createRegistryRepository().ensureWorkspace({
+      rootPath: workspaceRoot,
+    });
+    await indexWorkspace({ workspaceId: workspace.id });
+    return { workspace, repo: createWorkspaceRepository(workspaceRoot) };
+  }
+
+  beforeEach(() => {
+    registryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-csharp-cache-reg-"));
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-csharp-cache-ws-"));
+    process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(registryRoot, "registry.sqlite");
+    process.env.EMBEDDING_PROVIDER = "none";
+    closeRegistryDb();
+    closeAllWorkspaceDbs();
+    resetNativeParserCache();
+  });
+
+  afterEach(() => {
+    closeAllWorkspaceDbs();
+    closeRegistryDb();
+    rmTempDir(registryRoot);
+    rmTempDir(workspaceRoot);
+    delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
+    delete process.env.EMBEDDING_PROVIDER;
+    delete process.env.OPENEZ_NATIVE;
+    resetNativeParserCache();
+  });
+
+  test(".cs files are indexed and cached under the current parser tag", async () => {
+    resetNativeParserCache();
+    const nativeAvailable = Boolean(resolveNativeParser());
+
+    const { workspace, repo } = await indexCSharpWorkspace();
+    const doc = await repo.getDocumentByPath("src/main.cs");
+    expect(doc).not.toBeNull();
+    expect(doc!.language).toBe("csharp");
+
+    const cached = repo.getParsedDocument(doc!.id);
+    expect(cached).not.toBeNull();
+    expect(cached?.parserVersion).toBe(nativeAvailable ? "native-v6" : "fallback-v6");
+    const symbols = JSON.parse(cached!.symbols!);
+    expect(symbols.map((s: { name: string }) => s.name)).toEqual(
+      expect.arrayContaining(["Acme", "C", "C::Run", "C::Step"]),
+    );
+    expect(JSON.parse(cached!.calls!)).toContainEqual({
+      callerName: "C::Run",
+      calleeName: "Step",
+    });
+
+    // Cache hit: a second graph build reuses the row (parsedAt unchanged).
+    const parsedAt = cached!.parsedAt;
+    await buildGraphGeneration(workspace.id, workspaceRoot, 1, 1);
+    const afterFirst = repo.getParsedDocument(doc!.id);
+    expect(afterFirst!.parsedAt).toBe(parsedAt);
+
+    // Stale row under the previous tag reparses.
+    repo.insertParsedDocument({
+      documentId: doc!.id,
+      contentHash: doc!.contentHash,
+      symbols: "[]",
+      imports: "[]",
+      calls: "[]",
+      calledIdentifiers: "[]",
+      parserVersion: nativeAvailable ? "native-v5" : "fallback-v5",
+    });
+    await buildGraphGeneration(workspace.id, workspaceRoot, 2, 2);
+    const reparsed = repo.getParsedDocument(doc!.id);
+    expect(reparsed?.parserVersion).toBe(nativeAvailable ? "native-v6" : "fallback-v6");
+    expect(JSON.parse(reparsed!.symbols!).map((s: { name: string }) => s.name)).toContain(
+      "C::Step",
+    );
+  });
+});
