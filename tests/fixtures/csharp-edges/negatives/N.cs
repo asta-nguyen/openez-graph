@@ -4,6 +4,8 @@ namespace Acme
     public class Helper { public void Work() { } }
     public class C : Base
     {
+        public System.Action Callback;
+        public System.Action Handler { get; set; }
         public void M(int x) { }
         public void M(string s) { }
         public void Other() { }
@@ -14,6 +16,8 @@ namespace Acme
             h.Work();
             Inherited();
             External.Call();
+            Callback();
+            Handler();
         }
     }
 }

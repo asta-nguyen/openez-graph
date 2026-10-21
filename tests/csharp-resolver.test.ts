@@ -50,10 +50,7 @@ async function resolverFor(root: string): Promise<CSharpResolver> {
   const files: CSharpResolverFileInput[] = [];
   for (const entry of inputs as unknown as Array<{ rel: string; abs: string }>) {
     if (!entry.rel.endsWith(".cs") && !entry.rel.endsWith(".csx")) continue;
-    const parsed = await parseWithTreeSitter(
-      csharpConfig,
-      fs.readFileSync(entry.abs, "utf8"),
-    );
+    const parsed = await parseWithTreeSitter(csharpConfig, fs.readFileSync(entry.abs, "utf8"));
     files.push({
       filePath: entry.rel.split(path.sep).join("/"),
       symbols: parsed?.definedSymbols ?? [],
@@ -385,6 +382,71 @@ describe("csharp-resolver negatives", () => {
     expect(r.resolveCall("a.cs", "Derived::Run", "External.Call")).toBeNull();
     // A property receiver is not a nested type — `Name.M` cannot resolve
     // through a property.
+  });
+
+  test("delegate-valued fields, properties, and delegate types are not call targets", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "a.cs": `namespace Acme
+{
+    public class C
+    {
+        public System.Action Callback;
+        public System.Action Handler { get; set; }
+        public delegate void Nested();
+        public void Real() { }
+        public void Dup() { }
+        public void Dup(int x) { }
+        public void M() { Callback(); Handler(); Nested(); Real(); Dup(); }
+    }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    // Fields, properties, and nested delegate declarations are members, never
+    // call targets — `Callback()`/`Handler()`/`Nested()` produce no edge.
+    expect(r.resolveCall("a.cs", "C::M", "Callback")).toBeNull();
+    expect(r.resolveCall("a.cs", "C::M", "Handler")).toBeNull();
+    expect(r.resolveCall("a.cs", "C::M", "Nested")).toBeNull();
+    expect(r.resolveCall("a.cs", "C::M", "this.Callback")).toBeNull();
+    // Real methods still resolve; overloads stay ambiguous.
+    expect(r.resolveCall("a.cs", "C::M", "Real")).toEqual({
+      filePath: "a.cs",
+      name: "C::Real",
+    });
+    expect(r.resolveCall("a.cs", "C::M", "Dup")).toBeNull();
+  });
+
+  test("using-static never binds delegate-valued members", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace Acme.Util
+{
+    public static class Holder
+    {
+        public static System.Action Callback;
+        public static System.Action Prop { get; set; }
+        public static void Ping() { }
+    }
+}
+`,
+      "c.cs": `using static Acme.Util.Holder;
+namespace Acme.Consumer
+{
+    public class C
+    {
+        public void Run() { Callback(); Prop(); Ping(); }
+    }
+}
+`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Run", "Callback")).toBeNull();
+    expect(r.resolveCall("c.cs", "C::Run", "Prop")).toBeNull();
+    expect(r.resolveCall("c.cs", "C::Run", "Ping")).toEqual({
+      filePath: "u.cs",
+      name: "Holder::Ping",
+    });
   });
 });
 
