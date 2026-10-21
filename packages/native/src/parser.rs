@@ -58,7 +58,10 @@ enum ContextKind {
 #[derive(Clone)]
 struct ContextFrame {
   name: String,
-  end_row: usize,
+  /// Byte offset where the context node ends. Context expiry compares on
+  /// byte position (not row) so same-line sibling declarations don't leak
+  /// the previous sibling's scope.
+  end_byte: usize,
   kind: Option<ContextKind>,
   /// Go method receiver (var_name, type_name) for Type::method qualification.
   receiver: Option<(String, String)>,
@@ -85,6 +88,9 @@ struct SymbolRule {
   context_only: bool,
   /// Context kind carried by frames this rule pushes (Ruby class/module).
   context_kind: Option<ContextKind>,
+  /// Dynamic symbol type — C++ function_definition resolves to "method"
+  /// (qualified declarator or class context) vs "function".
+  symbol_type_fn: Option<fn(&Node, &[u8], &[ContextFrame]) -> &'static str>,
 }
 
 struct LanguageConfig {
@@ -107,12 +113,19 @@ struct LanguageConfig {
   /// (`pkg.func`, `self.m`) while called_identifiers record the last
   /// segment; ignores apply to the raw and last-segment forms. Python only.
   keep_qualified_calls: bool,
+  /// `.h` C++ headers only: any syntax error rejects the whole parse so the
+  /// document falls back to generic chunks with no graph records.
+  error_fails_parse: bool,
 }
 
 // ── Exported checks ──
 
 fn always_false(_name: &str, _text: &str) -> bool {
   false
+}
+
+fn always_true(_name: &str, _text: &str) -> bool {
+  true
 }
 
 fn python_exported(name: &str, _text: &str) -> bool {
@@ -279,6 +292,7 @@ fn python_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "class_definition",
@@ -292,6 +306,7 @@ fn python_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
     ],
     import_node_types: vec!["import_statement", "import_from_statement"],
@@ -303,6 +318,7 @@ fn python_config() -> LanguageConfig {
     per_symbol_calls: false,
     qualify_call: None,
     keep_qualified_calls: true,
+    error_fails_parse: false,
   }
 }
 
@@ -331,6 +347,7 @@ fn go_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "method_declaration",
@@ -344,6 +361,7 @@ fn go_config() -> LanguageConfig {
         normalize_receiver: Some(go_normalize_receiver),
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "type_spec",
@@ -357,6 +375,7 @@ fn go_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
     ],
     import_node_types: vec!["import_declaration"],
@@ -368,6 +387,7 @@ fn go_config() -> LanguageConfig {
     per_symbol_calls: false,
     qualify_call: None,
     keep_qualified_calls: false,
+    error_fails_parse: false,
   }
 }
 
@@ -395,6 +415,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "struct_item",
@@ -408,6 +429,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "enum_item",
@@ -421,6 +443,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "trait_item",
@@ -434,6 +457,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "impl_item",
@@ -447,6 +471,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "type_item",
@@ -460,6 +485,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "const_item",
@@ -473,6 +499,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "static_item",
@@ -486,6 +513,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "mod_item",
@@ -499,6 +527,7 @@ fn rust_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
     ],
     import_node_types: vec!["use_declaration"],
@@ -510,6 +539,7 @@ fn rust_config() -> LanguageConfig {
     per_symbol_calls: false,
     qualify_call: None,
     keep_qualified_calls: true,
+    error_fails_parse: false,
   }
 }
 
@@ -672,6 +702,7 @@ fn ruby_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: Some(ContextKind::Class),
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "module",
@@ -685,6 +716,7 @@ fn ruby_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: Some(ContextKind::Module),
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "method",
@@ -698,6 +730,7 @@ fn ruby_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "singleton_method",
@@ -711,6 +744,7 @@ fn ruby_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "singleton_class",
@@ -724,6 +758,7 @@ fn ruby_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: true,
         context_kind: None,
+        symbol_type_fn: None,
       },
       SymbolRule {
         node_type: "assignment",
@@ -737,6 +772,7 @@ fn ruby_config() -> LanguageConfig {
         normalize_receiver: None,
         context_only: false,
         context_kind: None,
+        symbol_type_fn: None,
       },
     ],
     import_node_types: vec!["call"],
@@ -748,6 +784,356 @@ fn ruby_config() -> LanguageConfig {
     per_symbol_calls: true,
     qualify_call: Some(ruby_qualify_call),
     keep_qualified_calls: false,
+    error_fails_parse: false,
+  }
+}
+
+
+// ── C++ config (ported from cppConfig in configs.ts) ──
+
+/// Strip `<...>` template argument lists, depth-aware. A `<` that begins
+/// an operator-name token (`operator<`, `operator<<`, `operator<=`,
+/// `operator<=>`, `operator<<=`, …) is kept together with the rest of the
+/// operator symbol run — only `<` that cannot be part of an operator name
+/// opens a template-argument group.
+fn strip_cpp_template_args(text: &str) -> String {
+  const OP_SYMS: &[u8] = b"+-*/%^&|~!=<>,";
+  let bytes = text.as_bytes();
+  let mut out = String::with_capacity(bytes.len());
+  let mut depth: i32 = 0;
+  let mut i = 0;
+  while i < bytes.len() {
+    let b = bytes[i];
+    if depth > 0 {
+      if b == b'<' {
+        depth += 1;
+      } else if b == b'>' {
+        depth -= 1;
+      }
+      i += 1;
+      continue;
+    }
+    if b == b'<' {
+      let operator_tail = out.ends_with("operator")
+        && (out.len() == "operator".len()
+          || !matches!(out.as_bytes()[out.len() - "operator".len() - 1],
+              c if c.is_ascii_alphanumeric() || c == b'_'));
+      if operator_tail {
+        out.push(b as char);
+        i += 1;
+        while i < bytes.len() && OP_SYMS.contains(&bytes[i]) {
+          out.push(bytes[i] as char);
+          i += 1;
+        }
+        continue;
+      }
+      depth += 1;
+      i += 1;
+      continue;
+    }
+    out.push(b as char);
+    i += 1;
+  }
+  out
+}
+
+/// Descend a declarator chain to its function_declarator. Pointer and
+/// reference layers unwrap; anything else yields None so non-function
+/// declarations emit no symbol.
+fn cpp_function_declarator<'a>(node: &Node<'a>) -> Option<Node<'a>> {
+  let mut cur = node.child_by_field_name("declarator");
+  while let Some(c) = cur {
+    match c.kind() {
+      "function_declarator" => return Some(c),
+      "pointer_declarator" | "reference_declarator" => {
+        cur = c.child_by_field_name("declarator");
+      }
+      _ => return None,
+    }
+  }
+  None
+}
+
+/// Name text of a function_declarator's declarator field — identifier,
+/// field_identifier, qualified_identifier, destructor_name, operator_name,
+/// or template_function — with whitespace and template args stripped.
+fn cpp_function_name(node: &Node, source: &[u8]) -> Option<String> {
+  let declarator = cpp_function_declarator(node)?;
+  let name_node = declarator.child_by_field_name("declarator")?;
+  let raw = if name_node.kind() == "template_function" {
+    name_node
+      .child_by_field_name("name")
+      .map(|n| text_of(&n, source))
+      .unwrap_or_else(|| text_of(&name_node, source))
+  } else {
+    text_of(&name_node, source)
+  };
+  let no_ws: String = raw.chars().filter(|c| !c.is_whitespace()).collect();
+  let stripped = strip_cpp_template_args(&no_ws);
+  if stripped.is_empty() {
+    None
+  } else {
+    Some(stripped)
+  }
+}
+
+/// class/struct/union/enum specifier name — only when a `body` exists, so
+/// elaborated type uses (`class Foo *p`) and forward declarations emit no
+/// symbol.
+fn cpp_type_name(node: &Node, source: &[u8]) -> Option<String> {
+  node.child_by_field_name("body")?;
+  node
+    .child_by_field_name("name")
+    .map(|n| text_of(&n, source))
+}
+
+/// namespace_definition name — anonymous namespaces emit no symbol/context;
+/// `namespace a::b` qualified names keep all segments.
+fn cpp_namespace_name(node: &Node, source: &[u8]) -> Option<String> {
+  let name_node = node.child_by_field_name("name")?;
+  let cleaned: String = text_of(&name_node, source)
+    .chars()
+    .filter(|c| !c.is_whitespace())
+    .collect();
+  if cleaned.is_empty() {
+    None
+  } else {
+    Some(cleaned)
+  }
+}
+
+/// function_definition -> "method" when the declarator is qualified (`A::m`)
+/// or it sits directly inside a class/struct/union context; else "function".
+fn cpp_function_type(node: &Node, _source: &[u8], stack: &[ContextFrame]) -> &'static str {
+  let qualified = cpp_function_declarator(node)
+    .and_then(|d| d.child_by_field_name("declarator"))
+    .map(|n| n.kind() == "qualified_identifier")
+    .unwrap_or(false);
+  if qualified {
+    return "method";
+  }
+  match stack.last().and_then(|f| f.kind) {
+    Some(ContextKind::Class) => "method",
+    _ => "function",
+  }
+}
+
+/// Normalize a call-expression function child: strip whitespace and
+/// template args, convert `->` to `.`, keep only simple identifier paths
+/// (`f`, `a::b::f`, `::f`, `obj.f`, `this.f`, `~A`, `A::operator==`).
+/// Anything else returns "" and is dropped.
+fn normalize_cpp_call(value: &str) -> String {
+  let no_ws: String = value.chars().filter(|c| !c.is_whitespace()).collect();
+  let stripped = strip_cpp_template_args(&no_ws);
+  let text = stripped.replace("->", ".");
+  if text.is_empty() {
+    return String::new();
+  }
+  let scope_parts: Vec<&str> = text.split("::").collect();
+  let leading_global = scope_parts.first() == Some(&"");
+  let parts: &[&str] = if leading_global {
+    &scope_parts[1..]
+  } else {
+    &scope_parts[..]
+  };
+  if parts.is_empty() {
+    return String::new();
+  }
+  for part in parts {
+    for seg in part.split('.') {
+      if seg.is_empty() {
+        return String::new();
+      }
+      if seg.starts_with("operator") && seg.len() > 8 {
+        continue;
+      }
+      if !seg
+        .chars()
+        .all(|c| c == '_' || c == '~' || c.is_alphanumeric())
+      {
+        return String::new();
+      }
+    }
+  }
+  text
+}
+
+fn cpp_symbol_rules() -> Vec<SymbolRule> {
+  vec![
+    SymbolRule {
+      node_type: "namespace_definition",
+      symbol_type: "namespace",
+      name_field: "name",
+      establishes_context: true,
+      is_exported: always_true,
+      extract_name: Some(cpp_namespace_name),
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: Some(ContextKind::Module),
+      symbol_type_fn: None,
+    },
+    SymbolRule {
+      node_type: "class_specifier",
+      symbol_type: "class",
+      name_field: "name",
+      establishes_context: true,
+      is_exported: always_true,
+      extract_name: Some(cpp_type_name),
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: Some(ContextKind::Class),
+      symbol_type_fn: None,
+    },
+    SymbolRule {
+      node_type: "struct_specifier",
+      symbol_type: "struct",
+      name_field: "name",
+      establishes_context: true,
+      is_exported: always_true,
+      extract_name: Some(cpp_type_name),
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: Some(ContextKind::Class),
+      symbol_type_fn: None,
+    },
+    SymbolRule {
+      node_type: "union_specifier",
+      symbol_type: "union",
+      name_field: "name",
+      establishes_context: true,
+      is_exported: always_true,
+      extract_name: Some(cpp_type_name),
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: Some(ContextKind::Class),
+      symbol_type_fn: None,
+    },
+    SymbolRule {
+      node_type: "enum_specifier",
+      symbol_type: "enum",
+      name_field: "name",
+      establishes_context: true,
+      is_exported: always_true,
+      extract_name: Some(cpp_type_name),
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: None,
+      symbol_type_fn: None,
+    },
+    SymbolRule {
+      node_type: "alias_declaration",
+      symbol_type: "type",
+      name_field: "name",
+      establishes_context: false,
+      is_exported: always_true,
+      extract_name: None,
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: None,
+      symbol_type_fn: None,
+    },
+    SymbolRule {
+      node_type: "type_definition",
+      symbol_type: "type",
+      name_field: "declarator",
+      establishes_context: false,
+      is_exported: always_true,
+      extract_name: None,
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: None,
+      symbol_type_fn: None,
+    },
+    SymbolRule {
+      node_type: "function_definition",
+      symbol_type: "function",
+      name_field: "name",
+      establishes_context: true,
+      is_exported: always_true,
+      extract_name: Some(cpp_function_name),
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: None,
+      symbol_type_fn: Some(cpp_function_type),
+    },
+    SymbolRule {
+      node_type: "declaration",
+      symbol_type: "declaration",
+      name_field: "name",
+      establishes_context: false,
+      is_exported: always_true,
+      extract_name: Some(cpp_function_name),
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: None,
+      symbol_type_fn: None,
+    },
+    SymbolRule {
+      node_type: "field_declaration",
+      symbol_type: "declaration",
+      name_field: "name",
+      establishes_context: false,
+      is_exported: always_true,
+      extract_name: Some(cpp_function_name),
+      extract_context_name: None,
+      receiver_field: None,
+      normalize_receiver: None,
+      context_only: false,
+      context_kind: None,
+      symbol_type_fn: None,
+    },
+  ]
+}
+
+fn cpp_config(error_fails_parse: bool) -> LanguageConfig {
+  let mut call_ignores = HashSet::new();
+  for s in [
+    "if", "for", "while", "switch", "return", "sizeof", "alignof", "decltype", "typeid",
+    "noexcept", "static_cast", "dynamic_cast", "reinterpret_cast", "const_cast", "new",
+    "delete", "throw", "static_assert", "catch", "int", "char", "short", "long", "float",
+    "double", "bool", "void", "unsigned", "signed", "const", "volatile", "auto", "size_t",
+    "nullptr", "true", "false", "this",
+  ] {
+    call_ignores.insert(s);
+  }
+
+  LanguageConfig {
+    symbol_rules: cpp_symbol_rules(),
+    import_node_types: vec!["preproc_include"],
+    call_node_type: "call_expression",
+    call_function_field: "function",
+    call_ignores,
+    normalize_call_name: normalize_cpp_call,
+    context_node_types: vec![
+      "namespace_definition",
+      "class_specifier",
+      "struct_specifier",
+      "union_specifier",
+      "enum_specifier",
+      "function_definition",
+    ],
+    per_symbol_calls: true,
+    qualify_call: None,
+    keep_qualified_calls: true,
+    error_fails_parse,
   }
 }
 
@@ -908,6 +1294,21 @@ fn extract_imports(node: &Node, source: &[u8], language: &str) -> Vec<String> {
         paths.push(cleaned.to_string());
       }
     }
+    "cpp" | "cpp-header" => {
+      // Quoted `#include "..."` paths only — system_lib_string and macro
+      // paths produce no import edge (extractCppImports).
+      if node.kind() == "preproc_include" {
+        if let Some(path_node) = node.child_by_field_name("path") {
+          if path_node.kind() == "string_literal" {
+            let text = text_of(&path_node, source);
+            let cleaned = text.trim_matches('"');
+            if !cleaned.is_empty() {
+              paths.push(cleaned.to_string());
+            }
+          }
+        }
+      }
+    }
     "ruby" => {
       // Only require_relative produces import edges — require (gem), load,
       // and autoload do not resolve to local files (extractRubyImports).
@@ -1004,9 +1405,11 @@ fn walk_tree(
     let start_row = node.start_position().row + 1; // 1-based
     let end_row = node.end_position().row + 1;
 
-    // Pop expired contexts
+    // Pop expired contexts — byte-position comparison so siblings that
+    // start on the same row the previous context ended on still pop it.
+    let start_byte = node.start_byte();
     while let Some(frame) = context_stack.last() {
-      if start_row > frame.end_row {
+      if start_byte >= frame.end_byte {
         context_stack.pop();
       } else {
         break;
@@ -1129,7 +1532,7 @@ fn walk_tree(
           if let Some(context_name) = extract_ctx(&node, source, &context_stack) {
             context_stack.push(ContextFrame {
               name: context_name,
-              end_row,
+              end_byte: node.end_byte(),
               kind: rule.context_kind,
               receiver: None,
             });
@@ -1173,9 +1576,13 @@ fn walk_tree(
           }
         });
 
+        let sym_type = rule
+          .symbol_type_fn
+          .map(|f| f(&node, source, &context_stack))
+          .unwrap_or(rule.symbol_type);
         symbols.push(NativeSymbol {
           name: full_name.clone(),
-          symbol_type: rule.symbol_type.to_string(),
+          symbol_type: sym_type.to_string(),
           exported,
           start_line: start_row as i32,
           end_line: end_row as i32,
@@ -1207,7 +1614,7 @@ fn walk_tree(
                 let mut v = context_stack.clone();
                 v.push(ContextFrame {
                   name: context_name.clone().unwrap(),
-                  end_row,
+                  end_byte: node.end_byte(),
                   kind: rule.context_kind,
                   receiver: None,
                 });
@@ -1234,7 +1641,7 @@ fn walk_tree(
               .and_then(|rt| receiver_var.as_ref().map(|rv| (rv.clone(), rt.clone())));
             context_stack.push(ContextFrame {
               name: context_name.unwrap_or_else(|| full_name.clone()),
-              end_row,
+              end_byte: node.end_byte(),
               kind: rule.context_kind,
               receiver: ctx_receiver,
             });
@@ -1420,7 +1827,14 @@ fn extract_calls_in_node(
     {
       continue;
     }
-    called_identifiers.insert(final_callee.clone());
+    // keepQualifiedCallee parity with parse.ts extractCallsInNode: record
+    // the last path segment as the called identifier for C++ (Ruby keeps
+    // the full name via keep_qualified_calls = false).
+    called_identifiers.insert(if config.keep_qualified_calls {
+      last_rust_call_segment(&final_callee).to_string()
+    } else {
+      final_callee.clone()
+    });
     call_expressions.push(NativeCallExpression {
       caller_name: caller_name.to_string(),
       callee_name: final_callee,
@@ -1436,6 +1850,10 @@ fn get_config(language: &str) -> Option<LanguageConfig> {
     "go" => Some(go_config()),
     "rust" => Some(rust_config()),
     "ruby" => Some(ruby_config()),
+    "cpp" => Some(cpp_config(false)),
+    // `.h` strict header mode: any syntax error rejects the parse so the
+    // file falls back to generic chunks with no graph records.
+    "cpp-header" => Some(cpp_config(true)),
     _ => None,
   }
 }
@@ -1446,6 +1864,7 @@ fn get_language_fn(language: &str) -> Option<tree_sitter::Language> {
     "go" => Some(tree_sitter_go::LANGUAGE.into()),
     "rust" => Some(tree_sitter_rust::LANGUAGE.into()),
     "ruby" => Some(tree_sitter_ruby::LANGUAGE.into()),
+    "cpp" | "cpp-header" => Some(tree_sitter_cpp::LANGUAGE.into()),
     _ => None,
   }
 }
@@ -1481,6 +1900,10 @@ pub fn parse_code_native(language: String, content: String) -> Option<NativePars
     });
     parser.parse(content.as_bytes(), None)
   })?;
+
+  if config.error_fails_parse && tree.root_node().has_error() {
+    return None;
+  }
 
   let source = content.as_bytes();
   let result = walk_tree(tree.root_node(), &config, source, &language);
@@ -1518,6 +1941,10 @@ pub fn parse_code_batch(items: Vec<ParseBatchItem>) -> Vec<Option<NativeParseRes
         });
         parser.parse(item.content.as_bytes(), None)
       })?;
+
+      if config.error_fails_parse && tree.root_node().has_error() {
+        return None;
+      }
 
       let source = item.content.as_bytes();
       let result = walk_tree(tree.root_node(), &config, source, &item.language);

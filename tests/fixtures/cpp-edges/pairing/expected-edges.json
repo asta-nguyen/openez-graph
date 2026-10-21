@@ -1,0 +1,8 @@
+{
+  "canary": { "from": "main.cpp#main", "to": "lib.h#app::helper" },
+  "edges": [
+    { "from": "main.cpp#main", "to": "lib.h#app::helper", "tier": "file" },
+    { "from": "lib.cpp#app::helper", "to": "lib.h#app::declared_only", "tier": "file" },
+    { "from": "lib.cpp#app::Worker::run", "to": "lib.cpp#app::Worker::status", "tier": "type" }
+  ]
+}

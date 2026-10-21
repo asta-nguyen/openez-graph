@@ -1,8 +1,19 @@
+import path from "node:path";
+
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
 
-import { parseGo, parsePython, parseRuby, parseRust, type IndexedCodeResult } from "../languages";
+import {
+  makeFallbackChunks,
+  parseGo,
+  parsePython,
+  parseRuby,
+  parseRust,
+  type IndexedCodeResult,
+} from "../languages";
 import { extractPythonBindings, markPythonCallShadowing } from "../python-resolver";
 import {
+  cppConfig,
+  cppHeaderConfig,
   goConfig,
   parseWithTreeSitter,
   pythonConfig,
@@ -16,6 +27,7 @@ const LANGUAGE_CONFIGS = {
   go: goConfig,
   rust: rustConfig,
   ruby: rubyConfig,
+  cpp: cppConfig,
 } as const;
 
 const REGEX_FALLBACKS: Record<
@@ -35,10 +47,23 @@ function isTreeSitterLanguage(language: string): language is TreeSitterLanguage 
 }
 
 /**
- * Parses Python/Go/Rust/Ruby using tree-sitter (WASM AST).
+ * Parses Python/Go/Rust/Ruby/C++ using tree-sitter (WASM AST).
  * Falls back to the regex parser if tree-sitter fails (grammar unavailable,
- * parse error, etc.) — matching the spec's resilience guidance.
+ * parse error, etc.) — matching the spec's resilience guidance. C++ has no
+ * regex parser by design: a failed C++ parse degrades to generic text
+ * chunks with no graph records (never throws).
  */
+/** C++ has no regex parser — a failed/unavailable AST degrades to generic
+ *  text chunks with no graph records. */
+function cppGenericFallback(content: string, counter: TokenCounter): IndexedCodeResult {
+  return {
+    ...makeFallbackChunks(content, content.split("\n"), counter),
+    definedSymbols: [],
+    calledIdentifiers: [],
+    callExpressions: [],
+  };
+}
+
 export class TreeSitterParser implements CodeParser {
   readonly name = "tree-sitter";
 
@@ -52,9 +77,18 @@ export class TreeSitterParser implements CodeParser {
       return this.regexFallback(input, language, counter);
     }
 
-    const config = LANGUAGE_CONFIGS[language];
+    // `.h` files use the strict header config: any syntax error rejects the
+    // whole parse, matching the native cpp-header behavior.
+    const config =
+      language === "cpp" && path.extname(input.relativePath) === ".h"
+        ? cppHeaderConfig
+        : LANGUAGE_CONFIGS[language];
     const tsResult = await parseWithTreeSitter(config, input.content, counter);
-    const result = tsResult ?? REGEX_FALLBACKS[language](input.content, counter);
+    const result =
+      tsResult ??
+      (language === "cpp"
+        ? cppGenericFallback(input.content, counter)
+        : REGEX_FALLBACKS[language](input.content, counter));
 
     // Python bindings and local-shadow marks are extracted once in
     // TypeScript over the source so the WASM and regex paths agree; see

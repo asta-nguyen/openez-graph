@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "use.cpp#use", "to": "ok.h#free_in_header" },
+  "edges": [
+    { "from": "use.cpp#use", "to": "ok.h#free_in_header", "tier": "file" },
+    { "from": "upper.C#upper_fn", "to": "ok.h#free_in_header", "tier": "file" }
+  ]
+}
