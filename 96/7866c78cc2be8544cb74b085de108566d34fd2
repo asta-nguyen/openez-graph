@@ -1,0 +1,36 @@
+tests/csharp-resolver.test.ts
+  s_64e63946995f9f::t_83a9edcfce1b70 181-231
+tests/fixtures/csharp-edges/enclosing-ns/consumer.cs
+  s_64e63946995f9f::t_1d77e47b917afa 1-11
+tests/fixtures/csharp-edges/enclosing-ns/expected-edges.json
+  s_64e63946995f9f::t_98c92ba3695358 1-7
+tests/fixtures/csharp-edges/enclosing-ns/App.csproj
+  s_64e63946995f9f::t_47981413d5b853 1
+packages/indexer/src/csharp-resolver.ts
+  s_64e63946995f9f::t_5c9f8fbfd56cc6 535-538,540-543,546-552,555-556,562,568-570,582-589,591-595,611-612
+  s_64e63946995f9f::t_d64a01aaee7a3b 10-16
+  s_64e63946995f9f::t_16b340413aa0f8 721-726,732-733,735-738,744,747-772,775-776,778
+  s_64e63946995f9f::t_7ed7da70aa1b21 554
+tests/fixtures/csharp-edges/enclosing-ns/baseline.json
+  s_64e63946995f9f::t_9fc5f8c3b74956 1-11
+tests/fixtures/csharp-edges/enclosing-ns/global.cs
+  s_64e63946995f9f::t_c09a92169d3fdc 1-7
+tests/fixtures/csharp-edges/enclosing-ns/nested.cs
+  s_64e63946995f9f::t_6f088f2e362cc1 1-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "967866c78cc2be8544cb74b085de108566d34fd2",
+  "prompts": {},
+  "sessions": {
+    "s_64e63946995f9f": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "shade-dinner",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
