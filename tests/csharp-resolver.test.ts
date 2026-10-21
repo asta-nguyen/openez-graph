@@ -941,4 +941,132 @@ namespace Acme.Consumer
     expect(r.resolveImport("c.cs", "N@1\0using A;")).toBe("u.cs");
     expect(r.resolveImport("c.cs", "N@1#1\0using B;")).toBe("u.cs");
   });
+
+  test("a same-line nested namespace sees its enclosing block's usings", async () => {
+    // `namespace A { using U; namespace B { C } }` on one physical line: B
+    // is nested inside A's body, so A's `using U` applies to B's members
+    // (dotnet compiles this). Line ranges alone cannot prove same-line
+    // nesting — the parser carries true declaration ancestry in each
+    // symbol's `receiver` scope key.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace U { public static class Thing { public static void F() { } } }`,
+      "c.cs": `namespace A { using U; namespace B { public class C { public void M() { Thing.F(); } } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::M", "Thing.F")).toEqual({
+      filePath: "u.cs",
+      name: "Thing::F",
+    });
+  });
+
+  test("a closed same-line sibling's usings do not reach a dotted namespace", async () => {
+    // `namespace A { using U; } namespace A.B { C }` on one physical line:
+    // the dotted `A.B` is a *separate* top-level declaration, not a child
+    // of the `A` block — the using does not apply (dotnet: CS0103). The
+    // payload must distinguish this from the nested case above.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace U { public static class Thing { public static void F() { } } }`,
+      "c.cs": `namespace A { using U; } namespace A.B { public class C { public void M() { Thing.F(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::M", "Thing.F")).toBeNull();
+  });
+
+  test("same-line enclosing usings apply through multiple nested levels", async () => {
+    // `A` holds the using; `C` sits two declarations deep (`A.B`) — the
+    // ancestor chain carries both scope keys in order.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace U { public static class Thing { public static void F() { } } }`,
+      "c.cs": `namespace A { using U; namespace B { public class C { public void M() { Thing.F(); } } } }`,
+      "d.cs": `namespace A { public class D { public void N() { Thing.F(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::M", "Thing.F")).toEqual({
+      filePath: "u.cs",
+      name: "Thing::F",
+    });
+    // The `A` block in c.cs is a different declaration from d.cs's — a
+    // using declared in one file's `A` block never crosses files.
+    expect(r.resolveCall("d.cs", "D::N", "Thing.F")).toBeNull();
+  });
+});
+
+describe("csharp-resolver per-level lookup precedence", () => {
+  test("an inner-level scoped using beats outer namespace declarations", async () => {
+    // `A.Thing` is declared one level out, but `A.B`'s `using U` binds
+    // `Thing` at the innermost level — the first level that has the name
+    // decides (dotnet compiles this unambiguous), so the call must land
+    // on `A.B.U.Thing.F`, never `A.Thing.F`.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "a.cs": `namespace A { public static class Thing { public static void F() { } } }`,
+      "u.cs": `namespace A.B.U { public static class Thing { public static void F() { } } }`,
+      "c.cs": `namespace A.B { using U; public class C { public void Go() { Thing.F(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Go", "Thing.F")).toEqual({
+      filePath: "u.cs",
+      name: "Thing::F",
+    });
+  });
+
+  test("an ambiguous inner-level using produces no edge, not the outer type", async () => {
+    // Two inner usings each supply `Thing` at level `A.B` — the level
+    // decides ambiguously (dotnet: CS0104), so the lookup must not fall
+    // through to the outer `A.Thing`.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "a.cs": `namespace A { public static class Thing { public static void F() { } } }`,
+      "u1.cs": `namespace A.B.U1 { public static class Thing { public static void F() { } } }`,
+      "u2.cs": `namespace A.B.U2 { public static class Thing { public static void F() { } } }`,
+      "c.cs": `namespace A.B { using U1; using U2; public class C { public void Go() { Thing.F(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Go", "Thing.F")).toBeNull();
+  });
+
+  test("an inner-level external alias reserves the name against outer types", async () => {
+    // `using Thing = External.Widget` binds `Thing` at level `A.B` — the
+    // external target keeps the name reserved and the outer `A.Thing` is
+    // never consulted.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "a.cs": `namespace A { public static class Thing { public static void F() { } } }`,
+      "c.cs": `namespace A.B { using Thing = External.Widget; public class C { public void Go() { Thing.F(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Go", "Thing.F")).toBeNull();
+  });
+
+  test("an inner-level alias to a workspace type beats outer declarations", async () => {
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "a.cs": `namespace A { public static class Thing { public static void F() { } } }`,
+      "w.cs": `namespace W { public static class Widget { public static void F() { } } }`,
+      "c.cs": `namespace A.B { using Thing = W.Widget; public class C { public void Go() { Thing.F(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Go", "Thing.F")).toEqual({
+      filePath: "w.cs",
+      name: "Widget::F",
+    });
+  });
+
+  test("an inner-level declared type still beats its own level's usings", async () => {
+    // Within one level the declared types come first: `A.B.Thing` wins
+    // over the same level's `using U` even though `A.B.U.Thing` exists.
+    const root = makeWorkspace({
+      "App.csproj": "<Project />",
+      "u.cs": `namespace A.B.U { public static class Thing { public static void F() { } } }`,
+      "c.cs": `namespace A.B { using U; public static class Thing { public static void F() { } } public class C { public void Go() { Thing.F(); } } }`,
+    });
+    const r = await resolverFor(root);
+    expect(r.resolveCall("c.cs", "C::Go", "Thing.F")).toEqual({
+      filePath: "c.cs",
+      name: "Thing::F",
+    });
+  });
 });

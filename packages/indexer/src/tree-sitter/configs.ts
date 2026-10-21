@@ -993,6 +993,18 @@ function csharpDeclOrdinal(owner: Node, qualified: string): number {
   return ordinal;
 }
 
+/** Scope key of a namespace declaration: `<qualified-name>@<decl-start-
+ *  line>` plus `#<ordinal>` when earlier declarations share that name and
+ *  line. Shared by using-directive scopes and symbol receivers.
+ * Mirrors csharp_scope_key in parser.rs. */
+function csharpScopeKey(nsNode: Node): string | null {
+  const qual = csharpNamespaceName(nsNode);
+  if (!qual) return null;
+  const ord = csharpDeclOrdinal(nsNode, qual);
+  const base = `${qual}@${nsNode.startPosition.row + 1}`;
+  return ord > 0 ? `${base}#${ord}` : base;
+}
+
 /**
  * Enclosing declaration scope for a `using` directive, encoded as
  * `<qualified-name>@<decl-start-line>` plus `#<ordinal>` when earlier
@@ -1001,32 +1013,53 @@ function csharpDeclOrdinal(owner: Node, qualified: string): number {
  * that follows a file-scoped namespace belongs to it; both keep their
  * scope so the resolver applies the using inside exactly the declaration
  * block that contains it. A `declaration_list` owned by anything else is
- * not a namespace body — the directive is still dropped.
+ * not a namespace body — the directive is invalid and returns null so the
+ * caller drops it (native parity).
  * Mirrors the csharp arm of extract_imports in parser.rs.
  */
-function csharpUsingScope(node: Node): string {
+function csharpUsingScope(node: Node): string | null {
   const parent = node.parent;
   if (parent?.type === "declaration_list") {
     const owner = parent.parent;
-    if (owner?.type !== "namespace_declaration") return "";
-    const qual = csharpNamespaceName(owner);
-    if (!qual) return "";
-    const ord = csharpDeclOrdinal(owner, qual);
-    const base = `${qual}@${owner.startPosition.row + 1}`;
-    return ord > 0 ? `${base}#${ord}` : base;
+    if (owner?.type !== "namespace_declaration") return null;
+    return csharpScopeKey(owner) ?? "";
   }
   if (parent?.type === "compilation_unit") {
     for (let sib = node.previousNamedSibling; sib; sib = sib.previousNamedSibling) {
       if (sib.type === "file_scoped_namespace_declaration") {
-        const qual = csharpNamespaceName(sib);
-        if (!qual) return "";
-        const ord = csharpDeclOrdinal(sib, qual);
-        const base = `${qual}@${sib.startPosition.row + 1}`;
-        return ord > 0 ? `${base}#${ord}` : base;
+        return csharpScopeKey(sib) ?? "";
       }
     }
   }
   return "";
+}
+
+/**
+ * Scope key of the innermost namespace declaration enclosing `node` — the
+ * same `name@line[#ord]` encoding usings carry, serialized as each C#
+ * symbol's `receiver`. Members of a file-scoped namespace are comp-unit
+ * siblings of the declaration node, so at compilation-unit level the
+ * scope belongs to the nearest preceding file-scoped declaration. True
+ * AST ancestry — line ranges cannot distinguish same-line nesting
+ * (`A{using U; B{}}`) from same-line siblings (`A{using U;} B{}`).
+ * Mirrors csharp_enclosing_scope in parser.rs.
+ */
+function csharpEnclosingScope(node: Node): string | undefined {
+  let inner: Node = node;
+  for (let p = node.parent; p; inner = p, p = p.parent) {
+    if (p.type === "namespace_declaration" || p.type === "file_scoped_namespace_declaration") {
+      return csharpScopeKey(p) ?? undefined;
+    }
+    if (p.type === "compilation_unit") {
+      for (let sib = inner.previousNamedSibling; sib; sib = sib.previousNamedSibling) {
+        if (sib.type === "file_scoped_namespace_declaration") {
+          return csharpScopeKey(sib) ?? undefined;
+        }
+      }
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -1038,6 +1071,10 @@ function csharpUsingScope(node: Node): string {
  */
 function extractCSharpImports(node: Node): string[] {
   const scope = csharpUsingScope(node);
+  // A directive inside a non-namespace declaration list is invalid C# —
+  // drop it like the native parser instead of emitting compilation-unit
+  // text.
+  if (scope === null) return [];
   return [scope ? `${scope}\0${node.text}` : node.text];
 }
 
@@ -1171,6 +1208,7 @@ export const csharpConfig: LanguageConfig = {
     },
   ],
   importRules: [{ nodeType: "using_directive", extract: extractCSharpImports }],
+  enclosingScope: csharpEnclosingScope,
   callRule: { nodeType: "invocation_expression", functionField: "function" },
   callIgnores: CSHARP_CALL_IGNORES,
   normalizeCallName: normalizeCSharpCallName,
