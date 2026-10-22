@@ -19,6 +19,43 @@ export interface ParsedSymbol {
 }
 
 /**
+ * A static import/require binding: local name -> module specifier + the export
+ * name it refers to ("default" for default imports, "*" for namespace and
+ * CommonJS require bindings). `typeOnly` marks TypeScript `import type` /
+ * `import { type X }` specifiers — they join file-level dependency edges but
+ * never resolve `calls` targets.
+ */
+export interface ImportBinding {
+  local: string;
+  module: string;
+  imported: string;
+  typeOnly?: boolean;
+  /** Byte range of the block/function that owns this binding — present only
+   *  for function-local `require` bindings; absent for module-scope imports. */
+  scopeStart?: number;
+  scopeEnd?: number;
+}
+
+/**
+ * A static export exposed by a module.
+ * - local: `name` maps to the same-file symbol `local` (includes CJS
+ *   `exports.name`/`module.exports.name`/object-literal assignments and ESM
+ *   `export { x as name }` without a source).
+ * - reexport: `name` forwards to `imported` in `module` (`export {x as name} from`).
+ * - star: wildcard re-export (`export * from`) — expanded at graph build time.
+ * `typeOnly` marks TypeScript `export type` / `export { type X }` specifiers —
+ * they never resolve `calls` targets.
+ */
+export interface ExportBinding {
+  name: string;
+  kind: "local" | "reexport" | "star";
+  local?: string;
+  module?: string;
+  imported?: string;
+  typeOnly?: boolean;
+}
+
+/**
  * Result of parsing a single source file.
  * Extends the raw IndexedCodeResult with parser identification so downstream
  * graph building can tag nodes/edges with which parser produced them.
@@ -32,7 +69,19 @@ export interface ParsedDocument {
   wikilinks: string[];
   definedSymbols: ParsedSymbol[];
   calledIdentifiers: string[];
-  callExpressions: Array<{ callerName: string; calleeName: string }>;
+  callExpressions: Array<{
+    callerName: string;
+    calleeName: string;
+    /** Byte offset of the call site — used to match scoped require bindings. */
+    start?: number;
+    /** The callee's root identifier is a param/local variable visible at the
+     *  call site (e.g. `run(NS) { NS.x() }`) — it cannot be a module import. */
+    shadowedLocal?: boolean;
+  }>;
+  /** Static ESM import + CommonJS require bindings (oxc only). */
+  importBindings?: ImportBinding[];
+  /** Static ESM/CommonJS export table (oxc only). */
+  exportBindings?: ExportBinding[];
 }
 
 export interface ParseInput {

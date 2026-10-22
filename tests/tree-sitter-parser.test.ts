@@ -109,14 +109,15 @@ describe("tree-sitter python parser", () => {
       calleeName: "helper",
     });
 
-    // main calls MyClass and method
+    // main calls MyClass and method — Python keeps the qualified
+    // receiver (`c.method`) so the graph resolver can apply its rules.
     expect(result!.callExpressions).toContainEqual({
       callerName: "main",
       calleeName: "MyClass",
     });
     expect(result!.callExpressions).toContainEqual({
       callerName: "main",
-      calleeName: "method",
+      calleeName: "c.method",
     });
 
     // MyClass (class context) should NOT have its own call edges
@@ -335,11 +336,12 @@ describe("tree-sitter rust parser", () => {
       calleeName: "helper",
     });
 
-    // main calls bar
-    expect(result!.callExpressions).toContainEqual({
-      callerName: "main",
-      calleeName: "bar",
-    });
+    // main calls bar — the receiver qualifier is preserved
+    expect(
+      result!.callExpressions.find(
+        (call) => call.callerName === "main" && call.calleeName === "f.bar",
+      ),
+    ).toBeDefined();
 
     // impl Foo should NOT have its own call edges
     const implCalls = result!.callExpressions.filter((c) => c.callerName === "impl Foo");

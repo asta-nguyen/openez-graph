@@ -18,6 +18,7 @@ export {
 } from "./local-workspace";
 export { removeWorkspace } from "./remove-workspace";
 export type { RemoveWorkspaceReport, RemoveWorkspaceSelector } from "./remove-workspace";
+export { publicSymbolKind } from "./utils";
 export type {
   FileOutlineResult,
   FileOutlineSymbol,

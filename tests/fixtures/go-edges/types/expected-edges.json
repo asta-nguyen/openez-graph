@@ -1,0 +1,11 @@
+{
+  "canary": { "from": "d/d.go#useG", "to": "d/d.go#newG" },
+  "edges": [
+    { "from": "d/d.go#useG", "to": "d/d.go#newF", "tier": "package" },
+    { "from": "d/d.go#useG", "to": "d/d.go#newG", "tier": "package" },
+    { "from": "d/d.go#useG", "to": "d/d.go#Map", "tier": "package" },
+    { "from": "d/d.go#useG", "to": "d/d.go#F::Close", "tier": "type" },
+    { "from": "d/d.go#useG", "to": "d/d.go#G::Close", "tier": "type" },
+    { "from": "d/d.go#G::Close", "to": "d/d.go#F::Close", "tier": "type" }
+  ]
+}

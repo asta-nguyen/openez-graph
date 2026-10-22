@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "C/Consumer.cs#C::Run", "to": "U/Helper.cs#Helper::Add" },
+  "edges": [
+    { "from": "C/Consumer.cs#C::Run", "to": "U/Helper.cs#Helper::Add", "tier": "binding" },
+    { "from": "C/Consumer.cs#C::Run", "to": "S/St.cs#St::Twice", "tier": "binding" }
+  ]
+}

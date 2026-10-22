@@ -1,0 +1,4 @@
+{
+  "canary": { "from": "importer.js#run", "to": "amb.js#uniq" },
+  "edges": [{ "from": "importer.js#run", "to": "amb.js#uniq" }]
+}

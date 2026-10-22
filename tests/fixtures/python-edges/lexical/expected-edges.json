@@ -1,0 +1,28 @@
+{
+  "canary": {
+    "from": "main.py#outer",
+    "to": "main.py#top_helper"
+  },
+  "edges": [
+    {
+      "from": "main.py#outer",
+      "to": "main.py#outer::inner"
+    },
+    {
+      "from": "main.py#outer",
+      "to": "main.py#top_helper"
+    },
+    {
+      "from": "main.py#outer",
+      "to": "main.py#local_target"
+    },
+    {
+      "from": "main.py#outer::inner",
+      "to": "main.py#top_helper"
+    },
+    {
+      "from": "main.py#K::m",
+      "to": "main.py#top_helper"
+    }
+  ]
+}

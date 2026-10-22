@@ -1,0 +1,6 @@
+{
+  "canary": { "from": "A/C.cs#C::Run", "to": "A/Helper.cs#Helper::Add" },
+  "edges": [
+    { "from": "A/C.cs#C::Run", "to": "A/Helper.cs#Helper::Add", "tier": "binding" }
+  ]
+}

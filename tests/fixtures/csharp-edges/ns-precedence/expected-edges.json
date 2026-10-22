@@ -1,0 +1,4 @@
+{
+  "canary": { "from": "C.cs#C::Go", "to": "U.cs#Thing::F" },
+  "edges": [{ "from": "C.cs#C::Go", "to": "U.cs#Thing::F", "tier": "binding" }]
+}

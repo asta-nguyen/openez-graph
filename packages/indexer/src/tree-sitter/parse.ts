@@ -34,6 +34,13 @@ export interface SymbolRule {
   receiverField?: string;
   /** transform receiver text (e.g. strip parens) */
   normalizeReceiver?: (text: string) => string;
+  /** emit one symbol per identifier (Go const/var specs) */
+  extractNames?: (node: Node) => string[];
+  /** emit symbols only at package level (empty context stack) */
+  topLevelOnly?: boolean;
+  /** dynamic symbol type override — C++ function_definition resolves to
+   *  "method" (qualified declarator or class context) vs "function" */
+  symbolTypeFor?: (node: Node, contextStack: ReadonlyArray<ContextFrame>) => string;
 }
 
 /**
@@ -44,7 +51,11 @@ export interface SymbolRule {
  */
 export interface ContextFrame {
   name: string;
-  endRow: number;
+  /** Byte offset where this context's node ends — used to pop contexts when
+   *  the walker reaches a sibling that shares the end row (same-line
+   *  declarations), where an end-row-only check cannot tell child from
+   *  sibling. */
+  endByte: number;
   kind?: "class" | "module";
   receiver?: { varName: string; typeName: string };
 }
@@ -59,6 +70,18 @@ export interface CallRule {
   nodeType: string;
   /** field containing the callable expression */
   functionField: string;
+  /**
+   * Optional override for callee extraction when the call node's callee is
+   * not a single field (Java method_invocation: `name` field plus optional
+   * `object`/`super` receiver). Takes precedence over functionField.
+   */
+  extractCall?: (callNode: Node) => string | null;
+  /**
+   * Optional second node type treated as a call only when its `typeField`
+   * child has `requiredTypeKind` — Go generic instantiations surface as
+   * `type_conversion_expression` with a `generic_type` type node.
+   */
+  typeConversion?: { nodeType: string; typeField: string; requiredTypeKind: string };
 }
 
 export interface LanguageConfig {
@@ -88,6 +111,50 @@ export interface LanguageConfig {
     normalized: string,
     contextStack: ReadonlyArray<ContextFrame>,
   ) => string | null;
+  /**
+   * When true, `callExpressions[].calleeName` keeps the qualified dotted
+   * name (`pkg.func`, `self.m`) while `calledIdentifiers` records the last
+   * segment; the call-ignore list is applied to the raw, normalized, and
+   * last-segment forms. Python only — resolution consumes the qualifier.
+   */
+  keepQualifiedCallee?: boolean;
+  /**
+   * Optional per-symbol enclosing-declaration scope key (C#): the scope
+   * key of the innermost namespace declaration containing the symbol —
+   * the same `name@line[#ord]` encoding used for scoped usings —
+   * serialized as the symbol's `receiver`. Lets the resolver rebuild true
+   * lexical ancestry where line ranges cannot (same-line nesting vs
+   * same-line siblings).
+   */
+  enclosingScope?: (node: Node) => string | undefined;
+  /**
+   * Optional post-pass that marks `call.shadowedLocal` for calls whose
+   * last segment is bound as a local inside the caller's symbol range.
+   * Runs once per file on the walker's output — Rust only.
+   */
+  markCallShadowing?: (
+    content: string,
+    symbols: ExtractedSymbol[],
+    calls: Array<{ callerName: string; calleeName: string; shadowedLocal?: boolean }>,
+  ) => void;
+  /**
+   * Optional source pre-pass applied only to the text handed to the
+   * tree-sitter parser — chunking still uses the original content. C# uses it
+   * to blank conditional-directive lines while preserving every byte offset.
+   */
+  preprocess?: (content: string) => string;
+  /**
+   * Node types whose symbol span extends to end-of-file instead of the
+   * node's own end row — a C# `namespace Foo;` (file-scoped) covers the rest
+   * of the file even though the grammar node ends at the semicolon.
+   */
+  eofSpanNodeTypes?: ReadonlySet<string>;
+  /**
+   * When true, any syntax error in the tree rejects the whole parse so the
+   * caller falls back to generic chunks with no graph records. Used by the
+   * `.h` C++ config only — other C++ extensions keep their partial trees.
+   */
+  errorFailsParse?: boolean;
 }
 
 // ── Extraction core ──
@@ -116,11 +183,31 @@ function getNodeName(node: Node, field: string): string | null {
   return firstChild?.text ?? null;
 }
 
+/**
+ * Last segment of a qualified callee: `pkg.func` → `func`,
+ * `crate::util::run` → `run`, `x.run` → `run`. Used for calledIdentifiers
+ * when `keepQualifiedCallee` keeps the full path in callExpressions.
+ */
+function lastPathSegment(value: string): string {
+  return value.split(/[.:]/).filter(Boolean).pop() ?? value;
+}
+
 function isCallNode(node: Node, callRule: CallRule): boolean {
-  return node.type === callRule.nodeType;
+  if (node.type === callRule.nodeType) return true;
+  const tc = callRule.typeConversion;
+  return (
+    tc !== undefined &&
+    node.type === tc.nodeType &&
+    node.childForFieldName(tc.typeField)?.type === tc.requiredTypeKind
+  );
 }
 
 function extractCallName(node: Node, callRule: CallRule): string | null {
+  if (callRule.extractCall) return callRule.extractCall(node);
+  const tc = callRule.typeConversion;
+  if (tc && node.type === tc.nodeType) {
+    return node.childForFieldName(tc.typeField)?.text ?? null;
+  }
   const funcNode = node.childForFieldName(callRule.functionField);
   if (!funcNode) return null;
   return funcNode.text;
@@ -165,10 +252,17 @@ function walkTree(
   while (stack.length > 0) {
     const node = stack.pop()!;
     const startRow = node.startPosition.row + 1; // 1-based
-    const endRow = node.endPosition.row + 1;
+    const endRow = config.eofSpanNodeTypes?.has(node.type)
+      ? lines.length
+      : node.endPosition.row + 1;
 
-    // Pop expired contexts
-    while (contextStack.length > 0 && startRow > contextStack[contextStack.length - 1].endRow) {
+    // Pop expired contexts. A context ends where its node ends byte-wise:
+    // a node starting at or after that byte is outside the context even when
+    // it shares the context's end row (same-line sibling declarations).
+    while (
+      contextStack.length > 0 &&
+      node.startIndex >= contextStack[contextStack.length - 1].endByte
+    ) {
       contextStack.pop();
     }
 
@@ -218,8 +312,19 @@ function walkTree(
             // @lru_cache or @app.route → normalize the expression text
             decName = config.normalizeCallName(expr.text);
           }
-          if (decName && !config.callIgnores.has(decName) && decName !== innerName) {
-            calledIdentifiers.add(decName);
+          const decIdentifier = decName
+            ? config.keepQualifiedCallee
+              ? lastPathSegment(decName)
+              : decName
+            : null;
+          if (
+            decName &&
+            decIdentifier &&
+            !config.callIgnores.has(decName) &&
+            !config.callIgnores.has(decIdentifier) &&
+            decName !== innerName
+          ) {
+            calledIdentifiers.add(decIdentifier);
             callExpressions.push({ callerName: innerName, calleeName: decName });
           }
         }
@@ -236,11 +341,29 @@ function walkTree(
         if (contextName) {
           contextStack.push({
             name: contextName,
-            endRow,
+            endByte: node.endIndex,
             kind: symbolRule.contextKind,
           });
         }
         // Skip symbol emission and call extraction — context-only.
+      } else if (symbolRule.extractNames) {
+        // Multi-name declarations (Go const/var specs). These are values,
+        // not callables: emit symbols but never contexts or call edges.
+        if (!symbolRule.topLevelOnly || contextStack.length === 0) {
+          const parentName =
+            contextStack.length > 0 ? contextStack[contextStack.length - 1].name : null;
+          for (const specName of symbolRule.extractNames(node)) {
+            if (!specName || specName === "_") continue;
+            symbols.push({
+              name: parentName ? `${parentName}::${specName}` : specName,
+              symbolType: symbolRule.symbolType,
+              type: symbolRule.symbolType,
+              exported: symbolRule.isExported ? symbolRule.isExported(specName, node) : false,
+              startLine: startRow,
+              endLine: endRow,
+            });
+          }
+        }
       } else {
         const name = symbolRule.extractName
           ? symbolRule.extractName(node)
@@ -272,14 +395,16 @@ function walkTree(
               ? `${parentName}::${name}`
               : name;
 
+          const symType = symbolRule.symbolTypeFor?.(node, contextStack) ?? symbolRule.symbolType;
+          const effectiveReceiver = receiver ?? config.enclosingScope?.(node);
           symbols.push({
             name: fullName,
-            symbolType: symbolRule.symbolType,
-            type: symbolRule.symbolType,
+            symbolType: symType,
+            type: symType,
             exported,
             startLine: startRow,
             endLine: endRow,
-            ...(receiver ? { receiver } : {}),
+            ...(effectiveReceiver ? { receiver: effectiveReceiver } : {}),
           });
 
           // Extract calls within this symbol's body, skipping calls that are
@@ -289,14 +414,25 @@ function walkTree(
             receiverVar && receiverType
               ? { varName: receiverVar, typeName: receiverType }
               : undefined;
+          // Java enum constants only scope a constant-specific class body —
+          // a bodiless constant (`LOW, HIGH`) must not leak a frame into its
+          // same-line siblings.
           const isContextNode =
-            symbolRule.establishesContext || config.contextNodeTypes.has(node.type);
+            (symbolRule.establishesContext || config.contextNodeTypes.has(node.type)) &&
+            !(
+              config.language === "java" &&
+              node.type === "enum_constant" &&
+              !node.childForFieldName("body")
+            );
           const contextName = isContextNode
             ? (symbolRule.extractContextName?.(node, contextStack) ?? fullName)
             : null;
           const callContext =
             contextName && symbolRule.contextKind
-              ? [...contextStack, { name: contextName, endRow, kind: symbolRule.contextKind }]
+              ? [
+                  ...contextStack,
+                  { name: contextName, endByte: node.endIndex, kind: symbolRule.contextKind },
+                ]
               : contextStack;
           extractCallsInNode(
             node,
@@ -311,7 +447,7 @@ function walkTree(
           if (isContextNode) {
             contextStack.push({
               name: contextName ?? fullName,
-              endRow,
+              endByte: node.endIndex,
               kind: symbolRule.contextKind,
               receiver: receiverInfo,
             });
@@ -319,16 +455,25 @@ function walkTree(
         }
       }
     } else if (isCallNode(node, config.callRule)) {
-      // Top-level call not inside a symbol — still track it
+      // Top-level call not inside a symbol — still track it. Go calls
+      // through the active method receiver qualify as Type::method, matching
+      // the native walker's calledIdentifiers output.
       const calleeName = extractCallName(node, config.callRule);
       if (calleeName) {
         const normalized = config.normalizeCallName(calleeName);
+        const trackedId = config.keepQualifiedCallee ? lastPathSegment(normalized) : normalized;
         if (
           normalized &&
           !config.callIgnores.has(calleeName) &&
-          !config.callIgnores.has(normalized)
+          !config.callIgnores.has(normalized) &&
+          !config.callIgnores.has(trackedId)
         ) {
-          calledIdentifiers.add(normalized);
+          const receiver = contextStack[contextStack.length - 1]?.receiver;
+          const tracked =
+            receiver && calleeName.startsWith(`${receiver.varName}.`)
+              ? `${receiver.typeName}::${normalized.split(".").pop()}`
+              : normalized;
+          calledIdentifiers.add(config.keepQualifiedCallee ? trackedId : tracked);
         }
       }
     }
@@ -370,7 +515,18 @@ function extractCallsInNode(
       );
     });
 
-  const callNodes = symbolNode.descendantsOfType(config.callRule.nodeType);
+  const callNodes = [
+    ...symbolNode.descendantsOfType(config.callRule.nodeType),
+    ...(config.callRule.typeConversion
+      ? symbolNode
+          .descendantsOfType(config.callRule.typeConversion.nodeType)
+          .filter(
+            (node) =>
+              node.childForFieldName(config.callRule.typeConversion!.typeField)?.type ===
+              config.callRule.typeConversion!.requiredTypeKind,
+          )
+      : []),
+  ];
   for (const callNode of callNodes) {
     // Skip calls inside nested symbols — they'll be extracted when processing
     // the nested symbol itself.
@@ -389,21 +545,24 @@ function extractCallsInNode(
     // targeting the wrong same-named method on a different type.
     const qualifiedCallee =
       receiverInfo && calleeName.startsWith(`${receiverInfo.varName}.`)
-        ? `${receiverInfo.typeName}::${normalized}`
+        ? `${receiverInfo.typeName}::${normalized.split(".").pop()}`
         : normalized;
 
     const hookQualified = config.qualifyCall?.(callNode, calleeName, normalized, contextStack);
     const finalCallee = hookQualified ?? qualifiedCallee;
+    const callIdentifier = config.keepQualifiedCallee ? lastPathSegment(finalCallee) : finalCallee;
 
     if (
       !normalized ||
+      !finalCallee ||
       config.callIgnores.has(calleeName) ||
       config.callIgnores.has(normalized) ||
+      (config.keepQualifiedCallee && config.callIgnores.has(callIdentifier)) ||
       finalCallee === callerName
     ) {
       continue;
     }
-    calledIdentifiers.add(finalCallee);
+    calledIdentifiers.add(callIdentifier);
     callExpressions.push({ callerName, calleeName: finalCallee });
   }
 }
@@ -415,8 +574,15 @@ export async function parseWithTreeSitter(
   content: string,
   counter?: TokenCounter,
 ): Promise<IndexedCodeResult | null> {
-  const tree = await parseContent(config.language, content);
+  const tree = await parseContent(
+    config.language,
+    config.preprocess ? config.preprocess(content) : content,
+  );
   if (!tree) return null;
+  if (config.errorFailsParse && tree.rootNode.hasError) {
+    tree.delete();
+    return null;
+  }
 
   try {
     const lines = content.split("\n");
@@ -425,6 +591,7 @@ export async function parseWithTreeSitter(
       config,
       lines,
     );
+    config.markCallShadowing?.(content, symbols, callExpressions);
 
     const chunks = createSymbolChunks(symbols, lines, config.language, counter);
     if (chunks.length === 0) {

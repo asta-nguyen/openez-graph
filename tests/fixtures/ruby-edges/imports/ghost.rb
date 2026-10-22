@@ -1,0 +1,3 @@
+def ghost
+  :ghost
+end

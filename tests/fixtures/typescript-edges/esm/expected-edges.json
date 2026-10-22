@@ -1,0 +1,10 @@
+{
+  "canary": { "from": "importer.ts#run", "to": "lib.ts#helper" },
+  "edges": [
+    { "from": "importer.ts#run", "to": "lib.ts#helper" },
+    { "from": "importer.ts#run", "to": "lib.ts#main" },
+    { "from": "importer.ts#run", "to": "lib.ts#other" },
+    { "from": "importer.ts#run", "to": "widget.tsx#render" },
+    { "from": "widget.tsx#render", "to": "lib.ts#helper" }
+  ]
+}

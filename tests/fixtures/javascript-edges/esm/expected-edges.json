@@ -1,0 +1,15 @@
+{
+  "canary": { "from": "importer.js#run", "to": "importer.js#helper" },
+  "edges": [
+    { "from": "importer.js#run", "to": "importer.js#helper" },
+    { "from": "importer.js#run", "to": "lib.js#real" },
+    { "from": "importer.js#run", "to": "lib.js#defaultFn" },
+    { "from": "importer.js#run", "to": "lib.js#named" },
+    { "from": "importer.js#run", "to": "lib.js#nsMember" },
+    { "from": "importer.js#run", "to": "anodef.js#default" },
+    { "from": "importer.js#run", "to": "arrdef.js#default" },
+    { "from": "importer.js#runScope", "to": "lib.js#targetScoped" },
+    { "from": "lib.js#defaultFn", "to": "lib.js#real" },
+    { "from": "clsdef.js#default.run", "to": "clsdef.js#helper" }
+  ]
+}

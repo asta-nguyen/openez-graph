@@ -1,0 +1,9 @@
+{
+  "canary": { "from": "consumer.ts#run", "to": "impl.ts#direct" },
+  "edges": [
+    { "from": "consumer.ts#run", "to": "impl.ts#direct" },
+    { "from": "consumer.ts#run", "to": "impl.ts#viaStar" },
+    { "from": "consumer.ts#run", "to": "impl.ts#dflt" },
+    { "from": "consumer.ts#run", "to": "b.ts#winner" }
+  ]
+}

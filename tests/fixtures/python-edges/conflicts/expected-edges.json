@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "main.py#ok", "to": "real_c.py#act" },
+  "edges": [
+    { "from": "main.py#ok", "to": "real_c.py#act" },
+    { "from": "main.py#g", "to": "main.py#local_target" }
+  ]
+}

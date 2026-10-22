@@ -48,15 +48,28 @@ function resolveWebTreeSitterWasm(): string | null {
   return null;
 }
 
+/**
+ * Language key → grammar npm package and wasm artifact name. Most languages
+ * follow the `tree-sitter-<language>` convention on both sides; csharp does
+ * not — its package is `tree-sitter-c-sharp` while the artifact keeps the
+ * grammar's C name `tree-sitter-c_sharp.wasm`.
+ */
+const GRAMMAR_PACKAGES: Record<string, { packageName: string; wasmFile: string }> = {
+  csharp: { packageName: "tree-sitter-c-sharp", wasmFile: "tree-sitter-c_sharp.wasm" },
+};
+
 function resolveGrammarWasm(language: string): string | null {
-  const fileName = `tree-sitter-${language}.wasm`;
+  const { packageName, wasmFile } = GRAMMAR_PACKAGES[language] ?? {
+    packageName: `tree-sitter-${language}`,
+    wasmFile: `tree-sitter-${language}.wasm`,
+  };
   // Individual grammar packages ship the .wasm in their package root.
-  const grammarPath = resolvePackageFile(`tree-sitter-${language}`, fileName);
+  const grammarPath = resolvePackageFile(packageName, wasmFile);
   if (grammarPath && fs.existsSync(grammarPath)) return grammarPath;
 
   // Fallback: tree-sitter-wasms monolith package (older ABI, may not work
   // with newer web-tree-sitter, but kept for resilience).
-  const wasmsPath = resolvePackageFile("tree-sitter-wasms", `out/${fileName}`);
+  const wasmsPath = resolvePackageFile("tree-sitter-wasms", `out/${wasmFile}`);
   if (wasmsPath && fs.existsSync(wasmsPath)) return wasmsPath;
 
   return null;

@@ -1,0 +1,8 @@
+{
+  "canary": { "from": "a/a.go#A", "to": "inner/p/p.go#Inner" },
+  "edges": [
+    { "from": "a/a.go#A", "to": "inner/p/p.go#Inner", "tier": "package" },
+    { "from": "b/b.go#B", "to": "b/b.go#local", "tier": "package" },
+    { "from": "dup1/call.go#Call", "to": "dup1/q/q.go#Q1", "tier": "package" }
+  ]
+}

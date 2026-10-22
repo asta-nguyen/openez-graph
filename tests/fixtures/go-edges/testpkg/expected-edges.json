@@ -1,0 +1,8 @@
+{
+  "canary": { "from": "foo/foo_test.go#TestNew", "to": "foo/foo.go#New" },
+  "edges": [
+    { "from": "foo/foo_test.go#TestNew", "to": "foo/foo.go#New", "tier": "package" },
+    { "from": "foo/foo_test.go#TestNew", "to": "foo/foo_test.go#helper", "tier": "package" },
+    { "from": "foo/helper_test.go#TestHelper", "to": "foo/foo_test.go#helper", "tier": "package" }
+  ]
+}

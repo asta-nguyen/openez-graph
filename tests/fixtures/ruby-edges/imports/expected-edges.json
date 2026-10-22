@@ -1,0 +1,23 @@
+{
+  "canary": {
+    "type": "imports",
+    "from": "main.rb",
+    "to": "util.rb"
+  },
+  "calls": [
+    {
+      "from": "main.rb#Main::go",
+      "to": "util.rb#Util::help"
+    }
+  ],
+  "imports": [
+    {
+      "from": "main.rb",
+      "to": "util.rb"
+    },
+    {
+      "from": "main.rb",
+      "to": "other.rb"
+    }
+  ]
+}

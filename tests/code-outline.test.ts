@@ -255,6 +255,56 @@ def multiply(a, b):
     expect(names).toContain("multiply");
   });
 
+  test("outline kind keeps the public vocabulary for C# and Java static members", async () => {
+    const srcDir = path.join(workspaceRoot, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, "Helper.cs"),
+      `namespace Acme.Util
+{
+    public static class Helper
+    {
+        public static int Add(int a, int b) => a + b;
+        public int Inst(int x) => x;
+    }
+}
+`,
+    );
+    fs.writeFileSync(
+      path.join(srcDir, "Util.java"),
+      `package app;
+
+public class Util {
+    public static int fmt(int x) { return x; }
+    public int inst() { return 0; }
+}
+`,
+    );
+
+    const registry = createRegistryRepository();
+    const ws = await registry.ensureWorkspace({ rootPath: workspaceRoot, name: "outline-kinds" });
+    await indexWorkspace({ workspaceId: ws.id, rootPath: workspaceRoot, mode: "full" });
+
+    const repo = createWorkspaceRepository(workspaceRoot);
+
+    // The parsers tag static members internally (static_method /
+    // static_function) so resolvers can filter `using static`/`import
+    // static` targets — the public outline kind must stay method/function.
+    const csOutline = await repo.getFileOutline("src/Helper.cs");
+    expect(csOutline).not.toBeNull();
+    const csKinds = new Map(csOutline!.symbols.map((s) => [s.name, s.kind]));
+    expect(csKinds.get("Helper::Add")).toBe("method");
+    expect(csKinds.get("Helper::Inst")).toBe("method");
+    expect(csOutline!.outlineText).not.toContain("static_method");
+
+    const javaOutline = await repo.getFileOutline("src/Util.java");
+    expect(javaOutline).not.toBeNull();
+    const javaKinds = new Map(javaOutline!.symbols.map((s) => [s.name, s.kind]));
+    expect(javaKinds.get("Util::fmt")).toBe("function");
+    expect(javaKinds.get("Util::inst")).toBe("function");
+    expect(javaOutline!.outlineText).not.toContain("static_function");
+  });
+
   test("handles Windows backslashes and prevents LIKE wildcard mismatches", async () => {
     const srcDir = path.join(workspaceRoot, "src");
     fs.mkdirSync(srcDir, { recursive: true });

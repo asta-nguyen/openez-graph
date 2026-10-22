@@ -1,0 +1,2 @@
+def go():
+    return "b"

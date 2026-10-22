@@ -1,5 +1,5 @@
 import { defineConfig } from "tsup";
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
@@ -30,9 +30,12 @@ export default defineConfig({
     "@openez-graph/native",
     "web-tree-sitter",
     "tree-sitter-python",
+    "tree-sitter-cpp",
+    "tree-sitter-c-sharp",
     "tree-sitter-go",
     "tree-sitter-rust",
     "tree-sitter-ruby",
+    "tree-sitter-java",
     "oxc-parser",
     "@oxc-parser/binding-darwin-arm64",
     "@oxc-parser/binding-darwin-x64",
@@ -85,13 +88,18 @@ export default defineConfig({
       console.log("✓ Copied CHANGELOG.md → dist/CHANGELOG.md");
     }
 
-    // Copy native .node binary + loader into dist so it resolves without node_modules
+    // Copy every available native .node binary + the index.js platform picker
+    // into dist so it resolves without node_modules
     const nativeDir = path.resolve(__dirname, "../../packages/native");
-    const nodeFile = path.join(nativeDir, "index.linux-x64-gnu.node");
-    if (existsSync(nodeFile)) {
+    const nativeBinaries = readdirSync(nativeDir).filter((entry) =>
+      /^index\.[^.]+\.node$/.test(entry),
+    );
+    if (nativeBinaries.length > 0) {
       const nativeDest = path.resolve(__dirname, "dist/native");
       mkdirSync(nativeDest, { recursive: true });
-      cpSync(nodeFile, path.join(nativeDest, "index.linux-x64-gnu.node"));
+      for (const binary of nativeBinaries) {
+        cpSync(path.join(nativeDir, binary), path.join(nativeDest, binary));
+      }
       cpSync(path.join(nativeDir, "index.js"), path.join(nativeDest, "index.js"));
       // Create node_modules/@openez-graph/native/package.json so require resolves from dist
       mkdirSync(path.resolve(__dirname, "dist/node_modules/@openez-graph/native"), {
@@ -100,14 +108,18 @@ export default defineConfig({
       writeFileSync(
         path.resolve(__dirname, "dist/node_modules/@openez-graph/native/package.json"),
         JSON.stringify(
-          { name: "@openez-graph/native", version: "0.1.0", main: "../../native/index.js" },
+          {
+            name: "@openez-graph/native",
+            version: "0.1.0",
+            main: "../../../native/index.js",
+          },
           null,
           2,
         ),
       );
-      console.log("✓ Copied native .node + loader → dist/native/");
+      console.log(`✓ Copied ${nativeBinaries.join(", ")} + loader → dist/native/`);
     } else {
-      console.log("⚠ Native .node not found — run cargo build first");
+      console.log("⚠ No native .node binaries found — CLI will use WASM/regex fallbacks");
     }
 
     // Build SQLite template databases and copy into dist.

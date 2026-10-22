@@ -1,8 +1,10 @@
 import path from "node:path";
 
 import { exactTokenCounter, type TokenCounter } from "@openez-graph/core";
+import { publicSymbolKind } from "@openez-graph/db";
 
 import { hashContent } from "./hash";
+import { extractPythonBindings, pythonImpliedImportPaths } from "./python-resolver";
 import type { IndexedChunk } from "./types";
 
 export function codeSearchText(text: string): string {
@@ -32,6 +34,22 @@ export const codeExtensions = new Map<string, string>([
   [".rb", "ruby"],
   [".rake", "ruby"],
   [".gemspec", "ruby"],
+  // C++ (no C parser exists, so `.h` maps to cpp; lowercase `.c` stays
+  // unindexed). Uppercase `.C` is added here too — `inferDocumentKind`
+  // preserves the raw-case extension for this key.
+  [".cpp", "cpp"],
+  [".cc", "cpp"],
+  [".cxx", "cpp"],
+  [".c++", "cpp"],
+  [".hpp", "cpp"],
+  [".hh", "cpp"],
+  [".hxx", "cpp"],
+  [".h++", "cpp"],
+  [".h", "cpp"],
+  [".C", "cpp"],
+  [".cs", "csharp"],
+  [".csx", "csharp"],
+  [".java", "java"],
 ]);
 
 export const configExtensions = new Map<string, string>([
@@ -67,7 +85,10 @@ export interface LanguageInfo {
 }
 
 export function inferDocumentKind(filePath: string): LanguageInfo {
-  const extension = path.extname(filePath).toLowerCase();
+  const rawExtension = path.extname(filePath);
+  // `.C` is the only case-sensitive C++ extension — keep its raw case so it
+  // can map to cpp while lowercase `.c` remains unindexed.
+  const extension = rawExtension === ".C" ? rawExtension : rawExtension.toLowerCase();
 
   if (markdownExtensions.has(extension)) {
     return { kind: "markdown", language: "markdown", extension };
@@ -159,41 +180,9 @@ function stripNonCode(
 
 // ── Python parser ──
 
-function stripPythonAlias(value: string): string {
-  return (
-    value
-      .trim()
-      .replace(/^\(+|\)+$/g, "")
-      .split(/\s+as\s+/i)[0]
-      ?.trim() ?? ""
-  );
-}
-
-function parsePythonImportLine(line: string): string[] {
-  const trimmed = line.trim().replace(/\s+#.*$/, "");
-  const fromMatch = /^from\s+([.\w]+)\s+import\s+(.+)$/.exec(trimmed);
-  if (fromMatch) {
-    const modulePath = fromMatch[1];
-    const importedNames = fromMatch[2]
-      .split(",")
-      .map(stripPythonAlias)
-      .filter((name) => name && name !== "*");
-
-    return [
-      modulePath,
-      ...importedNames.map((name) =>
-        modulePath.endsWith(".") ? `${modulePath}${name}` : `${modulePath}.${name}`,
-      ),
-    ];
-  }
-
-  const importMatch = /^import\s+(.+)$/.exec(trimmed);
-  if (!importMatch) return [];
-
-  return importMatch[1].split(",").map(stripPythonAlias).filter(Boolean);
-}
-
-function normalizePythonCallName(value: string): string {
+/** Last dotted segment — `calledIdentifiers` keep final segments while
+ *  `callExpressions[].calleeName` keeps the qualifier for the resolver. */
+function pythonCallIdentifier(value: string): string {
   const parts = value.split(".").filter(Boolean);
   return parts[parts.length - 1] ?? value;
 }
@@ -230,7 +219,10 @@ export function parsePython(
   const lines = content.split("\n");
   const codeLines = stripNonCode(content, { hashComments: true, tripleStrings: true }).split("\n");
   const definedSymbols: ExtractedSymbol[] = [];
-  const importPaths: string[] = [];
+  // Import paths are implied by the shared binding extractor so multiline
+  // parenthesized imports and relative imports (`from . import x` → `.x`)
+  // match the tree-sitter parsers.
+  const importPaths = pythonImpliedImportPaths(extractPythonBindings(content));
   const calledIdentifiers = new Set<string>();
   const callExpressions: Array<{ callerName: string; calleeName: string }> = [];
 
@@ -241,9 +233,16 @@ export function parsePython(
   let pendingDecorators: Array<{ name: string; lineIndex: number }> = [];
   const symbolStack: Array<{ name: string; endLine: number }> = [];
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  // A `name(` match is a call only when the root is an identifier — `.name(`
+  // after `)`, `]`, `}`, or a string quote belongs to a call result or
+  // literal (`super().x()`, `x[0].y()`).
+  const callHasNameRoot = (lineStr: string, index: number): boolean => {
+    if (lineStr[index - 1] !== ".") return true;
+    const before = lineStr[index - 2];
+    return before === undefined || /[\w]/.test(before);
+  };
 
+  for (let i = 0; i < lines.length; i++) {
     while (symbolStack.length > 0 && i >= symbolStack[symbolStack.length - 1].endLine) {
       symbolStack.pop();
     }
@@ -254,7 +253,7 @@ export function parsePython(
     if (decoratorMatch) {
       pendingDecorators.push({ name: decoratorMatch[1], lineIndex: i });
       const decoratorCalls = decoratorMatch[1];
-      const decoratorCalledName = normalizePythonCallName(decoratorCalls);
+      const decoratorCalledName = pythonCallIdentifier(decoratorCalls);
       if (!PYTHON_CALL_IGNORES.has(decoratorCalledName)) {
         calledIdentifiers.add(decoratorCalledName);
       }
@@ -292,28 +291,43 @@ export function parsePython(
 
       for (let lineIdx = i; lineIdx < endLine; lineIdx++) {
         const lineStr = codeLines[lineIdx];
+        if (lineIdx > i) {
+          const innerTrimmed = lineStr.trim();
+          // Skip nested definitions and their decorator lines entirely —
+          // their calls are attributed to the nested symbol's own scan.
+          if (decoratorRegex.test(innerTrimmed)) continue;
+          if (symbolRegex.test(innerTrimmed)) {
+            lineIdx = findBlockEnd(codeLines, lineIdx) - 1;
+            continue;
+          }
+        }
         callRegex.lastIndex = 0;
         let callMatch: RegExpExecArray | null;
         while ((callMatch = callRegex.exec(lineStr)) !== null) {
           const rawCalledName = callMatch[1];
-          const calledName = normalizePythonCallName(rawCalledName);
+          if (!callHasNameRoot(lineStr, callMatch.index)) continue;
+          const calledName = pythonCallIdentifier(rawCalledName);
           if (
             !PYTHON_CALL_IGNORES.has(rawCalledName) &&
             !PYTHON_CALL_IGNORES.has(calledName) &&
-            calledName !== rawName &&
-            calledName !== name
+            rawCalledName !== name &&
+            !(lineIdx === i && rawCalledName === rawName)
           ) {
             calledIdentifiers.add(calledName);
-            callExpressions.push({ callerName: name, calleeName: calledName });
+            callExpressions.push({ callerName: name, calleeName: rawCalledName });
           }
         }
       }
 
       for (const dec of pendingDecorators) {
-        const decCalledName = normalizePythonCallName(dec.name);
-        if (!PYTHON_CALL_IGNORES.has(decCalledName) && decCalledName !== name) {
-          calledIdentifiers.add(decCalledName);
-          callExpressions.push({ callerName: name, calleeName: decCalledName });
+        const decIdentifier = pythonCallIdentifier(dec.name);
+        if (
+          !PYTHON_CALL_IGNORES.has(dec.name) &&
+          !PYTHON_CALL_IGNORES.has(decIdentifier) &&
+          dec.name !== name
+        ) {
+          calledIdentifiers.add(decIdentifier);
+          callExpressions.push({ callerName: name, calleeName: dec.name });
         }
 
         const decLine = codeLines[dec.lineIndex];
@@ -321,15 +335,16 @@ export function parsePython(
         const decCallRegex = new RegExp(callRegex);
         while ((decCallMatch = decCallRegex.exec(decLine)) !== null) {
           const rawCalledName = decCallMatch[1];
-          const calledName = normalizePythonCallName(rawCalledName);
+          if (!callHasNameRoot(decLine, decCallMatch.index)) continue;
+          const calledName = pythonCallIdentifier(rawCalledName);
           if (
             !PYTHON_CALL_IGNORES.has(rawCalledName) &&
             !PYTHON_CALL_IGNORES.has(calledName) &&
-            calledName !== name &&
-            calledName !== decCalledName
+            rawCalledName !== name &&
+            rawCalledName !== dec.name
           ) {
             calledIdentifiers.add(calledName);
-            callExpressions.push({ callerName: name, calleeName: calledName });
+            callExpressions.push({ callerName: name, calleeName: rawCalledName });
           }
         }
       }
@@ -337,21 +352,19 @@ export function parsePython(
       pendingDecorators = [];
       symbolStack.push({ name, endLine });
     }
-
-    importPaths.push(...parsePythonImportLine(line));
   }
 
   const chunks = createSymbolChunks(definedSymbols, lines, "python", counter);
   if (chunks.length === 0) {
     return {
       ...makeFallbackChunks(content, lines, counter),
-      importPaths: [...new Set(importPaths)],
+      importPaths,
     };
   }
 
   return {
     chunks,
-    importPaths: [...new Set(importPaths)],
+    importPaths,
     definedSymbols,
     calledIdentifiers: [...calledIdentifiers],
     callExpressions,
@@ -387,8 +400,9 @@ const GO_CALL_IGNORES = new Set([
 ]);
 
 function normalizeGoCallName(value: string): string {
-  const parts = value.split(".").filter(Boolean);
-  return parts[parts.length - 1] ?? value;
+  // Strip generic instantiation (`pkg.F[T]` → `pkg.F`); keep the selector so
+  // graph resolution can map the qualifier to an import binding.
+  return value.split("[")[0] ?? value;
 }
 
 function parseGoImports(lines: string[]): string[] {
@@ -433,10 +447,14 @@ export function parseGo(
 
   const funcRegex = /^func\s+(?:\(([^)]*)\)\s+)?(\w+)/;
   const typeRegex = /^type\s+(\w+)\s+(?:struct|interface|func|map|chan|\w+)/;
-  const constVarRegex = /^(?:const|var)\s+(\w+)/;
-  const callRegex = /(\w+(?:\.\w+)*)\s*\(/g;
+  const constVarRegex = /^(?:const|var)\s+(\w+(?:\s*,\s*\w+)*)/;
+  const constVarGroupStart = /^(const|var)\s*\(/;
+  const constVarGroupEnd = /^\)/;
+  const constVarSpecRegex = /^(\w+(?:\s*,\s*\w+)*)/;
+  const callRegex = /(\w+(?:\.\w+)*)\s*(?:\[[^\]]*\])?\s*\(/g;
 
   const importPaths = parseGoImports(lines);
+  let inConstVarGroup: "const" | "var" | null = null;
   const activeFunctions: Array<{
     name: string;
     symbolName: string;
@@ -461,9 +479,15 @@ export function parseGo(
     if (funcMatch) {
       const receiver = funcMatch[1]?.trim();
       const name = funcMatch[2];
-      const receiverParts = receiver?.match(/[A-Za-z_]\w*/g) ?? [];
+      // `(s *Stack[T])` → var `s`, type `Stack[T]` — whitespace split keeps
+      // the generic arguments like the tree-sitter paths.
+      const receiverParts =
+        receiver
+          ?.replace(/^\(+|\)+$/g, "")
+          .trim()
+          .split(/\s+/) ?? [];
       const receiverName = receiverParts[0];
-      const receiverType = receiverParts[receiverParts.length - 1];
+      const receiverType = receiverParts[receiverParts.length - 1]?.replace(/^\*/, "");
       const exported = name[0] >= "A" && name[0] <= "Z";
       const startLine = currentLineNum;
       const endLine = findBraceBlockEnd(codeLines, i);
@@ -498,18 +522,48 @@ export function parseGo(
       });
     }
 
+    // Package-level const/var symbols only — locals inside a function body
+    // are not graph symbols. Grouped specs (`const ( ... )`) yield one symbol
+    // per identifier; the blank identifier is skipped.
+    const groupStart = constVarGroupStart.exec(trimmed);
+    if (groupStart && activeFunctions.length === 0) {
+      inConstVarGroup = groupStart[1] as "const" | "var";
+    } else if (inConstVarGroup) {
+      if (constVarGroupEnd.test(trimmed)) {
+        inConstVarGroup = null;
+      } else if (activeFunctions.length === 0) {
+        const specMatch = constVarSpecRegex.exec(trimmed);
+        if (specMatch) {
+          for (const name of specMatch[1].split(",").map((n) => n.trim())) {
+            if (name === "_") continue;
+            const exported = name[0] >= "A" && name[0] <= "Z";
+            definedSymbols.push({
+              name,
+              symbolType: inConstVarGroup,
+              type: inConstVarGroup,
+              exported,
+              startLine: currentLineNum,
+              endLine: currentLineNum,
+            });
+          }
+        }
+      }
+    }
     const cvMatch = constVarRegex.exec(trimmed);
-    if (cvMatch) {
-      const name = cvMatch[1];
-      const exported = name[0] >= "A" && name[0] <= "Z";
-      definedSymbols.push({
-        name,
-        symbolType: trimmed.startsWith("const") ? "const" : "var",
-        type: trimmed.startsWith("const") ? "const" : "var",
-        exported,
-        startLine: currentLineNum,
-        endLine: currentLineNum,
-      });
+    if (cvMatch && !groupStart && activeFunctions.length === 0) {
+      const kind = trimmed.startsWith("const") ? "const" : "var";
+      for (const name of cvMatch[1].split(",").map((n) => n.trim())) {
+        if (name === "_") continue;
+        const exported = name[0] >= "A" && name[0] <= "Z";
+        definedSymbols.push({
+          name,
+          symbolType: kind,
+          type: kind,
+          exported,
+          startLine: currentLineNum,
+          endLine: currentLineNum,
+        });
+      }
     }
 
     if (activeFunctions.length > 0) {
@@ -523,7 +577,7 @@ export function parseGo(
           active.receiverName &&
           rawCalledName.startsWith(`${active.receiverName}.`) &&
           active.receiverType
-            ? `${active.receiverType}::${calledName}`
+            ? `${active.receiverType}::${calledName.split(".").pop()}`
             : calledName;
         if (
           !GO_CALL_IGNORES.has(rawCalledName) &&
@@ -574,13 +628,307 @@ const RUST_CALL_IGNORES = new Set([
   "None",
   "Ok",
   "Err",
+  "String",
+  "str",
+  "Vec",
+  "Option",
+  "Result",
+  "self",
+  "Self",
+  "true",
+  "false",
 ]);
 
-function normalizeRustCallName(value: string): string {
-  const parts = value.split("::").filter(Boolean);
-  const last = parts[parts.length - 1] ?? value;
-  const dotParts = last.split(".");
-  return dotParts[dotParts.length - 1] ?? last;
+const RUST_CALL_PATH_REGEX = /^\w+(?:::\w+)*(?:\.\w+)*$/;
+
+function stripRustTurbofish(value: string): string {
+  let result = "";
+  let depth = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (depth === 0 && value.startsWith("::<", i)) {
+      depth = 1;
+      i += 2;
+      continue;
+    }
+    if (depth > 0) {
+      if (value[i] === "<") depth++;
+      else if (value[i] === ">") depth--;
+      continue;
+    }
+    result += value[i];
+  }
+  return result;
+}
+
+/**
+ * Preserve the qualified Rust call path (`crate::util::run`, `x.run`,
+ * `Self::new`) with whitespace removed and turbofish arguments stripped
+ * (`parse::<u8>` → `parse`). Returns "" when the callee is not a plain
+ * identifier path (`iter().map`, `[1].iter`) — those never resolve.
+ */
+export function normalizeRustCallName(value: string): string {
+  const stripped = value.replace(/\s+/g, "");
+  const path = stripRustTurbofish(stripped);
+  return RUST_CALL_PATH_REGEX.test(path) ? path : "";
+}
+
+/** Last `::`/`.`-separated segment of a normalized Rust call path. */
+export function lastRustCallSegment(value: string): string {
+  return value.split(/[.:]/).filter(Boolean).pop() ?? value;
+}
+
+// ── Rust shadow marker ──
+
+const RUST_SHADOW_KEYWORDS = new Set([
+  "let",
+  "mut",
+  "ref",
+  "in",
+  "if",
+  "else",
+  "while",
+  "for",
+  "loop",
+  "match",
+  "fn",
+  "return",
+  "break",
+  "continue",
+  "self",
+  "Self",
+  "crate",
+  "super",
+  "where",
+  "move",
+  "const",
+  "static",
+  "type",
+  "as",
+  "pub",
+  "use",
+  "mod",
+  "impl",
+  "struct",
+  "enum",
+  "trait",
+  "Some",
+  "None",
+  "Ok",
+  "Err",
+  "true",
+  "false",
+]);
+
+function rustBoundNamesInRegion(region: string): string[] {
+  const names: string[] = [];
+  const re = /[A-Za-z_]\w*/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(region)) !== null) {
+    const w = m[0];
+    if (/^[A-Z]/.test(w) || RUST_SHADOW_KEYWORDS.has(w) || w === "_") continue;
+    names.push(w);
+  }
+  return names;
+}
+
+/**
+ * Collect names bound by signature params, let/for/if-let/while-let/
+ * closure-param/match-arm pattern regions inside a line range. Match scanning
+ * masks literals; elsewhere over-marking is safer than missing a local binding.
+ */
+function rustLocalBindingsInRange(
+  codeLines: string[],
+  startLine: number,
+  endLine: number,
+): Set<string> {
+  const body = codeLines.slice(startLine - 1, endLine).join("\n");
+  const maskLiteral = (literal: string) => literal.replace(/[^\n]/g, " ");
+  const scanBody = body
+    .replace(/(?:br|r)(#{0,})"[\s\S]*?"\1/g, maskLiteral)
+    .replace(/"(?:\\[\s\S]|[^"\\])*"/g, maskLiteral)
+    .replace(/b?'(?:\\[\s\S]|[^'\\])'/g, maskLiteral);
+  const bound = new Set<string>();
+  const collect = (region: string) => rustBoundNamesInRegion(region).forEach((n) => bound.add(n));
+  const collectPatternBindings = (region: string) => {
+    let genericDepth = 0;
+    let cursor = 0;
+    for (const m of region.matchAll(/[A-Za-z_]\w*/g)) {
+      const index = m.index ?? 0;
+      while (cursor < index) {
+        if (region[cursor] === "<") genericDepth++;
+        else if (region[cursor] === ">" && genericDepth > 0) genericDepth--;
+        cursor++;
+      }
+      const name = m[0];
+      const before = region.slice(0, index).trimEnd();
+      const after = region.slice(index + name.length).trimStart();
+      if (
+        genericDepth > 0 ||
+        RUST_SHADOW_KEYWORDS.has(name) ||
+        name === "_" ||
+        before.endsWith("::") ||
+        after.startsWith("::") ||
+        after.startsWith(":") ||
+        after.startsWith("(") ||
+        after.startsWith("{")
+      ) {
+        continue;
+      }
+      bound.add(name);
+    }
+  };
+  // Capitalized names are valid bindings too; only collect them before the
+  // type separator so type names do not become false local shadows.
+  const collectUppercaseTypedBindings = (region: string) => {
+    for (const m of region.matchAll(/(?:^|,)\s*(?:(?:mut|ref)\s+)*([A-Z]\w*)\s*:/g)) {
+      bound.add(m[1]);
+    }
+  };
+
+  // Function-signature parameters (`fn f(x: T, mut y: U, ..)`).
+  const sig = /\bfn\s+\w+\s*(?:<[^>]*>)?\s*\(([^)]*)\)/.exec(body);
+  if (sig) {
+    collect(sig[1]);
+    collectUppercaseTypedBindings(sig[1]);
+  }
+  for (const m of body.matchAll(/\blet\s+([^=;]+?)\s*(?:=|;|:)/g)) {
+    const index = m.index ?? 0;
+    if (/\b(?:if|while)\s+$/.test(body.slice(0, index))) continue;
+    collectPatternBindings(m[1]);
+  }
+  for (const m of body.matchAll(/\bfor\s+(.+?)\s+in\b/g)) collectPatternBindings(m[1]);
+  for (const m of body.matchAll(/\b(?:if|while)\s+let\s+([^=]+?)\s*=[^=]/g)) {
+    collectPatternBindings(m[1]);
+  }
+  for (const m of body.matchAll(/\|([^|]*)\|/g)) {
+    collect(m[1]);
+    // Typed closure names are handled separately so type paths stay unbound.
+    if (!m[1].includes(":")) collectPatternBindings(m[1]);
+    collectUppercaseTypedBindings(m[1]);
+  }
+  for (const match of scanBody.matchAll(/\bmatch\b/g)) {
+    let open = -1;
+    let parens = 0;
+    let brackets = 0;
+    for (let i = (match.index ?? 0) + match[0].length; i < scanBody.length; i++) {
+      const char = scanBody[i];
+      if (char === "{" && parens === 0 && brackets === 0) {
+        let nestedParens = 0;
+        let nestedBrackets = 0;
+        let nestedBraces = 0;
+        let close = -1;
+        let hasArm = false;
+        for (let j = i + 1; j < scanBody.length; j++) {
+          const nested = scanBody[j];
+          if (nestedParens === 0 && nestedBrackets === 0 && nestedBraces === 0) {
+            if (scanBody.startsWith("=>", j)) {
+              hasArm = true;
+              break;
+            }
+            if (nested === "}") {
+              close = j;
+              break;
+            }
+          }
+          if (nested === "(") nestedParens++;
+          else if (nested === ")") nestedParens--;
+          else if (nested === "[") nestedBrackets++;
+          else if (nested === "]") nestedBrackets--;
+          else if (nested === "{") nestedBraces++;
+          else if (nested === "}" && nestedBraces > 0) nestedBraces--;
+        }
+        if (hasArm) {
+          open = i + 1;
+          break;
+        }
+        if (close < 0) break;
+        i = close;
+        continue;
+      }
+      if (char === ";" && parens === 0 && brackets === 0) break;
+      if (char === "(") parens++;
+      else if (char === ")") parens--;
+      else if (char === "[") brackets++;
+      else if (char === "]") brackets--;
+    }
+    if (open < 0) continue;
+
+    // Arm patterns can nest parentheses, brackets, and struct braces.
+    let patternStart = open;
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    let braceDepth = 0;
+    let inArmBody = false;
+    for (let i = open; i < scanBody.length; i++) {
+      const char = scanBody[i];
+      if (char === "}" && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) break;
+      if (parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
+        if (scanBody.startsWith("=>", i)) {
+          const arm = scanBody.slice(patternStart, i);
+          const guard = /\bif\b/.exec(arm);
+          const guardStart = guard && arm[guard.index - 1] !== "#" ? guard.index : -1;
+          collectPatternBindings(guardStart < 0 ? arm : arm.slice(0, guardStart));
+          inArmBody = true;
+          i++;
+          continue;
+        }
+        if (char === ",") {
+          patternStart = i + 1;
+          inArmBody = false;
+          continue;
+        }
+      }
+      if (char === "(") parenDepth++;
+      else if (char === ")") parenDepth--;
+      else if (char === "[") bracketDepth++;
+      else if (char === "]") bracketDepth--;
+      else if (char === "{") braceDepth++;
+      else if (char === "}" && braceDepth > 0) {
+        braceDepth--;
+        if (inArmBody && braceDepth === 0 && parenDepth === 0 && bracketDepth === 0) {
+          patternStart = i + 1;
+          inArmBody = false;
+        }
+      }
+    }
+  }
+  return bound;
+}
+
+/**
+ * Mark `call.shadowedLocal` when the callee's last segment is bound as a
+ * local (parameter, let/loop/pattern binding, or closure param) anywhere in
+ * the caller's symbol range. Function-granular and conservative: names that
+ * appear bound anywhere in the caller body mark all of that caller's
+ * matching calls.
+ */
+export function markRustCallShadowing(
+  content: string,
+  symbols: Array<{ name: string; startLine?: number; endLine?: number }>,
+  calls: Array<{ callerName: string; calleeName: string; shadowedLocal?: boolean }>,
+): void {
+  if (calls.length === 0) return;
+  const codeLines = content
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length))
+    .split("\n");
+  const bindingsByCaller = new Map<string, Set<string>>();
+  const symbolByName = new Map(symbols.map((s) => [s.name, s]));
+
+  for (const call of calls) {
+    if (!call.callerName) continue;
+    let bound = bindingsByCaller.get(call.callerName);
+    if (bound === undefined) {
+      bound = new Set<string>();
+      const sym = symbolByName.get(call.callerName);
+      if (sym?.startLine && sym.endLine && sym.endLine >= sym.startLine) {
+        bound = rustLocalBindingsInRange(codeLines, sym.startLine, sym.endLine);
+      }
+      bindingsByCaller.set(call.callerName, bound);
+    }
+    const root = call.calleeName.split(/[.:]/)[0];
+    if (root && bound.has(root)) call.shadowedLocal = true;
+  }
 }
 
 export function parseRust(
@@ -603,7 +951,7 @@ export function parseRust(
   const constRegex = /^(?:pub\s+)?(?:const|static)\s+(\w+)/;
   const modRegex = /^(?:pub\s+)?mod\s+(\w+)/;
   const useRegex = /^(?:pub(?:\([^)]*\))?\s+)?use\s+(.+?);?$/;
-  const callRegex = /(\w+(?:::\w+)*(?:\.\w+)*)\s*\(/g;
+  const callRegex = /(\w+(?:::\w+)*(?:::<[^()]*>)?(?:\.\w+(?:::<[^()]*>)?)*)\s*\(/g;
 
   const importPaths: string[] = [];
   let implContext: string | null = null;
@@ -813,13 +1161,16 @@ export function parseRust(
       while ((callMatch = callRegex.exec(lineStr)) !== null) {
         const rawCalledName = callMatch[1];
         const calledName = normalizeRustCallName(rawCalledName);
+        const calledIdentifier = lastRustCallSegment(calledName);
         if (
+          calledName &&
           !RUST_CALL_IGNORES.has(rawCalledName) &&
           !RUST_CALL_IGNORES.has(calledName) &&
+          !RUST_CALL_IGNORES.has(calledIdentifier) &&
           calledName !== active.name &&
           calledName !== active.symbolName
         ) {
-          calledIdentifiers.add(calledName);
+          calledIdentifiers.add(calledIdentifier);
           callExpressions.push({ callerName: active.symbolName, calleeName: calledName });
         }
       }
@@ -830,6 +1181,8 @@ export function parseRust(
   if (chunks.length === 0) {
     return { ...makeFallbackChunks(content, lines, counter), importPaths };
   }
+
+  markRustCallShadowing(content, definedSymbols, callExpressions);
 
   return {
     chunks,
@@ -883,10 +1236,22 @@ export function parseRuby(
   const requireRelativeRegex = /\brequire_relative\s+['"]([^'"]+)['"]/g;
 
   const contextStack: Array<{ name: string; endLine: number }> = [];
+  let inBeginBlock = false;
 
   for (let i = 0; i < codeLines.length; i++) {
     const line = codeLines[i];
     const trimmed = line.trim();
+
+    // =begin/=end document blocks and the __END__ trailer are non-code.
+    if (inBeginBlock) {
+      if (line.startsWith("=end")) inBeginBlock = false;
+      continue;
+    }
+    if (line.startsWith("=begin")) {
+      inBeginBlock = true;
+      continue;
+    }
+    if (line.startsWith("__END__")) break;
 
     while (contextStack.length > 0 && i >= contextStack[contextStack.length - 1].endLine) {
       contextStack.pop();
@@ -916,12 +1281,15 @@ export function parseRuby(
       continue;
     }
 
-    // require_relative only — use original (unstripped) line so the string
-    // argument is still present (stripNonCode removes string literals).
-    requireRelativeRegex.lastIndex = 0;
-    let reqMatch: RegExpExecArray | null;
-    while ((reqMatch = requireRelativeRegex.exec(lines[i] ?? "")) !== null) {
-      importPaths.push(reqMatch[1]);
+    // require_relative only — the stripped line gates out comments and
+    // string literals while the match runs on the raw line to keep the
+    // literal path argument (stripNonCode removes string contents).
+    if (trimmed.includes("require_relative")) {
+      requireRelativeRegex.lastIndex = 0;
+      let reqMatch: RegExpExecArray | null;
+      while ((reqMatch = requireRelativeRegex.exec(lines[i] ?? "")) !== null) {
+        importPaths.push(reqMatch[1]);
+      }
     }
   }
 
@@ -1232,13 +1600,16 @@ export function createSymbolChunks(
       tokenCount: counter.count(content),
       contentHash: hashContent(content),
       symbolName: symbol.name,
-      symbolType: symbol.symbolType,
+      // Chunk labels keep the public kind vocabulary — internal parser
+      // markers (static_method/static_function) are normalized here and
+      // everywhere else symbolType crosses into public metadata.
+      symbolType: publicSymbolKind(symbol.symbolType),
       metadata: {
         kind: "code",
         searchText: codeSearchText(content),
         language,
         symbolName: symbol.name,
-        symbolType: symbol.symbolType,
+        symbolType: publicSymbolKind(symbol.symbolType),
         exported: symbol.exported,
         startLine: symbol.startLine,
         endLine: symbol.endLine,
@@ -1284,4 +1655,21 @@ export function makeFallbackChunks(
     calledIdentifiers: [],
     callExpressions: [],
   };
+}
+
+/**
+ * Blank C# conditional-compilation directive lines (`#if` / `#elif` / `#else` /
+ * `#endif`) before parsing, keeping both bodies and every byte offset. Other
+ * `#...` directives (`#region`, `#pragma`, `#nullable`, …) parse fine and are
+ * left alone. Replacement preserves byte offsets — directive text becomes
+ * spaces, newlines and leading indentation stay — so symbol line/column data
+ * still maps to the original source. Applied identically by the WASM
+ * (configs.ts preprocess) and native (parser.rs) paths.
+ */
+export function blankCSharpDirectives(source: string): string {
+  if (!source.includes("#")) return source;
+  return source.replace(
+    /^([ \t]*)#[ \t]*(if|elif|else|endif)\b[^\n]*/gm,
+    (m, indent: string) => indent + " ".repeat(m.length - indent.length),
+  );
 }

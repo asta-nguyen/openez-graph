@@ -8,11 +8,13 @@ import { fastTokenCounter, type TokenCounter } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
+  publicSymbolKind,
   writeLocalWorkspaceConfig,
 } from "@openez-graph/db";
 import type { RegistryWorkspace, WorkspaceRepository } from "@openez-graph/db";
 
 import { hashContent } from "./hash";
+import { isNativeDisabled, loadNativeBinding, resetNativeBindingCache } from "./native-binding";
 import {
   createSymbolChunks,
   inferDocumentKind,
@@ -20,6 +22,23 @@ import {
   type ExtractedSymbol,
 } from "./languages";
 import { parseDocument } from "./parsers";
+import type { ExportBinding, ImportBinding } from "./parsers/types";
+import { createTypeScriptModuleResolver } from "./typescript-resolver";
+import { createGoResolver, isGoVendorPath, type GoResolver } from "./go-resolver";
+import { markRustCallShadowing } from "./languages";
+import { createRustResolver, type RustResolver } from "./rust-resolver";
+import { createCppResolver, type CppResolver } from "./cpp-resolver";
+import { createCSharpResolver, type CSharpResolver } from "./csharp-resolver";
+import {
+  createPythonModuleResolver,
+  createPythonResolver,
+  extractPythonBindings,
+  markPythonCallShadowing,
+  type PythonModuleResolver,
+  type PythonResolver,
+} from "./python-resolver";
+import { createRubyImportResolver, createRubyResolver, type RubyResolver } from "./ruby-resolver";
+import { createJavaResolver, type JavaResolver } from "./java-resolver";
 import { scanWorkspaceFiles } from "./scanner";
 import type { IndexedChunk, IndexWorkspaceSummary } from "./types";
 
@@ -41,9 +60,21 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
 // Parser version tags stored alongside cached parse results in
 // `parsed_documents`. Bump these when parser logic changes so stale cache
 // entries are invalidated on the next index/graph build.
-const PARSER_VERSION_OXC = "oxc-v2";
-const PARSER_VERSION_NATIVE = "native-v1";
-const PARSER_VERSION_FALLBACK = "fallback-v1";
+const PARSER_VERSION_OXC = "oxc-v5";
+const PARSER_VERSION_NATIVE = "native-v9";
+const PARSER_VERSION_FALLBACK = "fallback-v9";
+
+/** C++ headers reject the full native parse on any syntax error. */
+function nativeBatchLanguage(language: string, relativePath: string): string {
+  return language === "cpp" && relativePath.endsWith(".h") ? "cpp-header" : language;
+}
+
+/** OXC-family languages that share binding extraction, module-aware call
+ *  resolution, and lifted graph caps. JS/JSX callers keep the JS-only target
+ *  policy; TS/TSX callers may reach any OXC-family module. */
+const OXC_GRAPH_LANGUAGES = new Set(["javascript", "jsx", "typescript", "tsx"]);
+const JS_GRAPH_LANGUAGES = new Set(["javascript", "jsx"]);
+const TS_GRAPH_LANGUAGES = new Set(["typescript", "tsx"]);
 const INDEX_LEASE_DURATION_MS = 60_000;
 const INDEX_HEARTBEAT_INTERVAL_MS = 15_000;
 
@@ -54,10 +85,10 @@ function indexLeaseExpiry(): string {
 /**
  * Native tree-sitter parser surface used by the indexer. The native extension
  * is optional (platform-specific .node binary); when unavailable the indexer
- * falls back to the WASM/regex parsers and tags cache rows `fallback-v1`.
+ * falls back to the WASM/regex parsers and tags cache rows `fallback-v9`.
  */
 export interface NativeParser {
-  readonly id: "native-v1";
+  readonly id: "native-v9";
   parseCodeBatch(items: Array<{ language: string; content: string }>): Array<{
     symbols: Array<{
       name: string;
@@ -78,23 +109,15 @@ let _nativeParser: NativeParser | null | undefined;
 /**
  * Resolve the native tree-sitter parser once and cache the result. Returns
  * `null` when the platform-specific native extension is unavailable — callers
- * then fall back to the registry parsers and tag cached rows `fallback-v1`.
+ * then fall back to the registry parsers and tag cached rows `fallback-v9`.
  * The resolved capability also drives parsed_documents cache validation: a
  * cache row is only reused when its `parser_version` matches the parser that
- * the current capability would use (`native-v1` vs `fallback-v1`).
+ * the current capability would use (`native-v9` vs `fallback-v9`).
  */
 export function resolveNativeParser(): NativeParser | null {
+  if (isNativeDisabled()) return null;
   if (_nativeParser !== undefined) return _nativeParser;
-  try {
-    const nativePath = path.join(__dirname, "native", "index.linux-x64-gnu.node");
-    _nativeParser = require(nativePath) as NativeParser;
-  } catch {
-    try {
-      _nativeParser = require("@openez-graph/native") as NativeParser;
-    } catch {
-      _nativeParser = null;
-    }
-  }
+  _nativeParser = loadNativeBinding() as NativeParser | null;
   return _nativeParser;
 }
 
@@ -104,17 +127,18 @@ export function resolveNativeParser(): NativeParser | null {
  */
 export function resetNativeParserCache(): void {
   _nativeParser = undefined;
+  resetNativeBindingCache();
 }
 
 /**
  * Map a parser name (returned by `parseDocument`/`parseInline`) to the
  * version tag stored in `parsed_documents.parser_version`. Native
- * tree-sitter results use `native-v1`, the fallback parser uses
- * `fallback-v1`, and every other parser (oxc, markdown, config, regex)
- * is grouped under `oxc-v2` since they share the same chunking/call-
+ * tree-sitter results use `native-v9`, the fallback parser uses
+ * `fallback-v9`, and every other parser (oxc, markdown, config, regex)
+ * is grouped under `oxc-v5` since they share the same chunking/call-
  * extraction contract. Non-native tree-sitter/regex fallbacks for
- * Python/Go/Rust use `fallback-v1` so cache validation matches the
- * expected version when the native extension is unavailable.
+ * Python/Go/Rust/Ruby/C++/C#/Java use `fallback-v9` so cache validation matches
+ * the expected version when the native extension is unavailable.
  */
 function parserVersionFor(parserName: string): string {
   if (parserName === "tree-sitter-native") return PARSER_VERSION_NATIVE;
@@ -171,63 +195,42 @@ export function createWorkspaceFileResolver(
     return null;
   }
 
-  function resolvePythonModulePath(modulePath: string): string | null {
-    const basePath = normalizeRelativePath(modulePath.replace(/\./g, "/"));
-
-    const directPath = `${basePath}.py`;
-    if (knownRelativePaths.has(directPath)) return directPath;
-
-    const initPath = `${basePath}/__init__.py`;
-    if (knownRelativePaths.has(initPath)) return initPath;
-
-    return null;
-  }
-
-  function resolvePythonRelativeImport(
-    importerRelativePath: string,
-    importPath: string,
-  ): string | null {
-    const dotMatch = /^(\.+)(.*)$/.exec(importPath);
-    if (!dotMatch) return null;
-
-    const level = dotMatch[1].length;
-    const remainder = dotMatch[2].replace(/^\./, "");
-    let baseDirectory = normalizeRelativePath(path.dirname(importerRelativePath));
-
-    for (let index = 1; index < level; index++) {
-      baseDirectory = normalizeRelativePath(path.dirname(baseDirectory));
-    }
-
-    const modulePath = remainder
-      ? normalizeRelativePath(path.join(baseDirectory, remainder.replace(/\./g, "/")))
-      : baseDirectory;
-
-    return resolvePythonModulePath(modulePath);
-  }
-
-  function resolvePythonImport(importerRelativePath: string, importPath: string): string | null {
-    if (importPath.startsWith(".")) {
-      const resolved = resolvePythonRelativeImport(importerRelativePath, importPath);
-      if (resolved) return resolved;
-    }
-
-    return resolvePythonModulePath(importPath);
-  }
+  // Python module resolution shares the resolver used by graph call edges:
+  // absolute and dot-relative paths resolve through the importer's source
+  // roots (workspace root + non-package ancestors), nearest root wins,
+  // `a.py` + `a/__init__.py` collisions are ambiguous, and unresolvable or
+  // external specifiers return null. See python-resolver.ts.
+  let pythonModuleResolver: PythonModuleResolver | null = null;
+  let rubyImportResolver: ReturnType<typeof createRubyImportResolver> | null = null;
 
   return {
+    workspaceRelativeFor: toWorkspaceRelative,
     resolveImport(
       importerRelativePath: string,
       importPath: string,
       language?: string,
     ): string | null {
       if (language === "python") {
-        const resolved = resolvePythonImport(importerRelativePath, importPath);
-        if (resolved) return resolved;
+        pythonModuleResolver ??= createPythonModuleResolver(
+          [...knownRelativePaths].filter((p) => p.endsWith(".py")),
+        );
+        return pythonModuleResolver.resolveModule(
+          normalizeRelativePath(importerRelativePath),
+          importPath,
+        );
       }
 
       if (language === "ruby") {
-        return resolveRelativeImport(importerRelativePath, importPath);
+        // require_relative resolves literal paths to .rb files only — a
+        // same-stem .md or other extension never captures the edge.
+        rubyImportResolver ??= createRubyImportResolver({
+          workspaceRoot,
+          workspaceRelativeFor: toWorkspaceRelative,
+        });
+        return rubyImportResolver.resolveImport(importerRelativePath, importPath);
       }
+
+      if (language === "cpp") return null; // C++ includes resolve in the TU-aware resolver.
 
       if (importPath.startsWith(".")) {
         return resolveRelativeImport(importerRelativePath, importPath);
@@ -331,7 +334,54 @@ export async function chunkDocument(input: {
     definedSymbols: parsed.definedSymbols,
     calledIdentifiers: parsed.calledIdentifiers,
     callExpressions: parsed.callExpressions,
+    importBindings: parsed.importBindings,
+    exportBindings: parsed.exportBindings,
   };
+}
+
+/**
+ * Serialize the cached `imports` payload for `parsed_documents`. Rows with
+ * JavaScript module-binding metadata store an object
+ * `{v:1, paths, importBindings, exportBindings}`; everything else keeps the
+ * legacy plain string-array shape so non-oxc rows stay unchanged.
+ */
+function serializeCachedImports(
+  paths: string[],
+  importBindings?: ImportBinding[],
+  exportBindings?: ExportBinding[],
+): string {
+  if (!importBindings?.length && !exportBindings?.length) {
+    return JSON.stringify(paths ?? []);
+  }
+  return JSON.stringify({
+    v: 1,
+    paths: paths ?? [],
+    importBindings: importBindings ?? [],
+    exportBindings: exportBindings ?? [],
+  });
+}
+
+/** Inverse of serializeCachedImports — accepts both the legacy string-array
+ *  shape and the extended object payload. */
+function parseCachedImports(raw: string | null): {
+  paths: string[];
+  importBindings: ImportBinding[];
+  exportBindings: ExportBinding[];
+} {
+  if (!raw) return { paths: [], importBindings: [], exportBindings: [] };
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return { paths: parsed, importBindings: [], exportBindings: [] };
+    }
+    return {
+      paths: Array.isArray(parsed.paths) ? parsed.paths : [],
+      importBindings: Array.isArray(parsed.importBindings) ? parsed.importBindings : [],
+      exportBindings: Array.isArray(parsed.exportBindings) ? parsed.exportBindings : [],
+    };
+  } catch {
+    return { paths: [], importBindings: [], exportBindings: [] };
+  }
 }
 
 interface ParseTask {
@@ -354,8 +404,8 @@ async function parseInline(
 ): Promise<Map<string, ParseResult>> {
   const results = new Map<string, ParseResult>();
 
-  // ── Batch native tree-sitter parse for Python/Go/Rust files ──
-  const TS_LANGS = new Set(["python", "go", "rust"]);
+  // ── Batch native tree-sitter parse for Python/Go/Rust/Ruby/C++/C#/Java files ──
+  const TS_LANGS = new Set(["python", "go", "rust", "ruby", "csharp", "cpp", "java"]);
   const native = resolveNativeParser();
 
   const batchTasks: ParseTask[] = [];
@@ -377,10 +427,10 @@ async function parseInline(
   if (batchTasks.length > 0) {
     const _batchStart = Date.now();
     const batchItems = batchTasks.map((t) => ({
-      language: inferDocumentKind(t.relativePath).language!,
+      language: nativeBatchLanguage(inferDocumentKind(t.relativePath).language!, t.relativePath),
       content: t.content,
     }));
-    // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust
+    // Use parseCodeBatch — rayon-parallel tree-sitter parse for Python/Go/Rust/Ruby/Java
     const nativeResults = native!.parseCodeBatch(batchItems);
     process.stderr.write(
       `[t]   native-batch: ${Date.now() - _batchStart}ms (${batchTasks.length} files)\n`,
@@ -389,7 +439,7 @@ async function parseInline(
       const task = batchTasks[i];
       const nr = nativeResults[i];
       if (nr) {
-        const lang = batchItems[i].language;
+        const lang = inferDocumentKind(task.relativePath).language ?? "text";
         const lines = task.content.split("\n");
         // Build symbol-aware chunks so code_context can match symbol names
         // to chunks via metadata.symbolName. Fall back to line-based chunks
@@ -411,6 +461,21 @@ async function parseInline(
         }
         // Bound chunks to configured token limits
         chunks = boundChunks(chunks, task.targetTokens, task.overlapTokens, task.counter);
+        // Python keeps qualified call names + all calls (graph caps are
+        // lifted for Python only) and gets bindings + shadow marks here —
+        // the native result shape is unchanged. Ruby, Rust, and C# are also
+        // uncapped; Rust calls carry the same shadow marker.
+        const isPython = lang === "python";
+        const isRuby = lang === "ruby";
+        const isRust = lang === "rust";
+        const isCpp = lang === "cpp";
+        const isJava = lang === "java";
+        const callExpressions =
+          lang === "go" || isPython || isRuby || isRust || lang === "csharp" || isCpp || isJava
+            ? nr.callExpressions
+            : nr.callExpressions.slice(0, 20);
+        if (isPython) markPythonCallShadowing(task.content, symbols, callExpressions);
+        if (isRust) markRustCallShadowing(task.content, symbols, callExpressions);
         results.set(task.id, {
           kind: "code",
           language: lang,
@@ -420,7 +485,9 @@ async function parseInline(
           wikilinks: [],
           definedSymbols: symbols,
           calledIdentifiers: nr.calledIdentifiers,
-          callExpressions: nr.callExpressions.slice(0, 20),
+          callExpressions,
+          importBindings: isPython ? extractPythonBindings(task.content, symbols) : undefined,
+          exportBindings: undefined,
         });
       } else {
         // Native returned null — fall back to individual parse
@@ -631,13 +698,6 @@ export async function indexWorkspace(input: {
       metadata: string;
     }> = [];
     const _T0 = Date.now();
-    const symbolNodeIdsByFileAndName = new Map<string, string>();
-    const pendingCallEdges: Array<{
-      callerName: string;
-      calleeName: string;
-      filePath: string;
-      parser: string;
-    }> = [];
 
     try {
       await reportProgress(
@@ -890,7 +950,11 @@ export async function indexWorkspace(input: {
             documentId,
             contentHash,
             symbols: JSON.stringify(indexed.definedSymbols ?? []),
-            imports: JSON.stringify(indexed.importPaths ?? []),
+            imports: serializeCachedImports(
+              indexed.importPaths ?? [],
+              indexed.importBindings,
+              indexed.exportBindings,
+            ),
             calls: JSON.stringify(indexed.callExpressions ?? []),
             calledIdentifiers: JSON.stringify(indexed.calledIdentifiers ?? []),
             parserVersion: parserVersionFor(indexed.parser),
@@ -1070,8 +1134,8 @@ export async function buildGraphGeneration(
   // Read file contents
   const fs = await import("node:fs/promises");
 
-  // Split documents: native-parseable (python/go/rust) vs registry-parseable
-  const NATIVE_LANGS = new Set(["python", "go", "rust"]);
+  // Split documents: native-parseable (python/go/rust/ruby/csharp/cpp/java) vs registry-parseable
+  const NATIVE_LANGS = new Set(["python", "go", "rust", "ruby", "csharp", "cpp", "java"]);
   const nativeDocs: typeof graphDocs = [];
   const registryDocs: typeof graphDocs = [];
   for (const doc of graphDocs) {
@@ -1089,10 +1153,25 @@ export async function buildGraphGeneration(
     language: string | null;
     kind: string;
     parser: string;
-    definedSymbols: Array<{ name: string; symbolType: string; type: string; exported: boolean }>;
+    definedSymbols: Array<{
+      name: string;
+      symbolType: string;
+      type: string;
+      exported: boolean;
+      startLine?: number;
+      endLine?: number;
+      receiver?: string;
+    }>;
     importPaths: string[];
     calledIdentifiers: string[];
-    callExpressions: Array<{ callerName: string; calleeName: string }>;
+    callExpressions: Array<{
+      callerName: string;
+      calleeName: string;
+      start?: number;
+      shadowedLocal?: boolean;
+    }>;
+    importBindings?: ImportBinding[];
+    exportBindings?: ExportBinding[];
   };
 
   const parsedFiles = new Map<string, ParsedFile>();
@@ -1107,15 +1186,18 @@ export async function buildGraphGeneration(
       (cached.parserVersion === PARSER_VERSION_OXC ||
         cached.parserVersion === PARSER_VERSION_FALLBACK)
     ) {
+      const cachedImports = parseCachedImports(cached.imports);
       parsedFiles.set(doc.path, {
         filePath: doc.path,
         language: doc.language,
         kind: doc.kind,
         parser: "cached",
         definedSymbols: cached.symbols ? JSON.parse(cached.symbols) : [],
-        importPaths: cached.imports ? JSON.parse(cached.imports) : [],
+        importPaths: cachedImports.paths,
         calledIdentifiers: cached.calledIdentifiers ? JSON.parse(cached.calledIdentifiers) : [],
         callExpressions: cached.calls ? JSON.parse(cached.calls) : [],
+        importBindings: cachedImports.importBindings,
+        exportBindings: cachedImports.exportBindings,
       });
       continue;
     }
@@ -1138,13 +1220,19 @@ export async function buildGraphGeneration(
         importPaths: parsed.importPaths,
         calledIdentifiers: parsed.calledIdentifiers,
         callExpressions: parsed.callExpressions,
+        importBindings: parsed.importBindings,
+        exportBindings: parsed.exportBindings,
       });
       // Cache the parse result so future graph builds skip re-parsing.
       repo.insertParsedDocument({
         documentId: doc.id,
         contentHash: doc.contentHash,
         symbols: JSON.stringify(parsed.definedSymbols ?? []),
-        imports: JSON.stringify(parsed.importPaths ?? []),
+        imports: serializeCachedImports(
+          parsed.importPaths ?? [],
+          parsed.importBindings,
+          parsed.exportBindings,
+        ),
         calls: JSON.stringify(parsed.callExpressions ?? []),
         calledIdentifiers: JSON.stringify(parsed.calledIdentifiers ?? []),
         parserVersion: parserVersionFor(parsed.parser),
@@ -1154,11 +1242,11 @@ export async function buildGraphGeneration(
     }
   }
 
-  // ── Parse native docs (Python/Go/Rust) with native batch, fallback to parseDocument ──
+  // ── Parse native docs (Python/Go/Rust/Ruby/Java) with native batch, fallback to parseDocument ──
   if (nativeDocs.length > 0) {
     // Resolve the native parser capability once. The expected cache version
-    // for native-language docs depends on this: `native-v1` when the native
-    // extension is available, `fallback-v1` when it is not (the fallback
+    // for native-language docs depends on this: `native-v9` when the native
+    // extension is available, `fallback-v9` when it is not (the fallback
     // parser would re-parse them). A cache row is only reused when both the
     // content hash AND this expected version match.
     const nativeCapability = resolveNativeParser();
@@ -1175,15 +1263,17 @@ export async function buildGraphGeneration(
         cached.contentHash === doc.contentHash &&
         cached.parserVersion === expectedNativeVersion
       ) {
+        const cachedImports = parseCachedImports(cached.imports);
         parsedFiles.set(doc.path, {
           filePath: doc.path,
           language: doc.language,
           kind: doc.kind,
           parser: "cached",
           definedSymbols: cached.symbols ? JSON.parse(cached.symbols) : [],
-          importPaths: cached.imports ? JSON.parse(cached.imports) : [],
+          importPaths: cachedImports.paths,
           calledIdentifiers: cached.calledIdentifiers ? JSON.parse(cached.calledIdentifiers) : [],
           callExpressions: cached.calls ? JSON.parse(cached.calls) : [],
+          importBindings: cachedImports.importBindings,
         });
       } else {
         nativeToParse.push(doc);
@@ -1197,7 +1287,7 @@ export async function buildGraphGeneration(
         try {
           const content = await fs.readFile(doc.absolutePath, "utf8");
           const lang = doc.language ?? inferDocumentKind(doc.path).language ?? "text";
-          batchItems.push({ language: lang, content });
+          batchItems.push({ language: nativeBatchLanguage(lang, doc.path), content });
           batchDocPaths.push(doc.path);
         } catch {
           /* file may have been deleted */
@@ -1217,8 +1307,30 @@ export async function buildGraphGeneration(
             symbolType: s.symbolType,
             type: s.symbolType,
             exported: s.exported,
+            startLine: s.startLine,
+            endLine: s.endLine,
+            ...(s.receiver ? { receiver: s.receiver } : {}),
           }));
-          const callExpressions = nr.callExpressions.slice(0, 20);
+          // Python keeps qualified call names + every call; bindings and
+          // shadow marks are derived in TypeScript so the native result
+          // shape stays unchanged. Calls ride through the shared imports
+          // envelope so cached native rows keep their bindings. Ruby, Rust,
+          // and C# are also uncapped; Rust calls carry the same shadow marker.
+          const isPython = lang === "python";
+          const isRuby = lang === "ruby";
+          const isRust = lang === "rust";
+          const isCpp = lang === "cpp";
+          const isJava = lang === "java";
+          const callExpressions =
+            lang === "go" || isPython || isRuby || isRust || lang === "csharp" || isCpp || isJava
+              ? nr.callExpressions
+              : nr.callExpressions.slice(0, 20);
+          if (isPython)
+            markPythonCallShadowing(batchItems[i].content, definedSymbols, callExpressions);
+          if (isRust) markRustCallShadowing(batchItems[i].content, definedSymbols, callExpressions);
+          const importBindings = isPython
+            ? extractPythonBindings(batchItems[i].content, definedSymbols)
+            : undefined;
           parsedFiles.set(filePath, {
             filePath,
             language: lang,
@@ -1228,13 +1340,14 @@ export async function buildGraphGeneration(
             importPaths: nr.importPaths,
             calledIdentifiers: nr.calledIdentifiers,
             callExpressions,
+            importBindings,
           });
           // Cache the native parse result.
           repo.insertParsedDocument({
             documentId: doc.id,
             contentHash: doc.contentHash,
             symbols: JSON.stringify(definedSymbols),
-            imports: JSON.stringify(nr.importPaths ?? []),
+            imports: serializeCachedImports(nr.importPaths ?? [], importBindings, undefined),
             calls: JSON.stringify(callExpressions),
             calledIdentifiers: JSON.stringify(nr.calledIdentifiers ?? []),
             parserVersion: PARSER_VERSION_NATIVE,
@@ -1270,7 +1383,11 @@ export async function buildGraphGeneration(
           documentId: doc.id,
           contentHash: doc.contentHash,
           symbols: JSON.stringify(parsed.definedSymbols ?? []),
-          imports: JSON.stringify(parsed.importPaths ?? []),
+          imports: serializeCachedImports(
+            parsed.importPaths ?? [],
+            parsed.importBindings,
+            parsed.exportBindings,
+          ),
           calls: JSON.stringify(parsed.callExpressions ?? []),
           calledIdentifiers: JSON.stringify(parsed.calledIdentifiers ?? []),
           parserVersion: parserVersionFor(parsed.parser),
@@ -1293,6 +1410,135 @@ export async function buildGraphGeneration(
     absolutePath: d.absolutePath,
   }));
   const resolver = createWorkspaceFileResolver(rootPath, knownFiles);
+  const tsResolver = createTypeScriptModuleResolver({
+    workspaceRoot: rootPath,
+    workspaceRelativeFor: resolver.workspaceRelativeFor,
+  });
+
+  // Go module/package resolution is reconstructed from go.mod and source at
+  // graph-build time; see docs/agent-devkit/changes/archive/2026-10-20-39-go-indexing-accuracy.
+  const goFiles = [...parsedFiles.keys()].filter((p) => parsedFiles.get(p)?.language === "go");
+  const goResolver: GoResolver | null =
+    goFiles.length > 0 ? createGoResolver({ workspaceRoot: rootPath, goFiles }) : null;
+
+  // Python call resolution runs entirely on parsed data — symbols and
+  // import bindings per file plus the workspace .py file set; see
+  // docs/agent-devkit/changes/2026-10-20-39-python-index-accuracy.
+  const pythonFiles = [...parsedFiles.keys()].filter(
+    (p) => parsedFiles.get(p)?.language === "python",
+  );
+  const pythonResolver: PythonResolver | null =
+    pythonFiles.length > 0
+      ? createPythonResolver({
+          pythonFiles,
+          symbolsFor: (file) => parsedFiles.get(file)?.definedSymbols,
+          bindingsFor: (file) => parsedFiles.get(file)?.importBindings,
+        })
+      : null;
+
+  // Ruby call resolution is scope-aware: bare calls bind to a unique method
+  // of the caller's own class/module (across reopened-class files) then to a
+  // unique top-level method; ::-qualified callees walk the caller's lexical
+  // scopes. See docs/agent-devkit/changes/archive/2026-10-20-39-ruby-native-indexing.
+  const rubyFiles = [...parsedFiles.keys()].filter((p) => parsedFiles.get(p)?.language === "ruby");
+  const rubyResolver: RubyResolver | null =
+    rubyFiles.length > 0
+      ? createRubyResolver({
+          symbols: rubyFiles.flatMap((file) =>
+            (parsedFiles.get(file)?.definedSymbols ?? []).map((s) => ({
+              filePath: file,
+              name: s.name,
+              symbolType: s.symbolType,
+            })),
+          ),
+        })
+      : null;
+
+  // Rust call resolution is crate/module-aware: `crate`/`self`/`super`
+  // paths, `use` bindings, package-library names, and supported method forms
+  // resolve to unique in-crate symbols only — see rust-resolver.ts.
+  const rustFiles = [...parsedFiles.keys()].filter((p) => parsedFiles.get(p)?.language === "rust");
+  const rustResolver: RustResolver | null =
+    rustFiles.length > 0
+      ? createRustResolver(
+          rustFiles.map((file) => {
+            const parsed = parsedFiles.get(file);
+            return {
+              filePath: file,
+              symbols: (parsed?.definedSymbols ?? []).map((s) => ({
+                ...s,
+                type: s.symbolType,
+              })),
+              importPaths: parsed?.importPaths ?? [],
+            };
+          }),
+          [...parsedFiles.keys()],
+          rootPath,
+        )
+      : null;
+
+  // C++ translation-unit resolution: quoted includes build a per-file
+  // visibility closure; calls resolve to unique targets visible from the
+  // translation unit — see cpp-resolver.ts.
+  const cppFiles = [...parsedFiles.keys()].filter((p) => parsedFiles.get(p)?.language === "cpp");
+  const cppResolver: CppResolver | null =
+    cppFiles.length > 0
+      ? createCppResolver({
+          cppFiles,
+          symbolsFor: (file) => parsedFiles.get(file)?.definedSymbols ?? [],
+          importPathsFor: (file) => parsedFiles.get(file)?.importPaths ?? [],
+          workspaceRelativeFor: resolver.workspaceRelativeFor,
+          workspaceRoot: rootPath,
+        })
+      : null;
+
+  // C# call resolution is namespace/using-aware with project-root scoping —
+  // see csharp-resolver.ts. Same-type partial calls, explicitly qualified
+  // calls, and uniquely bound using-static calls resolve; everything else
+  // (variable receivers, inherited members, overloads, ambiguous or
+  // cross-root-duplicate identities, external names) produces no edge.
+  const csharpFiles = [...parsedFiles.keys()].filter(
+    (p) => parsedFiles.get(p)?.language === "csharp",
+  );
+  const csharpResolver: CSharpResolver | null =
+    csharpFiles.length > 0
+      ? createCSharpResolver(
+          csharpFiles.map((file) => {
+            const parsed = parsedFiles.get(file);
+            return {
+              filePath: file,
+              symbols: (parsed?.definedSymbols ?? []).map((s) => ({
+                ...s,
+                type: s.symbolType,
+              })),
+              importPaths: parsed?.importPaths ?? [],
+            };
+          }),
+          rootPath,
+        )
+      : null;
+
+  // Java call resolution is package/type/member-aware: package identity,
+  // enclosing-type members, explicit single-type and static imports, and
+  // same-package types resolve unique workspace targets only — see
+  // java-resolver.ts.
+  const javaFiles = [...parsedFiles.keys()].filter((p) => parsedFiles.get(p)?.language === "java");
+  const javaResolver: JavaResolver | null =
+    javaFiles.length > 0
+      ? createJavaResolver(
+          javaFiles.map((file) => {
+            const parsed = parsedFiles.get(file);
+            return {
+              filePath: file,
+              symbols: (parsed?.definedSymbols ?? []).map((sym) => ({
+                name: sym.name,
+                symbolType: sym.symbolType,
+              })),
+              importPaths: parsed?.importPaths ?? [],
+            };
+          }),
+        )
+      : null;
 
   // ── Build nodes ──
   const allNodeInputs: Array<{ type: string; label: string; refId?: string; metadata?: string }> =
@@ -1300,7 +1546,17 @@ export async function buildGraphGeneration(
   const allEdges: Array<{ fromNodeId: string; toNodeId: string; type: string; metadata?: string }> =
     [];
   const symbolNodeIdsByFileAndName = new Map<string, string>();
-  const pendingCallEdges: Array<{ callerName: string; calleeName: string; filePath: string }> = [];
+  // C# occurrence routing: `${file}\0${emissionIndex}` -> node id, so same
+  // (file,label) symbols (same-named members in one file) map to their own
+  // graph node instead of collapsing to the label's last writer.
+  const symbolNodeIdsByFileAndIndex = new Map<string, string>();
+  const pendingCallEdges: Array<{
+    callerName: string;
+    calleeName: string;
+    filePath: string;
+    start?: number;
+    shadowedLocal?: boolean;
+  }> = [];
 
   // Map: filePath -> { fileNodeIdx, symNodeStart, symCount }
   const _symMeta: Array<{
@@ -1320,6 +1576,7 @@ export async function buildGraphGeneration(
     const doc = graphDocs.find((d) => d.path === filePath);
     if (!doc) continue;
     const language = parsed.language ?? doc.language ?? "text";
+    if (language === "go" && isGoVendorPath(filePath)) continue;
 
     // Load chunks for this document to map symbolName -> chunkId
     const chunks = await repo.getChunksByDocument(doc.id);
@@ -1344,8 +1601,19 @@ export async function buildGraphGeneration(
       metadata: JSON.stringify({ path: filePath, language }),
     });
 
-    // Symbol nodes (cap 30)
-    const symbols = parsed.definedSymbols.slice(0, 30);
+    // Symbol nodes (cap 30 for non-OXC languages; Go, Python, Ruby, Rust,
+    // and C# are uncapped).
+    const isOxcFile = OXC_GRAPH_LANGUAGES.has(language);
+    const uncapped =
+      isOxcFile ||
+      language === "go" ||
+      language === "python" ||
+      language === "ruby" ||
+      language === "rust" ||
+      language === "csharp" ||
+      language === "cpp" ||
+      language === "java";
+    const symbols = uncapped ? parsed.definedSymbols : parsed.definedSymbols.slice(0, 30);
     const symNodeStart = allNodeInputs.length;
     for (const sym of symbols) {
       const refId = chunkIdBySymbolName.get(sym.name) ?? null;
@@ -1354,7 +1622,9 @@ export async function buildGraphGeneration(
         label: sym.name,
         refId: refId ?? undefined,
         metadata: JSON.stringify({
-          symbolType: sym.symbolType,
+          // Node metadata keeps the public kind vocabulary; internal
+          // static_* markers only live in parsed_documents.symbols.
+          symbolType: publicSymbolKind(sym.symbolType),
           filePath,
           language,
           parser: parsed.parser,
@@ -1362,9 +1632,17 @@ export async function buildGraphGeneration(
       });
     }
 
-    // Call expressions (cap 20)
-    for (const call of parsed.callExpressions.slice(0, 20)) {
-      pendingCallEdges.push({ callerName: call.callerName, calleeName: call.calleeName, filePath });
+    // Call expressions (cap 20 for non-OXC languages; Go, Python, Ruby,
+    // Rust, and C# uncapped)
+    const callExpressions = uncapped ? parsed.callExpressions : parsed.callExpressions.slice(0, 20);
+    for (const call of callExpressions) {
+      pendingCallEdges.push({
+        callerName: call.callerName,
+        calleeName: call.calleeName,
+        filePath,
+        start: call.start,
+        shadowedLocal: call.shadowedLocal,
+      });
     }
 
     _symMeta.push({ filePath, fileNodeIdx, symNodeStart, symCount: symbols.length });
@@ -1387,6 +1665,7 @@ export async function buildGraphGeneration(
         `${meta.filePath}\0${allNodeInputs[meta.symNodeStart + si].label}`,
         symNodeId,
       );
+      symbolNodeIdsByFileAndIndex.set(`${meta.filePath}\0${si}`, symNodeId);
       if (fileNodeId && symNodeId && fileNodeId !== symNodeId) {
         allEdges.push({ fromNodeId: fileNodeId, toNodeId: symNodeId, type: "defines" });
       }
@@ -1397,10 +1676,9 @@ export async function buildGraphGeneration(
   for (const [filePath, parsed] of parsedFiles) {
     const importerNode = fileNodeIdsByPath.get(filePath);
     if (!importerNode) continue;
-    const language = parsed.language ?? "text";
     const seenTargets = new Set<string>();
     for (const importPath of parsed.importPaths) {
-      const targetPath = resolver.resolveImport(filePath, importPath, language);
+      const targetPath = resolveModuleSpecifier(filePath, importPath);
       if (!targetPath) continue;
       if (seenTargets.has(targetPath)) continue; // deduplicate
       seenTargets.add(targetPath);
@@ -1410,12 +1688,306 @@ export async function buildGraphGeneration(
     }
   }
 
+  // Go symbol type lookup: `${file}\0${name}` -> symbolType, for the Go
+  // resolver's package-level-function check.
+  const goSymbolTypes = new Map<string, string>();
+  for (const meta of _symMeta) {
+    const filePath = meta.filePath;
+    for (let si = 0; si < meta.symCount; si++) {
+      const input = allNodeInputs[meta.symNodeStart + si];
+      if (!input.metadata?.includes('"language":"go"')) continue;
+      goSymbolTypes.set(`${filePath}\0${input.label}`, JSON.parse(input.metadata).symbolType);
+    }
+  }
+
   // Call edges
   const globalSymbolNodes = new Map<string, string>();
   for (const [key, nodeId] of symbolNodeIdsByFileAndName) {
     const label = key.slice(key.indexOf("\0") + 1);
     if (!globalSymbolNodes.has(label)) globalSymbolNodes.set(label, nodeId);
   }
+
+  // ── OXC module-binding resolution maps ──
+  // Cross-file OXC-language calls resolve through static ESM imports and
+  // CommonJS require bindings to unique module exports; a same-name global
+  // symbol is never substituted for a missing or ambiguous import target.
+  // TypeScript callers may reach any OXC-family target; JavaScript callers
+  // keep the JS-only target policy (the JS→TS guard below).
+  const bindingsByFile = new Map<string, Map<string, ImportBinding[]>>();
+  const exportsByFile = new Map<string, ExportBinding[]>();
+  for (const [filePath, parsed] of parsedFiles) {
+    if (!OXC_GRAPH_LANGUAGES.has(parsed.language ?? "")) continue;
+    if (parsed.importBindings?.length) {
+      const byLocal = new Map<string, ImportBinding[]>();
+      for (const binding of parsed.importBindings) {
+        const list = byLocal.get(binding.local) ?? [];
+        list.push(binding);
+        byLocal.set(binding.local, list);
+      }
+      bindingsByFile.set(filePath, byLocal);
+    }
+    if (parsed.exportBindings?.length) exportsByFile.set(filePath, parsed.exportBindings);
+  }
+
+  /** Pick the import binding that applies at a call site: the innermost
+   *  function-local `require` scope containing the call's byte offset wins,
+   *  else the module-scope binding. */
+  function findImportBinding(
+    filePath: string,
+    local: string,
+    callStart: number | undefined,
+  ): ImportBinding | undefined {
+    const list = bindingsByFile.get(filePath)?.get(local);
+    if (!list) return undefined;
+    let moduleScope: ImportBinding | undefined;
+    let best: ImportBinding | undefined;
+    let bestSize = Infinity;
+    for (const binding of list) {
+      if (binding.scopeStart === undefined || binding.scopeEnd === undefined) {
+        moduleScope ??= binding;
+        continue;
+      }
+      if (
+        callStart !== undefined &&
+        binding.scopeStart <= callStart &&
+        callStart <= binding.scopeEnd
+      ) {
+        const size = binding.scopeEnd - binding.scopeStart;
+        if (size < bestSize) {
+          best = binding;
+          bestSize = size;
+        }
+      }
+    }
+    return best ?? moduleScope;
+  }
+
+  /** Resolve a module specifier with the resolver matching the language of
+   *  the file that contains it: tsconfig-aware for TS/TSX, the workspace
+   *  resolver for everything else. */
+  function resolveModuleSpecifier(fromFile: string, specifier: string): string | null {
+    const language = parsedFiles.get(fromFile)?.language ?? "";
+    // C# importPaths carry full using-directive text — only a binding that
+    // resolves to exactly one in-workspace file produces an imports edge.
+    // The generic resolver returns null for non-relative specifiers anyway;
+    // routing here keeps that guarantee explicit.
+    if (language === "csharp") return csharpResolver?.resolveImport(fromFile, specifier) ?? null;
+    if (language === "cpp") return cppResolver?.resolveImport(fromFile, specifier) ?? null;
+    if (TS_GRAPH_LANGUAGES.has(language)) return tsResolver.resolve(fromFile, specifier);
+    // Java imports are package paths, not filesystem paths — only explicit
+    // single-type/static imports that resolve to a unique workspace type
+    // produce an imports edge; wildcards and external packages return null.
+    if (language === "java") return javaResolver?.resolveImport(fromFile, specifier) ?? null;
+    return resolver.resolveImport(fromFile, specifier, language);
+  }
+
+  /**
+   * Collect (filePath, symbolName) candidates an export name resolves to in a
+   * module file. `local` and `reexport` entries that match the name take
+   * precedence over wildcard `star` re-exports (ESM semantics); more than one
+   * explicit match or more than one distinct star target means the export is
+   * ambiguous and contributes nothing. `visited` guards re-export cycles.
+   */
+  function collectModuleExports(
+    moduleFile: string,
+    exportName: string,
+    visited: Set<string>,
+  ): Array<{ filePath: string; symbolName: string }> {
+    const visitKey = `${moduleFile}\0${exportName}`;
+    if (visited.has(visitKey)) return [];
+    visited.add(visitKey);
+    const entries = exportsByFile.get(moduleFile);
+    if (!entries) return [];
+    const matched: ExportBinding[] = [];
+    const seenMatch = new Set<string>();
+    const stars: ExportBinding[] = [];
+    for (const entry of entries) {
+      // Type-only exports never resolve a `calls` target.
+      if (entry.typeOnly) continue;
+      if (entry.kind === "star") {
+        stars.push(entry);
+      } else if (entry.name === exportName) {
+        // `exports.f = f; module.exports.f = f` yields identical entries —
+        // dedupe by target so only genuinely different definitions conflict.
+        const key = `${entry.kind}\0${entry.local ?? ""}\0${entry.module ?? ""}\0${entry.imported ?? ""}`;
+        if (seenMatch.has(key)) continue;
+        seenMatch.add(key);
+        matched.push(entry);
+      }
+    }
+    if (matched.length > 1) return []; // ambiguous duplicate export
+    if (matched.length === 1) {
+      const entry = matched[0];
+      if (entry.kind === "local" && entry.local) {
+        if (symbolNodeIdsByFileAndName.has(`${moduleFile}\0${entry.local}`)) {
+          return [{ filePath: moduleFile, symbolName: entry.local }];
+        }
+        // `export { x }` where `x` is itself an import binding forwards to
+        // the bound module's export (`import {x} from "./m"; export {x}`).
+        const forwarded = bindingsByFile
+          .get(moduleFile)
+          ?.get(entry.local)
+          ?.find((b) => b.scopeStart === undefined);
+        if (forwarded && !forwarded.typeOnly && forwarded.imported !== "*") {
+          const target = resolveModuleSpecifier(moduleFile, forwarded.module);
+          return target ? collectModuleExports(target, forwarded.imported, visited) : [];
+        }
+        return [];
+      }
+      if (entry.kind === "reexport" && entry.module && entry.imported) {
+        const target = resolveModuleSpecifier(moduleFile, entry.module);
+        return target ? collectModuleExports(target, entry.imported, visited) : [];
+      }
+      return [];
+    }
+    // `export *` forwards named exports only — never `default`.
+    if (exportName === "default") return [];
+    const candidates: Array<{ filePath: string; symbolName: string }> = [];
+    for (const star of stars) {
+      const target = star.module ? resolveModuleSpecifier(moduleFile, star.module) : null;
+      if (target) candidates.push(...collectModuleExports(target, exportName, visited));
+    }
+    return candidates;
+  }
+
+  /** Resolve an export name in a module file to exactly one symbol target;
+   *  returns null when unresolved or ambiguous. Results are memoized —
+   *  barrel-heavy workspaces re-run the same re-export walk per call. */
+  const exportResolutionCache = new Map<string, { filePath: string; symbolName: string } | null>();
+  function resolveUniqueModuleExport(
+    moduleFile: string,
+    exportName: string,
+  ): { filePath: string; symbolName: string } | null {
+    const cacheKey = `${moduleFile}\0${exportName}`;
+    if (exportResolutionCache.has(cacheKey)) return exportResolutionCache.get(cacheKey)!;
+    const candidates = collectModuleExports(moduleFile, exportName, new Set());
+    const distinct = new Map<string, { filePath: string; symbolName: string }>();
+    for (const candidate of candidates) {
+      distinct.set(`${candidate.filePath}\0${candidate.symbolName}`, candidate);
+    }
+    const resolved = distinct.size === 1 ? [...distinct.values()][0] : null;
+    exportResolutionCache.set(cacheKey, resolved);
+    return resolved;
+  }
+
+  /**
+   * Resolve an OXC-language call expression through its file's module
+   * bindings.
+   * - `name()` — local bound to a named/default import or destructured
+   *   require → that export in the bound workspace module.
+   * - `ns.member()` — namespace import/require binding → `member` uniquely
+   *   exported by the bound module.
+   * - `exports.member()` / `module.exports.member()` — self-module export.
+   * Anything else (external packages, computed requires, missing or
+   * ambiguous exports, deeper member chains) resolves to null → no edge.
+   * A JS/JSX caller whose final resolved target is not a JS/JSX file is
+   * dropped — TypeScript callers may reach any OXC-family module.
+   */
+  function resolveOxcCallTarget(call: {
+    calleeName: string;
+    filePath: string;
+    shadowedLocal?: boolean;
+    start?: number;
+  }): string | null {
+    // A param/local variable with the same name shadows any import binding.
+    if (call.shadowedLocal) return null;
+    let moduleFile: string | null = null;
+    let exportName: string | null = null;
+
+    if (!call.calleeName.includes(".")) {
+      const binding = findImportBinding(call.filePath, call.calleeName, call.start);
+      if (!binding || binding.imported === "*" || binding.typeOnly) return null;
+      moduleFile = resolveModuleSpecifier(call.filePath, binding.module);
+      exportName = binding.imported;
+    } else {
+      let receiver: string;
+      let member: string;
+      if (call.calleeName.startsWith("module.exports.")) {
+        receiver = "module.exports";
+        member = call.calleeName.slice("module.exports.".length);
+      } else {
+        const separator = call.calleeName.indexOf(".");
+        receiver = call.calleeName.slice(0, separator);
+        member = call.calleeName.slice(separator + 1);
+      }
+      if (!member || member.includes(".")) return null;
+      if (receiver === "exports" || receiver === "module.exports") {
+        moduleFile = call.filePath;
+      } else {
+        const binding = findImportBinding(call.filePath, receiver, call.start);
+        if (!binding || binding.imported !== "*" || binding.typeOnly) return null;
+        moduleFile = resolveModuleSpecifier(call.filePath, binding.module);
+      }
+      exportName = member;
+    }
+
+    if (!moduleFile || !exportName) return null;
+    const resolved = resolveUniqueModuleExport(moduleFile, exportName);
+    if (!resolved) return null;
+    // JavaScript callers keep the JS-only target policy: a resolved target
+    // in a TypeScript (or other non-JS) module is dropped.
+    const callerLanguage = parsedFiles.get(call.filePath)?.language ?? "";
+    const targetLanguage = parsedFiles.get(resolved.filePath)?.language ?? "";
+    if (JS_GRAPH_LANGUAGES.has(callerLanguage) && !JS_GRAPH_LANGUAGES.has(targetLanguage)) {
+      return null;
+    }
+    return symbolNodeIdsByFileAndName.get(`${resolved.filePath}\0${resolved.symbolName}`) ?? null;
+  }
+
+  /**
+   * Go call resolution: receiver-qualified `Type::method` names keep the
+   * same-file lookup; `pkg.Func` resolves through the file's bound import to
+   * an exported package-level function declared directly in the imported
+   * package; a bare name resolves to a unique package-level function of the
+   * caller's own package. A root name in the caller's function-local names
+   * (receiver, params, results, `:=`/`var`/`const`) drops the call.
+   */
+  const resolveGoCall = (call: {
+    callerName: string;
+    calleeName: string;
+    filePath: string;
+  }): string | null => {
+    if (!goResolver) return null;
+    if (call.calleeName.includes("::")) {
+      return symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.calleeName}`) ?? null;
+    }
+    const ctx = goResolver.contextForFile(call.filePath);
+    if (!ctx?.packageName) return null;
+    const locals = ctx.localNamesByCaller.get(call.callerName);
+
+    const uniquePackageFunction = (files: string[], name: string): string | null => {
+      let found: string | null = null;
+      for (const file of files) {
+        if (goSymbolTypes.get(`${file}\0${name}`) !== "function") continue;
+        const id = symbolNodeIdsByFileAndName.get(`${file}\0${name}`);
+        if (!id) continue;
+        if (found) return null; // ambiguous
+        found = id;
+      }
+      return found;
+    };
+
+    const dotIndex = call.calleeName.indexOf(".");
+    if (dotIndex >= 0) {
+      const qualifier = call.calleeName.slice(0, dotIndex);
+      const member = call.calleeName.slice(dotIndex + 1);
+      if (!/^\p{Lu}/u.test(member)) return null; // unexported or nested member
+      if (locals?.has(qualifier) || ctx.ambiguousNames.has(qualifier)) return null;
+      const target = ctx.imports.get(qualifier);
+      if (!target) return null;
+      return uniquePackageFunction(
+        goResolver.packageFiles(target.dir, target.packageName, false),
+        member,
+      );
+    }
+
+    if (locals?.has(call.calleeName)) return null;
+    return uniquePackageFunction(
+      goResolver.packageFiles(ctx.packageDir, ctx.packageName, true),
+      call.calleeName,
+    );
+  };
+
   const _callMeta = `{"heuristic":true,"confidence":"low"}`;
   for (const call of pendingCallEdges) {
     const callerNodeId = symbolNodeIdsByFileAndName.get(`${call.filePath}\0${call.callerName}`);
@@ -1424,7 +1996,9 @@ export async function buildGraphGeneration(
     // 1. Try qualified name (callerName.calleeName) — handles nested functions
     //    that shadow top-level symbols (e.g. `two.helper` called from `two`)
     // 2. Try same-file unqualified name
-    // 3. Try global symbol map (cross-file resolution)
+    // 3. JavaScript files: try module-binding import resolution — a same-name
+    //    global symbol is never substituted for a missing import target
+    //    Other languages: try global symbol map (cross-file resolution)
     const lexicalNames: string[] = [];
     if (!call.calleeName.includes(".")) {
       let scope = call.callerName;
@@ -1436,10 +2010,90 @@ export async function buildGraphGeneration(
       }
     }
     lexicalNames.push(call.calleeName);
-    const calleeNodeId =
-      lexicalNames
+    const isOxcCaller = OXC_GRAPH_LANGUAGES.has(parsedFiles.get(call.filePath)?.language ?? "");
+    const isGoCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "go";
+    const isPythonCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "python";
+    const isRubyCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "ruby";
+    const isRustCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "rust";
+    const isCppCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "cpp";
+    const isCSharpCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "csharp";
+    const isJavaCaller = (parsedFiles.get(call.filePath)?.language ?? "") === "java";
+    let calleeNodeId: string | undefined;
+    if (isGoCaller) {
+      calleeNodeId = resolveGoCall(call) ?? undefined;
+    } else if (isPythonCaller) {
+      // Python never uses lexical-name guessing or the global symbol map —
+      // resolution goes through unique bindings, enclosing scopes, and the
+      // self/cls/Class rules in python-resolver.ts.
+      const target = pythonResolver?.resolveCall(call);
+      calleeNodeId = target
+        ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.symbolName}`)
+        : undefined;
+    } else if (isRubyCaller) {
+      // Ruby never uses lexical-name guessing or the global symbol map —
+      // resolution is scope-aware via ruby-resolver.ts and unique-only.
+      const target = rubyResolver?.resolveCall(call);
+      calleeNodeId = target
+        ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.symbolName}`)
+        : undefined;
+    } else if (isCppCaller) {
+      // C++ uses translation-unit visibility and unique target resolution.
+      const target = cppResolver?.resolveCall({
+        filePath: call.filePath,
+        callerName: call.callerName,
+        calleeName: call.calleeName,
+      });
+      calleeNodeId = target
+        ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.symbolName}`)
+        : undefined;
+    } else if (isRustCaller) {
+      // Rust never uses lexical-name guessing, OXC bindings, or the global
+      // symbol map — resolution is crate/module-aware via rust-resolver.ts
+      // and emits only unique in-crate targets.
+      const target = rustResolver?.resolveCall(
+        call.filePath,
+        call.callerName,
+        call.calleeName,
+        call.shadowedLocal,
+      );
+      calleeNodeId = target
+        ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.name}`)
+        : undefined;
+    } else if (isCSharpCaller) {
+      // C# never uses lexical-name guessing, OXC bindings, or the global
+      // symbol map — resolution is namespace/using-aware via
+      // csharp-resolver.ts and emits only unique targets.
+      const target = csharpResolver?.resolveCallOccurrence(
+        call.filePath,
+        call.callerName,
+        call.calleeName,
+      );
+      calleeNodeId = target
+        ? (symbolNodeIdsByFileAndIndex.get(`${target.filePath}\0${target.index}`) ??
+          symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.name}`))
+        : undefined;
+    } else if (isJavaCaller) {
+      // Java never uses lexical-name guessing or the global symbol map —
+      // resolution is package/type/member-aware via java-resolver.ts and
+      // emits only unique workspace targets.
+      const target = javaResolver?.resolveCall({
+        filePath: call.filePath,
+        callerName: call.callerName,
+        calleeName: call.calleeName,
+      });
+      calleeNodeId = target
+        ? symbolNodeIdsByFileAndName.get(`${target.filePath}\0${target.symbolName}`)
+        : undefined;
+    } else {
+      calleeNodeId = lexicalNames
         .map((name) => symbolNodeIdsByFileAndName.get(`${call.filePath}\0${name}`))
-        .find((id): id is string => Boolean(id)) ?? globalSymbolNodes.get(call.calleeName);
+        .find((id): id is string => Boolean(id));
+      if (!calleeNodeId) {
+        calleeNodeId = isOxcCaller
+          ? (resolveOxcCallTarget(call) ?? undefined)
+          : globalSymbolNodes.get(call.calleeName);
+      }
+    }
     if (!calleeNodeId || callerNodeId === calleeNodeId) continue;
     allEdges.push({
       fromNodeId: callerNodeId,

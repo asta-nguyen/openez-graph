@@ -1,0 +1,6 @@
+{
+  "canary": { "from": "Program.cs#Program::Main", "to": "Helpers.cs#Helper::RunA" },
+  "edges": [
+    { "from": "Program.cs#Program::Main", "to": "Helpers.cs#Helper::RunA", "tier": "member" }
+  ]
+}

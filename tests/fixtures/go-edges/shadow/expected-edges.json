@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "ok/ok.go#Ok", "to": "store/store.go#Get" },
+  "edges": [
+    { "from": "ok/ok.go#Ok", "to": "store/store.go#Get", "tier": "package" },
+    { "from": "s/s.go#Use", "to": "s/s.go#newStore", "tier": "package" }
+  ]
+}

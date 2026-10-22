@@ -1,0 +1,13 @@
+{
+  "canary": {
+    "from": "src/app/Anon.java#Anon::go::<anonymous>::run",
+    "to": "src/app/Util.java#Util::format"
+  },
+  "edges": [
+    {
+      "from": "src/app/Anon.java#Anon::go::<anonymous>::run",
+      "to": "src/app/Util.java#Util::format",
+      "tier": "type"
+    }
+  ]
+}
