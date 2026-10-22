@@ -1,0 +1,8 @@
+{
+  "canary": { "from": "use.py#run", "to": "use.py#local_target" },
+  "edges": [
+    { "from": "use.py#run", "to": "use.py#local_target" },
+    { "from": "use.py#run", "to": "pkg/impl.py#api" },
+    { "from": "use.py#run", "to": "pkg/sub/inner.py#deep_api" }
+  ]
+}

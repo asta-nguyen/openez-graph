@@ -5,6 +5,24 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-10-22
+
+### Added
+
+- Native Rust parser and file scanner binaries for Linux x64 GNU, macOS arm64, and Windows x64 MSVC, with tree-sitter and regex fallbacks on other platforms.
+- Structured symbol extraction and workspace-aware call resolution for C++, C#, and Java.
+- Binding-aware call graph resolution for TypeScript/JavaScript, Python, Go, Rust, and Ruby.
+
+### Changed
+
+- Removed symbol and call graph caps for JavaScript/TypeScript, Python, Go, Rust, and Ruby to retain larger code graphs.
+- Run `openez reindex <path>` after upgrading to rebuild parser rows and graph artifacts for updated language indexers.
+
+### Fixed
+
+- Improved language-specific call resolution for imports, re-exports, namespaces, module paths, lexical scopes, and local shadowing; ambiguous and unresolved calls no longer create misleading edges.
+- Reduced memory churn and fitting time for large MCP `diff_context` responses by avoiding tokenizer cache-hit LRU refreshes and batching structured trimming while retaining exact cl100k token budgets.
+
 ## [1.5.0] - 2026-08-26
 
 ### Added
@@ -344,6 +362,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 - CLI npm packaging
 
 [1.5.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.4.0...v1.5.0
+[1.6.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.5.0...v1.6.0
 [1.4.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.0...v1.3.1
 [1.2.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.1.0...v1.2.0

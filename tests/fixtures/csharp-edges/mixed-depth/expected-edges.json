@@ -1,0 +1,6 @@
+{
+  "canary": { "from": "Program.cs#Program::Main", "to": "Types.cs#Y::M" },
+  "edges": [
+    { "from": "Program.cs#Program::Main", "to": "Types.cs#Y::M", "tier": "member" }
+  ]
+}

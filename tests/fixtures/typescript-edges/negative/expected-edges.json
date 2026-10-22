@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "self.ts#run", "to": "self.ts#helper" },
+  "edges": [
+    { "from": "self.ts#run", "to": "self.ts#helper" },
+    { "from": "shadow.ts#shadowVar", "to": "shadow.ts#shadowVar.helper" }
+  ]
+}

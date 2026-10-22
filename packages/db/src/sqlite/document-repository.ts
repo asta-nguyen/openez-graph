@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { createChunkOps, type ChunkStmts } from "./chunk-repository";
+import { publicSymbolKind } from "./utils";
 import type { NativeDatabase, StreamTimestampHolder } from "./shared-types";
 import type { FileOutlineResult, FileOutlineSymbol } from "./types";
 
@@ -176,7 +177,7 @@ export function createDocumentOps(
 
               symbols.push({
                 name,
-                kind: String(s.symbolType || s.kind || s.type || "symbol"),
+                kind: publicSymbolKind(String(s.symbolType || s.kind || s.type || "symbol")),
                 startLine,
                 endLine,
                 exported: Boolean(s.exported),
@@ -196,7 +197,11 @@ export function createDocumentOps(
 
           const name =
             c.heading || (meta.symbolName ? String(meta.symbolName) : `Chunk ${c.chunk_index + 1}`);
-          const kind = meta.symbolType ? String(meta.symbolType) : c.heading ? "section" : "chunk";
+          const kind = meta.symbolType
+            ? publicSymbolKind(String(meta.symbolType))
+            : c.heading
+              ? "section"
+              : "chunk";
           const startLine = Number(meta.startLine || 1);
           const endLine = Number(meta.endLine || startLine);
 

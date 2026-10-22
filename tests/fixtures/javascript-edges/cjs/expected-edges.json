@@ -1,0 +1,72 @@
+{
+  "canary": {
+    "from": "user.cjs#run",
+    "to": "user.cjs#helper"
+  },
+  "edges": [
+    {
+      "from": "user.cjs#run",
+      "to": "user.cjs#helper"
+    },
+    {
+      "from": "user.cjs#run",
+      "to": "mod.cjs#nsFn"
+    },
+    {
+      "from": "user.cjs#run",
+      "to": "mod.cjs#localFn"
+    },
+    {
+      "from": "user.cjs#run",
+      "to": "objmod.cjs#objFn"
+    },
+    {
+      "from": "user.cjs#run",
+      "to": "objmod.cjs#localFn"
+    },
+    {
+      "from": "mod.cjs#nsFn",
+      "to": "mod.cjs#localFn"
+    },
+    {
+      "from": "mod.cjs#pump",
+      "to": "mod.cjs#nsFn"
+    },
+    {
+      "from": "mod.cjs#pump",
+      "to": "mod.cjs#localFn"
+    },
+    {
+      "from": "objmod.cjs#objFn",
+      "to": "objmod.cjs#localFn"
+    },
+    {
+      "from": "nestedreq.cjs#handler",
+      "to": "mod.cjs#nsFn"
+    },
+    {
+      "from": "nestedreq.cjs#writer",
+      "to": "mod.cjs#nsFn"
+    },
+    {
+      "from": "nestedreq.cjs#scopedInner",
+      "to": "mod.cjs#localFn"
+    },
+    {
+      "from": "nestedreq.cjs#varScoped",
+      "to": "mod.cjs#nsFn"
+    },
+    {
+      "from": "nestedreq.cjs#sw",
+      "to": "mod.cjs#nsFn"
+    },
+    {
+      "from": "nestedreq.cjs#swRequire",
+      "to": "mod.cjs#nsFn"
+    },
+    {
+      "from": "nestedreq.cjs#swRequire",
+      "to": "objmod.cjs#objFn"
+    }
+  ]
+}

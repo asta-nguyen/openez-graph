@@ -44,8 +44,8 @@ describe("OxcParser", () => {
     );
     expect(result.callExpressions).toEqual(
       expect.arrayContaining([
-        { callerName: "caller", calleeName: "fetch" },
-        { callerName: "caller", calleeName: "api.save" },
+        { callerName: "caller", calleeName: "fetch", start: expect.any(Number) },
+        { callerName: "caller", calleeName: "api.save", start: expect.any(Number) },
       ]),
     );
     expect(result.calledIdentifiers).toEqual(expect.arrayContaining(["fetch", "api.save"]));
@@ -75,10 +75,14 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "outer.inner",
       calleeName: "doThing",
+      start: expect.any(Number),
     });
     expect(result.callExpressions).toContainEqual({
       callerName: "outer",
       calleeName: "inner",
+      start: expect.any(Number),
+      // `inner` is a block-scoped function declaration inside `outer`.
+      shadowedLocal: true,
     });
     // `doThing` must NOT be attributed to `outer`.
     expect(
@@ -110,10 +114,12 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "outer.inner",
       calleeName: "helper",
+      start: expect.any(Number),
     });
     expect(result.callExpressions).toContainEqual({
       callerName: "Service.run",
       calleeName: "helper",
+      start: expect.any(Number),
     });
   });
 
@@ -143,6 +149,7 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "outer.inner",
       calleeName: "helper",
+      start: expect.any(Number),
     });
   });
 
@@ -200,6 +207,7 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "outer.helper",
       calleeName: "deep",
+      start: expect.any(Number),
     });
     // The call from outer() to helper() — at parser level this is still
     // `helper`, but graph resolution will prefer `outer.helper` over the
@@ -207,6 +215,9 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "outer",
       calleeName: "helper",
+      start: expect.any(Number),
+      // `helper` is a block-scoped function declaration inside `outer`.
+      shadowedLocal: true,
     });
   });
 
@@ -231,6 +242,7 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "outer",
       calleeName: "helper",
+      start: expect.any(Number),
     });
   });
 
@@ -250,6 +262,7 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "Service.run",
       calleeName: "Service.save",
+      start: expect.any(Number),
     });
   });
 
@@ -296,6 +309,7 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "Settings.static.run",
       calleeName: "Settings.static.helper",
+      start: expect.any(Number),
     });
   });
 
@@ -324,10 +338,13 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "Settings.run",
       calleeName: "Settings.save",
+      start: expect.any(Number),
+      shadowedLocal: true,
     });
     expect(result.callExpressions).not.toContainEqual({
       callerName: "Settings.run",
       calleeName: "Settings.static.save",
+      start: expect.any(Number),
     });
   });
 
@@ -349,10 +366,12 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "outer.inner",
       calleeName: "this.save",
+      start: expect.any(Number),
     });
     expect(result.callExpressions).not.toContainEqual({
       callerName: "outer.inner",
       calleeName: "outer.save",
+      start: expect.any(Number),
     });
   });
 
@@ -380,6 +399,7 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "Service.run.callback",
       calleeName: "Service.save",
+      start: expect.any(Number),
     });
   });
 
@@ -406,10 +426,367 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "Service.run.inner.callback",
       calleeName: "this.save",
+      start: expect.any(Number),
     });
     expect(result.callExpressions).not.toContainEqual({
       callerName: "Service.run.inner.callback",
       calleeName: "Service.save",
+      start: expect.any(Number),
+    });
+  });
+
+  it("extracts ESM import bindings with local names and imported export names", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "mod.mjs",
+        absolutePath: "/tmp/mod.mjs",
+        content: [
+          'import defaultDep from "./dep.js";',
+          'import { run, helper as renamed } from "./dep.js";',
+          'import * as ns from "./ns.js";',
+          'import "lodash";',
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    expect(result.importBindings).toEqual([
+      { local: "defaultDep", module: "./dep.js", imported: "default" },
+      { local: "run", module: "./dep.js", imported: "run" },
+      { local: "renamed", module: "./dep.js", imported: "helper" },
+      { local: "ns", module: "./ns.js", imported: "*" },
+    ]);
+    expect(result.importPaths).toEqual(expect.arrayContaining(["./dep.js", "./ns.js", "lodash"]));
+  });
+
+  it("extracts static CommonJS require bindings and ignores computed requires", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "mod.cjs",
+        absolutePath: "/tmp/mod.cjs",
+        content: [
+          'const mod = require("./mod.cjs");',
+          'const { read, write: save } = require("./io.cjs");',
+          "const dynamic = require(process.env.MOD);",
+          "let late;",
+          'late = require("./late.cjs");',
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    expect(result.importBindings).toEqual([
+      { local: "mod", module: "./mod.cjs", imported: "*" },
+      { local: "read", module: "./io.cjs", imported: "read" },
+      { local: "save", module: "./io.cjs", imported: "write" },
+    ]);
+    // Declarator string-literal requires join importPaths; computed requires
+    // and non-declarator require assignments are not static bindings.
+    expect(result.importPaths).toEqual(expect.arrayContaining(["./mod.cjs", "./io.cjs"]));
+    expect(result.importPaths).not.toContain("./late.cjs");
+    expect(result.importBindings?.map((b) => b.local)).not.toContain("late");
+  });
+
+  it("extracts static CommonJS exports as symbols and local export entries", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "mod.cjs",
+        absolutePath: "/tmp/mod.cjs",
+        content: [
+          "function localFn() {}",
+          "exports.nsFn = function () {};",
+          "module.exports.prop = localFn;",
+          "module.exports = { objFn: function () {}, named: localFn };",
+          "exports.unresolvable = makeThing();",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    const names = result.definedSymbols.map((symbol) => symbol.name);
+    expect(names).toEqual(expect.arrayContaining(["localFn", "nsFn", "objFn"]));
+    expect(result.definedSymbols.find((symbol) => symbol.name === "nsFn")?.exported).toBe(true);
+    expect(result.exportBindings).toEqual(
+      expect.arrayContaining([
+        { name: "prop", kind: "local", local: "localFn" },
+        { name: "named", kind: "local", local: "localFn" },
+        { name: "nsFn", kind: "local", local: "nsFn" },
+        { name: "objFn", kind: "local", local: "objFn" },
+      ]),
+    );
+    // A property whose value is not one local declaration is unresolvable.
+    expect(result.exportBindings?.map((e) => e.name)).not.toContain("unresolvable");
+  });
+
+  it("extracts ESM export specifiers, re-exports, and default exports", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "barrel.js",
+        absolutePath: "/tmp/barrel.js",
+        content: [
+          'export { a as ra } from "./a.js";',
+          'export * from "./b.js";',
+          "function internal() {}",
+          "export { internal as helper };",
+          "export function direct() {}",
+          "export default function df() {}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    expect(result.exportBindings).toEqual(
+      expect.arrayContaining([
+        { name: "ra", kind: "reexport", module: "./a.js", imported: "a" },
+        { name: "*", kind: "star", module: "./b.js" },
+        { name: "helper", kind: "local", local: "internal" },
+        { name: "direct", kind: "local", local: "direct" },
+        { name: "default", kind: "local", local: "df" },
+      ]),
+    );
+    // `export default function df` exports only "default" — `df` itself is
+    // not a named export.
+    expect(result.exportBindings?.map((e) => e.name)).not.toContain("df");
+  });
+
+  it("extracts TypeScript bindings with per-specifier typeOnly flags", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "typed.ts",
+        absolutePath: "/tmp/typed.ts",
+        content: [
+          'import type { Shape } from "./shapes";',
+          'import { type OnlyT, realFn } from "./mixed";',
+          'import * as ns from "./ns";',
+          'export type { Shape } from "./shapes";',
+          'export { type Iface, real } from "./x";',
+          'export type * from "./types";',
+          "export interface Iface { a: number }",
+          "export function real() {}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "typescript",
+      "code",
+    );
+
+    expect(result.importBindings).toEqual(
+      expect.arrayContaining([
+        { local: "Shape", module: "./shapes", imported: "Shape", typeOnly: true },
+        { local: "OnlyT", module: "./mixed", imported: "OnlyT", typeOnly: true },
+        { local: "realFn", module: "./mixed", imported: "realFn", typeOnly: undefined },
+        { local: "ns", module: "./ns", imported: "*", typeOnly: undefined },
+      ]),
+    );
+    expect(result.exportBindings).toEqual(
+      expect.arrayContaining([
+        {
+          name: "Shape",
+          kind: "reexport",
+          module: "./shapes",
+          imported: "Shape",
+          typeOnly: true,
+        },
+        {
+          name: "Iface",
+          kind: "reexport",
+          module: "./x",
+          imported: "Iface",
+          typeOnly: true,
+        },
+        { name: "real", kind: "reexport", module: "./x", imported: "real", typeOnly: undefined },
+        { name: "*", kind: "star", module: "./types", typeOnly: true },
+        { name: "Iface", kind: "local", local: "Iface", typeOnly: undefined },
+        { name: "real", kind: "local", local: "real", typeOnly: undefined },
+      ]),
+    );
+  });
+
+  it("keeps JavaScript payloads free of typeOnly flags", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "plain.js",
+        absolutePath: "/tmp/plain.js",
+        content: ['import { x } from "./m";', "export function f() {}"].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    for (const binding of result.importBindings ?? []) {
+      expect(binding).not.toHaveProperty("typeOnly");
+    }
+    for (const entry of result.exportBindings ?? []) {
+      expect(entry).not.toHaveProperty("typeOnly");
+    }
+  });
+
+  it("extracts function-local require bindings with their owning scope", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "nested.js",
+        absolutePath: "/tmp/nested.js",
+        content: [
+          "function handler() {",
+          "  const { read } = require('./io');",
+          "  const io = require('./io');",
+          "  read();",
+          "  io.write();",
+          "}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    const bindings = result.importBindings ?? [];
+    const read = bindings.find((b) => b.local === "read");
+    const io = bindings.find((b) => b.local === "io");
+    expect(read).toMatchObject({
+      module: "./io",
+      imported: "read",
+      scopeStart: expect.any(Number),
+      scopeEnd: expect.any(Number),
+    });
+    expect(io).toMatchObject({
+      module: "./io",
+      imported: "*",
+      scopeStart: expect.any(Number),
+      scopeEnd: expect.any(Number),
+    });
+    expect(result.importPaths).toContain("./io");
+  });
+
+  it("treats a shadowed require parameter as a local call, not a module binding", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "shadowed-require.js",
+        absolutePath: "/tmp/shadowed-require.js",
+        content: [
+          "function caller(require) {",
+          '  const { run } = require("./dep");',
+          "  run();",
+          "}",
+        ].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    expect(result.importBindings?.some((binding) => binding.local === "run")).toBe(false);
+    expect(result.importPaths).not.toContain("./dep");
+    expect(result.callExpressions).toContainEqual({
+      callerName: "caller",
+      calleeName: "run",
+      start: expect.any(Number),
+      shadowedLocal: true,
+    });
+  });
+
+  it("emits a stable `default` symbol for anonymous default exports", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "anon.js",
+        absolutePath: "/tmp/anon.js",
+        content: ["export default function () {", "  return 1;", "}"].join("\n"),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    expect(result.definedSymbols.map((s) => s.name)).toContain("default");
+    expect(result.exportBindings).toContainEqual({
+      name: "default",
+      kind: "local",
+      local: "default",
+    });
+  });
+
+  it("emits a `default` symbol for anonymous default arrow exports", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "anon.js",
+        absolutePath: "/tmp/anon.js",
+        content: "export default () => 2;",
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    const symbol = result.definedSymbols.find((s) => s.name === "default");
+    expect(symbol?.symbolType).toBe("function");
+    expect(result.exportBindings).toContainEqual({
+      name: "default",
+      kind: "local",
+      local: "default",
+    });
+  });
+
+  it("does not mark calls shadowed by declarations in sibling blocks", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "scope.js",
+        absolutePath: "/tmp/scope.js",
+        content: ["export function caller() {", "  target();", "  { const target = 1; }", "}"].join(
+          "\n",
+        ),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "caller",
+      calleeName: "target",
+      start: expect.any(Number),
+    });
+  });
+
+  it("marks calls shadowed by same-block declarations after the call (TDZ)", () => {
+    const result = new OxcParser().parse(
+      {
+        relativePath: "scope.js",
+        absolutePath: "/tmp/scope.js",
+        content: ["export function caller() {", "  target();", "  const target = 1;", "}"].join(
+          "\n",
+        ),
+        targetTokens: 500,
+        overlapTokens: 50,
+      },
+      "javascript",
+      "code",
+    );
+
+    expect(result.callExpressions).toContainEqual({
+      callerName: "caller",
+      calleeName: "target",
+      start: expect.any(Number),
+      shadowedLocal: true,
     });
   });
 
@@ -434,6 +811,7 @@ describe("OxcParser", () => {
     expect(result.callExpressions).toContainEqual({
       callerName: "configure",
       calleeName: "helper",
+      start: expect.any(Number),
     });
   });
 });

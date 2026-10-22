@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.base.json",
+  // A child `paths` object replaces the inherited paths entirely.
+  "compilerOptions": { "paths": { "@pkg/*": ["pkg2/src/*"] } }
+}

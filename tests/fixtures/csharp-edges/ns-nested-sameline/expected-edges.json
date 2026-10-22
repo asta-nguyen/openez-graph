@@ -1,0 +1,4 @@
+{
+  "canary": { "from": "Consumer.cs#C::M", "to": "Lib.cs#Thing::F" },
+  "edges": [{ "from": "Consumer.cs#C::M", "to": "Lib.cs#Thing::F", "tier": "binding" }]
+}

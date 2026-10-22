@@ -1,0 +1,10 @@
+{
+  "canary": { "from": "main.py#run", "to": "main.py#local_target" },
+  "edges": [
+    { "from": "main.py#run", "to": "main.py#local_target" },
+    { "from": "main.py#run", "to": "helpers.py#project_view" },
+    { "from": "main.py#run", "to": "helpers.py#X" },
+    { "from": "main.py#run", "to": "helpers.py#X::as_view" },
+    { "from": "main.py#run_local", "to": "helpers.py#X::as_view" }
+  ]
+}

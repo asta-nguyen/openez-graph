@@ -37,10 +37,12 @@ def helper():
 
     expect(result.calledIdentifiers).toEqual(expect.arrayContaining(["helper", "run"]));
     expect(result.calledIdentifiers).not.toContain("len");
+    // callExpressions keep the qualified callee (`runner.run`) for the
+    // Python call resolver; calledIdentifiers above stay last-segment.
     expect(result.callExpressions).toEqual(
       expect.arrayContaining([
         { callerName: "load_history", calleeName: "helper" },
-        { callerName: "load_history", calleeName: "run" },
+        { callerName: "load_history", calleeName: "runner.run" },
       ]),
     );
   });
@@ -70,11 +72,13 @@ class User:
     expect(result.calledIdentifiers).toEqual(
       expect.arrayContaining(["route", "required", "save", "dataclass"]),
     );
+    // callExpressions keep qualified decorator/call names so the resolver
+    // can follow `auth.required`-style module bindings.
     expect(result.callExpressions).toEqual(
       expect.arrayContaining([
-        { callerName: "create_user", calleeName: "route" },
-        { callerName: "create_user", calleeName: "required" },
-        { callerName: "create_user", calleeName: "save" },
+        { callerName: "create_user", calleeName: "app.route" },
+        { callerName: "create_user", calleeName: "auth.required" },
+        { callerName: "create_user", calleeName: "db.save" },
         { callerName: "User", calleeName: "dataclass" },
       ]),
     );

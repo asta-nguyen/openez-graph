@@ -62,3 +62,17 @@ export function sanitizeFtsQuery(query: string): string {
     .map((term) => `"${term}"*`)
     .join(" OR ");
 }
+
+/**
+ * Map an internal `symbolType` marker to the public kind vocabulary.
+ * The tree-sitter parsers emit `static_method`/`static_function` on
+ * `parsed_documents.symbols` so the C#/Java resolvers can restrict
+ * `using static`/`import static` to genuinely static members; outline
+ * `kind` labels, chunk metadata, and graph-node metadata keep the base
+ * vocabulary so public shapes never see the internal distinction.
+ */
+export function publicSymbolKind(kind: string): string {
+  if (kind === "static_method") return "method";
+  if (kind === "static_function") return "function";
+  return kind;
+}

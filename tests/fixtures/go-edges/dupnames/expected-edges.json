@@ -1,0 +1,6 @@
+{
+  "canary": { "from": "x/use.go#Use", "to": "x/use.go#Other" },
+  "edges": [
+    { "from": "x/use.go#Use", "to": "x/use.go#Other", "tier": "package" }
+  ]
+}

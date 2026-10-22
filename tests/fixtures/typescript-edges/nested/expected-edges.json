@@ -1,0 +1,17 @@
+{
+  "canary": { "from": "pkg/caller.ts#run", "to": "shared/helper.ts#rootFn" },
+  "edges": [
+    { "from": "pkg/caller.ts#run", "to": "shared/helper.ts#rootFn" },
+    { "from": "pkg/src/deep/a.ts#runA", "to": "shared/helper.ts#rootFn" },
+    { "from": "pkg/src/b.ts#runB", "to": "shared/helper.ts#rootFn" },
+    { "from": "pkg2/caller.ts#run", "to": "pkg2/src/util.ts#pkgFn" },
+    { "from": "pkg3/caller.ts#run", "to": "pkg3/local.ts#localFn" }
+  ],
+  "fileImports": {
+    "pkg/caller.ts": ["shared/helper.ts"],
+    "pkg/src/deep/a.ts": ["shared/helper.ts"],
+    "pkg/src/b.ts": ["shared/helper.ts"],
+    "pkg2/caller.ts": ["pkg2/src/util.ts"],
+    "pkg3/caller.ts": ["pkg3/local.ts"]
+  }
+}

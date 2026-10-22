@@ -1,0 +1,7 @@
+{
+  "canary": { "from": "main.py#wrapped", "to": "helpers.py#cached" },
+  "edges": [
+    { "from": "main.py#wrapped", "to": "helpers.py#cached" },
+    { "from": "main.py#K::method", "to": "helpers.py#cached" }
+  ]
+}

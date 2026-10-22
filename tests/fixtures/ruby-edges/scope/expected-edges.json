@@ -1,0 +1,42 @@
+{
+  "canary": {
+    "type": "calls",
+    "from": "app/invoice.rb#Billing::Invoice::total",
+    "to": "app/invoice.rb#Billing::Invoice::tax"
+  },
+  "calls": [
+    {
+      "from": "app/invoice.rb#Billing::Invoice::build",
+      "to": "app/invoice.rb#Billing::Helper::run"
+    },
+    {
+      "from": "app/invoice.rb#Billing::Invoice::total",
+      "to": "app/invoice.rb#Billing::Invoice::tax"
+    },
+    {
+      "from": "app/invoice.rb#Billing::Invoice::total",
+      "to": "app/invoice.rb#Billing::Invoice::build"
+    },
+    {
+      "from": "app/invoice.rb#Billing::Invoice::total",
+      "to": "app/invoice.rb#Billing::Invoice::audit"
+    },
+    {
+      "from": "app/invoice.rb#Billing::Invoice::total",
+      "to": "app/invoice.rb#Billing::Helper::run"
+    },
+    {
+      "from": "app/invoice.rb#Billing::Invoice::total",
+      "to": "app/invoice.rb#make_id"
+    },
+    {
+      "from": "app/invoice.rb#Billing::Invoice::audit",
+      "to": "app/invoice.rb#emit"
+    },
+    {
+      "from": "app/invoice.rb#Billing::Helper::run",
+      "to": "app/invoice.rb#log"
+    }
+  ],
+  "imports": []
+}
