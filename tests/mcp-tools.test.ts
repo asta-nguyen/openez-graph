@@ -272,6 +272,82 @@ describe("MCP agent contracts", () => {
     }
   });
 
+  it("marks diff_context truncated only when trimming beyond formattedSummary is needed", async () => {
+    execSync("git init", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.name 'Tester'", { cwd: tempRoot, stdio: "ignore" });
+    execSync("git config user.email 'tester@example.com'", { cwd: tempRoot, stdio: "ignore" });
+    await createIndexedWorkspace("summary-first", tempRoot);
+    execSync("git add . && git commit -m initial", { cwd: tempRoot, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(tempRoot, "src", "target.ts"),
+      "export function target(value: string) { return value.trim().toUpperCase(); }\n",
+    );
+
+    const { client, server } = await connectClient(tempRoot);
+    try {
+      const fullText = textResult(
+        await client.callTool({
+          name: "diff_context",
+          arguments: { maxTokens: 100_000 },
+        }),
+      );
+      const fullBody = JSON.parse(fullText) as {
+        workspaces: Array<{ report: { formattedSummary?: string; files: unknown[] } }>;
+        metrics: { responseTokens: number };
+      };
+      const fullTokens = countTokens(fullText);
+      const fullReport = fullBody.workspaces[0]?.report;
+      expect(typeof fullReport?.formattedSummary).toBe("string");
+      expect(fullReport?.formattedSummary?.length).toBeGreaterThan(0);
+      // metrics.responseTokens must describe the exact returned text.
+      expect(fullTokens).toBeLessThanOrEqual(100_000);
+      expect(fullBody.metrics.responseTokens).toBe(fullTokens);
+
+      // Slightly over budget: dropping formattedSummary alone must make the
+      // response fit, so it is not marked truncated and keeps all structured
+      // content.
+      const summaryOnlyText = textResult(
+        await client.callTool({
+          name: "diff_context",
+          arguments: { maxTokens: fullTokens - 10 },
+        }),
+      );
+      expect(countTokens(summaryOnlyText)).toBeLessThanOrEqual(fullTokens - 10);
+      const summaryOnlyBody = JSON.parse(summaryOnlyText) as {
+        workspaces: Array<{ report: { formattedSummary?: string; files: unknown[] } }>;
+        metrics: { truncated: boolean; tokenBudget: number; responseTokens: number };
+      };
+      expect(summaryOnlyBody.workspaces[0]?.report.formattedSummary).toBeUndefined();
+      expect(summaryOnlyBody.workspaces[0]?.report.files).toEqual(fullReport?.files);
+      expect(summaryOnlyBody.metrics.truncated).toBe(false);
+      expect(summaryOnlyBody.metrics.tokenBudget).toBe(fullTokens - 10);
+      expect(summaryOnlyBody.metrics.responseTokens).toBe(countTokens(summaryOnlyText));
+
+      // Tighter budget: summary removal is insufficient, so structured content
+      // is trimmed and the response is marked truncated.
+      const tightBudget = Math.max(64, countTokens(summaryOnlyText) - 20);
+      const trimmedText = textResult(
+        await client.callTool({
+          name: "diff_context",
+          arguments: { maxTokens: tightBudget },
+        }),
+      );
+      expect(countTokens(trimmedText)).toBeLessThanOrEqual(tightBudget);
+      const trimmedBody = JSON.parse(trimmedText) as {
+        workspaces: Array<{ report: { formattedSummary?: string; files: unknown[] } }>;
+        metrics: { truncated: boolean; responseTokens: number };
+      };
+      expect(trimmedBody.metrics.truncated).toBe(true);
+      expect(trimmedBody.metrics.responseTokens).toBe(countTokens(trimmedText));
+      expect(trimmedBody.workspaces).toHaveLength(1);
+      expect(trimmedBody.workspaces[0]?.report.formattedSummary).toBeUndefined();
+      expect(trimmedBody.workspaces[0]?.report.files.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("returns a structured error for an unregistered diff_context path", async () => {
     const { client, server } = await connectClient(tempRoot);
     try {
