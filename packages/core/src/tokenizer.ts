@@ -6,16 +6,21 @@
 
 // Lazy-load gpt-tokenizer — the BPE vocab is ~965KB and only needed for
 // exact (retrieval) token counting, never for the fast indexing path.
+// The cl100k_base encoding is imported explicitly: gpt-tokenizer 4.x
+// defaults the package root to o200k_base, while our token budgets and
+// stored counts are cl100k.
 let _encode: ((text: string) => number[]) | null = null;
 let _decode: ((tokens: number[]) => string) | null = null;
+let _countTokens: ((text: string) => number) | null = null;
 let _loadFailed = false;
 
 function loadTokenizer(): void {
   if (_encode || _loadFailed) return;
   try {
-    const tokenizer = require("gpt-tokenizer");
+    const tokenizer = require("gpt-tokenizer/encoding/cl100k_base");
     _encode = tokenizer.encode;
     _decode = tokenizer.decode;
+    _countTokens = tokenizer.countTokens;
   } catch {
     _loadFailed = true;
   }
@@ -27,9 +32,9 @@ function loadTokenizer(): void {
  */
 export function countTokens(value: string): number {
   loadTokenizer();
-  if (_encode) {
+  if (_countTokens) {
     try {
-      return _encode(value).length;
+      return _countTokens(value);
     } catch {
       return Math.ceil(value.length / 4);
     }

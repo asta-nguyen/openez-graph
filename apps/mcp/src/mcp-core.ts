@@ -292,24 +292,63 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
   metrics.tokenBudget = maxTokens;
   metrics.truncated = false;
 
-  const serializedTokens = () => countTokens(JSON.stringify(value));
-  const updateMetrics = () => {
-    metrics.responseTokens = serializedTokens();
-    if (typeof metrics.selectedFullFileTokens === "number") {
-      metrics.estimatedTokensSaved = metrics.truncated
-        ? 0
-        : Math.max(0, metrics.selectedFullFileTokens - Number(metrics.responseTokens));
-      metrics.method = "selected-full-files-minus-serialized-response";
+  const measure = () => {
+    const text = JSON.stringify(value);
+    return { text, tokens: countTokens(text) };
+  };
+  const serializedTokens = () => measure().tokens;
+  // metrics.responseTokens is embedded in the serialized text it reports,
+  // so writing it can change that count — including pushing a fitting
+  // response back over budget. Re-write the derived fields and re-measure
+  // until the metrics object is stable; the returned count then describes
+  // the exact text that will be sent.
+  let includeMethod = true;
+  const finalizeMetrics = () => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const tokens = serializedTokens();
+      const before = JSON.stringify(metrics);
+      metrics.responseTokens = tokens;
+      if (typeof metrics.selectedFullFileTokens === "number") {
+        metrics.estimatedTokensSaved = metrics.truncated
+          ? 0
+          : Math.max(0, metrics.selectedFullFileTokens - tokens);
+        if (includeMethod) metrics.method = "selected-full-files-minus-serialized-response";
+        else delete metrics.method;
+      }
+      if (JSON.stringify(metrics) === before) return tokens;
+    }
+    return serializedTokens();
+  };
+  if (finalizeMetrics() <= maxTokens) return value;
+
+  // formattedSummary is rendered text derived from the structured payload —
+  // it is dropped before any structured trimming when the response does not
+  // fit. If its removal alone brings the response under budget, the response
+  // is not marked truncated.
+  let droppedSummary = false;
+  const dropSummaries = (current: unknown) => {
+    if (Array.isArray(current)) {
+      current.forEach(dropSummaries);
+      return;
+    }
+    if (!current || typeof current !== "object") return;
+    for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
+      if (key === "formattedSummary") {
+        delete (current as Record<string, unknown>)[key];
+        droppedSummary = true;
+      } else {
+        dropSummaries(child);
+      }
     }
   };
-  updateMetrics();
-  if (serializedTokens() <= maxTokens) {
-    updateMetrics();
-    return value;
-  }
+  dropSummaries(value);
+  if (droppedSummary && finalizeMetrics() <= maxTokens) return value;
 
   metrics.truncated = true;
-  for (let attempts = 0; attempts < 10_000 && serializedTokens() > maxTokens; attempts += 1) {
+  // Prune in deterministic batches: serialized-size estimates schedule how
+  // much to remove per batch; exact cl100k counts at batch boundaries and on
+  // the final response decide when trimming stops.
+  const trimBatch = (current: { text: string; tokens: number }) => {
     const arrays: Array<{ items: unknown[]; minimum: number }> = [];
     const strings: Array<{ owner: Record<string, unknown>; key: string; value: string }> = [];
     const visit = (current: unknown, parentKey?: string) => {
@@ -348,31 +387,79 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
     };
     visit(value);
 
-    const array = arrays.sort(
-      (left, right) =>
-        JSON.stringify(right.items[right.items.length - 1]).length -
-        JSON.stringify(left.items[left.items.length - 1]).length,
-    )[0];
-    if (array) {
-      array.items.pop();
-      continue;
+    const charsPerToken = current.text.length / current.tokens;
+    let estimatedOverflow = current.tokens - maxTokens;
+    let changed = false;
+
+    // Arrays first, in the existing priority order: pop from the array whose
+    // current last item serializes largest, repeating until the estimated
+    // overflow is covered or every array is at its minimum. Each candidate's
+    // last-item size is measured once and only the popped array is
+    // re-measured, so selection is a linear scan; ties keep traversal order,
+    // matching the previous stable sort.
+    const candidates = arrays
+      .filter((candidate) => candidate.items.length > candidate.minimum)
+      .map((candidate) => ({
+        items: candidate.items,
+        minimum: candidate.minimum,
+        lastSize: JSON.stringify(candidate.items[candidate.items.length - 1]).length,
+      }));
+    while (estimatedOverflow > 0 && candidates.length > 0) {
+      let best = 0;
+      for (let index = 1; index < candidates.length; index += 1) {
+        if (candidates[index]!.lastSize > candidates[best]!.lastSize) best = index;
+      }
+      const candidate = candidates[best]!;
+      candidate.items.pop();
+      estimatedOverflow -= (candidate.lastSize + 1) / charsPerToken;
+      if (candidate.items.length > candidate.minimum) {
+        candidate.lastSize = JSON.stringify(candidate.items[candidate.items.length - 1]).length;
+      } else {
+        candidates.splice(best, 1);
+      }
+      changed = true;
     }
 
-    const longest = strings.sort((left, right) => right.value.length - left.value.length)[0];
-    if (!longest?.value) break;
-    const overflow = serializedTokens() - maxTokens;
-    const currentTokens = countTokens(longest.value);
-    longest.owner[longest.key] = truncateToTokenLimit(
-      longest.value,
-      Math.max(0, currentTokens - overflow - 8),
-    );
+    // Strings are only touched once every array is at its minimum, longest
+    // first — same priority as before, batched under the same estimate.
+    if (estimatedOverflow > 0) {
+      for (const entry of strings.sort((left, right) => right.value.length - left.value.length)) {
+        if (estimatedOverflow <= 0) break;
+        const trimmed = truncateToTokenLimit(
+          entry.value,
+          Math.max(0, countTokens(entry.value) - Math.ceil(estimatedOverflow) - 8),
+        );
+        if (trimmed === entry.value) continue;
+        entry.owner[entry.key] = trimmed;
+        estimatedOverflow -= (entry.value.length - trimmed.length) / charsPerToken;
+        changed = true;
+      }
+    }
+
+    return changed;
+  };
+
+  let last = measure();
+  for (let attempts = 0; attempts < 10_000 && last.tokens > maxTokens; attempts += 1) {
+    if (!trimBatch(last)) break;
+    last = measure();
   }
 
-  updateMetrics();
-  while (serializedTokens() > maxTokens && typeof metrics.method === "string")
-    delete metrics.method;
-  updateMetrics();
-  if (serializedTokens() > maxTokens) {
+  // Writing the final metrics changes the serialized text — it can push a
+  // fitting response back over budget — so keep fitting until the exact
+  // count is stable and within budget: shed the optional metrics.method
+  // tag first, then continue batch trimming.
+  let tokens = finalizeMetrics();
+  for (let attempts = 0; attempts < 10_000 && tokens > maxTokens; attempts += 1) {
+    if (typeof metrics.method === "string") {
+      includeMethod = false;
+      delete metrics.method;
+    } else if (!trimBatch(measure())) {
+      break;
+    }
+    tokens = finalizeMetrics();
+  }
+  if (tokens > maxTokens) {
     // Last-resort minimal response. Preserve the workspaces envelope if it
     // exists (diff_context contract requires { workspaces: [...] }) by
     // keeping a single truncated error entry. Other tools fall back to
@@ -419,7 +506,11 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
       return buildMinimal(variants[variants.length - 1]!, 0);
     }
     const minimal = { metrics: { responseTokens: 0, tokenBudget: maxTokens, truncated: true } };
-    minimal.metrics.responseTokens = countTokens(JSON.stringify(minimal));
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const responseTokens = countTokens(JSON.stringify(minimal));
+      if (minimal.metrics.responseTokens === responseTokens) break;
+      minimal.metrics.responseTokens = responseTokens;
+    }
     return minimal;
   }
   return value;
@@ -1124,23 +1215,9 @@ export function createMcpServer(options?: McpServerOptions) {
           }
         }
 
-        let payload: {
-          workspaces: Array<Omit<DiffWorkspaceEntry, "report"> & { report?: unknown }>;
-        } = {
-          workspaces: reports,
-        };
-        // Drop formattedSummary before structured symbols/files when over budget.
-        if (countTokens(JSON.stringify(payload)) > responseBudget) {
-          payload = {
-            workspaces: reports.map((entry) => {
-              if (!entry.report) return entry;
-              const { formattedSummary: _drop, ...reportWithoutSummary } = entry.report;
-              return { ...entry, report: reportWithoutSummary };
-            }),
-          };
-        }
-
-        return jsonResponse(payload, responseBudget);
+        // formattedSummary-first removal and budget trimming are owned by the
+        // shared fitter inside jsonResponse.
+        return jsonResponse({ workspaces: reports }, responseBudget);
       }
       case "code_outline": {
         const input = codeOutlineSchema.parse(request.params.arguments ?? {});

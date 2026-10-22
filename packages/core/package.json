@@ -12,7 +12,7 @@
     "@openez-graph/config": "workspace:*",
     "@openez-graph/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "gpt-tokenizer": "^2.9.0",
+    "gpt-tokenizer": "^4.1.0",
     "ollama": "^0.5.0",
     "openai": "^5.0.0",
     "zod": "^3.24.0"

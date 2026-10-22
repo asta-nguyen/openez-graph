@@ -130,12 +130,12 @@ describe("csharp symbols", () => {
 
   test("nested namespace symbols carry fully qualified names", async () => {
     const res = await PARSE(`namespace A { class X { } namespace B { class Y { } } }`);
-    const names = res.definedSymbols!.map((s) => s.name);
+    const names = res!.definedSymbols!.map((s) => s.name);
     // Same-line nesting is exact: B's emitted name is `A.B` (parser-derived
     // ancestor walk), not `B` — and same-line siblings stay top-level.
     expect(names).toEqual(["A", "X", "A.B", "Y"]);
     const sib = await PARSE(`namespace A { class W { } } namespace B { class W { } }`);
-    expect(sib.definedSymbols!.map((s) => s.name)).toEqual(["A", "W", "B", "W"]);
+    expect(sib!.definedSymbols!.map((s) => s.name)).toEqual(["A", "W", "B", "W"]);
   });
 
   test("exported reflects the public modifier token, not attribute text", async () => {
@@ -143,7 +143,7 @@ describe("csharp symbols", () => {
       `[Doc("public API")] class Internal { void M() { } }\n` +
         `[Doc("public")] public class P { public void Run() { } void Hide() { } }\n`,
     );
-    const byName = new Map(res.definedSymbols!.map((s) => [s.name, s.exported]));
+    const byName = new Map(res!.definedSymbols!.map((s) => [s.name, s.exported]));
     // "public" inside an attribute argument must not fake accessibility.
     expect(byName.get("Internal")).toBe(false);
     expect(byName.get("Internal::M")).toBe(false);

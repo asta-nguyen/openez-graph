@@ -2,6 +2,7 @@
 
 ## Archived changes
 
+- [MCP response budget memory use](changes/archive/2026-10-22-diff-context-token-budget-memory/design.md) — completed 2026-10-22
 - [Go indexing accuracy and native parity](changes/archive/2026-10-20-39-go-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21
 - [C++ indexing accuracy and native parity](changes/archive/2026-10-20-39-cpp-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21
 - [C# indexing accuracy and native parity](changes/archive/2026-10-20-39-csharp-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21

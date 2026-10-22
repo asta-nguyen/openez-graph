@@ -59,6 +59,8 @@ describe("java language registration", () => {
         relativePath: "src/A.java",
         absolutePath: "/tmp/A.java",
         content: BASIC,
+        targetTokens: 512,
+        overlapTokens: 64,
       },
       "java",
       "code",
@@ -294,6 +296,8 @@ describe("java parser fallback", () => {
       relativePath: "src/A.java",
       absolutePath: "/tmp/A.java",
       content: "plain text with no java structure at all\n\n\n",
+      targetTokens: 512,
+      overlapTokens: 64,
     });
     expect(parsed.chunks.length).toBeGreaterThan(0);
     expect(parsed.definedSymbols).toEqual([]);
