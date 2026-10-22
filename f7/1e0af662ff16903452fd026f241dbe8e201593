@@ -1,0 +1,65 @@
+apps/mcp/src/mcp-core.ts
+  s_40482f44189743::t_5acd7f81d1bfcb 395-419
+  s_40482f44189743::t_ee181843f5326c 426
+  s_40482f44189743::t_6fc4e087283f4a 295-296,298-318,320,323-344,348-351,390-394,420,423-425,427-429,431-445,448-462,509-513,1218-1219
+  s_40482f44189743::t_a09c702d8ea1bf 297,322,345,430,1220
+CHANGELOG.md
+  s_40482f44189743::t_aaac398882c792 8,24
+  s_40482f44189743::t_1504ddf872b1f5 9-23,25,365
+packages/core/src/tokenizer.ts
+  s_75df56e3919ca9::t_1c88237ae152f6 9-11,14,20,23,35,37
+tests/mcp-tools.test.ts
+  s_40482f44189743::t_6fc4e087283f4a 275-349
+  s_40482f44189743::t_c168c8e28866bf 274
+apps/cli/package.json
+  s_40482f44189743::t_1504ddf872b1f5 3
+tests/java-indexer.test.ts
+  s_3160f661dd8451::t_fdde23136e1447 62-63
+  s_3160f661dd8451::t_eed6e95c6b6bb6 299-300
+tests/csharp-indexer.test.ts
+  s_3160f661dd8451::t_d6a38dc8ea01dd 146
+  s_3160f661dd8451::t_6f4d805b686f12 138
+  s_3160f661dd8451::t_8f8a01f9f564e7 133
+docs/agent-devkit/changes/archive/2026-10-22-diff-context-token-budget-memory/tasks.md
+  s_40482f44189743::t_a033ce5522f374 1-66
+docs/agent-devkit/INDEX.md
+  s_40482f44189743::t_5a44253604474c 5
+packages/core/package.json
+  s_75df56e3919ca9::t_42c408a7b51655 15
+pnpm-lock.yaml
+  s_40482f44189743::t_87ef6dc25a8f5d 80-82,345-346,407-409,3323-3324,4544-4551,7508,8970,8975
+docs/agent-devkit/changes/archive/2026-10-22-diff-context-token-budget-memory/design.md
+  s_40482f44189743::t_255b91dc5dd5b6 1-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f71e0af662ff16903452fd026f241dbe8e201593",
+  "prompts": {},
+  "sessions": {
+    "s_3160f661dd8451": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "romantic-carrot",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_40482f44189743": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a158e1-cb44-7020-aa8f-5329933881f3",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_75df56e3919ca9": {
+      "agent_id": {
+        "tool": "windsurf",
+        "id": "brook-number",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
