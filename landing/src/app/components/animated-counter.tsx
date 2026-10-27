@@ -19,6 +19,11 @@ export function AnimatedCounter({ target, duration = 1200, suffix = "" }: Props)
       ([entry]) => {
         if (entry.isIntersecting && !started.current) {
           started.current = true;
+          if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            setVal(target);
+            observer.disconnect();
+            return;
+          }
           const start = performance.now();
           const step = (now: number) => {
             const t = Math.min((now - start) / duration, 1);
