@@ -7,7 +7,6 @@ import {
   Terminal,
   Puzzle,
   ArrowRight,
-  Star,
   FileCode2,
   Layers,
   Workflow,
@@ -17,30 +16,17 @@ import {
 import { Reveal } from "./components/reveal";
 import { AnimatedCounter } from "./components/animated-counter";
 import { GitHubStars } from "./components/github-stars";
-import { HeroGraph } from "./components/graph-loader";
 import { DashboardPreview } from "./components/dashboard-preview";
 import { AgentTabs } from "./components/agent-tabs";
 import { CommandBox } from "./components/command-box";
+import { RetrievalStage } from "./components/retrieval-stage";
+import { mcpToolCount } from "./components/mcp-tools";
 import { Footer } from "./components/footer";
-
-const REPO = "asta-nguyen/openez-graph";
-
-// Mirrors the tools registered in apps/mcp/src/mcp-core.ts; the counts below derive from this list
-const mcpTools = [
-  { name: "code_query", desc: "Ranked code and documentation" },
-  { name: "code_outline", desc: "AST outline of a single file" },
-  { name: "code_context", desc: "Graph-adjacent context for a symbol or file" },
-  { name: "graph_neighbors", desc: "Inspect nodes and edges" },
-  { name: "diff_context", desc: "Affected symbols and callers for a git diff" },
-  { name: "memory_recall", desc: "Durable project decisions" },
-  { name: "memory_write", desc: "Store a decision for later sessions" },
-  { name: "list_workspaces", desc: "Registered workspace inventory" },
-  { name: "index_workspace", desc: "Index or refresh on demand" },
-  { name: "remove_workspace", desc: "Remove a workspace (needs confirm: true)" },
-];
+import { SiteHeader } from "./components/site-header";
+import { REPO, REPO_URL } from "@/lib/site";
 
 const stats = [
-  { label: "MCP tools", target: mcpTools.length },
+  { label: "MCP tools", target: mcpToolCount },
   { label: "Indexed formats", target: 20 },
   { label: "Agent setups", target: 5 },
   { label: "Local database", target: 1 },
@@ -119,7 +105,7 @@ const features = [
   {
     icon: Search,
     title: "Hybrid RAG Retrieval",
-    desc: "Full-text search fused with optional vector embeddings (bge-m3 / OpenAI) via Reciprocal Rank Fusion. 95.65% recall@5. Graph expansion follows call/import edges — no external vector DB required.",
+    desc: "Full-text search with graph expansion along call and import edges, plus optional vector embeddings (bge-m3 / OpenAI) fused via Reciprocal Rank Fusion. 76.47% recall@5 on our own benchmark (FTS only, 17 queries) — no external vector DB required.",
   },
   {
     icon: Network,
@@ -133,7 +119,7 @@ const features = [
   },
   {
     icon: Radio,
-    title: `${mcpTools.length} MCP tools`,
+    title: `${mcpToolCount} MCP tools`,
     desc: "Give agents ranked retrieval, file outlines, graph context, git-diff impact, durable memory, and workspace controls through a focused MCP tool surface.",
   },
   {
@@ -251,57 +237,39 @@ export default async function LandingPage() {
 
   return (
     <div className="min-h-svh overflow-x-clip bg-background text-foreground dot-grid">
-      <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/70 backdrop-blur-md">
-        <nav
-          className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6"
-          aria-label="Primary navigation"
-        >
-          <a href="#top" className="font-display text-sm font-black tracking-[-0.04em]">
-            OPEN<span className="text-primary">EZ</span>
-          </a>
-          <div className="flex items-center gap-5 text-xs text-muted-foreground sm:gap-7">
-            <a className="nav-link hidden sm:inline" href="#how">
-              How it works
-            </a>
-            <a className="nav-link hidden sm:inline" href="#product">
-              Product
-            </a>
-            <a className="nav-link" href="#quick-start">
-              Quick start
-            </a>
-            <a
-              href={`https://github.com/${REPO}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="nav-link rounded-md border border-border px-3 py-1.5 font-medium text-foreground"
-            >
-              GitHub ↗
-            </a>
-          </div>
-        </nav>
-      </header>
+      <SiteHeader />
 
       <main>
         {/* ── HERO ── */}
-        <section
-          id="top"
-          className="relative flex min-h-svh items-center overflow-hidden px-6 pb-20 pt-28"
-        >
-          <div className="glow-orb left-1/2 top-1/4 -translate-x-1/2" />
-          <HeroGraph />
+        <section id="top" className="relative overflow-hidden px-6 pb-20 pt-28 lg:pb-24 lg:pt-32">
+          <div className="glow-orb -right-24 top-16" />
+          <div className="glow-orb glow-orb--violet -left-56 top-64" />
+          <div className="glow-orb glow-orb--amber right-1/4 top-[28rem]" />
 
-          <div className="relative mx-auto grid w-full max-w-7xl items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
+          <div className="relative mx-auto grid w-full max-w-7xl items-center gap-14 lg:grid-cols-2">
             <div className="fade-up">
-              <div className="mb-8 inline-flex items-center gap-2 border-l-2 border-primary bg-accent/30 px-3 py-1.5 font-mono text-xs font-medium tracking-wider text-accent-foreground">
-                <Star className="h-3 w-3" aria-hidden="true" />
-                OpenEZ Graph v{cliVersion} · local-first RAG
-              </div>
+              <a
+                href={`${REPO_URL}/releases`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 font-mono text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+              >
+                <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />v
+                {cliVersion}
+                <span className="text-white/20" aria-hidden="true">
+                  ·
+                </span>
+                local-first RAG
+                <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </a>
 
-              <h1 className="mb-6 text-balance text-[clamp(2.4rem,4.4vw,3.9rem)] font-black leading-[1.05] tracking-[-0.05em]">
-                <span className="gradient-text">Durable context for coding agents</span>
+              <h1 className="mb-6 text-balance text-[clamp(2.4rem,4.2vw,3.6rem)] font-bold leading-[1.06] tracking-[-0.04em]">
+                Durable context
+                <br className="hidden sm:block" />{" "}
+                <span className="accent-text">for coding agents</span>
               </h1>
 
-              <p className="mb-8 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+              <p className="mb-9 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
                 Index code once. Let Codex, Claude, OpenCode, Windsurf, and Devin retrieve ranked
                 code, graph context, and project memory from local SQLite.
               </p>
@@ -321,34 +289,7 @@ export default async function LandingPage() {
               </div>
             </div>
 
-            <aside
-              className="mcp-surface fade-up"
-              style={{ animationDelay: "0.15s" }}
-              aria-label="OpenEZ MCP tool surface"
-            >
-              <div className="mcp-surface__header">
-                <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-primary">
-                    MCP server
-                  </p>
-                  <h2 className="mt-1 text-base font-semibold">Tools exposed to your agent</h2>
-                </div>
-                <span className="mcp-live">ready</span>
-              </div>
-              <div className="p-2">
-                {mcpTools.map((tool) => (
-                  <div className="mcp-tool" key={tool.name}>
-                    <code>{tool.name}</code>
-                    <span className="text-xs text-muted-foreground">{tool.desc}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mcp-surface__footer">
-                <span>stdio transport</span>
-                <span>SQLite · WAL</span>
-                <span>multi-workspace</span>
-              </div>
-            </aside>
+            <RetrievalStage />
           </div>
         </section>
 
@@ -547,7 +488,7 @@ export default async function LandingPage() {
               </div>
               <div className="flex flex-wrap items-center justify-center gap-4">
                 <a
-                  href={`https://github.com/${REPO}#readme`}
+                  href={`${REPO_URL}#readme`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 active:scale-[0.98]"

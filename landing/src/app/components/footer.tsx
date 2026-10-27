@@ -8,11 +8,11 @@ const ParticleText = dynamic(() => import("./particle-text").then((m) => m.Parti
   ssr: false,
 });
 
-const navLinks = [
+const navLinks: { label: string; href: string; internal?: boolean }[] = [
   { label: "GitHub", href: "https://github.com/asta-nguyen/openez-graph" },
   { label: "Docs", href: "https://github.com/asta-nguyen/openez-graph#readme" },
   { label: "CLI", href: "https://github.com/asta-nguyen/openez-graph#cli" },
-  { label: "MCP", href: "https://github.com/asta-nguyen/openez-graph#mcp" },
+  { label: "MCP", href: "/docs/mcp", internal: true },
 ];
 
 // OpenEZ accent colors in linear RGB (0–1)
@@ -57,8 +57,7 @@ export function Footer() {
               <a
                 key={l.label}
                 href={l.href}
-                target="_blank"
-                rel="noopener noreferrer"
+                {...(l.internal ? {} : { target: "_blank", rel: "noopener noreferrer" })}
                 className="openez-footer__navlink"
               >
                 {l.label}

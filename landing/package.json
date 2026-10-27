@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "next build",
+    "build": "node scripts/check-mcp-tools.mjs && next build",
     "start": "next start",
-    "render:og": "node scripts/render-og-animated.mjs"
+    "render:og": "node scripts/render-og-animated.mjs",
+    "check:mcp": "node scripts/check-mcp-tools.mjs"
   },
   "dependencies": {
     "@takumi-rs/helpers": "^1.8.7",
