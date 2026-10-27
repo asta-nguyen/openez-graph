@@ -7,12 +7,4 @@ const DynamicHeroGraph = dynamic(
   { ssr: false },
 );
 
-const DynamicInteractiveGraph = dynamic(
-  () =>
-    import("./interactive-graph").then((m) => ({
-      default: m.InteractiveGraph,
-    })),
-  { ssr: false },
-);
-
-export { DynamicHeroGraph as HeroGraph, DynamicInteractiveGraph as InteractiveGraph };
+export { DynamicHeroGraph as HeroGraph };

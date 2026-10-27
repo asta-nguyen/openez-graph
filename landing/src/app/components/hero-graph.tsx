@@ -145,6 +145,8 @@ export function HeroGraph() {
       scene.add(new THREE.LineSegments(geo, mat));
     }
 
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
     // Resize observer
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -152,6 +154,7 @@ export function HeroGraph() {
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height);
+        if (still) renderer.render(scene, camera);
       }
     });
     ro.observe(container);
@@ -159,7 +162,7 @@ export function HeroGraph() {
     // ── Animation loop ──
     let raf = 0;
     function animate() {
-      raf = requestAnimationFrame(animate);
+      if (!still) raf = requestAnimationFrame(animate);
       nodeGroup.rotation.y += 0.0015;
       nodeGroup.rotation.x = Math.sin(Date.now() * 0.0003) * 0.05;
       renderer.render(scene, camera);
