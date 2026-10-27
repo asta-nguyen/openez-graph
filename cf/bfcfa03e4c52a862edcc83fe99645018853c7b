@@ -1,0 +1,72 @@
+landing/src/app/components/footer.tsx
+  s_f9ee4ef7cd6f8a::t_cc43b70e859837 11,15,60
+landing/src/app/docs/mcp/page.tsx
+  s_f9ee4ef7cd6f8a::t_9e88e6b140f15c 80-81,83,85-86,90-91,93-94,102-107
+  s_f9ee4ef7cd6f8a::t_3b8884d07f5fa1 1-79,82,84,87-89,92,95-101,108-212,218-288
+  s_f9ee4ef7cd6f8a::t_8677bee484f0c5 213-217
+  s_f9ee4ef7cd6f8a::t_55aa78219af8e3 289-291
+landing/src/app/page.tsx
+  s_f9ee4ef7cd6f8a::t_ba55f1bd6db16a 108
+  s_f9ee4ef7cd6f8a::t_99b73566b263f7 244-247,249,266
+  s_f9ee4ef7cd6f8a::t_e751c1ea6208c2 251-264,267-268
+  s_f9ee4ef7cd6f8a::t_dbf69032901f39 23
+  s_f9ee4ef7cd6f8a::t_c9a4b25d6b24a3 25-26,240
+  s_f9ee4ef7cd6f8a::t_c60efd4e689903 29,122
+  s_f9ee4ef7cd6f8a::t_3b744668941f83 22
+  s_f9ee4ef7cd6f8a::t_9c41996a216b4c 269
+landing/src/app/components/mcp-reference.ts
+  s_f9ee4ef7cd6f8a::t_f0db61a9cbe995 35,53,56,91,107,125,127-128,147,206-211,213
+  s_f9ee4ef7cd6f8a::t_642fcd5af26070 1-34,36-52,54-55,57-90,92-106,108-124,126,129-146,148-205,212,214-219
+  s_f9ee4ef7cd6f8a::t_925bcd6686fd97 220-222
+landing/src/app/sitemap.ts
+  s_f9ee4ef7cd6f8a::t_cc43b70e859837 17-22
+landing/src/app/components/agent-tabs.tsx
+  s_f9ee4ef7cd6f8a::t_e751c1ea6208c2 14-22,27
+  s_f9ee4ef7cd6f8a::t_25700768136ea1 28-30
+landing/src/app/components/mcp-tools.ts
+  s_f9ee4ef7cd6f8a::t_c030cd1a46af69 2,4-9
+  s_f9ee4ef7cd6f8a::t_7b5fec3990734f 1,3,10-11
+landing/src/app/components/site-header.tsx
+  s_f9ee4ef7cd6f8a::t_c9a4b25d6b24a3 11
+  s_f9ee4ef7cd6f8a::t_3bc63106c1bc46 1-10,12-39
+landing/package.json
+  s_f9ee4ef7cd6f8a::t_c74023e0f0a7c9 8,10-11
+landing/src/app/globals.css
+  s_f9ee4ef7cd6f8a::t_cc43b70e859837 166
+  s_f9ee4ef7cd6f8a::t_c60efd4e689903 167-173
+  s_f9ee4ef7cd6f8a::t_3b744668941f83 176,178,183-187,191-195,198-202,204-218,221-228,230-232,234-241
+  s_f9ee4ef7cd6f8a::t_4101c42b14f905 179-180
+  s_f9ee4ef7cd6f8a::t_2c8b9d3b103562 33-40
+  s_f9ee4ef7cd6f8a::t_e751c1ea6208c2 76-85
+  s_f9ee4ef7cd6f8a::t_2e204b54424d16 112
+landing/scripts/check-mcp-tools.mjs
+  s_f9ee4ef7cd6f8a::t_c74023e0f0a7c9 1-30
+landing/src/app/components/retrieval-demo.ts
+  s_f9ee4ef7cd6f8a::t_68309e7ec253b2 1-544
+  s_f9ee4ef7cd6f8a::t_237180cb8c156e 545-547
+landing/src/lib/site.ts
+  s_f9ee4ef7cd6f8a::t_8eff1e9c2ab672 1-2
+landing/src/app/components/retrieval-stage.tsx
+  s_f9ee4ef7cd6f8a::t_dcf05ab12f6eb1 1-9,11-136,138,141-186,188,190-288,290-401,403-454,474-560,562-564,570-615,621,627-660
+  s_f9ee4ef7cd6f8a::t_2c464eb54e129d 455-473
+  s_f9ee4ef7cd6f8a::t_9c897cafd498e7 10,187,189
+  s_f9ee4ef7cd6f8a::t_4101c42b14f905 561,565-569
+  s_f9ee4ef7cd6f8a::t_92d56710846585 137,139-140,289,402,616-620,622-626
+  s_f9ee4ef7cd6f8a::t_601762c75fdaa8 661-662
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cfbfcfa03e4c52a862edcc83fe99645018853c7b",
+  "prompts": {},
+  "sessions": {
+    "s_f9ee4ef7cd6f8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "190ca0f1-c7e8-4df4-affa-eea68caf5810",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
