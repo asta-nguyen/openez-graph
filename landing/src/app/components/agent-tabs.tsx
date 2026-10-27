@@ -11,12 +11,24 @@ const agents = [
   { id: "devin", label: "Devin" },
 ];
 
-export function AgentTabs({ prefix, suffix = "" }: { prefix: string; suffix?: string }) {
+export function AgentTabs({
+  prefix,
+  suffix = "",
+  centered = false,
+}: {
+  prefix: string;
+  suffix?: string;
+  centered?: boolean;
+}) {
   const [agent, setAgent] = useState(agents[0].id);
 
   return (
     <div>
-      <div role="group" aria-label="Choose your agent" className="mb-2 flex flex-wrap gap-1.5">
+      <div
+        role="group"
+        aria-label="Choose your agent"
+        className={`mb-2 flex flex-wrap gap-1.5 ${centered ? "justify-center" : ""}`}
+      >
         {agents.map((a) => (
           <button
             key={a.id}
