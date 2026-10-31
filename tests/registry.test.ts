@@ -9,6 +9,7 @@ import {
   resolveRegistryDbPath,
 } from "../packages/db/src/sqlite/index";
 import { createNativeDatabase } from "../packages/db/src/sqlite/database-loader";
+import { getRegistryNativeDb } from "../packages/db/src/sqlite/registry-db";
 
 let tempDir: string;
 
@@ -31,6 +32,44 @@ describe("resolveRegistryDbPath", () => {
 });
 
 describe("createRegistryRepository", () => {
+  it("waits for a concurrent registry write lock when opening the database", async () => {
+    await createRegistryRepository().createWorkspace({
+      id: "lock-ws",
+      name: "lock-ws",
+      rootPath: path.join(tempDir, "workspace"),
+    });
+    closeRegistryDb();
+    const dbPath = resolveRegistryDbPath();
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `const { Database } = require("bun:sqlite");
+         const db = new Database(${JSON.stringify(dbPath)});
+         db.exec("BEGIN IMMEDIATE");
+         console.log("locked");
+         setTimeout(() => { db.exec("COMMIT"); db.close(); }, 500);`,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const reader = child.stdout.getReader();
+    const ready = await reader.read();
+    expect(new TextDecoder().decode(ready.value)).toContain("locked");
+
+    const startedAt = performance.now();
+    let openError: unknown;
+    try {
+      await createRegistryRepository().listWorkspaces();
+    } catch (error) {
+      openError = error;
+    }
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(await child.exited).toBe(0);
+    expect(openError).toBeUndefined();
+    expect(elapsedMs).toBeGreaterThanOrEqual(400);
+  });
+
   it("migrates legacy registries and invalidates pre-existing completed graphs", async () => {
     const dbPath = resolveRegistryDbPath();
     const legacy = createNativeDatabase(dbPath);
@@ -117,6 +156,102 @@ describe("createRegistryRepository", () => {
     expect(columnsAfterReopen.map((column) => column.name)).toEqual(
       expect.arrayContaining(["index_generation", "graph_generation"]),
     );
+  });
+
+  it("maps an expired indexing lease to failed without mutating the stored row", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({
+      id: "expired-ws",
+      name: "expired-ws",
+      rootPath: "/tmp/expired-ws",
+    });
+    expect(
+      await repo.tryClaimIndexing(
+        "expired-ws",
+        "owner-a",
+        new Date(Date.now() - 60_000).toISOString(),
+      ),
+    ).toBe(true);
+
+    const native = getRegistryNativeDb();
+    const before = native.prepare("SELECT * FROM workspaces WHERE id = ?").get("expired-ws");
+    const workspace = await repo.getWorkspace("expired-ws");
+    const after = native.prepare("SELECT * FROM workspaces WHERE id = ?").get("expired-ws");
+
+    expect(workspace).toMatchObject({
+      status: "error",
+      indexingStatus: "failed",
+      lastError: "Index lease expired; the previous index run was interrupted.",
+    });
+    expect(after).toEqual(before);
+    expect(
+      await repo.tryClaimIndexing(
+        "expired-ws",
+        "owner-b",
+        new Date(Date.now() + 60_000).toISOString(),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps a running workspace unchanged while its index lease is live", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({ id: "live-ws", name: "live-ws", rootPath: "/tmp/live-ws" });
+    const leaseExpiresAt = new Date(Date.now() + 60_000).toISOString();
+    expect(await repo.tryClaimIndexing("live-ws", "owner-a", leaseExpiresAt)).toBe(true);
+
+    expect(await repo.getWorkspace("live-ws")).toMatchObject({
+      status: "indexing",
+      indexingStatus: "running",
+      indexLeaseExpiresAt: leaseExpiresAt,
+    });
+  });
+
+  it("reports a running workspace with a NULL index lease as failed", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({
+      id: "null-lease-ws",
+      name: "null-lease-ws",
+      rootPath: "/tmp/null-lease-ws",
+    });
+    expect(
+      await repo.tryClaimIndexing(
+        "null-lease-ws",
+        "owner-a",
+        new Date(Date.now() + 60_000).toISOString(),
+      ),
+    ).toBe(true);
+    getRegistryNativeDb()
+      .prepare("UPDATE workspaces SET index_lease_expires_at = NULL WHERE id = ?")
+      .run("null-lease-ws");
+
+    expect(await repo.getWorkspace("null-lease-ws")).toMatchObject({
+      status: "error",
+      indexingStatus: "failed",
+      lastError: "Index lease expired; the previous index run was interrupted.",
+    });
+  });
+
+  it("keeps a stored error when an indexing lease has expired", async () => {
+    const repo = createRegistryRepository();
+    await repo.createWorkspace({
+      id: "stored-error-ws",
+      name: "stored-error-ws",
+      rootPath: "/tmp/stored-error-ws",
+    });
+    await repo.tryClaimIndexing(
+      "stored-error-ws",
+      "owner-a",
+      new Date(Date.now() - 60_000).toISOString(),
+    );
+    getRegistryNativeDb()
+      .prepare("UPDATE workspaces SET last_error = ? WHERE id = ?")
+      .run("previous indexing error", "stored-error-ws");
+
+    expect(await repo.getWorkspace("stored-error-ws")).toMatchObject({
+      indexingStatus: "failed",
+      status: "error",
+      lastError: "previous indexing error",
+    });
   });
 
   it("creates and lists workspaces", async () => {

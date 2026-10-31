@@ -807,16 +807,17 @@ export async function indexWorkspace(input: {
       if (parseTasks.length > 0) {
         await invalidateGraph();
         // ── Phase 4: Write all results to DB (main thread, transactioned) ──
-        repo.setOptimizedWriteMode(true);
-        repo.dropFtsTriggers();
         bulkWriteMode = true;
+        repo.setOptimizedWriteMode(true);
       }
 
       // ── Phase 4: Batch DB write — collect everything, insert in few big queries ──
       const _dbSub: Record<string, number> = {};
+      let ftsRestoreTime = 0;
       await assertIndexingLease();
       await repo.transaction(async () => {
         const _dbT0 = Date.now();
+        if (parseTasks.length > 0) repo.dropFtsTriggers();
         // Step 1: Handle existing documents (reset artifacts + update) in bulk
         const newDocs: Array<{
           path: string;
@@ -964,36 +965,34 @@ export async function indexWorkspace(input: {
         // Graph (nodes + edges + call edges) is built lazily on first
         // graph_neighbors/code_context query — see buildGraphFromIndexedFiles()
 
+        const _T5 = Date.now();
+        if (parseTasks.length > 0) {
+          repo.deleteStaleFtsRows();
+          if (ftsInputsForBackground.length > 0) {
+            _ftsBuildingWorkspaces.set(workspace.id, true);
+            const _ftsT = Date.now();
+            try {
+              await repo.bulkInsertFts(ftsInputsForBackground);
+              process.stderr.write(
+                `[t]   fts-insert: ${Date.now() - _ftsT}ms (${ftsInputsForBackground.length} entries)\n`,
+              );
+            } finally {
+              _ftsBuildingWorkspaces.delete(workspace.id);
+            }
+          }
+          repo.restoreFtsTriggersOnly({ withinTransaction: true });
+          needsWriteModeRestore = true;
+          bulkWriteMode = false;
+        }
+        ftsRestoreTime = Date.now() - _T5;
+
         await reportProgress(`Writing ${parseTasks.length}/${parseTasks.length}...`, 95);
       });
       process.stderr.write(`[t]   db sub: ${JSON.stringify(_dbSub)}\n`);
 
-      // ── Phase 5: FTS insert (triggers still down — no double-write) + restore ──
       process.stderr.write(`[t] phase4 db-write: ${Date.now() - _T4}ms\n`);
-      const _T5 = Date.now();
-
-      // Insert FTS entries while triggers are still down (no trigger overhead)
-      if (ftsInputsForBackground.length > 0) {
-        _ftsBuildingWorkspaces.set(workspace.id, true);
-        const _ftsT = Date.now();
-        try {
-          await repo.bulkInsertFts(ftsInputsForBackground);
-          process.stderr.write(
-            `[t]   fts-insert: ${Date.now() - _ftsT}ms (${ftsInputsForBackground.length} entries)\n`,
-          );
-        } finally {
-          _ftsBuildingWorkspaces.delete(workspace.id);
-        }
-      }
-
-      // Now restore FTS triggers (entries already inserted, no backfill needed)
-      if (bulkWriteMode) {
-        repo.restoreFtsTriggersOnly();
-        needsWriteModeRestore = true;
-        bulkWriteMode = false;
-      }
       repo.setMeta("chunking_fingerprint", chunkingFingerprint);
-      process.stderr.write(`[t] phase5 fts-restore: ${Date.now() - _T5}ms\n`);
+      process.stderr.write(`[t] phase5 fts-restore: ${ftsRestoreTime}ms\n`);
       const _T7 = Date.now();
       await reportProgress("Finalizing index run...", 98);
       await assertIndexingLease();

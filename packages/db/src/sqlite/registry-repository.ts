@@ -31,14 +31,20 @@ function displayNameForSuffix(baseName: string, suffix: number): string {
 }
 
 function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWorkspace {
+  const indexLeaseExpired =
+    row.indexingStatus === "running" &&
+    (!row.indexLeaseExpiresAt || row.indexLeaseExpiresAt < new Date().toISOString());
+
   return {
     id: row.id,
     name: row.name,
     rootPath: row.rootPath,
     includeGlobs: row.includeGlobs || "",
     excludeGlobs: row.excludeGlobs || "",
-    status: row.status as RegistryWorkspace["status"],
-    indexingStatus: row.indexingStatus as RegistryWorkspace["indexingStatus"],
+    status: indexLeaseExpired ? "error" : (row.status as RegistryWorkspace["status"]),
+    indexingStatus: indexLeaseExpired
+      ? "failed"
+      : (row.indexingStatus as RegistryWorkspace["indexingStatus"]),
     indexBuildOwner: row.indexBuildOwner ?? undefined,
     indexLeaseExpiresAt: row.indexLeaseExpiresAt ?? undefined,
     graphStatus: row.graphStatus as RegistryWorkspace["graphStatus"],
@@ -51,7 +57,10 @@ function mapWorkspaceRow(row: typeof schema.workspaces.$inferSelect): RegistryWo
     chunkCount: row.chunkCount,
     nodeCount: row.nodeCount,
     edgeCount: row.edgeCount,
-    lastError: row.lastError ?? undefined,
+    lastError:
+      indexLeaseExpired && !row.lastError
+        ? "Index lease expired; the previous index run was interrupted."
+        : (row.lastError ?? undefined),
     pinnedAt: row.pinnedAt ?? undefined,
     pinOrder: row.pinOrder ?? undefined,
     createdAt: row.createdAt,

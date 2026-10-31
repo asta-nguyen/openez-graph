@@ -5,6 +5,19 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-10-31
+
+### Changed
+
+- Workspace and registry SQLite connections now wait up to 30 seconds for the write lock instead of failing at once with `database is locked`.
+- `openez status` and `list_workspaces` report a `running` index whose lease has expired (or has no lease) as `failed` with an "Index lease expired" message, and `openez remove` no longer warns that such a workspace is still indexing; the stored registry row is not modified and `openez index` can still claim it.
+
+### Fixed
+
+- Opening a workspace database no longer stalls for minutes when `chunks_fts` has drifted from `chunks`: the repair is set-based and convergent, removes NULL, orphaned, and duplicate FTS rows, then backfills missing ones. On a 24k-chunk workspace, the first open after reindexing one changed file went from 326 s to 62 ms.
+- Incremental indexing no longer leaves stale FTS rows for replaced chunks, which triggered that slow repair on the next open.
+- Indexing now writes trigger changes, chunks, and FTS rows in one transaction, so an interrupted or killed index keeps the previous index and a consistent FTS table instead of missing triggers and drifted rows.
+
 ## [1.6.0] - 2026-10-22
 
 ### Added
@@ -363,6 +376,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 
 [1.5.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.4.0...v1.5.0
 [1.6.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.5.0...v1.6.0
+[1.6.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.6.0...v1.6.1
 [1.4.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.0...v1.3.1
 [1.2.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.1.0...v1.2.0

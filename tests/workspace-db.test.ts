@@ -3,18 +3,26 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { closeAllWorkspaceDbs, createWorkspaceRepository } from "../packages/db/src/sqlite/index";
+import {
+  closeAllWorkspaceDbs,
+  closeRegistryDb,
+  createWorkspaceRepository,
+} from "../packages/db/src/sqlite/index";
 import { composeFtsSearchText } from "../packages/db/src/sqlite/fts-repository";
 
 let tempRoot: string;
 
 beforeEach(() => {
   tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openez-ws-"));
+  process.env.AI_MEMORY_REGISTRY_DB_PATH = path.join(tempRoot, "registry.sqlite");
+  closeRegistryDb();
 });
 
 afterEach(() => {
   closeAllWorkspaceDbs();
+  closeRegistryDb();
   fs.rmSync(tempRoot, { recursive: true, force: true });
+  delete process.env.AI_MEMORY_REGISTRY_DB_PATH;
 });
 
 describe("createWorkspaceRepository", () => {
@@ -338,6 +346,176 @@ describe("createWorkspaceRepository", () => {
     expect(ftsRows.map((row) => String(row.chunk_id))).not.toContain(oldChunkId);
   });
 
+  it("repairs one missing FTS row among 6,000 chunks in under five seconds", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const docId = await repo.insertDocument({
+      path: "large-repair.md",
+      absolutePath: path.join(tempRoot, "large-repair.md"),
+      kind: "markdown",
+      language: "markdown",
+      contentHash: "large-repair",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    await repo.insertChunks(
+      Array.from({ length: 6_000 }, (_, chunkIndex) => ({
+        documentId: docId,
+        chunkIndex,
+        content: `repair chunk ${chunkIndex}`,
+        tokenCount: 3,
+        contentHash: `repair:${chunkIndex}`,
+        metadata: "{}",
+      })),
+    );
+    await repo.executeRaw(
+      "DELETE FROM chunks_fts WHERE rowid = (SELECT min(rowid) FROM chunks_fts)",
+    );
+
+    closeAllWorkspaceDbs();
+    const startedAt = performance.now();
+    const reopened = createWorkspaceRepository(tempRoot);
+    const elapsedMs = performance.now() - startedAt;
+    const rows = await reopened.queryRaw(
+      "SELECT count(*) AS rows, count(DISTINCT chunk_id) AS ids FROM chunks_fts",
+    );
+
+    expect(Number(rows[0]?.rows)).toBe(6_000);
+    expect(Number(rows[0]?.ids)).toBe(6_000);
+    expect(elapsedMs).toBeLessThan(1_000);
+  }, 60_000);
+
+  it("converges duplicate and missing FTS rows without writing on the next open", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const docId = await repo.insertDocument({
+      path: "duplicate-repair.md",
+      absolutePath: path.join(tempRoot, "duplicate-repair.md"),
+      kind: "markdown",
+      language: "markdown",
+      contentHash: "duplicate-repair",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    const chunkIds = await repo.insertChunks(
+      Array.from({ length: 500 }, (_, chunkIndex) => ({
+        documentId: docId,
+        chunkIndex,
+        content: `duplicate repair chunk ${chunkIndex}`,
+        tokenCount: 4,
+        contentHash: `duplicate-repair:${chunkIndex}`,
+        metadata: "{}",
+      })),
+    );
+    await repo.executeRaw(
+      `INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
+       SELECT chunk_id, path, heading, language, search_text FROM chunks_fts WHERE chunk_id = ?`,
+      [chunkIds[0]],
+    );
+    await repo.executeRaw("DELETE FROM chunks_fts WHERE chunk_id = ?", [chunkIds[1]]);
+
+    closeAllWorkspaceDbs();
+    const firstOpen = createWorkspaceRepository(tempRoot);
+    const firstRows = await firstOpen.queryRaw(
+      "SELECT count(*) AS rows, count(DISTINCT chunk_id) AS ids, max(rowid) AS max_rowid FROM chunks_fts",
+    );
+    expect(Number(firstRows[0]?.rows)).toBe(500);
+    expect(Number(firstRows[0]?.ids)).toBe(500);
+
+    const firstMaxRowId = Number(firstRows[0]?.max_rowid);
+    closeAllWorkspaceDbs();
+    const startedAt = performance.now();
+    const secondOpen = createWorkspaceRepository(tempRoot);
+    const elapsedMs = performance.now() - startedAt;
+    const secondRows = await secondOpen.queryRaw("SELECT max(rowid) AS max_rowid FROM chunks_fts");
+
+    expect(Number(secondRows[0]?.max_rowid)).toBe(firstMaxRowId);
+    expect(elapsedMs).toBeLessThan(500);
+  }, 60_000);
+
+  it("removes orphan and NULL FTS rows while backfilling missing chunks", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const docId = await repo.insertDocument({
+      path: "null-repair.md",
+      absolutePath: path.join(tempRoot, "null-repair.md"),
+      kind: "markdown",
+      language: "markdown",
+      contentHash: "null-repair",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+    const chunkIds = await repo.insertChunks(
+      Array.from({ length: 3 }, (_, chunkIndex) => ({
+        documentId: docId,
+        chunkIndex,
+        content: `null repair chunk ${chunkIndex}`,
+        tokenCount: 4,
+        contentHash: `null-repair:${chunkIndex}`,
+        metadata: "{}",
+      })),
+    );
+    await repo.executeRaw("DELETE FROM chunks_fts WHERE chunk_id = ?", [chunkIds[0]]);
+    repo.dropFtsTriggers();
+    await repo.executeRaw("DELETE FROM chunks WHERE id = ?", [chunkIds[1]]);
+    await repo.executeRaw(
+      "INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text) VALUES (NULL, '', '', '', 'null row')",
+    );
+
+    closeAllWorkspaceDbs();
+    const reopened = createWorkspaceRepository(tempRoot);
+    const rows = await reopened.queryRaw(
+      `SELECT count(*) AS rows,
+        count(DISTINCT chunk_id) AS ids,
+        sum(chunk_id IS NULL) AS nulls,
+        sum(chunk_id NOT IN (SELECT id FROM chunks)) AS orphans
+       FROM chunks_fts`,
+    );
+
+    expect(Number(rows[0]?.rows)).toBe(2);
+    expect(Number(rows[0]?.ids)).toBe(2);
+    expect(Number(rows[0]?.nulls)).toBe(0);
+    expect(Number(rows[0]?.orphans)).toBe(0);
+    const ftsRows = await reopened.queryRaw("SELECT chunk_id FROM chunks_fts ORDER BY chunk_id");
+    expect(ftsRows.map((row) => String(row.chunk_id))).toEqual([chunkIds[0], chunkIds[2]].sort());
+  });
+
+  it("opens a database with zero chunks without error", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    await expect(repo.getChunkCount()).resolves.toBe(0);
+  });
+
+  it("waits for a concurrent workspace write lock when opening the database", async () => {
+    createWorkspaceRepository(tempRoot);
+    closeAllWorkspaceDbs();
+    const dbPath = path.join(tempRoot, ".openez", "index.sqlite");
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `const { Database } = require("bun:sqlite");
+         const db = new Database(${JSON.stringify(dbPath)});
+         db.exec("BEGIN IMMEDIATE");
+         console.log("locked");
+         setTimeout(() => { db.exec("COMMIT"); db.close(); }, 500);`,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const reader = child.stdout.getReader();
+    const ready = await reader.read();
+    expect(new TextDecoder().decode(ready.value)).toContain("locked");
+
+    const startedAt = performance.now();
+    let openError: unknown;
+    try {
+      createWorkspaceRepository(tempRoot);
+    } catch (error) {
+      openError = error;
+    }
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(await child.exited).toBe(0);
+    expect(openError).toBeUndefined();
+    expect(elapsedMs).toBeGreaterThanOrEqual(400);
+  });
+
   it("keeps stale rebuild and backfill FTS text identical to application writes", async () => {
     const repo = createWorkspaceRepository(tempRoot);
     const docId = await repo.insertDocument({
@@ -486,6 +664,58 @@ describe("createWorkspaceRepository", () => {
       },
     ]);
     expect(await repo.fullTextSearch("trigger", 5)).toHaveLength(1);
+  });
+
+  it("rolls back trigger drops and chunk inserts together", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const docId = await repo.insertDocument({
+      path: "transaction.ts",
+      absolutePath: path.join(tempRoot, "transaction.ts"),
+      kind: "code",
+      language: "typescript",
+      contentHash: "transaction",
+      sizeBytes: 10,
+      mtimeMs: 1,
+    });
+
+    await expect(
+      repo.transaction(async () => {
+        repo.dropFtsTriggers();
+        await repo.insertChunks([
+          {
+            documentId: docId,
+            chunkIndex: 0,
+            content: "rolled back chunk",
+            tokenCount: 3,
+            contentHash: "rolled-back",
+            metadata: "{}",
+          },
+        ]);
+        throw new Error("roll back write");
+      }),
+    ).rejects.toThrow("roll back write");
+
+    expect(await repo.getChunkCount()).toBe(0);
+    expect(
+      await repo.queryRaw(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*'",
+      ),
+    ).toHaveLength(3);
+  });
+
+  it("restores FTS triggers inside the surrounding write transaction", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+
+    await repo.transaction(async () => {
+      repo.dropFtsTriggers();
+      repo.restoreFtsTriggersOnly({ withinTransaction: true });
+    });
+
+    expect(
+      await repo.queryRaw(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*'",
+      ),
+    ).toHaveLength(3);
   });
 
   it("counts documents, chunks, nodes, edges", async () => {
