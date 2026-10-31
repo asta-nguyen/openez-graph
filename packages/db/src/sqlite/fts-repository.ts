@@ -25,6 +25,34 @@ export function composeFtsSearchTextSql(metadata: string, content: string): stri
   return `coalesce(nullif(${normalizedSearchText}, '') || char(10), '') || ${content}`;
 }
 
+export function deleteStaleFtsRows(native: NativeDatabase): void {
+  native.exec(`
+    DELETE FROM chunks_fts
+    WHERE chunk_id IS NULL
+      OR NOT EXISTS (SELECT 1 FROM chunks WHERE chunks.id = chunks_fts.chunk_id)
+  `);
+}
+
+export function repairChunksFts(native: NativeDatabase): void {
+  deleteStaleFtsRows(native);
+  native.exec(`
+    DELETE FROM chunks_fts
+    WHERE rowid NOT IN (
+      SELECT min(rowid) FROM chunks_fts
+      WHERE chunk_id IS NOT NULL
+      GROUP BY chunk_id
+    )
+  `);
+  native.exec(`
+    INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
+    SELECT c.id, d.path, coalesce(c.heading, ''), coalesce(d.language, ''),
+      ${composeFtsSearchTextSql("c.metadata", "c.content")}
+    FROM chunks c
+    INNER JOIN documents d ON d.id = c.document_id
+    WHERE c.id NOT IN (SELECT chunk_id FROM chunks_fts WHERE chunk_id IS NOT NULL)
+  `);
+}
+
 /**
  * Prepared statements used by the FTS operations.
  *
@@ -253,26 +281,16 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
     },
 
     restoreFtsTriggers(): void {
-      // Remove orphaned FTS entries
-      native.exec("DELETE FROM chunks_fts WHERE chunk_id NOT IN (SELECT id FROM chunks)");
-
-      // Backfill missing FTS entries via SQL (content is uncompressed TEXT)
-      native.exec(`
-        INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-        SELECT c.id, d.path, coalesce(c.heading, ''),
-          coalesce(d.language, ''),
-          ${composeFtsSearchTextSql("c.metadata", "c.content")}
-        FROM chunks c
-        INNER JOIN documents d ON d.id = c.document_id
-        LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-        WHERE f.chunk_id IS NULL;
-      `);
-
+      repairChunksFts(native);
       restoreFtsTriggerDefinitions(native);
     },
 
-    restoreFtsTriggersOnly(): void {
-      restoreFtsTriggerDefinitions(native);
+    deleteStaleFtsRows(): void {
+      deleteStaleFtsRows(native);
+    },
+
+    restoreFtsTriggersOnly(options?: { withinTransaction?: boolean }): void {
+      restoreFtsTriggerDefinitions(native, options);
     },
 
     // ── Reset ──

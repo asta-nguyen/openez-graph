@@ -180,6 +180,7 @@ function getRegistryDbRaw() {
   }
 
   const sqlite = createNativeDatabase(dbPath);
+  sqlite.pragma("busy_timeout = 30000");
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   if (!usedTemplate) initializeRegistrySchema(sqlite);

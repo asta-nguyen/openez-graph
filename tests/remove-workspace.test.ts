@@ -71,6 +71,36 @@ describe("removeWorkspace", () => {
     expect(await createRegistryRepository().listWorkspaces()).toHaveLength(0);
   });
 
+  it("warns for a live index lease but not an expired one", async () => {
+    await seedWorkspace("ws-live", path.join(tempDir, "proj-live"));
+    await seedWorkspace("ws-expired", path.join(tempDir, "proj-expired"));
+    const repo = createRegistryRepository();
+    expect(
+      await repo.tryClaimIndexing(
+        "ws-live",
+        "owner-live",
+        new Date(Date.now() + 60_000).toISOString(),
+      ),
+    ).toBe(true);
+    expect(
+      await repo.tryClaimIndexing(
+        "ws-expired",
+        "owner-expired",
+        new Date(Date.now() - 60_000).toISOString(),
+      ),
+    ).toBe(true);
+
+    const liveReport = await removeWorkspace({ id: "ws-live" });
+    const expiredReport = await removeWorkspace({ id: "ws-expired" });
+
+    expect(liveReport?.warnings.some((warning) => warning.includes("appears to be indexing"))).toBe(
+      true,
+    );
+    expect(
+      expiredReport?.warnings.some((warning) => warning.includes("appears to be indexing")),
+    ).toBe(false);
+  });
+
   it("returns null for an unknown workspace", async () => {
     expect(await removeWorkspace({ id: "nope" })).toBeNull();
   });
