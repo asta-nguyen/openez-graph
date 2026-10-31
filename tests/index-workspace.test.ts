@@ -310,6 +310,11 @@ describe("indexWorkspace", () => {
     const repo = createWorkspaceRepository(workspaceRoot);
 
     await indexWorkspace({ workspaceId: workspace.id });
+    const triggersBefore = await repo.queryRaw(
+      "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*' ORDER BY name",
+    );
+    const journalModeBefore = await repo.queryRaw("PRAGMA journal_mode");
+    const synchronousBefore = await repo.queryRaw("PRAGMA synchronous");
     const touchedAt = new Date(Date.now() + 5_000);
     fs.utimesSync(sourcePath, touchedAt, touchedAt);
 
@@ -320,13 +325,204 @@ describe("indexWorkspace", () => {
       );
     expect((await indexWorkspace({ workspaceId: workspace.id })).filesUpdated).toBe(0);
     expect(sourceWasRead()).toBe(true);
+    expect(
+      await repo.queryRaw(
+        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*' ORDER BY name",
+      ),
+    ).toEqual(triggersBefore);
+    expect(await repo.queryRaw("PRAGMA journal_mode")).toEqual(journalModeBefore);
+    expect(await repo.queryRaw("PRAGMA synchronous")).toEqual(synchronousBefore);
     expect((await repo.getDocumentByPath("a.ts"))?.mtimeMs).toBe(
       Math.trunc(fs.statSync(sourcePath).mtimeMs),
     );
     readSpy.mockClear();
     expect((await indexWorkspace({ workspaceId: workspace.id })).filesUpdated).toBe(0);
     expect(sourceWasRead()).toBe(false);
+    expect(
+      await repo.queryRaw(
+        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*' ORDER BY name",
+      ),
+    ).toEqual(triggersBefore);
+    expect(await repo.queryRaw("PRAGMA journal_mode")).toEqual(journalModeBefore);
+    expect(await repo.queryRaw("PRAGMA synchronous")).toEqual(synchronousBefore);
     readSpy.mockRestore();
+  });
+
+  it("rolls back changed chunks when bulk FTS insertion throws", async () => {
+    const changedPath = path.join(workspaceRoot, "changed.ts");
+    fs.writeFileSync(changedPath, "export function changed() { return 1; }\n");
+    fs.writeFileSync(path.join(workspaceRoot, "stable.ts"), "export const stable = 2;\n");
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const beforeChunks = await repo.queryRaw("SELECT id, content_hash FROM chunks ORDER BY id");
+
+    fs.writeFileSync(changedPath, "export function changed() { return 12345; }\n");
+    const markerPath = path.join(workspaceRoot, "fts-insert-result");
+    closeAllWorkspaceDbs();
+    closeRegistryDb();
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        path.join(import.meta.dir, "helpers", "kill-during-fts-insert.ts"),
+        workspace.id,
+        "throw",
+      ],
+      {
+        env: { ...process.env, OPENEZ_TEST_FTS_MARKER: markerPath },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const childLogs = Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    const childExit = await child.exited;
+    const [childOutput, childError] = await childLogs;
+    if (!fs.existsSync(markerPath)) {
+      throw new Error(`FTS failure helper exited ${childExit}: ${childOutput}\n${childError}`);
+    }
+    expect(fs.readFileSync(markerPath, "utf-8")).toBe("error:forced FTS insert failure");
+    expect(childExit).toBe(0);
+
+    const afterFailure = createWorkspaceRepository(workspaceRoot);
+    const afterChunks = await afterFailure.queryRaw(
+      "SELECT id, content_hash FROM chunks ORDER BY id",
+    );
+    const fts = await afterFailure.queryRaw(
+      `SELECT count(*) AS rows, count(DISTINCT chunk_id) AS ids,
+        sum(chunk_id NOT IN (SELECT id FROM chunks)) AS orphans FROM chunks_fts`,
+    );
+    const triggers = await afterFailure.queryRaw(
+      "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*'",
+    );
+    expect(afterChunks).toEqual(beforeChunks);
+    expect(Number(fts[0]?.rows)).toBe(beforeChunks.length);
+    expect(Number(fts[0]?.ids)).toBe(beforeChunks.length);
+    expect(Number(fts[0]?.orphans ?? 0)).toBe(0);
+    expect(triggers).toHaveLength(3);
+
+    const beforeOpen = await afterFailure.queryRaw(
+      "SELECT max(rowid) AS max_rowid FROM chunks_fts",
+    );
+    closeAllWorkspaceDbs();
+    const startedAt = performance.now();
+    const reopened = createWorkspaceRepository(workspaceRoot);
+    const elapsedMs = performance.now() - startedAt;
+    const afterOpen = await reopened.queryRaw("SELECT max(rowid) AS max_rowid FROM chunks_fts");
+    expect(afterOpen[0]?.max_rowid).toBe(beforeOpen[0]?.max_rowid);
+    expect(elapsedMs).toBeLessThan(500);
+  });
+
+  it("keeps the previous index when the process is killed during FTS insertion", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "changed.ts"),
+      "export function changed() { return 1; }\n",
+    );
+    fs.writeFileSync(
+      path.join(workspaceRoot, "stable.ts"),
+      "export function stable() { return 2; }\n",
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+    const repo = createWorkspaceRepository(workspaceRoot);
+    const beforeChunks = await repo.queryRaw("SELECT id, content_hash FROM chunks ORDER BY id");
+
+    fs.writeFileSync(
+      path.join(workspaceRoot, "changed.ts"),
+      "export function changed() { return 12345; }\n",
+    );
+    const markerPath = path.join(workspaceRoot, "kill-marker");
+    closeAllWorkspaceDbs();
+    closeRegistryDb();
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        path.join(import.meta.dir, "helpers", "kill-during-fts-insert.ts"),
+        workspace.id,
+        "kill",
+      ],
+      {
+        env: { ...process.env, OPENEZ_TEST_FTS_MARKER: markerPath },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const childLogs = Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    const childExit = await child.exited;
+    const [childOutput, childError] = await childLogs;
+    if (!fs.existsSync(markerPath)) {
+      throw new Error(`FTS kill helper exited ${childExit}: ${childOutput}\n${childError}`);
+    }
+    expect(fs.readFileSync(markerPath, "utf-8")).toBe("fts-inserted");
+    expect(childExit).not.toBe(0);
+
+    const afterCrash = createWorkspaceRepository(workspaceRoot);
+    const afterChunks = await afterCrash.queryRaw(
+      "SELECT id, content_hash FROM chunks ORDER BY id",
+    );
+    const fts = await afterCrash.queryRaw(
+      `SELECT count(*) AS rows, count(DISTINCT chunk_id) AS ids,
+        sum(chunk_id NOT IN (SELECT id FROM chunks)) AS orphans FROM chunks_fts`,
+    );
+    const triggers = await afterCrash.queryRaw(
+      "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*'",
+    );
+    expect(afterChunks).toEqual(beforeChunks);
+    expect(Number(fts[0]?.rows)).toBe(beforeChunks.length);
+    expect(Number(fts[0]?.ids)).toBe(beforeChunks.length);
+    expect(Number(fts[0]?.orphans ?? 0)).toBe(0);
+    expect(triggers).toHaveLength(3);
+
+    const beforeOpen = await afterCrash.queryRaw("SELECT max(rowid) AS max_rowid FROM chunks_fts");
+    closeAllWorkspaceDbs();
+    const startedAt = performance.now();
+    const reopened = createWorkspaceRepository(workspaceRoot);
+    const elapsedMs = performance.now() - startedAt;
+    const afterOpen = await reopened.queryRaw("SELECT max(rowid) AS max_rowid FROM chunks_fts");
+    expect(afterOpen[0]?.max_rowid).toBe(beforeOpen[0]?.max_rowid);
+    expect(elapsedMs).toBeLessThan(500);
+  }, 60_000);
+
+  it("keeps FTS rows in sync when an incremental index replaces one of two files", async () => {
+    const changedPath = path.join(workspaceRoot, "changed.ts");
+    fs.writeFileSync(changedPath, "export function changed() { return 1; }\n");
+    fs.writeFileSync(
+      path.join(workspaceRoot, "stable.ts"),
+      "export function stable() { return 2; }\n",
+    );
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    const repo = createWorkspaceRepository(workspaceRoot);
+    await indexWorkspace({ workspaceId: workspace.id });
+
+    fs.writeFileSync(changedPath, "export function changed() { return 12345; }\n");
+    const summary = await indexWorkspace({ workspaceId: workspace.id });
+    expect(summary.filesUpdated).toBe(1);
+    const rows = await repo.queryRaw(
+      `SELECT (SELECT count(*) FROM chunks) AS chunks,
+        count(*) AS rows, count(DISTINCT chunk_id) AS ids,
+        sum(chunk_id NOT IN (SELECT id FROM chunks)) AS orphans FROM chunks_fts`,
+    );
+    const triggers = await repo.queryRaw(
+      "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'chunks_fts_*'",
+    );
+    expect(Number(rows[0]?.rows)).toBe(Number(rows[0]?.chunks));
+    expect(Number(rows[0]?.ids)).toBe(Number(rows[0]?.chunks));
+    expect(Number(rows[0]?.orphans ?? 0)).toBe(0);
+    expect(triggers).toHaveLength(3);
+
+    const beforeOpen = await repo.queryRaw("SELECT max(rowid) AS max_rowid FROM chunks_fts");
+    closeAllWorkspaceDbs();
+    const startedAt = performance.now();
+    const reopened = createWorkspaceRepository(workspaceRoot);
+    const elapsedMs = performance.now() - startedAt;
+    const afterOpen = await reopened.queryRaw("SELECT max(rowid) AS max_rowid FROM chunks_fts");
+    expect(afterOpen[0]?.max_rowid).toBe(beforeOpen[0]?.max_rowid);
+    expect(elapsedMs).toBeLessThan(500);
   });
 
   it("rechunks unchanged source when workspace chunking settings change", async () => {

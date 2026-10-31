@@ -477,8 +477,10 @@ export interface WorkspaceRepository {
   ): void;
   /** Recreate FTS triggers and backfill any missing FTS rows. */
   restoreFtsTriggers(): void;
+  /** Delete FTS rows without a matching chunk, including NULL chunk IDs. */
+  deleteStaleFtsRows(): void;
   /** Recreate FTS triggers only (no backfill — use when FTS rows were inserted inline). */
-  restoreFtsTriggersOnly(): void;
+  restoreFtsTriggersOnly(options?: { withinTransaction?: boolean }): void;
 
   // ── Streaming inserts — cached prepared statements, no dynamic SQL ──
   streamDocument(input: {

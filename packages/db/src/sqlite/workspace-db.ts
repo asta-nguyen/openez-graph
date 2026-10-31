@@ -7,6 +7,7 @@ import * as schema from "./schema";
 import { createNativeDatabase } from "./database-loader";
 import {
   composeFtsSearchTextSql,
+  repairChunksFts,
   FTS_SCHEMA_VERSION,
   restoreFtsTriggerDefinitions,
 } from "./fts-repository";
@@ -62,6 +63,7 @@ function getWorkspaceDbRaw(rootPath: string) {
   }
 
   const sqlite = createNativeDatabase(dbPath);
+  sqlite.pragma("busy_timeout = 30000");
   sqlite.pragma("page_size = 16384");
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
@@ -208,22 +210,7 @@ export function initializeWorkspaceSchema(sqlite: ReturnType<typeof createNative
         ftsInSync = ftsShape.distinct_count === chunkCount && ftsShape.orphan_count === 0;
       }
       if (!ftsInSync) {
-        sqlite.exec(`
-          INSERT INTO chunks_fts (chunk_id, path, heading, language, search_text)
-          SELECT c.id, d.path, coalesce(c.heading, ''),
-            coalesce(d.language, ''),
-            ${composeFtsSearchTextSql("c.metadata", "c.content")}
-          FROM chunks c
-          INNER JOIN documents d ON d.id = c.document_id
-          LEFT JOIN chunks_fts f ON f.chunk_id = c.id
-          WHERE f.chunk_id IS NULL;
-        `);
-        // Remove FTS rows for chunks that no longer exist (orphaned by
-        // interrupted deletes or manual DB edits).
-        sqlite.exec(`
-          DELETE FROM chunks_fts
-          WHERE chunk_id NOT IN (SELECT id FROM chunks);
-        `);
+        repairChunksFts(sqlite);
       }
     }
 
