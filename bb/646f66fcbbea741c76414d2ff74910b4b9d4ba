@@ -1,0 +1,74 @@
+packages/db/src/sqlite/types.ts
+  s_2c8b32e884f371::t_045719a6c18f00 480-481,483
+tests/workspace-db.test.ts
+  s_2c8b32e884f371::t_63a3bad314d2ec 480,482
+  s_0663b2d11d35ea::t_24e0b903b69420 384
+  s_2c8b32e884f371::t_4a87888022f57b 6-10,17-18,23,25,483-516
+  s_2c8b32e884f371::t_edf7e9252efc68 349-369,373-383,385-479,481,517-518
+  s_0663b2d11d35ea::t_177d804d56ec0b 370-372
+  s_2c8b32e884f371::t_7bda9e67c4fe8a 669-720
+docs/agent-devkit/INDEX.md
+  s_0663b2d11d35ea::t_ab1a0804a6393a 5
+packages/db/src/sqlite/workspace-db.ts
+  s_2c8b32e884f371::t_40fafdc182012f 10,213
+  s_2c8b32e884f371::t_1174f7ea41d150 66
+packages/db/src/sqlite/registry-db.ts
+  s_2c8b32e884f371::t_a99d1889f42e9e 183
+packages/indexer/src/index-workspace.ts
+  s_2c8b32e884f371::t_15b3fbaa8b592b 973,976-978
+  s_2c8b32e884f371::t_3ecf67b672d648 811,816,820,968-972,974-975,979-988,995
+tests/helpers/kill-during-fts-insert.ts
+  s_2c8b32e884f371::t_5dc6a0641a4cbb 1-39
+tests/index-workspace.test.ts
+  s_2c8b32e884f371::t_38b28e9faec6df 500,503-504
+  s_2c8b32e884f371::t_ac951ee2c94362 361-374,377-384,386-389,393,397,444,447
+  s_2c8b32e884f371::t_c3c5802425be15 499
+  s_2c8b32e884f371::t_cc49106d23160c 313-317,328-334,341-347,351-360,375-376,385,394-396,398-405,409-418,427-431,436-443,445-446,450-451,456,461-464,468-492,498,501,505-526
+  s_2c8b32e884f371::t_9d1b3ef260a11f 448-449,452-455,457-460
+  s_0663b2d11d35ea::t_177d804d56ec0b 390-392,406-408,465-467
+  s_2c8b32e884f371::t_f61c1cf48b29bf 419-426,432-435,493-497,502
+  s_0663b2d11d35ea::t_d719ca635c56a7 527
+tests/registry.test.ts
+  s_0663b2d11d35ea::t_177d804d56ec0b 163-167,211-215,236-240
+  s_2c8b32e884f371::t_c96980ef8f13d0 12,161-162,168-210,216-235,241-255
+  s_2c8b32e884f371::t_e98ca7df6fc6fa 35-72
+  s_0663b2d11d35ea::t_51122a4f9758ea 256
+tests/remove-workspace.test.ts
+  s_2c8b32e884f371::t_50a8fb39be03be 74-78,84-85,91-103
+  s_0663b2d11d35ea::t_177d804d56ec0b 79-83,86-90
+packages/db/src/sqlite/fts-repository.ts
+  s_2c8b32e884f371::t_b7d0b4084e5cc6 52
+  s_2c8b32e884f371::t_6bea20f75ec4a9 288-293
+  s_2c8b32e884f371::t_fdd5139df6e51f 28-51,53-55,284
+packages/db/src/sqlite/registry-repository.ts
+  s_0663b2d11d35ea::t_177d804d56ec0b 45-47
+  s_2c8b32e884f371::t_85180aeb93a320 34-37,44,60-63
+docs/agent-devkit/changes/archive/2026-10-30-42-fts-repair-and-interrupted-index/design.md
+  s_0663b2d11d35ea::t_6e552a8f81bcf7 1-80
+docs/agent-devkit/changes/archive/2026-10-30-42-fts-repair-and-interrupted-index/tasks.md
+  s_0663b2d11d35ea::t_0ac9006c2b3a53 1-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb646f66fcbbea741c76414d2ff74910b4b9d4ba",
+  "prompts": {},
+  "sessions": {
+    "s_0663b2d11d35ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "983e3e7e-5f2d-46c8-88e3-bf6e32649b62",
+        "model": "unknown"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_2c8b32e884f371": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1907e-c195-7602-ba4a-5eef730ffdab",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
