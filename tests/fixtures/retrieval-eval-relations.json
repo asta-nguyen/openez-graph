@@ -1,0 +1,33 @@
+[
+  {
+    "query": "what calls getBrainSettings",
+    "expectedPaths": ["packages/core/src/retrieval.ts", "packages/indexer/src/index-workspace.ts"]
+  },
+  {
+    "query": "what calls reciprocalRankFusion",
+    "expectedPaths": ["packages/core/src/retrieval.ts"]
+  },
+  {
+    "query": "what calls formatEmbeddingInput",
+    "expectedPaths": ["packages/core/src/retrieval.ts", "packages/indexer/src/embed-workspace.ts"]
+  },
+  { "query": "what calls parseRetrievalCases", "expectedPaths": ["tests/embed-benchmark.test.ts"] },
+  {
+    "query": "what does codeQuery call",
+    "expectedPaths": [
+      "packages/config/src/load-brain-config.ts",
+      "packages/core/src/rrf.ts",
+      "packages/db/src/sqlite/registry-repository.ts",
+      "packages/db/src/sqlite/workspace-repository.ts"
+    ]
+  },
+  {
+    "query": "what does embedWorkspace call",
+    "expectedPaths": [
+      "packages/core/src/embeddings.ts",
+      "packages/core/src/local-embedding.ts",
+      "packages/db/src/sqlite/workspace-repository.ts"
+    ]
+  },
+  { "query": "what calls evaluateRetrieval", "expectedPaths": ["tests/embed-benchmark.test.ts"] }
+]

@@ -1,0 +1,78 @@
+[
+  {
+    "query": "codeQuery",
+    "expectedPaths": ["packages/core/src/retrieval.ts"]
+  },
+  {
+    "query": "graphExpand",
+    "expectedPaths": ["packages/core/src/retrieval.ts"]
+  },
+  {
+    "query": "vectorSearch",
+    "expectedPaths": ["packages/core/src/retrieval.ts"]
+  },
+  {
+    "query": "rankStoredEmbeddings",
+    "expectedPaths": ["packages/core/src/retrieval.ts"]
+  },
+  {
+    "query": "cosineSimilarity",
+    "expectedPaths": ["packages/core/src/retrieval.ts"]
+  },
+  {
+    "query": "reciprocalRankFusion",
+    "expectedPaths": ["packages/core/src/rrf.ts"]
+  },
+  {
+    "query": "evaluateRetrieval",
+    "expectedPaths": ["packages/indexer/src/retrieval-eval.ts"]
+  },
+  {
+    "query": "summarizeQuality",
+    "expectedPaths": ["packages/indexer/src/retrieval-eval.ts"]
+  },
+  {
+    "query": "embedWorkspace",
+    "expectedPaths": ["packages/indexer/src/embed-workspace.ts"]
+  },
+  {
+    "query": "getBrainSettings",
+    "expectedPaths": ["packages/config/src/load-brain-config.ts"]
+  },
+  {
+    "query": "formatEmbeddingInput",
+    "expectedPaths": ["packages/core/src/embeddings.ts"]
+  },
+  {
+    "query": "createWorkspaceResolver.resolveWorkspaceByPath",
+    "expectedPaths": ["apps/mcp/src/mcp-core.ts"]
+  },
+  {
+    "query": "fitToTokenBudget.measure",
+    "expectedPaths": ["apps/mcp/src/mcp-core.ts"]
+  },
+  {
+    "query": "indexWorkspace",
+    "expectedPaths": ["packages/indexer/src/index-workspace.ts"]
+  },
+  {
+    "query": "createWorkspaceRepository",
+    "expectedPaths": ["packages/db/src/sqlite/workspace-repository.ts"]
+  },
+  {
+    "query": "parseRetrievalCases",
+    "expectedPaths": ["packages/indexer/src/retrieval-eval.ts"]
+  },
+  {
+    "query": "ensureGraphReadySafely",
+    "expectedPaths": ["apps/mcp/src/mcp-core.ts"]
+  },
+  {
+    "query": "createGraphService.ensureGraphReadyInternal",
+    "expectedPaths": ["packages/indexer/src/graph-service.ts"]
+  },
+  {
+    "query": "show me indexWorkspace",
+    "expectedPaths": ["packages/indexer/src/index-workspace.ts"]
+  }
+]

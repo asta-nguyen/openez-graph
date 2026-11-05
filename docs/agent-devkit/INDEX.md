@@ -2,6 +2,8 @@
 
 ## Archived changes
 
+- [Retrieval ranking benchmark, exact-symbol lookup, and hub-aware graph ranking](changes/archive/2026-11-05-retrieval-ranking-benchmark/design.md) — completed 2026-11-05
+
 - [FTS repair cost and interrupted-index recovery](changes/archive/2026-10-30-42-fts-repair-and-interrupted-index/design.md) — issue [#42](https://github.com/asta-nguyen/openez-graph/issues/42), completed 2026-10-31
 - [MCP response budget memory use](changes/archive/2026-10-22-diff-context-token-budget-memory/design.md) — completed 2026-10-22
 - [Go indexing accuracy and native parity](changes/archive/2026-10-20-39-go-indexing-accuracy/design.md) — issue [#39](https://github.com/asta-nguyen/openez-graph/issues/39), completed 2026-10-21

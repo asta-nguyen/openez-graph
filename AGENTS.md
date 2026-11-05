@@ -154,7 +154,7 @@ MCP should be multi-workspace aware.
 - YAML/JSON/TOML: structure-aware chunking
 - Markdown: section-oriented chunking
 
-Retrieval defaults to FTS + graph expansion. Embeddings are optional and should not be assumed to exist.
+Retrieval defaults to FTS + exact symbol-name lookup + graph expansion. Embeddings are optional and should not be assumed to exist.
 
 ## Working Guidance
 

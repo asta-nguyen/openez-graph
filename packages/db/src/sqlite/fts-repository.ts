@@ -134,6 +134,7 @@ export function createFtsOps(native: NativeDatabase, stmts: FtsStmts, deps: FtsO
             documents.path,
             bm25(chunks_fts, 0, 4, 3, 1.5, 2)
               * CASE
+                  WHEN documents.path GLOB '*.gen.*' THEN 0.5
                   WHEN documents.path LIKE 'tests/%' OR documents.path LIKE '%/__tests__/%' OR documents.path GLOB '*.test.*' THEN 0.8
                   WHEN documents.kind = 'code' THEN 1.35
                   ELSE 1

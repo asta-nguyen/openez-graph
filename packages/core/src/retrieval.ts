@@ -180,6 +180,117 @@ async function vectorSearch(rootPath: string, query: string, limit: number): Pro
   }
 }
 
+const MAX_EXACT_SYMBOL_NODES = 5;
+const IDENTIFIER_TOKEN = /[A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)*/g;
+
+// Plain words ("local", "index") only count when they are the whole query; otherwise a token
+// must look like code: `_`, `$`, a `.`/`::` qualifier, or a camelCase transition.
+const IDENTIFIER_SHAPE = /[_$]|\.|::|[a-z][A-Z]/;
+
+// Chunks whose symbol label equals a query identifier, in query-token order. Reads the
+// already-built graph; an unbuilt graph yields no hits.
+async function exactSymbolSearch(rootPath: string, query: string): Promise<ChunkHit[]> {
+  const whole = query.trim();
+  const tokens = [...new Set(query.match(IDENTIFIER_TOKEN) ?? [])].filter(
+    (t) => t.length >= 3 && (t === whole || IDENTIFIER_SHAPE.test(t)),
+  );
+  const repo = createWorkspaceRepository(rootPath);
+  const seenPaths = new Set<string>();
+  const hits: ChunkHit[] = [];
+
+  for (const token of tokens) {
+    const forms = [token];
+    if (token.includes(".")) forms.push(token.replaceAll(".", "::"));
+    if (token.includes("::")) forms.push(token.replaceAll("::", "."));
+    const rows = await repo.queryRaw(
+      `SELECT chunks.id, chunks.content, chunks.heading, chunks.metadata, documents.path
+       FROM graph_nodes
+       INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+       INNER JOIN documents ON documents.id = chunks.document_id
+       WHERE graph_nodes.type = 'symbol'
+         AND graph_nodes.label IN (${forms.map(() => "?").join(",")})
+       ORDER BY documents.path, chunks.id`,
+      forms,
+    );
+    if (rows.length > MAX_EXACT_SYMBOL_NODES) continue;
+    for (const row of rows) {
+      const path = String(row.path);
+      if (seenPaths.has(path)) continue;
+      seenPaths.add(path);
+      hits.push({
+        id: String(row.id),
+        path,
+        content: String(row.content),
+        score: 1,
+        heading: row.heading ? String(row.heading) : null,
+        metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+      });
+    }
+  }
+  return hits;
+}
+
+const IDENT = String.raw`([A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)*)`;
+const CALLER_QUERIES = [
+  new RegExp(String.raw`^(?:what|who|which \w+) (?:calls|uses|invokes) ${IDENT}\??$`, "i"),
+  new RegExp(String.raw`^callers of ${IDENT}\??$`, "i"),
+];
+const CALLEE_QUERIES = [
+  new RegExp(String.raw`^what does ${IDENT} (?:call|use|invoke)\??$`, "i"),
+  new RegExp(String.raw`^callees of ${IDENT}\??$`, "i"),
+];
+
+// "what calls X" / "what does X call": chunks one `calls` edge away from the unique symbol X,
+// excluding X's own file. Anything else, or an ambiguous X, yields no hits.
+async function relationSearch(rootPath: string, query: string): Promise<ChunkHit[]> {
+  const q = query.trim().replace(/\s+/g, " ");
+  const callerMatch = CALLER_QUERIES.map((rx) => q.match(rx)).find(Boolean);
+  const calleeMatch = callerMatch ? null : CALLEE_QUERIES.map((rx) => q.match(rx)).find(Boolean);
+  const name = (callerMatch ?? calleeMatch)?.[1];
+  if (!name) return [];
+
+  const forms = [name, name.replaceAll(".", "::"), name.replaceAll("::", ".")];
+  const repo = createWorkspaceRepository(rootPath);
+  const targets = await repo.queryRaw(
+    `SELECT graph_nodes.id, documents.path
+     FROM graph_nodes
+     INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+     INNER JOIN documents ON documents.id = chunks.document_id
+     WHERE graph_nodes.type = 'symbol' AND graph_nodes.label IN (?, ?, ?)`,
+    forms,
+  );
+  if (targets.length !== 1) return [];
+
+  const [near, far] = callerMatch ? ["from_node_id", "to_node_id"] : ["to_node_id", "from_node_id"];
+  const rows = await repo.queryRaw(
+    `SELECT chunks.id, chunks.content, chunks.heading, chunks.metadata, documents.path
+     FROM graph_edges
+     INNER JOIN graph_nodes ON graph_nodes.id = graph_edges.${near}
+     INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+     INNER JOIN documents ON documents.id = chunks.document_id
+     WHERE graph_edges.type = 'calls' AND graph_edges.${far} = ? AND documents.path <> ?
+     ORDER BY documents.path, chunks.id`,
+    [String(targets[0]!.id), String(targets[0]!.path)],
+  );
+
+  const seenPaths = new Set<string>();
+  return rows.flatMap((row) => {
+    const path = String(row.path);
+    if (seenPaths.has(path)) return [];
+    seenPaths.add(path);
+    return [
+      {
+        id: String(row.id),
+        path,
+        content: String(row.content),
+        score: 1,
+        heading: row.heading ? String(row.heading) : null,
+        metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+      },
+    ];
+  });
+}
+
 async function graphExpand(
   rootPath: string,
   seedIds: string[],
@@ -211,15 +322,24 @@ async function graphExpand(
       WHERE walk.depth < ?
     ),
     candidate_chunks AS (
-      SELECT chunks.id, MIN(walk.depth) AS distance
+      SELECT
+        chunks.id,
+        MIN(walk.depth) AS distance,
+        MIN((
+          SELECT COUNT(*) FROM graph_edges
+          WHERE graph_edges.from_node_id = graph_nodes.id
+            OR graph_edges.to_node_id = graph_nodes.id
+        )) AS degree,
+        documents.path AS path
       FROM walk
       INNER JOIN graph_nodes ON graph_nodes.id = walk.node_id
       INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+      INNER JOIN documents ON documents.id = chunks.document_id
       WHERE graph_nodes.type = 'symbol'
         AND walk.depth > 0
         AND chunks.id NOT IN (${placeholders})
-      GROUP BY chunks.id
-      ORDER BY distance
+      GROUP BY chunks.id, documents.path
+      ORDER BY distance, degree, documents.path, chunks.id
       LIMIT ?
     )
     SELECT
@@ -229,7 +349,7 @@ async function graphExpand(
     FROM candidate_chunks
     INNER JOIN chunks ON chunks.id = candidate_chunks.id
     INNER JOIN documents ON documents.id = chunks.document_id
-    ORDER BY candidate_chunks.distance, documents.path`,
+    ORDER BY candidate_chunks.distance, candidate_chunks.degree, documents.path, chunks.id`,
     [...seedIds, depth, ...seedIds, limit * 5],
   );
 
@@ -296,26 +416,34 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
   console.error(
     `[retrieval] query: "${input.query}" | fts_limit=${retrieval.textLimit} vector_limit=${retrieval.vectorLimit}`,
   );
-  const [ftsResults, vectorResults] = await Promise.all([
+  // The graph must be current before the exact-symbol lookup. The callback is injected
+  // by the caller (MCP/web) to avoid a core→indexer package cycle.
+  if (!input.skipGraphExpand) await input.ensureGraph(input.workspaceId);
+  const [ftsResults, vectorResults, exactResults, relationResults] = await Promise.all([
     repo.fullTextSearch(input.query, retrieval.textLimit),
     vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit),
+    exactSymbolSearch(workspace.rootPath, input.query),
+    relationSearch(workspace.rootPath, input.query),
   ]);
-  console.error(`[retrieval] results: fts=${ftsResults.length} vector=${vectorResults.length}`);
+  console.error(
+    `[retrieval] results: fts=${ftsResults.length} vector=${vectorResults.length} exact=${exactResults.length}`,
+  );
 
-  // RRF fusion: FTS weighted 2x, vector weighted 1x. Vector can boost files FTS ranked low.
+  // RRF fusion: FTS 2x, vector 1x, exact symbol 3x. Vector can boost files FTS ranked low;
+  // a chunk that defines a queried identifier outranks ones that merely mention it.
+  const lists = [
+    { results: ftsResults, weight: 2 },
+    { results: vectorResults, weight: 1 },
+    { results: exactResults, weight: 3 },
+  ].filter((list) => list.results.length > 0);
   let fused = reciprocalRankFusion(
-    [ftsResults, vectorResults]
-      .filter((results) => results.length > 0)
-      .map((results) => results.map((item) => ({ item, score: item.score }))),
+    lists.map((list) => list.results.map((item) => ({ item, score: item.score }))),
     60,
-    [2, 1],
+    lists.map((list) => list.weight),
     (item) => item.path,
   );
 
   if (!input.skipGraphExpand) {
-    // Ensure the graph is built before expansion. The callback is injected
-    // by the caller (MCP/web) to avoid a core→indexer package cycle.
-    await input.ensureGraph(input.workspaceId);
     const graphResults = await graphExpand(
       workspace.rootPath,
       fused.slice(0, Math.min(finalLimit, 5)).map((entry) => entry.item.id),
@@ -336,6 +464,16 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
       [1, 0.25],
       (item) => item.path,
     );
+  }
+
+  // A relation question is answered by the graph, so its callers/callees lead the ranking.
+  if (relationResults.length > 0) {
+    const relationPaths = new Set(relationResults.map((item) => item.path));
+    const topScore = fused[0]?.score ?? 1;
+    fused = [
+      ...relationResults.map((item) => ({ item, score: topScore })),
+      ...fused.filter((entry) => !relationPaths.has(entry.item.path)),
+    ];
   }
 
   const selected: ChunkHit[] = [];

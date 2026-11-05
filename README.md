@@ -37,7 +37,7 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 - **Rust-native parsing** — TS/JS parsed with [oxc-parser](https://oxc.rs) (~13x faster than Babel); Python/Go/Rust/Ruby parsed with tree-sitter (WASM) with regex fallback
 - Local SQLite storage in WAL mode
 - Multi-workspace indexing and retrieval
-- Full-text search with graph expansion and optional embedding reranking
+- Full-text search with exact symbol-name matching, graph expansion, and optional embedding reranking
 - Persistent technical decisions through agent memory
 - CLI, MCP, and management UI over the same runtime
 - No Docker, Postgres, or Redis required
