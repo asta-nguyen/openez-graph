@@ -1,0 +1,97 @@
+tests/fixtures/retrieval-eval-identifiers.json
+  s_ef2dc781e7c84a::t_71cc3902d90560 1-2,47,68-69,78
+  s_ef2dc781e7c84a::t_ac71595ba0a55d 3-46,48-67,70-77
+apps/mcp/src/mcp-core.ts
+  s_54259471fd962a::t_f8b2ad24ea40f1 653
+  s_54259471fd962a::t_bf437dd31aea1c 322-323
+  s_54259471fd962a::t_0c35069c14f973 349-350
+tests/embed-benchmark.test.ts
+  s_54259471fd962a::t_8d4b15814a8ed1 36
+  s_ef2dc781e7c84a::t_5c22b860f9c94b 15,28-35,37-38,40,44,51,150-157,163-164,174-187,189,194-196
+  s_ef2dc781e7c84a::t_ac71595ba0a55d 76-82
+  s_ef2dc781e7c84a::t_ff26584a128ef3 143-149
+  s_ef2dc781e7c84a::t_60882bec118c91 42,54-56,58-61,63
+packages/db/src/sqlite/fts-repository.ts
+  s_54259471fd962a::t_99f90cfa165bba 137
+packages/core/src/retrieval.ts
+  s_ef2dc781e7c84a::t_e69bb77ca7b359 183-185,190-192,197-232,325-333,337,341-342,352,419-421,425,428-430,432-438,440,442
+  s_ef2dc781e7c84a::t_220fac438b7373 186-189,193-196
+  s_54259471fd962a::t_38c12b2b86dcf2 233-293
+  s_54259471fd962a::t_3b86e87b720d6f 422,426
+  s_54259471fd962a::t_1757e91c4b286d 469-478
+apps/cli/README.md
+  s_ef2dc781e7c84a::t_485cbecfe8496a 108
+README.md
+  s_ef2dc781e7c84a::t_485cbecfe8496a 40
+tests/fixtures/retrieval-eval-relations.json
+  s_ef2dc781e7c84a::t_71cc3902d90560 1-5,10,13,15-16,23-24,33
+  s_ef2dc781e7c84a::t_a8512729b89880 11-12,14,17-22,25-32
+  s_ef2dc781e7c84a::t_ac71595ba0a55d 6-9
+tests/relation-query-retrieval.test.ts
+  s_54259471fd962a::t_3b5b97f94d5fd4 1-102
+  s_54259471fd962a::t_597e2622b1166f 103-106
+docs/agent-devkit/INDEX.md
+  s_54259471fd962a::t_54c708756cbea5 5
+  s_54259471fd962a::t_af64535c052f1f 6
+tests/fixtures/retrieval-eval.json
+  s_54259471fd962a::t_de1e52d26c6e53 12
+tests/fixtures/retrieval-eval-docs.json
+  s_54259471fd962a::t_1f7512eb8817c4 1-21
+tests/fts-retrieval.test.ts
+  s_54259471fd962a::t_4eeb905e46672c 115-116,119-120,125
+  s_54259471fd962a::t_b1bafd8974aafb 113-114,121-124,126-133,135-136
+  s_54259471fd962a::t_677fd1b51666e1 117-118,134
+  s_54259471fd962a::t_5dc7ab8ab6ffc8 137-155
+tests/exact-symbol-retrieval.test.ts
+  s_ef2dc781e7c84a::t_25b6004d64a6f0 1-53,56,64-66,71-73,76-99,102-129,131,168
+  s_ef2dc781e7c84a::t_b6f30b396a7904 63
+  s_ef2dc781e7c84a::t_b636ca1683ae9f 149-152
+  s_ef2dc781e7c84a::t_18ba4ec19a2108 54-55,58,67-69,74-75,100-101,130
+  s_ef2dc781e7c84a::t_c01af088955be5 70
+  s_ef2dc781e7c84a::t_a88d0a315b64d6 136-139
+  s_ef2dc781e7c84a::t_133171139953ac 57,59-62
+  s_ef2dc781e7c84a::t_dc3ee8dc68d847 132-135,140-148,153-167
+AGENTS.md
+  s_ef2dc781e7c84a::t_485cbecfe8496a 157
+tests/graph-expand-ranking.test.ts
+  s_ef2dc781e7c84a::t_0ebfa60db2f70c 49
+  s_ef2dc781e7c84a::t_f11adacbce1af7 61,79
+  s_ef2dc781e7c84a::t_ae8595c0804c84 1-48,50-60,62-78,80-87
+docs/agent-devkit/changes/archive/2026-11-05-retrieval-ranking-benchmark/tasks.md
+  s_54259471fd962a::t_68781ad50bd694 1-282
+tests/mcp-tools.test.ts
+  s_54259471fd962a::t_26c9b8a370ec2d 576,582-583
+packages/db/src/sqlite/utils.ts
+  s_54259471fd962a::t_564c5a0481fbd2 63
+  s_54259471fd962a::t_40f5aa4df3ecfa 46-54
+docs/agent-devkit/changes/archive/2026-11-05-retrieval-ranking-benchmark/benchmark-summary.md
+  s_ef2dc781e7c84a::t_7f4b0d2d4fe79c 1-24
+docs/agent-devkit/changes/archive/2026-11-05-retrieval-ranking-benchmark/results.md
+  s_ef2dc781e7c84a::t_2a12ed0c550026 1-163
+docs/agent-devkit/changes/archive/2026-11-05-retrieval-ranking-benchmark/design.md
+  s_54259471fd962a::t_f00b9311c8be71 1-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6501f5c8df57a3b579af273c87113497f2b39f3",
+  "prompts": {},
+  "sessions": {
+    "s_54259471fd962a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "26ccf609-4006-483e-a474-ec5ad2575e9a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    },
+    "s_ef2dc781e7c84a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8b333825-28a9-4d76-9e53-19dfbe5741ad",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
