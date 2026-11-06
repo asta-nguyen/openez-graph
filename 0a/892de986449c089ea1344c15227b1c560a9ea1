@@ -1,0 +1,31 @@
+tests/file-name-retrieval.test.ts
+  s_54259471fd962a::t_7bf67a396f03e3 45-50,67
+  s_54259471fd962a::t_80e777a21ece33 55,59,75
+  s_54259471fd962a::t_eba00062731a02 1-44,51-54,56-58,60-66,68-74,76-99
+tests/helpers/kill-during-fts-insert.ts
+  s_54259471fd962a::t_b747e916aa9943 7,26
+packages/db/src/sqlite/utils.ts
+  s_54259471fd962a::t_60e1fa1d0c7eb9 21-23,25,59-60,62-68,70-72
+packages/db/src/sqlite/index.ts
+  s_54259471fd962a::t_60e1fa1d0c7eb9 21
+packages/core/src/retrieval.ts
+  s_54259471fd962a::t_a6405355f06e5b 526-527
+  s_54259471fd962a::t_d64201417875de 2,234,236-252,257-281,283-324,514-521,532
+  s_54259471fd962a::t_435ae953aed8b9 235,253-256,282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0a892de986449c089ea1344c15227b1c560a9ea1",
+  "prompts": {},
+  "sessions": {
+    "s_54259471fd962a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "26ccf609-4006-483e-a474-ec5ad2575e9a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
