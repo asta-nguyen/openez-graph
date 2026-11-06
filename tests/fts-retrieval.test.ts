@@ -110,6 +110,49 @@ describe("FTS retrieval", () => {
     expect(await repo.fullTextSearch("payment", 5)).toHaveLength(1);
   });
 
+  it("ranks generated files below hand-written code with the same text", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    // The generated file matches the query more strongly; only the path weight can reorder them.
+    for (const [file, content] of [
+      ["src/b.ts", "workspace indexing route"],
+      ["src/a.gen.ts", "workspace indexing route workspace indexing"],
+    ]) {
+      const documentId = await insertTestDocument(repo, file!);
+      await repo.insertChunks([
+        {
+          documentId,
+          chunkIndex: 0,
+          content: content!,
+          tokenCount: 3,
+          contentHash: file,
+          metadata: "{}",
+        },
+      ]);
+    }
+
+    const hits = await repo.fullTextSearch("workspace indexing", 5);
+    expect(hits.map((hit) => hit.path)).toEqual(["src/b.ts", "src/a.gen.ts"]);
+  });
+
+  it("matches inflected query words against their base form", async () => {
+    const repo = createWorkspaceRepository(tempRoot);
+    const documentId = await insertTestDocument(repo, "src/tokenizer.ts");
+    await repo.insertChunks([
+      {
+        documentId,
+        chunkIndex: 0,
+        content: "export function truncateToTokenLimit() {}",
+        tokenCount: 6,
+        contentHash: "inflected",
+        metadata: JSON.stringify({ searchText: "truncate to token limit chunk" }),
+      },
+    ]);
+
+    expect(await repo.fullTextSearch("truncated", 5)).toHaveLength(1);
+    expect(await repo.fullTextSearch("chunks", 5)).toHaveLength(1);
+    expect(await repo.fullTextSearch("truncating", 5)).toHaveLength(1);
+  });
+
   it("stores trigger FTS rows with the shared text policy", async () => {
     const repo = createWorkspaceRepository(tempRoot);
     const documentId = await insertTestDocument(repo, "src/trigger.ts");

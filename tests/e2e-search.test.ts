@@ -227,7 +227,7 @@ describe("end-to-end search pipeline", () => {
     expect(result.answerContext).toBe("");
   });
 
-  it("loads retrieval limits from the selected workspace root", async () => {
+  it("honors the caller's result limit", async () => {
     await setupWorkspaceWithContent();
     const repo = createWorkspaceRepository(tempRoot);
     const authDocument = await repo.getDocumentByPath("src/auth.ts");
@@ -242,22 +242,10 @@ describe("end-to-end search pipeline", () => {
         metadata: JSON.stringify({ kind: "code", startLine: 10, endLine: 10 }),
       },
     ]);
-    fs.writeFileSync(
-      path.join(tempRoot, "brain.config.js"),
-      [
-        "const config = {",
-        "  retrieval: {",
-        "    vectorLimit: 20, textLimit: 20, graphHops: 1,",
-        "    maxGraphNeighbors: 20, finalLimit: 1, maxContextTokens: 8000",
-        "  }",
-        "};",
-        "export default config;",
-      ].join("\n"),
-    );
-
     const result = await codeQuery({
       workspaceId: "test-e2e",
       query: "authentication",
+      limit: 1,
       skipGraphExpand: true,
     });
 

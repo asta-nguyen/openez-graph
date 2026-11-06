@@ -1,0 +1,22 @@
+[
+  {
+    "query": "SSE integration guide",
+    "expectedPaths": ["docs/SSE-INTEGRATION.md"]
+  },
+  {
+    "query": "billing and Stripe integration",
+    "expectedPaths": ["docs/BILLING-INTEGRATION.md"]
+  },
+  {
+    "query": "frontend architecture overview",
+    "expectedPaths": ["docs/ARCHITECTURE.md", "CLAUDE.md"]
+  },
+  {
+    "query": "how the frontend calls the backend api",
+    "expectedPaths": ["docs/API_CALLS.md"]
+  },
+  {
+    "query": "how embed mode works",
+    "expectedPaths": ["docs/embed-guide.md"]
+  }
+]

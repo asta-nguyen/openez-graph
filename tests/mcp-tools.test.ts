@@ -573,12 +573,14 @@ describe("MCP agent contracts", () => {
         }),
       );
       const body = JSON.parse(text) as {
-        metrics: { truncated: boolean };
+        metrics: { truncated: boolean; fullResponseTokens?: number };
         results: Array<{ result: { nodes: Array<Record<string, unknown>> } }>;
       };
 
       expect(countTokens(text)).toBeLessThanOrEqual(500);
       expect(body.metrics.truncated).toBe(true);
+      // Tells the caller what maxTokens would return the whole result.
+      expect(body.metrics.fullResponseTokens).toBeGreaterThan(500);
       expect(body.results[0]?.result.nodes[0]).not.toHaveProperty("created_at");
       expect(body.results[0]?.result.nodes[0]).not.toHaveProperty("updated_at");
     } finally {

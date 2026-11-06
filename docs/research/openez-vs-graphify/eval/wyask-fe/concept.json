@@ -1,0 +1,38 @@
+[
+  {
+    "query": "where is the HTTP client with automatic token refresh?",
+    "expectedPaths": ["lib/api/client.ts"]
+  },
+  {
+    "query": "where are receiver access tokens stored and cleared?",
+    "expectedPaths": ["lib/token.ts"]
+  },
+  {
+    "query": "where is the React Query client configured?",
+    "expectedPaths": ["lib/query/queryClient.ts"]
+  },
+  {
+    "query": "where is authentication state provided to the app?",
+    "expectedPaths": ["providers/AuthProvider.tsx"]
+  },
+  {
+    "query": "where is the global app store defined?",
+    "expectedPaths": ["stores/useAppStore.ts"]
+  },
+  {
+    "query": "where is the envelope API service?",
+    "expectedPaths": ["features/envelope/envelope.service.ts"]
+  },
+  {
+    "query": "where are the MSW API mocks for tests?",
+    "expectedPaths": ["test/mocks/handlers.ts"]
+  },
+  {
+    "query": "where is the checkout page?",
+    "expectedPaths": ["app/checkout/page.tsx"]
+  },
+  {
+    "query": "where are cross-cutting app constants defined?",
+    "expectedPaths": ["utils/constants.ts"]
+  }
+]

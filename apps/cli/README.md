@@ -56,6 +56,8 @@ openez setup devin        # Devin CLI
 # 3. Restart your agent — it will auto-index (auto-sync opt-in via OPENEZ_MCP_WATCH=1)
 ```
 
+Every `setup` writes the OpenEZ instructions block into the project's `AGENTS.md` or `CLAUDE.md`. `openez setup claude` also adds a PreToolUse hook to the project's `.claude/settings.local.json`: once per session, before the agent greps or runs `grep`/`rg` in an indexed project, it reminds the agent to try `code_query` first. It never blocks a tool call. `openez setup codex` and `openez setup devin` add a SessionStart hook (user-level `~/.codex/hooks.json`, `~/.config/devin/config.json`) that adds the same reminder when a session starts in an indexed project, because their PreToolUse hooks cannot add context without blocking; Codex runs it only after you trust it with `/hooks`. OpenCode and Windsurf rely on the instructions block.
+
 ## Commands
 
 ```bash
@@ -105,7 +107,7 @@ Valid config keys: `embedding.provider`, `embedding.openai_api_key`, `embedding.
 | ----------------- | --------------------------------------------------------------------------------------------------- |
 | `list_workspaces` | List all registered workspaces                                                                      |
 | `code_outline`    | Inspect file AST structure, functions, classes, and exported symbols with line numbers (~50 tokens) |
-| `code_query`      | Hybrid FTS/vector search + graph expansion over indexed code and docs                               |
+| `code_query`      | Hybrid FTS/vector search + exact symbol-name matching + graph expansion over indexed code and docs  |
 | `code_context`    | Get budgeted symbol context with callers, callees, and related files (limit: 50/workspace, max 200) |
 | `diff_context`    | Analyze git diff changes and retrieve affected AST symbols & caller/callee dependencies             |
 | `graph_neighbors` | Traverse graph edges from a node or label                                                           |
@@ -161,16 +163,25 @@ and tracked in [issue #39](https://github.com/asta-nguyen/openez-graph/issues/39
 
 ## Retrieval quality
 
-Measured on 2026-08-10 against the openez codebase (180 files, 979 chunks, 17 fixture-backed
-queries):
+| Corpus                 | Suite       | OpenEZ      | Graphify    |
+| ---------------------- | ----------- | ----------- | ----------- |
+| Rust + TS desktop app  | concept     | .40 / .37   | .53 / .27   |
+|                        | identifiers | 1.00 / 1.00 | 1.00 / 1.00 |
+|                        | relations   | 1.00 / .94  | .50 / .16   |
+| Python FastAPI service | concept     | .91 / .71   | .45 / .31   |
+|                        | identifiers | 1.00 / 1.00 | .80 / .80   |
+|                        | relations   | .75 / .75   | .50 / .28   |
+| TS Next.js frontend    | concept     | .89 / .69   | .78 / .37   |
+|                        | identifiers | 1.00 / 1.00 | .89 / .89   |
+|                        | relations   | .75 / .75   | .75 / .25   |
 
-| Metric      | FTS only |
-| ----------- | -------: |
-| Recall@5    |   76.47% |
-| MRR         |   0.6564 |
-| Avg latency |  12.1 ms |
+Recall@5 / MRR, measured 2026-11-06 with no embeddings against Graphify 0.9.103 `--code-only`
+(no LLM calls). The Python and Next.js numbers are optimistic: OpenEZ's ranking was improved using
+those questions. The desktop app's concept suite is the fairest row, because it was written first
+and never tuned against; both tools miss most questions phrased differently from the code. Suites
+are small (4 to 15 questions), and warm query latency is comparable.
 
-FTS-only remains the default. Embedding comparison is opt-in and is not claimed by this baseline.
+FTS-only remains the default. Embedding comparison is opt-in and is not claimed by this benchmark.
 
 ```bash
 # Enable Ollama embeddings (bge-m3 recommended for code search)

@@ -19,6 +19,7 @@ import {
   createBlobParser,
   embedWorkspace,
   ensureGraphReady,
+  ensureOpenezIgnore,
   indexWorkspace,
 } from "@openez-graph/indexer";
 import {
@@ -49,6 +50,14 @@ program
   .description("OpenEZ Graph - Local-first knowledge retrieval system")
   .version(pkg.version);
 
+// Setup commands seed a .openezignore with common skip patterns; an existing one is never touched.
+function createOpenezIgnore(rootPath: string): void {
+  if (!fs.existsSync(rootPath) || !fs.statSync(rootPath).isDirectory()) return;
+  if (ensureOpenezIgnore(rootPath)) {
+    console.log(`Created ${path.join(rootPath, ".openezignore")} (edit it to skip more paths)`);
+  }
+}
+
 // ── openez init [path] ──
 
 program
@@ -69,6 +78,7 @@ program
       process.exit(1);
     }
 
+    createOpenezIgnore(resolvedPath);
     const registry = createRegistryRepository();
     const existing = await registry.getWorkspaceByPath(resolvedPath);
 
@@ -609,7 +619,10 @@ configCmd
 
 const setup = program
   .command("setup")
-  .description("Configure editor/agent integrations (codex, claude, opencode, windsurf, devin)");
+  .description("Configure editor/agent integrations (codex, claude, opencode, windsurf, devin)")
+  .hook("preAction", (_setup, action) => {
+    createOpenezIgnore(path.resolve(String(action.processedArgs[0] ?? process.cwd())));
+  });
 
 setup
   .command("codex")

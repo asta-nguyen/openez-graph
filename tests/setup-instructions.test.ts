@@ -118,6 +118,48 @@ describe("agent setup instructions", () => {
     });
   }
 
+  for (const setupCase of cases) {
+    it(`never loosens ${setupCase.name} config file permissions`, async () => {
+      // New config: owner-only.
+      await runSetup(setupCase);
+      const configPath = path.join(homePath, setupCase.config);
+      expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+
+      // Existing config keeps whatever mode the user chose.
+      fs.chmodSync(configPath, 0o640);
+      await runSetup(setupCase);
+      expect(fs.statSync(configPath).mode & 0o777).toBe(0o640);
+    });
+  }
+
+  it("registers the Claude search reminder hook for the project", async () => {
+    await runSetup(cases[1]);
+    const local = JSON.parse(
+      fs.readFileSync(path.join(projectPath, ".claude", "settings.local.json"), "utf-8"),
+    );
+    expect(local.hooks.PreToolUse[0].hooks[0].command).toContain("claude-search-reminder.mjs");
+    expect(
+      fs.existsSync(path.join(homePath, ".openez", "hooks", "claude-search-reminder.mjs")),
+    ).toBe(true);
+  });
+
+  it("registers the SessionStart reminder for Codex and Devin", async () => {
+    for (const [setupCase, hooksFile] of [
+      [cases[0], path.join(".codex", "hooks.json")],
+      [cases[4], path.join(".config", "devin", "config.json")],
+    ] as const) {
+      await runSetup(setupCase);
+      const saved = JSON.parse(fs.readFileSync(path.join(homePath, hooksFile), "utf-8"));
+      expect(saved.hooks.SessionStart).toHaveLength(1);
+      expect(saved.hooks.SessionStart[0].hooks[0].command).toContain("session-start-reminder.mjs");
+    }
+    // Devin keeps its MCP entry next to the hook in the same file.
+    const devin = JSON.parse(
+      fs.readFileSync(path.join(homePath, ".config", "devin", "config.json"), "utf-8"),
+    );
+    expect(devin.mcpServers.openez).toBeDefined();
+  });
+
   it("preserves user-authored AGENTS.md content and remains idempotent", async () => {
     const instructionsPath = path.join(projectPath, "AGENTS.md");
     const userContent = "# Project rules\n\nKeep this byte-for-byte.\n";

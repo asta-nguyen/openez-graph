@@ -4,7 +4,7 @@ import { mock } from "bun:test";
 import { createRegistryRepository } from "../../packages/db/src/sqlite/registry-repository";
 import { createWorkspaceRepository } from "../../packages/db/src/sqlite/workspace-repository";
 import { writeLocalWorkspaceConfig } from "../../packages/db/src/sqlite/local-workspace";
-import { publicSymbolKind } from "../../packages/db/src/sqlite/utils";
+import { publicSymbolKind, queryTerms } from "../../packages/db/src/sqlite/utils";
 
 const mode = process.argv[3];
 const createRepository = createWorkspaceRepository;
@@ -23,6 +23,7 @@ mock.module("@openez-graph/db", () => ({
     return repo;
   },
   publicSymbolKind,
+  queryTerms,
   writeLocalWorkspaceConfig,
 }));
 

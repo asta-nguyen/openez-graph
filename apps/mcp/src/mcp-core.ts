@@ -319,7 +319,8 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
     }
     return serializedTokens();
   };
-  if (finalizeMetrics() <= maxTokens) return value;
+  const fullResponseTokens = finalizeMetrics();
+  if (fullResponseTokens <= maxTokens) return value;
 
   // formattedSummary is rendered text derived from the structured payload —
   // it is dropped before any structured trimming when the response does not
@@ -345,6 +346,8 @@ function fitToTokenBudget(result: unknown, maxTokens: number): unknown {
   if (droppedSummary && finalizeMetrics() <= maxTokens) return value;
 
   metrics.truncated = true;
+  // The maxTokens that would have returned the whole result, so a caller can ask again.
+  metrics.fullResponseTokens = fullResponseTokens;
   // Prune in deterministic batches: serialized-size estimates schedule how
   // much to remove per batch; exact cl100k counts at batch boundaries and on
   // the final response decide when trimming stops.
@@ -647,7 +650,7 @@ export function createMcpServer(options?: McpServerOptions) {
       {
         name: "code_query",
         description:
-          "Retrieve ranked code and documentation context for a user query. Supports one or many workspaces.",
+          "Retrieve ranked code and documentation context for a user query. Supports one or many workspaces. Questions shaped 'what calls X' / 'what does X call' put X's callers/callees first; for other relationship questions use code_context.",
         inputSchema: {
           type: "object",
           properties: {

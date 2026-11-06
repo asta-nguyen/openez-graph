@@ -9,7 +9,7 @@
   },
   {
     "query": "where are embeddings written?",
-    "expectedPaths": ["packages/indexer/src/index-workspace.ts"]
+    "expectedPaths": ["packages/indexer/src/embed-workspace.ts"]
   },
   { "query": "how does codeQuery work?", "expectedPaths": ["packages/core/src/retrieval.ts"] },
   {

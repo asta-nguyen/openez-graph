@@ -54,6 +54,28 @@ import {
 import { ensureGraphReady, indexWorkspace } from "@openez-graph/indexer";
 
 const app = new Hono();
+
+// The server binds to loopback, but any page in the user's browser can still reach it. Reject
+// requests addressed to a non-loopback host name (DNS rebinding: evil.example resolving to
+// 127.0.0.1) and writes sent from a non-loopback page (CSRF: a text/plain POST skips the CORS
+// preflight). Clients without an Origin header (curl, the CLI) are not browsers and pass.
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const isLoopbackUrl = (url: string) => {
+  try {
+    return LOOPBACK_HOSTS.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+};
+app.use("/api/*", async (c, next) => {
+  const origin = c.req.header("origin");
+  const writes = !["GET", "HEAD", "OPTIONS"].includes(c.req.method);
+  if (!isLoopbackUrl(c.req.url) || (writes && origin && !isLoopbackUrl(origin))) {
+    return c.json({ error: "Forbidden: request did not come from the local OpenEZ UI" }, 403);
+  }
+  await next();
+});
+
 app.use(
   "/*",
   cors({

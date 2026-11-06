@@ -5,6 +5,43 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-06
+
+Run `openez reindex <path>` after upgrading: symbol extraction changed (`oxc-v6`).
+
+### Added
+
+- `.openezignore`: a root file with `.gitignore` syntax for paths that stay in Git but should not be indexed. `openez init` and `openez setup <agent>` create one with common patterns when the project has none, and never overwrite an existing file.
+- `code_query` ranks files whose name the question spells out, so "React Query client" finds `lib/query/queryClient.ts`.
+- `code_query` ranks the file defining an exact symbol name first, including members found by bare name (`connect_or_spawn` finds `DaemonClient::connect_or_spawn`).
+- `code_query` answers "what calls X" and "what does X call" from the call graph, including calls from functions nested inside X.
+- `openez setup claude` adds a project hook that reminds the agent once per session to try `code_query` before grepping. `openez setup codex` and `openez setup devin` add the same reminder at session start; Codex runs it only after you trust it with `/hooks`. None of them block a tool call.
+- Truncated MCP responses report `metrics.fullResponseTokens`, the `maxTokens` value that would return the whole result.
+- A comparison with Graphify on the benchmark page and in `BENCHMARK.md`.
+
+### Changed
+
+- After graph expansion, the best match, files defining a queried symbol, and documents keep their rank; graph neighbors reorder the remaining results.
+- Graph neighbors are ordered by fewest connections first, so widely used utilities no longer take the limited slots.
+- FTS queries match plain word stems: "truncated" finds `truncate` and "chunks" finds `chunk`. Generated `*.gen.*` files rank lower.
+- Retrieval and chunking always use the built-in defaults, because per-project configuration was removed.
+
+### Removed
+
+- `brain.config.*` is no longer read. Use `.openezignore` to skip files. Indexing prints a warning if the file is still present.
+
+### Fixed
+
+- A `!` line in `.gitignore` (such as `!.env.example`) no longer makes a workspace index 0 files. Re-include lines are now ignored, so a file they re-include stays skipped.
+- Components wrapped in a call, such as `const Row = memo(function Row() {})`, are now symbols; every call inside them was previously lost from the graph.
+
+### Security
+
+- Indexing no longer executes code: `brain.config.*` was evaluated when loaded, so indexing or opening an agent in an untrusted repository could run code from it.
+- The web UI API rejects requests addressed to a non-loopback host (DNS rebinding) and writes from a non-loopback `Origin` (CSRF), which any open web page could previously send.
+- `openez setup` no longer changes agent config files to mode 644, which could expose tokens stored in them. New files are created as 600 and existing files keep their mode.
+- JSON, YAML, and TOML files named like credentials or secrets (`*credentials*`, `*secret*`, `service-account*.json`) are never indexed, so their contents cannot reach an agent.
+
 ## [1.6.1] - 2026-10-31
 
 ### Changed
@@ -376,6 +413,7 @@ Remediation release — index/graph correctness, data protection, and web flow f
 
 [1.5.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.4.0...v1.5.0
 [1.6.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.5.0...v1.6.0
+[1.7.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.6.1...HEAD
 [1.6.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.6.0...v1.6.1
 [1.4.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.0...v1.3.1

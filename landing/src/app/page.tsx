@@ -105,7 +105,7 @@ const features = [
   {
     icon: Search,
     title: "Hybrid RAG Retrieval",
-    desc: "Full-text search with graph expansion along call and import edges, plus optional vector embeddings (bge-m3 / OpenAI) fused via Reciprocal Rank Fusion. 76.47% recall@5 on our own benchmark (FTS only, 17 queries) — no external vector DB required.",
+    desc: "Full-text search, exact symbol and file-name matching, and graph expansion along call and import edges, plus optional vector embeddings (bge-m3 / OpenAI) fused via Reciprocal Rank Fusion. No external vector DB required.",
   },
   {
     icon: Network,

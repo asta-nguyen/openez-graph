@@ -37,7 +37,7 @@ Coding agents repeatedly spend context reading the same files. OpenEZ creates a 
 - **Rust-native parsing** — TS/JS parsed with [oxc-parser](https://oxc.rs) (~13x faster than Babel); Python/Go/Rust/Ruby parsed with tree-sitter (WASM) with regex fallback
 - Local SQLite storage in WAL mode
 - Multi-workspace indexing and retrieval
-- Full-text search with graph expansion and optional embedding reranking
+- Full-text search with exact symbol-name matching, graph expansion, and optional embedding reranking
 - Persistent technical decisions through agent memory
 - CLI, MCP, and management UI over the same runtime
 - No Docker, Postgres, or Redis required
@@ -135,14 +135,24 @@ Embeddings are optional. The default retrieval path works with SQLite full-text 
 
 ### Retrieval benchmark
 
-| Metric      | FTS only |
-| ----------- | -------: |
-| Recall@5    |   76.47% |
-| MRR         |   0.6564 |
-| Avg latency |  12.1 ms |
+| Corpus                 | Suite       | OpenEZ      | Graphify    |
+| ---------------------- | ----------- | ----------- | ----------- |
+| Rust + TS desktop app  | concept     | .40 / .37   | .53 / .27   |
+|                        | identifiers | 1.00 / 1.00 | 1.00 / 1.00 |
+|                        | relations   | 1.00 / .94  | .50 / .16   |
+| Python FastAPI service | concept     | .91 / .71   | .45 / .31   |
+|                        | identifiers | 1.00 / 1.00 | .80 / .80   |
+|                        | relations   | .75 / .75   | .50 / .28   |
+| TS Next.js frontend    | concept     | .89 / .69   | .78 / .37   |
+|                        | identifiers | 1.00 / 1.00 | .89 / .89   |
+|                        | relations   | .75 / .75   | .75 / .25   |
 
-Measured on 2026-08-10 against 180 files, 979 chunks, and 17 fixture-backed queries. Embedding
-comparison is opt-in and is not claimed by this baseline. See [BENCHMARK.md](BENCHMARK.md).
+Recall@5 / MRR, measured 2026-11-06 with no embeddings against Graphify 0.9.103 `--code-only`
+(no LLM calls). The Python and Next.js numbers are optimistic: OpenEZ's ranking was improved using
+those questions. The desktop app's concept suite is the fairest row, because it was written first
+and never tuned against; both tools miss most questions phrased differently from the code. Suites
+are small (4 to 15 questions), and warm query latency is comparable.
+See [BENCHMARK.md](BENCHMARK.md) for documentation questions, speed, and caveats.
 
 ### Embedding configuration
 
@@ -182,6 +192,14 @@ Valid config keys:
 API keys are encrypted at rest with AES-256-GCM. The master key is stored at `~/.openez/master.key` with file mode `0600`.
 
 Indexing never creates vectors. Full reindex replaces chunks and removes their vectors. Run `openez embed [path]` after indexing or reindexing; retrieval falls back to FTS + graph when the configured provider or active vectors are unavailable.
+
+## Ignoring files
+
+Indexing skips hidden directories, `.gitignore` matches, and paths listed in a root `.openezignore` (same syntax as `.gitignore`). `openez init` and `openez setup <agent>` create one with common patterns (vendored dependencies, minified and generated files, archived agent plans) when the project has none; edit it to skip anything else that stays in Git but should not be searched. The next `openez index` removes newly ignored files from the index.
+
+JSON, YAML, and TOML files named like credentials or secrets (`*credentials*`, `*secret*`, `service-account*.json`) are never indexed, so their contents cannot reach an agent. Source files such as `secrets.ts` are indexed as usual.
+
+OpenEZ has no per-project config file. A `brain.config.*` file is never read or executed.
 
 ## Management UI
 

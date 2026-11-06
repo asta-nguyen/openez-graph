@@ -1,0 +1,42 @@
+[
+  {
+    "query": "RingBuffer",
+    "expectedPaths": ["crates/daemon/src/buffer.rs"]
+  },
+  {
+    "query": "SessionManager",
+    "expectedPaths": ["crates/daemon/src/session.rs"]
+  },
+  {
+    "query": "encode_output",
+    "expectedPaths": ["crates/protocol/src/frame.rs"]
+  },
+  {
+    "query": "connect_or_spawn",
+    "expectedPaths": ["apps/desktop/src-tauri/src/daemon_client.rs"]
+  },
+  {
+    "query": "match_codex_rollouts",
+    "expectedPaths": ["apps/desktop/src-tauri/src/activity.rs"]
+  },
+  {
+    "query": "toSplitRows",
+    "expectedPaths": ["apps/desktop/src/features/editor/diff-view.ts"]
+  },
+  {
+    "query": "startQuerySync",
+    "expectedPaths": ["apps/desktop/src/services/sync.ts"]
+  },
+  {
+    "query": "TerminalController",
+    "expectedPaths": ["apps/desktop/src/features/terminal/TerminalController.ts"]
+  },
+  {
+    "query": "usageTone",
+    "expectedPaths": ["apps/desktop/src/features/usage/tone.ts"]
+  },
+  {
+    "query": "checkoutForCwd",
+    "expectedPaths": ["apps/desktop/src/stores/ui.ts"]
+  }
+]

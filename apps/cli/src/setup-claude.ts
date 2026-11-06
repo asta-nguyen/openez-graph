@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { installClaudeSearchHook } from "./agent-hooks";
 import { resolveCliInvocation } from "./resolve-cli";
 import { installAgentInstructions } from "./setup-instructions";
 
@@ -54,15 +55,20 @@ export async function setupClaude(rootPath: string): Promise<void> {
     startupTimeoutSec: 120,
   };
 
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
-  fs.chmodSync(configPath, 0o644);
+  // Owner-only when created; an existing file keeps the permissions its owner chose.
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
   const instructionsPath = installAgentInstructions(resolvedPath, "CLAUDE.md");
+  const hookSettingsPath = installClaudeSearchHook(resolvedPath);
 
   console.log(`Claude Code MCP server configured: '${label}'`);
   console.log("  Mode:    shared multi-workspace MCP");
   console.log(`  Repo:    ${repoRoot}`);
   console.log(`  Config:  ${configPath}`);
   console.log(`  Rules:   ${instructionsPath}`);
+  console.log(`  Hook:    ${hookSettingsPath} (code_query reminder before grep)`);
   console.log("");
   console.log("Restart Claude Code or open a new session for the changes to take effect.");
 }

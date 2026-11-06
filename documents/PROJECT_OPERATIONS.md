@@ -23,9 +23,9 @@ The default path is local-first and low-setup.
 
 ### Configuration
 
-- `brain.config.*` is optional
+- there is no per-project config file; `brain.config.*` is never read or executed
 - workspace registration should not depend on a config file
-- config files may still provide global tuning defaults
+- per-project indexing scope lives in `.openezignore` (gitignore syntax)
 
 ### CLI
 

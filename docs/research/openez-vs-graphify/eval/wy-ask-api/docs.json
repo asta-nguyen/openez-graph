@@ -1,0 +1,26 @@
+[
+  {
+    "query": "architecture overview and route topology",
+    "expectedPaths": ["docs/llm/architecture/overview.md", "ARCHITECTURE.md"]
+  },
+  {
+    "query": "how does the chat RAG workflow work",
+    "expectedPaths": ["docs/llm/workflows/chat-rag.md"]
+  },
+  {
+    "query": "how are payments integrated",
+    "expectedPaths": ["docs/llm/integrations/payments.md"]
+  },
+  {
+    "query": "how does the email platform work",
+    "expectedPaths": ["docs/llm/integrations/email.md"]
+  },
+  {
+    "query": "how is authentication handled",
+    "expectedPaths": ["docs/llm/domains/auth.md", "src/core/auth.py"]
+  },
+  {
+    "query": "setup instructions and environment variables",
+    "expectedPaths": ["README.md"]
+  }
+]

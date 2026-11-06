@@ -1,0 +1,77 @@
+[
+  {
+    "query": "what imports the api client",
+    "expectedPaths": [
+      "app/saved/[token]/page.tsx",
+      "app/workspace/approvals/ApprovalsPageClient.tsx",
+      "components/Auth/Password/SetPasswordForm.tsx",
+      "components/Envelope/Chat/ChatPromptInput.tsx",
+      "components/Envelope/ClientEnvelopePage.tsx",
+      "components/Envelope/EmbedEnvelopePage.tsx",
+      "features/advanced-analytics/advanced-analytics.service.ts",
+      "features/analytics/analytics.service.ts",
+      "features/auth/auth.mutation.ts",
+      "features/auth/auth.service.ts",
+      "features/behavior-response/behavior-response.service.ts",
+      "features/behavior-response/useBehaviorResponse.ts",
+      "features/behavior-setup/behavior-setup.service.ts",
+      "features/calendly/calendly.service.ts",
+      "features/campaign/campaign.service.ts",
+      "features/chat/chat.service.ts",
+      "features/contact/contact.service.ts",
+      "features/dashboard/dashboard.service.ts",
+      "features/document/document.service.ts",
+      "features/email/email.service.ts",
+      "features/envelope/envelope.service.ts",
+      "features/learn-walkthrough/useLearnWalkthrough.ts",
+      "features/legal/legal.service.ts",
+      "features/notification/notification.service.ts",
+      "features/notification/useNotificationStream.ts",
+      "features/payment/payment.service.ts",
+      "features/plan/plan.service.ts",
+      "features/pricing/pricing.service.ts",
+      "features/prompt-builder/prompt-builder.service.ts",
+      "features/reports/reports.service.ts",
+      "features/savedAnswers/savedAnswers.service.ts",
+      "features/team/team.service.ts",
+      "features/user/user.service.ts",
+      "features/webhook/webhook.service.ts",
+      "lib/api/server.ts",
+      "lib/connectors/client.ts",
+      "providers/AuthProvider.tsx",
+      "utils/analytic.ts",
+      "utils/error.ts"
+    ]
+  },
+  {
+    "query": "what uses useEnvelope",
+    "expectedPaths": [
+      "components/Home/Hero.tsx",
+      "components/Envelope/ClientEnvelopePage.tsx",
+      "components/Envelope/New/CreateEnvelopeFlow.tsx",
+      "components/Home/__tests__/Hero.test.tsx"
+    ]
+  },
+  {
+    "query": "what uses useEnvelopeStore",
+    "expectedPaths": [
+      "components/Envelope/ClientEnvelopePage.tsx",
+      "components/layout/Header/HeaderMobile.tsx",
+      "hooks/useHasEnvelopeSession.ts",
+      "stores/index.ts"
+    ]
+  },
+  {
+    "query": "what uses the shared queryClient",
+    "expectedPaths": [
+      "lib/query/QueryProvider.tsx",
+      "app/layout.tsx",
+      "app/workspace/layout.tsx",
+      "app/workspace/settings/page.tsx",
+      "app/workspace/envelopes/branding/page.tsx",
+      "app/workspace/analytics/page.tsx",
+      "app/envelope/page.tsx",
+      "lib/auth/logout.ts"
+    ]
+  }
+]

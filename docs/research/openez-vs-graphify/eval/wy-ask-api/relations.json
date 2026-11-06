@@ -1,0 +1,37 @@
+[
+  {
+    "query": "what calls build_agent",
+    "expectedPaths": ["src/api/routes/chat.py", "src/domains/shares/share_escalation_service.py"]
+  },
+  {
+    "query": "what does build_agent call",
+    "expectedPaths": ["src/agents/tool_manifest.py", "src/core/llm_models.py"]
+  },
+  {
+    "query": "what calls EmailEventEmitter",
+    "expectedPaths": [
+      "src/domains/shares/share_service.py",
+      "src/email/scheduler.py",
+      "src/email/event_processor.py",
+      "src/api/routes/email.py",
+      "src/api/routes/chat.py",
+      "src/tasks/scheduled.py",
+      "src/domains/handoff/email.py",
+      "src/domains/teams/team_service.py",
+      "src/domains/conversation_behavior/team_question_service.py",
+      "src/agents/handoff_tools.py",
+      "src/api/routes/_email_forms.py",
+      "src/api/routes/chat_history.py"
+    ]
+  },
+  {
+    "query": "what does search_documents call",
+    "expectedPaths": [
+      "src/domains/chat/citation_rendering.py",
+      "src/core/query_normalisation.py",
+      "src/agents/search_scope.py",
+      "src/core/citation_register.py",
+      "src/domains/analytics/fallback_repository.py"
+    ]
+  }
+]

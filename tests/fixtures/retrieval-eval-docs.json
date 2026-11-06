@@ -1,0 +1,21 @@
+[
+  {
+    "query": "steps to publish a new CLI version to npm",
+    "expectedPaths": [".agents/skills/release-cli/SKILL.md", "AGENTS.md"]
+  },
+  { "query": "quick start install guide", "expectedPaths": ["README.md", "apps/cli/README.md"] },
+  {
+    "query": "plan for upgrading the tree-sitter parsers",
+    "expectedPaths": ["documents/backlogs/TREE_SITTER_UPGRADE_GUIDE.md"]
+  },
+  {
+    "query": "product direction and core decisions",
+    "expectedPaths": ["documents/PROJECT_OPERATIONS.md"]
+  },
+  {
+    "query": "embedding review backlog notes",
+    "expectedPaths": ["documents/backlogs/embedding-review.md"]
+  },
+  { "query": "what changed in each release", "expectedPaths": ["CHANGELOG.md"] },
+  { "query": "which content types are supported", "expectedPaths": ["README.md"] }
+]
