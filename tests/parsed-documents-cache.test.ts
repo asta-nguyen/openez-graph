@@ -231,7 +231,7 @@ describe("parsed_documents module-binding payload", () => {
     resetNativeParserCache();
   });
 
-  test("oxc-v5 rows carry module bindings and stale oxc-v2 rows reparse", async () => {
+  test("oxc-v6 rows carry module bindings and stale oxc-v2 rows reparse", async () => {
     fs.writeFileSync(path.join(workspaceRoot, "dep.js"), "export function depFn() { return 1; }\n");
     fs.writeFileSync(
       path.join(workspaceRoot, "main.js"),
@@ -252,7 +252,7 @@ describe("parsed_documents module-binding payload", () => {
     expect(doc).not.toBeNull();
 
     const cached = repo.getParsedDocument(doc!.id);
-    expect(cached?.parserVersion).toBe("oxc-v5");
+    expect(cached?.parserVersion).toBe("oxc-v6");
     const payload = JSON.parse(cached!.imports!);
     expect(Array.isArray(payload)).toBe(false);
     expect(payload.paths).toEqual(["./dep.js"]);
@@ -293,7 +293,7 @@ describe("parsed_documents module-binding payload", () => {
 
     await buildGraphGeneration(workspace.id, workspaceRoot, 1, 1);
     const reparsed = repo.getParsedDocument(doc!.id);
-    expect(reparsed?.parserVersion).toBe("oxc-v5");
+    expect(reparsed?.parserVersion).toBe("oxc-v6");
     expect(JSON.parse(reparsed!.imports!).importBindings).toContainEqual({
       local: "depFn",
       module: "./dep.js",

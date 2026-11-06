@@ -91,6 +91,56 @@ describe("relation queries", () => {
     expect(ranked[0]).not.toBe("checkout.ts");
   });
 
+  it("finds a method by its bare name, in code_query and in relation questions", async () => {
+    write("Cargo.toml", '[package]\nname = "demo"\nversion = "0.1.0"\n');
+    fs.mkdirSync(path.join(workspaceRoot, "src"));
+    write("src/lib.rs", "pub mod client;\npub mod bridge;\n");
+    write(
+      "src/client.rs",
+      "pub struct DaemonClient;\nimpl DaemonClient {\n    pub fn connect_or_spawn() {}\n}\n",
+    );
+    write(
+      "src/bridge.rs",
+      "use crate::client::DaemonClient;\npub fn start() {\n    DaemonClient::connect_or_spawn();\n}\n",
+    );
+    // Mentions the name repeatedly, so plain ranking prefers it to the definition.
+    write("notes.md", `# Notes\n\n${"connect_or_spawn ".repeat(30)}\n`);
+    await index();
+
+    expect((await query("connect_or_spawn"))[0]).toBe("src/client.rs");
+    expect((await query("what calls connect_or_spawn"))[0]).toBe("src/bridge.rs");
+  });
+
+  it("counts calls from functions nested inside the symbol", async () => {
+    write("cache.ts", "export function upsert() { return 1; }\n");
+    write(
+      "sync.ts",
+      'import { upsert } from "./cache";\n' +
+        "export function startSync() {\n  const onEvent = () => upsert();\n  return onEvent;\n}\n",
+    );
+    await index();
+
+    expect((await query("what does startSync call"))[0]).toBe("cache.ts");
+  });
+
+  it("treats a component wrapped in memo or forwardRef as a symbol", async () => {
+    write("tone.ts", "export function usageTone() { return 1; }\n");
+    write(
+      "row.tsx",
+      'import { memo } from "react";\nimport { usageTone } from "./tone";\n' +
+        "const Row = memo(function Row() {\n  return <b className={String(usageTone())} />;\n});\nexport default Row;\n",
+    );
+    write(
+      "panel.tsx",
+      'import { forwardRef, memo } from "react";\nimport { usageTone } from "./tone";\n' +
+        "export const Panel = memo(forwardRef(() => <i>{usageTone()}</i>));\n",
+    );
+    await index();
+
+    const callers = await query("what calls usageTone");
+    expect(callers.slice(0, 2).sort()).toEqual(["panel.tsx", "row.tsx"]);
+  });
+
   it("leaves ordinary queries alone", async () => {
     writeLedger();
     await index();

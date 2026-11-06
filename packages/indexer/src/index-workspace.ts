@@ -60,7 +60,7 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
 // Parser version tags stored alongside cached parse results in
 // `parsed_documents`. Bump these when parser logic changes so stale cache
 // entries are invalidated on the next index/graph build.
-const PARSER_VERSION_OXC = "oxc-v5";
+const PARSER_VERSION_OXC = "oxc-v6";
 const PARSER_VERSION_NATIVE = "native-v9";
 const PARSER_VERSION_FALLBACK = "fallback-v9";
 
@@ -135,7 +135,7 @@ export function resetNativeParserCache(): void {
  * version tag stored in `parsed_documents.parser_version`. Native
  * tree-sitter results use `native-v9`, the fallback parser uses
  * `fallback-v9`, and every other parser (oxc, markdown, config, regex)
- * is grouped under `oxc-v5` since they share the same chunking/call-
+ * is grouped under `oxc-v6` since they share the same chunking/call-
  * extraction contract. Non-native tree-sitter/regex fallbacks for
  * Python/Go/Rust/Ruby/C++/C#/Java use `fallback-v9` so cache validation matches
  * the expected version when the native extension is unavailable.

@@ -56,6 +56,20 @@ type SymbolAst = {
  * Returns both the public symbols and their matching AST nodes so callers can
  * walk each symbol's subtree for call extraction.
  */
+/**
+ * The function a variable initializer defines: a function itself, or a function passed to a call
+ * such as `memo(function Row() {})`, `memo(forwardRef(() => {}))`, or zustand's `create(() => {})`.
+ */
+function initializerFunction(init: OxcNode | undefined): OxcNode | null {
+  if (init?.type === "ArrowFunctionExpression" || init?.type === "FunctionExpression") return init;
+  if (init?.type !== "CallExpression") return null;
+  for (const argument of (init.arguments ?? []) as OxcNode[]) {
+    const fn = initializerFunction(argument);
+    if (fn) return fn;
+  }
+  return null;
+}
+
 function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
   const results: SymbolAst[] = [];
 
@@ -130,14 +144,13 @@ function extractSymbols(body: OxcNode[], source: string): SymbolAst[] {
       for (const decl of node.declarations ?? []) {
         if (decl.id?.type === "Identifier") {
           const declName = decl.id.name;
-          const isArrow = decl.init?.type === "ArrowFunctionExpression";
-          const isFunc = decl.init?.type === "FunctionExpression";
-          if (isArrow || isFunc) {
+          const fn = initializerFunction(decl.init as OxcNode | undefined);
+          if (fn) {
             const startLine = source.slice(0, decl.start).split("\n").length;
             const endLine = source.slice(0, decl.end).split("\n").length;
-            // Associate the symbol with the function initializer node so its
-            // body subtree is walked for call extraction.
-            const bodyNode = (decl.init as OxcNode) ?? decl;
+            // Associate the symbol with the function node so its body subtree
+            // is walked for call extraction.
+            const bodyNode = fn;
             results.push({
               symbol: {
                 name: declName,

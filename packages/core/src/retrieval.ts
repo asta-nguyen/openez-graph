@@ -188,6 +188,33 @@ const IDENTIFIER_TOKEN = /[A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)*/g;
 // must look like code: `_`, `$`, a `.`/`::` qualifier, or a camelCase transition.
 const IDENTIFIER_SHAPE = /[_$]|\.|::|[a-z][A-Z]/;
 
+// Symbol nodes for a name a user wrote: the exact label in `.` or `::` form, else, for a bare name,
+// any member with that name (`connect_or_spawn` -> `DaemonClient::connect_or_spawn`). GLOB, not LIKE:
+// `_` is a wildcard in LIKE. Names come from identifier regexes, so they hold no GLOB metacharacters.
+async function findSymbolNodes(
+  repo: ReturnType<typeof createWorkspaceRepository>,
+  name: string,
+): Promise<Array<Record<string, unknown>>> {
+  const columns = `graph_nodes.id AS node_id, graph_nodes.label, chunks.id, chunks.content,
+    chunks.heading, chunks.metadata, documents.path`;
+  const from = `FROM graph_nodes
+    INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+    INNER JOIN documents ON documents.id = chunks.document_id
+    WHERE graph_nodes.type = 'symbol'`;
+  const forms = [...new Set([name, name.replaceAll(".", "::"), name.replaceAll("::", ".")])];
+  const exact = await repo.queryRaw(
+    `SELECT ${columns} ${from} AND graph_nodes.label IN (${forms.map(() => "?").join(",")})
+     ORDER BY documents.path, chunks.id`,
+    forms,
+  );
+  if (exact.length > 0 || name.includes(".") || name.includes("::")) return exact;
+  return repo.queryRaw(
+    `SELECT ${columns} ${from} AND (graph_nodes.label GLOB ? OR graph_nodes.label GLOB ?)
+     ORDER BY documents.path, chunks.id`,
+    [`*::${name}`, `*.${name}`],
+  );
+}
+
 // Chunks whose symbol label equals a query identifier, in query-token order. Reads the
 // already-built graph; an unbuilt graph yields no hits.
 async function exactSymbolSearch(rootPath: string, query: string): Promise<ChunkHit[]> {
@@ -200,19 +227,7 @@ async function exactSymbolSearch(rootPath: string, query: string): Promise<Chunk
   const hits: ChunkHit[] = [];
 
   for (const token of tokens) {
-    const forms = [token];
-    if (token.includes(".")) forms.push(token.replaceAll(".", "::"));
-    if (token.includes("::")) forms.push(token.replaceAll("::", "."));
-    const rows = await repo.queryRaw(
-      `SELECT chunks.id, chunks.content, chunks.heading, chunks.metadata, documents.path
-       FROM graph_nodes
-       INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
-       INNER JOIN documents ON documents.id = chunks.document_id
-       WHERE graph_nodes.type = 'symbol'
-         AND graph_nodes.label IN (${forms.map(() => "?").join(",")})
-       ORDER BY documents.path, chunks.id`,
-      forms,
-    );
+    const rows = await findSymbolNodes(repo, token);
     if (rows.length > MAX_EXACT_SYMBOL_NODES) continue;
     for (const row of rows) {
       const path = String(row.path);
@@ -341,18 +356,24 @@ async function relationSearch(rootPath: string, query: string): Promise<ChunkHit
   const name = (callerMatch ?? calleeMatch)?.[1];
   if (!name) return [];
 
-  const forms = [name, name.replaceAll(".", "::"), name.replaceAll("::", ".")];
   const repo = createWorkspaceRepository(rootPath);
-  const targets = await repo.queryRaw(
-    `SELECT graph_nodes.id, documents.path
-     FROM graph_nodes
-     INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
-     INNER JOIN documents ON documents.id = chunks.document_id
-     WHERE graph_nodes.type = 'symbol' AND graph_nodes.label IN (?, ?, ?)`,
-    forms,
-  );
+  const targets = await findSymbolNodes(repo, name);
   if (targets.length !== 1) return [];
+  const target = targets[0]!;
 
+  // "what does X call" includes X's nested functions: their calls are part of X's behavior.
+  const sources = callerMatch
+    ? [target.node_id]
+    : (
+        await repo.queryRaw(
+          `SELECT graph_nodes.id FROM graph_nodes
+           INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
+           INNER JOIN documents ON documents.id = chunks.document_id
+           WHERE graph_nodes.type = 'symbol' AND documents.path = ?
+             AND (graph_nodes.id = ? OR graph_nodes.label GLOB ? OR graph_nodes.label GLOB ?)`,
+          [target.path, target.node_id, `${target.label}.*`, `${target.label}::*`],
+        )
+      ).map((row) => row.id);
   const [near, far] = callerMatch ? ["from_node_id", "to_node_id"] : ["to_node_id", "from_node_id"];
   const rows = await repo.queryRaw(
     `SELECT chunks.id, chunks.content, chunks.heading, chunks.metadata, documents.path
@@ -360,9 +381,10 @@ async function relationSearch(rootPath: string, query: string): Promise<ChunkHit
      INNER JOIN graph_nodes ON graph_nodes.id = graph_edges.${near}
      INNER JOIN chunks ON chunks.id = graph_nodes.ref_id
      INNER JOIN documents ON documents.id = chunks.document_id
-     WHERE graph_edges.type = 'calls' AND graph_edges.${far} = ? AND documents.path <> ?
+     WHERE graph_edges.type = 'calls' AND graph_edges.${far} IN (${sources.map(() => "?").join(",")})
+       AND documents.path <> ?
      ORDER BY documents.path, chunks.id`,
-    [String(targets[0]!.id), String(targets[0]!.path)],
+    [...sources, target.path],
   );
 
   const seenPaths = new Set<string>();
