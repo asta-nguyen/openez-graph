@@ -525,37 +525,19 @@ describe("indexWorkspace", () => {
     expect(elapsedMs).toBeLessThan(500);
   });
 
-  it("rechunks unchanged source when workspace chunking settings change", async () => {
-    const configPath = path.join(workspaceRoot, "brain.config.js");
-    const sourcePath = path.join(workspaceRoot, "long.ts");
-    const writeConfig = (targetTokens: number) =>
-      fs.writeFileSync(
-        configPath,
-        `const config = { chunking: { targetTokens: ${targetTokens}, overlapTokens: 0 } };\nexport default config;\n`,
-      );
-
-    writeConfig(256);
+  it("never executes a legacy brain.config file from the indexed repository", async () => {
+    const marker = path.join(workspaceRoot, "config-code-ran.txt");
     fs.writeFileSync(
-      sourcePath,
-      `export function long() {\n${"  console.log('chunking');\n".repeat(240)}}\n`,
+      path.join(workspaceRoot, "brain.config.ts"),
+      `Bun.write(${JSON.stringify(marker)}, "ran");\nexport default { retrieval: {} };\n`,
     );
+    fs.writeFileSync(path.join(workspaceRoot, "a.ts"), "export const a = 1;\n");
     const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
 
     await indexWorkspace({ workspaceId: workspace.id });
-    const repo = createWorkspaceRepository(workspaceRoot);
-    const document = await repo.getDocumentByPath("long.ts");
-    const initialChunks = await repo.getChunksByDocument(document!.id);
+    await Bun.sleep(50);
 
-    writeConfig(64);
-    const changedConfigRun = await indexWorkspace({ workspaceId: workspace.id });
-    const rechunked = await repo.getChunksByDocument(document!.id);
-
-    expect(changedConfigRun.filesUpdated).toBeGreaterThanOrEqual(2);
-    expect(rechunked.length).toBeGreaterThan(initialChunks.length);
-    expect(Math.max(...rechunked.map((chunk) => chunk.tokenCount))).toBeLessThanOrEqual(64);
-
-    const unchangedRun = await indexWorkspace({ workspaceId: workspace.id });
-    expect(unchangedRun.filesUpdated).toBe(0);
+    expect(fs.existsSync(marker)).toBe(false);
   });
 
   it("never modifies agent instructions while indexing or reindexing", async () => {

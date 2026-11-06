@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 
-import { getBrainSettings, loadBrainConfig } from "@openez-graph/config";
+import { getDefaultSettings } from "@openez-graph/config";
 import { fastTokenCounter, type TokenCounter } from "@openez-graph/core";
 import {
   createRegistryRepository,
@@ -539,6 +539,19 @@ async function parseInline(
   return results;
 }
 
+// brain.config.* used to be evaluated as code, which let an indexed repository run code on this
+// machine. It is no longer read; tell users who still have one where their settings went.
+const LEGACY_CONFIG_FILES = ["brain.config.ts", "brain.config.js", "brain.config.mjs"];
+function warnLegacyBrainConfig(rootPath: string): void {
+  const legacy = LEGACY_CONFIG_FILES.find((name) => fsSync.existsSync(path.join(rootPath, name)));
+  if (legacy) {
+    console.error(
+      `[openez] ${legacy} is no longer read (config files are never executed). ` +
+        "List paths to skip in .openezignore instead.",
+    );
+  }
+}
+
 export async function indexWorkspace(input: {
   workspaceId?: string;
   rootPath?: string;
@@ -614,15 +627,10 @@ export async function indexWorkspace(input: {
     await writeLocalWorkspaceConfig(workspace);
 
     const repo = createWorkspaceRepository(workspace.rootPath);
-    const settings = await getBrainSettings(workspace.rootPath);
-    const config = await loadBrainConfig(workspace.rootPath);
-    const configuredWorkspace = config.workspaces?.find(
-      (candidate) =>
-        candidate.id === workspace.id ||
-        path.resolve(candidate.root) === path.resolve(workspace.rootPath),
-    );
-    const includeGlobs = workspace.includeGlobs || configuredWorkspace?.include.join("\n") || "";
-    const excludeGlobs = workspace.excludeGlobs || configuredWorkspace?.exclude.join("\n") || "";
+    const settings = getDefaultSettings();
+    warnLegacyBrainConfig(workspace.rootPath);
+    const includeGlobs = workspace.includeGlobs || "";
+    const excludeGlobs = workspace.excludeGlobs || "";
     const runMode = input.mode ?? "incremental";
     const chunkingFingerprint = hashContent(JSON.stringify(settings.chunking));
     const forceRechunk =
@@ -1114,7 +1122,7 @@ export async function buildGraphGeneration(
   const _graphStart = Date.now();
 
   const repo = createWorkspaceRepository(rootPath);
-  const settings = await getBrainSettings(rootPath);
+  const settings = getDefaultSettings();
   const targetTokens = settings.chunking.targetTokens;
   const overlapTokens = settings.chunking.overlapTokens;
 

@@ -3,11 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { codeQuery } from "../packages/core/src/retrieval";
+import { codeQuery, graphExpand } from "../packages/core/src/retrieval";
 import {
   closeAllWorkspaceDbs,
   closeRegistryDb,
   createRegistryRepository,
+  createWorkspaceRepository,
 } from "../packages/db/src/sqlite";
 import { ensureGraphReady } from "../packages/indexer/src/graph-service";
 import { indexWorkspace } from "../packages/indexer/src/index-workspace";
@@ -37,20 +38,16 @@ function write(file: string, content: string) {
   fs.writeFileSync(path.join(workspaceRoot, file), content);
 }
 
+// The single graph neighbor (limit 1) of the `start` symbol in seed.ts.
 async function oneNeighborQuery() {
-  write(
-    "brain.config.js",
-    "export default { retrieval: { vectorLimit: 20, textLimit: 20, graphHops: 1, maxGraphNeighbors: 1, finalLimit: 10, maxContextTokens: 8000 } };\n",
-  );
   const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
   await indexWorkspace({ workspaceId: workspace.id });
-  const result = await codeQuery({
-    workspaceId: workspace.id,
-    query: "start",
-    recordMetrics: false,
-    ensureGraph: ensureGraphReady,
-  });
-  return result.sources.map((source) => source.path).filter((p) => p !== "seed.ts");
+  await ensureGraphReady(workspace.id);
+  const [seed] = await createWorkspaceRepository(workspaceRoot).queryRaw(
+    "SELECT ref_id FROM graph_nodes WHERE type = 'symbol' AND label = 'start'",
+  );
+  const neighbors = await graphExpand(workspaceRoot, [String(seed!.ref_id)], 1, 1);
+  return neighbors.map((hit) => hit.path);
 }
 
 describe("graphExpand neighbor ordering", () => {
@@ -70,6 +67,38 @@ describe("graphExpand neighbor ordering", () => {
     }
 
     expect(await oneNeighborQuery()).toEqual(["leaf.ts"]);
+  });
+
+  it("keeps a document's pre-graph rank when graph neighbors are boosted", async () => {
+    // guide.md leads the text ranking; four code files fill the seed slots; helper.ts matches
+    // weakly (rank 6) but is called by a seed, so the graph boost lifts it above the guide.
+    write("guide.md", `# Ledger settlement guide\n\n${"ledger settlement guide ".repeat(8)}\n`);
+    write(
+      "c1.ts",
+      'import { helperStep } from "./helper";\nexport function c1() { return helperStep() + "ledger settlement ledger settlement"; }\n',
+    );
+    for (const n of [2, 3, 4]) {
+      write(
+        `c${n}.ts`,
+        `export function c${n}() { return "ledger settlement ledger settlement ${n}"; }\n`,
+      );
+    }
+    write("helper.ts", 'export function helperStep() { return "ledger"; }\n');
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+    const run = (graph: boolean) =>
+      codeQuery({
+        workspaceId: workspace.id,
+        query: "ledger settlement guide",
+        recordMetrics: false,
+        ...(graph ? { ensureGraph: ensureGraphReady } : { skipGraphExpand: true as const }),
+      });
+
+    const before = (await run(false)).sources.map((s) => s.path);
+    const after = (await run(true)).sources.map((s) => s.path);
+    expect(before).toEqual(["guide.md", "c2.ts", "c3.ts", "c4.ts", "c1.ts", "helper.ts"]);
+    expect(after[0]).toBe("guide.md");
+    expect(after[1]).toBe("helper.ts"); // the graph still lifts code, just not above the guide
   });
 
   it("breaks equal-degree ties by path", async () => {

@@ -1,0 +1,7 @@
+# Archived agent-devkit plans describe superseded designs; keep them out of search.
+docs/agent-devkit/changes/archive/
+
+# Parser and benchmark fixtures are test data, not product code. Benchmark questions and
+# answers must not be retrievable, or the benchmark grades itself.
+tests/fixtures/
+BENCHMARK.md

@@ -1,4 +1,4 @@
-import { getBrainSettings } from "@openez-graph/config";
+import { getDefaultSettings } from "@openez-graph/config";
 import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
 
 import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
@@ -180,6 +180,7 @@ async function vectorSearch(rootPath: string, query: string, limit: number): Pro
   }
 }
 
+const DOCUMENT_PATH = /\.(?:md|mdx|markdown)$/i;
 const MAX_EXACT_SYMBOL_NODES = 5;
 const IDENTIFIER_TOKEN = /[A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)*/g;
 
@@ -291,7 +292,7 @@ async function relationSearch(rootPath: string, query: string): Promise<ChunkHit
   });
 }
 
-async function graphExpand(
+export async function graphExpand(
   rootPath: string,
   seedIds: string[],
   depth: number,
@@ -405,7 +406,7 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
     throw new Error(`Workspace '${input.workspaceId}' not found`);
   }
 
-  const settings = await getBrainSettings(workspace.rootPath);
+  const settings = getDefaultSettings();
   const retrieval = settings.retrieval;
   const finalLimit = input.limit ?? retrieval.finalLimit;
   const maxTokens = input.maxTokens ?? retrieval.maxContextTokens;
@@ -451,6 +452,7 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
       retrieval.maxGraphNeighbors,
     );
     const fusedItemsByPath = new Map(fused.map((entry) => [entry.item.path, entry.item]));
+    const beforeGraph = fused;
 
     fused = reciprocalRankFusion(
       [
@@ -464,6 +466,18 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
       [1, 0.25],
       (item) => item.path,
     );
+
+    // The graph only links code, so its boost would push every document down. Documents keep
+    // their pre-graph rank; code is reordered by the graph in the remaining slots.
+    const pinned = beforeGraph.flatMap((entry, index) =>
+      DOCUMENT_PATH.test(entry.item.path) ? [{ entry, index }] : [],
+    );
+    if (pinned.length > 0) {
+      const pinnedPaths = new Set(pinned.map(({ entry }) => entry.item.path));
+      const reordered = fused.filter((entry) => !pinnedPaths.has(entry.item.path));
+      for (const { entry, index } of pinned) reordered.splice(index, 0, entry);
+      fused = reordered;
+    }
   }
 
   // A relation question is answered by the graph, so its callers/callees lead the ranking.

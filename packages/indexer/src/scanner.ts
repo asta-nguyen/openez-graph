@@ -1,7 +1,7 @@
 import fg from "fast-glob";
 import fsAsync from "node:fs/promises";
 import path from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 // @ts-expect-error — picomatch v4 ships no type declarations
 import picomatch from "picomatch";
@@ -57,28 +57,76 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   "**/pnpm-lock.yaml",
   "**/package-lock.json",
   "**/yarn.lock",
+  // Secrets: indexed text can be returned to an agent and sent to its model provider. Only
+  // config extensions, so source files such as secrets.ts stay searchable.
+  "**/*credentials*.{json,yaml,yml,toml}",
+  "**/*secret*.{json,yaml,yml,toml}",
+  "**/service-account*.json",
 ];
 
-function loadGitignore(rootPath: string): string[] {
-  const gitignorePath = path.join(rootPath, ".gitignore");
+// Written by `openez init` / `openez setup` when a project has no .openezignore yet. Only
+// patterns the scanner does not already skip (DEFAULT_EXCLUDE_PATTERNS, .gitignore, hidden dirs).
+const DEFAULT_OPENEZIGNORE = `# Paths OpenEZ should not index. Same syntax as .gitignore; edit freely.
+# Already skipped without listing: .gitignore matches, hidden directories,
+# node_modules, dist, build, coverage, target, and lock files.
+
+# Vendored dependencies
+vendor/
+venv/
+Pods/
+bower_components/
+
+# Build output and generated code
+out/
+obj/
+*.min.js
+*.min.css
+*.pb.go
+*_pb2.py
+*.generated.*
+
+# Test snapshots
+__snapshots__/
+
+# Archived agent plans describe superseded designs
+docs/agent-devkit/changes/archive/
+`;
+
+/** Creates `<root>/.openezignore` with common patterns; returns false when one already exists. */
+export function ensureOpenezIgnore(rootPath: string): boolean {
+  const filePath = path.join(rootPath, ".openezignore");
+  if (existsSync(filePath)) return false;
+  writeFileSync(filePath, DEFAULT_OPENEZIGNORE, { flag: "wx" });
+  return true;
+}
+
+// .gitignore-style file at the workspace root: `.gitignore`, or `.openezignore` for paths that
+// stay in Git but should not be indexed (agent plans, archives, generated docs).
+function loadIgnoreFile(rootPath: string, fileName: string): string[] {
+  const gitignorePath = path.join(rootPath, fileName);
   if (!existsSync(gitignorePath)) return [];
 
   try {
     const content = readFileSync(gitignorePath, "utf8");
     if (!content) return [];
 
-    return content
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#"))
-      .flatMap((pattern) => {
-        const hasSlash = pattern.replace(/\/$/, "").includes("/");
-        const clean = pattern.replace(/^\//, "").replace(/\/$/, "");
-        if (hasSlash) {
-          return [clean, `${clean}/**`];
-        }
-        return [clean, `${clean}/**`, `**/${clean}`, `**/${clean}/**`];
-      });
+    return (
+      content
+        .split("\n")
+        .map((line) => line.trim())
+        // ponytail: re-include (`!pattern`) lines are dropped, not honored: as a picomatch pattern
+        // a leading `!` matches every other path and ignored the whole workspace. Honor them if a
+        // project needs to re-include something its own ignore file excludes.
+        .filter((line) => line && !line.startsWith("#") && !line.startsWith("!"))
+        .flatMap((pattern) => {
+          const hasSlash = pattern.replace(/\/$/, "").includes("/");
+          const clean = pattern.replace(/^\//, "").replace(/\/$/, "");
+          if (hasSlash) {
+            return [clean, `${clean}/**`];
+          }
+          return [clean, `${clean}/**`, `**/${clean}`, `**/${clean}/**`];
+        })
+    );
   } catch {
     return [];
   }
@@ -94,7 +142,10 @@ export async function scanWorkspaceFiles(input: {
   exclude?: string;
 }): Promise<FileToIndex[]> {
   const rootPath = path.resolve(input.rootPath);
-  const gitignorePatterns = loadGitignore(rootPath);
+  const gitignorePatterns = [
+    ...loadIgnoreFile(rootPath, ".gitignore"),
+    ...loadIgnoreFile(rootPath, ".openezignore"),
+  ];
 
   const ignorePatterns = [
     ...DEFAULT_EXCLUDE_PATTERNS,

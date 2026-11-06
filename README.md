@@ -183,6 +183,14 @@ API keys are encrypted at rest with AES-256-GCM. The master key is stored at `~/
 
 Indexing never creates vectors. Full reindex replaces chunks and removes their vectors. Run `openez embed [path]` after indexing or reindexing; retrieval falls back to FTS + graph when the configured provider or active vectors are unavailable.
 
+## Ignoring files
+
+Indexing skips hidden directories, `.gitignore` matches, and paths listed in a root `.openezignore` (same syntax as `.gitignore`). `openez init` and `openez setup <agent>` create one with common patterns (vendored dependencies, minified and generated files, archived agent plans) when the project has none; edit it to skip anything else that stays in Git but should not be searched. The next `openez index` removes newly ignored files from the index.
+
+JSON, YAML, and TOML files named like credentials or secrets (`*credentials*`, `*secret*`, `service-account*.json`) are never indexed, so their contents cannot reach an agent. Source files such as `secrets.ts` are indexed as usual.
+
+OpenEZ has no per-project config file. A `brain.config.*` file is never read or executed.
+
 ## Management UI
 
 The web UI provides workspace status, query telemetry, document and memory inspection, benchmarks, and a graph explorer.

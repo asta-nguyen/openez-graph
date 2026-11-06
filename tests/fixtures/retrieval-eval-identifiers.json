@@ -36,8 +36,8 @@
     "expectedPaths": ["packages/indexer/src/embed-workspace.ts"]
   },
   {
-    "query": "getBrainSettings",
-    "expectedPaths": ["packages/config/src/load-brain-config.ts"]
+    "query": "getDefaultSettings",
+    "expectedPaths": ["packages/config/src/types.ts"]
   },
   {
     "query": "formatEmbeddingInput",

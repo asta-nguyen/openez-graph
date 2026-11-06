@@ -1,6 +1,6 @@
 [
   {
-    "query": "what calls getBrainSettings",
+    "query": "what calls getDefaultSettings",
     "expectedPaths": ["packages/core/src/retrieval.ts", "packages/indexer/src/index-workspace.ts"]
   },
   {
@@ -15,7 +15,7 @@
   {
     "query": "what does codeQuery call",
     "expectedPaths": [
-      "packages/config/src/load-brain-config.ts",
+      "packages/config/src/types.ts",
       "packages/core/src/rrf.ts",
       "packages/db/src/sqlite/registry-repository.ts",
       "packages/db/src/sqlite/workspace-repository.ts"
