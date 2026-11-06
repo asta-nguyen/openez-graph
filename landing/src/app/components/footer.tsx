@@ -13,6 +13,7 @@ const navLinks: { label: string; href: string; internal?: boolean }[] = [
   { label: "Docs", href: "https://github.com/asta-nguyen/openez-graph#readme" },
   { label: "CLI", href: "https://github.com/asta-nguyen/openez-graph#cli" },
   { label: "MCP", href: "/docs/mcp", internal: true },
+  { label: "Benchmark", href: "/benchmark", internal: true },
 ];
 
 // OpenEZ accent colors in linear RGB (0–1)

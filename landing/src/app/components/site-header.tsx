@@ -24,6 +24,9 @@ export function SiteHeader() {
           <a className="nav-link" href="/docs/mcp">
             Docs
           </a>
+          <a className="nav-link hidden sm:inline" href="/benchmark">
+            Benchmark
+          </a>
           <a
             href={REPO_URL}
             target="_blank"

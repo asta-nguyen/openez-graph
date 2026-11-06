@@ -401,6 +401,14 @@ export default async function LandingPage() {
                     <h3 className="text-sm font-semibold">{f.title}</h3>
                   </div>
                   <p className="text-sm leading-relaxed text-muted-foreground">{f.desc}</p>
+                  {f.title === "Hybrid RAG Retrieval" && (
+                    <a
+                      className="mt-3 inline-block text-sm text-primary hover:underline"
+                      href="/benchmark"
+                    >
+                      See the benchmark →
+                    </a>
+                  )}
                 </div>
               ))}
             </div>
