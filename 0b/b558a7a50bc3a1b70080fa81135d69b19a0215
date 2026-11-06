@@ -1,0 +1,47 @@
+apps/cli/src/agent-hooks.ts
+  s_54259471fd962a::t_3c4fce05501625 1-163
+tests/web-workspaces-endpoint.test.ts
+  s_54259471fd962a::t_a89a18ece613e2 109-141
+apps/cli/README.md
+  s_54259471fd962a::t_26e7372ba8b5b5 59
+  s_54259471fd962a::t_5276110ea945e5 60
+tests/agent-hooks.test.ts
+  s_54259471fd962a::t_9fb851b799f1cf 1-6,8-108,152-153
+  s_54259471fd962a::t_78077d9981e0d5 7,109-151
+apps/web/src/server/index.ts
+  s_54259471fd962a::t_07458f7f4e8b5e 57-78
+tests/setup-instructions.test.ts
+  s_54259471fd962a::t_a89a18ece613e2 121-134
+  s_54259471fd962a::t_508ab7e564ab36 139,144,146-162
+  s_54259471fd962a::t_f5c34f6289a925 135-138,140-143,145
+apps/cli/src/setup-devin.ts
+  s_54259471fd962a::t_508ab7e564ab36 5,63,70
+  s_54259471fd962a::t_8ea5b11a9443f0 57-61
+apps/cli/src/setup-codex.ts
+  s_54259471fd962a::t_508ab7e564ab36 5,66,73-74
+  s_54259471fd962a::t_8ea5b11a9443f0 63-64
+apps/cli/src/setup-claude.ts
+  s_54259471fd962a::t_8ea5b11a9443f0 58-62
+  s_54259471fd962a::t_9fb851b799f1cf 5
+  s_54259471fd962a::t_82a754afc59231 64,71
+apps/cli/src/setup-windsurf.ts
+  s_54259471fd962a::t_8ea5b11a9443f0 56-60
+apps/cli/src/setup-opencode.ts
+  s_54259471fd962a::t_8ea5b11a9443f0 57-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0bb558a7a50bc3a1b70080fa81135d69b19a0215",
+  "prompts": {},
+  "sessions": {
+    "s_54259471fd962a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "26ccf609-4006-483e-a474-ec5ad2575e9a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
