@@ -209,10 +209,6 @@ The web UI provides workspace status, query telemetry, document and memory inspe
 openez serve --web
 ```
 
-![Workspace overview](assets/workspace.png)
-
-![Graph explorer](assets/graph.png)
-
 ## Development
 
 ```bash
