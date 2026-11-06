@@ -1,0 +1,66 @@
+documents/PROJECT_OPERATIONS.md
+  s_54259471fd962a::t_a7e5e89be89e21 26,28
+packages/indexer/src/scanner.ts
+  s_54259471fd962a::t_6dc554a3a29913 60-64
+  s_54259471fd962a::t_000110a5de8926 113-129
+  s_54259471fd962a::t_84a4edb8b63e20 4,67-101
+  s_54259471fd962a::t_d5f32d2fa09365 103-106,145-148
+  s_54259471fd962a::t_89b635fcefeb44 102
+README.md
+  s_54259471fd962a::t_b82402894a27e3 190-191
+  s_54259471fd962a::t_a7e5e89be89e21 186-189,192
+  s_54259471fd962a::t_9eb0b7325bc110 193
+packages/core/src/retrieval.ts
+  s_54259471fd962a::t_16bde265cd1d56 295
+  s_54259471fd962a::t_cf1429774e5150 455
+  s_54259471fd962a::t_7d06265505b050 469-480
+  s_54259471fd962a::t_dc7b923f8ea32e 183
+  s_54259471fd962a::t_a31d97c22f2883 1,409
+apps/cli/src/cli.ts
+  s_54259471fd962a::t_3aec7e39ca2592 22,53-60,81,622-625
+tests/fixtures/retrieval-eval-identifiers.json
+  s_54259471fd962a::t_a0d0212fe05792 39-40
+tests/graph-expand-ranking.test.ts
+  s_54259471fd962a::t_4f80edca63f713 6,11,41,45-50
+  s_54259471fd962a::t_b7e7474bc86705 72,76,79,87-98,102-103
+  s_54259471fd962a::t_3c871df2917ddb 78,81-84,86,99,101
+  s_54259471fd962a::t_cdebbe3e3572cc 73-75,77,80,85,100
+tests/e2e-search.test.ts
+  s_54259471fd962a::t_1ab6bd9db492e8 230
+  s_54259471fd962a::t_16bde265cd1d56 248
+tests/scanner.test.ts
+  s_54259471fd962a::t_2fc2417454a0b3 91-98,103-113
+  s_54259471fd962a::t_f2309c5ecaaf0a 44-75
+  s_54259471fd962a::t_4b7c5a160d3650 76-90
+  s_54259471fd962a::t_28d8540a6ca08b 7,10-41
+  s_54259471fd962a::t_bd083dee4fee39 99-102
+  s_54259471fd962a::t_286e1c2d621691 42
+tests/index-workspace.test.ts
+  s_54259471fd962a::t_28d8540a6ca08b 528-529,531-532,534,538,540
+packages/indexer/src/index-workspace.ts
+  s_54259471fd962a::t_85f4124b01691b 542-554
+  s_54259471fd962a::t_a31d97c22f2883 6,630-633,1125
+.openezignore
+  s_54259471fd962a::t_2fce6529bf2f21 2
+  s_54259471fd962a::t_16bde265cd1d56 3,7
+  s_54259471fd962a::t_bcfde7446cea5a 1
+  s_54259471fd962a::t_112ef99ae760db 4-6
+tests/fixtures/retrieval-eval-relations.json
+  s_54259471fd962a::t_a0d0212fe05792 3,18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "988311cc697f7d8ad23a34cde888683baf9577d1",
+  "prompts": {},
+  "sessions": {
+    "s_54259471fd962a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "26ccf609-4006-483e-a474-ec5ad2575e9a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
