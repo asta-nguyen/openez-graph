@@ -1,5 +1,5 @@
 import { getDefaultSettings } from "@openez-graph/config";
-import { createRegistryRepository, createWorkspaceRepository } from "@openez-graph/db";
+import { createRegistryRepository, createWorkspaceRepository, queryTerms } from "@openez-graph/db";
 
 import { embeddingStorageModel, formatEmbeddingInput, getEmbeddingProvider } from "./embeddings";
 import type { EmbeddingProvider } from "./embeddings";
@@ -231,6 +231,97 @@ async function exactSymbolSearch(rootPath: string, query: string): Promise<Chunk
   return hits;
 }
 
+const FILE_NAME_LIMIT = 10;
+const COMMON_FILE_NAME_FILES = 2;
+
+// Words of a path segment: camelCase, snake_case, kebab-case and dots split, lowercased.
+const pathWords = (segment: string) =>
+  segment
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 2);
+
+// A query term names a path word when they are equal, or when both have four or more letters and
+// one starts with the other: "authentication" ~ "auth", "token" ~ "tokenizer", "provid" ~ "provider".
+const namesWord = (term: string, word: string) =>
+  term === word ||
+  (term.length >= 4 && word.length >= 4 && (word.startsWith(term) || term.startsWith(word)));
+
+// Files whose name the question spells out ("React Query client" -> lib/query/queryClient.ts),
+// ranked by how much of the file name it covers. Graphify scores node and file names far above
+// body text; BM25 alone lets long files that repeat the words win. A name identifies a file only
+// when it is nearly unique, so one shared by more than two files (types, index, page) counts only
+// when its directory is named too, and a partly covered name needs two matching words (one
+// generic word such as "core" does not pick out mcp-core.ts).
+async function fileNameSearch(rootPath: string, query: string): Promise<ChunkHit[]> {
+  const terms = queryTerms(query).map((term) => term.toLowerCase());
+  if (terms.length === 0) return [];
+
+  const repo = createWorkspaceRepository(rootPath);
+  const files = (await repo.queryRaw("SELECT path FROM documents")).map((row) => {
+    const filePath = String(row.path);
+    const segments = filePath.split("/");
+    const name = segments[segments.length - 1]!.replace(/\..*$/, "");
+    return {
+      path: filePath,
+      name: name.toLowerCase(),
+      nameWords: pathWords(name),
+      dirWords: pathWords(segments[segments.length - 2] ?? ""),
+    };
+  });
+  const nameCounts = new Map<string, number>();
+  for (const file of files) nameCounts.set(file.name, (nameCounts.get(file.name) ?? 0) + 1);
+
+  const named = (words: string[]) =>
+    words.filter((word) => terms.some((term) => namesWord(term, word))).length;
+  const matches = files.flatMap((file) => {
+    const nameHits = named(file.nameWords);
+    const dirHits = named(file.dirWords);
+    const coverage = file.nameWords.length === 0 ? 0 : nameHits / file.nameWords.length;
+    if (coverage < 0.5 || (coverage < 1 && nameHits < 2)) return [];
+    if ((nameCounts.get(file.name) ?? 0) > COMMON_FILE_NAME_FILES && dirHits === 0) return [];
+    return [{ path: file.path, coverage, nameHits, dirHits }];
+  });
+  matches.sort(
+    (a, b) =>
+      b.coverage - a.coverage ||
+      b.nameHits - a.nameHits ||
+      b.dirHits - a.dirHits ||
+      a.path.length - b.path.length ||
+      a.path.localeCompare(b.path),
+  );
+  const top = matches.slice(0, FILE_NAME_LIMIT).map((match) => match.path);
+  if (top.length === 0) return [];
+
+  // Each file is represented by its first chunk.
+  const rows = await repo.queryRaw(
+    `SELECT chunks.id, chunks.content, chunks.heading, chunks.metadata, documents.path
+     FROM chunks
+     INNER JOIN documents ON documents.id = chunks.document_id
+     WHERE documents.path IN (${top.map(() => "?").join(",")})
+       AND chunks.chunk_index = (
+         SELECT MIN(first.chunk_index) FROM chunks AS first WHERE first.document_id = chunks.document_id
+       )`,
+    top,
+  );
+  const byPath = new Map(rows.map((row) => [String(row.path), row]));
+  return top.flatMap((filePath) => {
+    const row = byPath.get(filePath);
+    if (!row) return [];
+    return [
+      {
+        id: String(row.id),
+        path: filePath,
+        content: String(row.content),
+        score: 1,
+        heading: row.heading ? String(row.heading) : null,
+        metadata: safeParseJson(String(row.metadata ?? "{}"), {}),
+      },
+    ];
+  });
+}
+
 const IDENT = String.raw`([A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)*)`;
 const CALLER_QUERIES = [
   new RegExp(String.raw`^(?:what|who|which \w+) (?:calls|uses|invokes) ${IDENT}\??$`, "i"),
@@ -420,22 +511,25 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
   // The graph must be current before the exact-symbol lookup. The callback is injected
   // by the caller (MCP/web) to avoid a core→indexer package cycle.
   if (!input.skipGraphExpand) await input.ensureGraph(input.workspaceId);
-  const [ftsResults, vectorResults, exactResults, relationResults] = await Promise.all([
-    repo.fullTextSearch(input.query, retrieval.textLimit),
-    vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit),
-    exactSymbolSearch(workspace.rootPath, input.query),
-    relationSearch(workspace.rootPath, input.query),
-  ]);
+  const [ftsResults, vectorResults, exactResults, fileNameResults, relationResults] =
+    await Promise.all([
+      repo.fullTextSearch(input.query, retrieval.textLimit),
+      vectorSearch(workspace.rootPath, input.query, retrieval.vectorLimit),
+      exactSymbolSearch(workspace.rootPath, input.query),
+      fileNameSearch(workspace.rootPath, input.query),
+      relationSearch(workspace.rootPath, input.query),
+    ]);
   console.error(
     `[retrieval] results: fts=${ftsResults.length} vector=${vectorResults.length} exact=${exactResults.length}`,
   );
 
-  // RRF fusion: FTS 2x, vector 1x, exact symbol 3x. Vector can boost files FTS ranked low;
-  // a chunk that defines a queried identifier outranks ones that merely mention it.
+  // RRF fusion: FTS 2x, vector 1x, exact symbol 3x, file name 2x. Vector can boost files FTS
+  // ranked low; a chunk that defines a queried identifier outranks ones that merely mention it.
   const lists = [
     { results: ftsResults, weight: 2 },
     { results: vectorResults, weight: 1 },
     { results: exactResults, weight: 3 },
+    { results: fileNameResults, weight: 2 },
   ].filter((list) => list.results.length > 0);
   let fused = reciprocalRankFusion(
     lists.map((list) => list.results.map((item) => ({ item, score: item.score }))),

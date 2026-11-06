@@ -18,12 +18,11 @@ export function safeParseJson<T>(value: string | undefined, fallback: T): T {
 }
 
 /**
- * Sanitize a user query for FTS5 MATCH.
- * Splits into terms, strips FTS5 special characters, and joins with OR
- * so multi-word queries match any term (broader recall for code search).
- * Falls back to prefix matching for partial words.
+ * The search terms of a user query: words and numbers without question/filler stopwords,
+ * plain lowercase words reduced to a stem, deduplicated in query order. Shared by the FTS query
+ * and the file-name match so both read a question the same way.
  */
-export function sanitizeFtsQuery(query: string): string {
+export function queryTerms(query: string): string[] {
   const stopwords = new Set([
     "a",
     "an",
@@ -57,10 +56,20 @@ export function sanitizeFtsQuery(query: string): string {
     (t) => t.length > 1 && !stopwords.has(t.toLowerCase()),
   );
 
-  if (terms.length === 0) return "";
+  return [...new Set(terms.map(stem))];
+}
 
+/**
+ * Sanitize a user query for FTS5 MATCH.
+ * Splits into terms, strips FTS5 special characters, and joins with OR
+ * so multi-word queries match any term (broader recall for code search).
+ * Falls back to prefix matching for partial words.
+ */
+export function sanitizeFtsQuery(query: string): string {
   // Use prefix matching (*) for each term, joined with OR
-  return [...new Set(terms.map(stem))].map((term) => `"${term}"*`).join(" OR ");
+  return queryTerms(query)
+    .map((term) => `"${term}"*`)
+    .join(" OR ");
 }
 
 /**
