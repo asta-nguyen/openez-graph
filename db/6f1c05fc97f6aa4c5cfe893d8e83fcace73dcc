@@ -1,0 +1,29 @@
+landing/src/app/sitemap.ts
+  s_54259471fd962a::t_bcb23d81119927 23-28
+landing/src/app/components/footer.tsx
+  s_54259471fd962a::t_bcb23d81119927 16
+landing/src/app/benchmark/page.tsx
+  s_54259471fd962a::t_45372d5e6a107a 129
+  s_54259471fd962a::t_8b5126c9a09262 105,109,169,182-183
+  s_54259471fd962a::t_bcb23d81119927 1-104,106-108,110-128,130-168,170-181,184-268
+landing/src/app/components/site-header.tsx
+  s_54259471fd962a::t_bcb23d81119927 27-29
+landing/src/app/page.tsx
+  s_54259471fd962a::t_bcb23d81119927 404-411
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "db6f1c05fc97f6aa4c5cfe893d8e83fcace73dcc",
+  "prompts": {},
+  "sessions": {
+    "s_54259471fd962a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "26ccf609-4006-483e-a474-ec5ad2575e9a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
