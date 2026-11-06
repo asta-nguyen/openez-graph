@@ -1,0 +1,38 @@
+[
+  {
+    "query": "what calls create_token",
+    "expectedPaths": ["crates/daemon/src/main.rs"]
+  },
+  {
+    "query": "what calls encode_output",
+    "expectedPaths": ["crates/daemon/src/server.rs"]
+  },
+  {
+    "query": "what calls connect_or_spawn",
+    "expectedPaths": ["apps/desktop/src-tauri/src/bridge.rs"]
+  },
+  {
+    "query": "what uses startQuerySync",
+    "expectedPaths": ["apps/desktop/src/App.tsx"]
+  },
+  {
+    "query": "what uses sessionService",
+    "expectedPaths": [
+      "apps/desktop/src/features/sessions/queries.ts",
+      "apps/desktop/src/features/terminal/TerminalView.tsx",
+      "apps/desktop/src/features/terminal/TerminalWorkspace.tsx"
+    ]
+  },
+  {
+    "query": "what uses usageTone",
+    "expectedPaths": ["apps/desktop/src/features/sessions/SessionItems.tsx"]
+  },
+  {
+    "query": "what does startQuerySync call",
+    "expectedPaths": ["apps/desktop/src/queryClient.ts"]
+  },
+  {
+    "query": "what does create_token call",
+    "expectedPaths": ["crates/daemon/src/paths.rs"]
+  }
+]

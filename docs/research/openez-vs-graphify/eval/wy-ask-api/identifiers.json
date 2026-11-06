@@ -1,0 +1,15 @@
+[
+  { "query": "build_agent", "expectedPaths": ["src/agents/build.py"] },
+  { "query": "search_documents", "expectedPaths": ["src/agents/tools.py"] },
+  { "query": "get_current_user", "expectedPaths": ["src/core/auth.py"] },
+  { "query": "EmailEventEmitter", "expectedPaths": ["src/email/event_emitter.py"] },
+  { "query": "RagRetriever", "expectedPaths": ["src/domains/chat/rag_retriever.py"] },
+  { "query": "ConfigSettings", "expectedPaths": ["src/core/config.py"] },
+  { "query": "tenant_limited", "expectedPaths": ["src/tasks/fairness.py"] },
+  { "query": "rrf_fuse", "expectedPaths": ["src/domains/chat/rag_retriever.py"] },
+  {
+    "query": "require_tenant_scope",
+    "expectedPaths": ["src/domains/chat/rag_retriever.py"]
+  },
+  { "query": "acquire_tenant_slot", "expectedPaths": ["src/tasks/fairness.py"] }
+]

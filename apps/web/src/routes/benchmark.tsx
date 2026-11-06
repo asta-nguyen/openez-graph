@@ -23,6 +23,27 @@ export const Route = createFileRoute("/benchmark")({
   component: BenchmarkPage,
 });
 
+// Dated snapshot from BENCHMARK.md: Recall@5 / MRR, no embeddings, Graphify 0.9.103 --code-only.
+const COMPARISON = [
+  { corpus: "Rust + TS desktop app", suite: "Concept", openez: ".40 / .37", graphify: ".53 / .27" },
+  { corpus: "", suite: "Identifiers", openez: "1.00 / 1.00", graphify: "1.00 / 1.00" },
+  { corpus: "", suite: "Relations", openez: "1.00 / .94", graphify: ".50 / .16" },
+  { corpus: "", suite: "Documentation", openez: ".86 / .78", graphify: "N/A" },
+  {
+    corpus: "Python FastAPI service",
+    suite: "Concept",
+    openez: ".91 / .71",
+    graphify: ".45 / .31",
+  },
+  { corpus: "", suite: "Identifiers", openez: "1.00 / 1.00", graphify: ".80 / .80" },
+  { corpus: "", suite: "Relations", openez: ".75 / .75", graphify: ".50 / .28" },
+  { corpus: "", suite: "Documentation", openez: ".50 / .50", graphify: "N/A" },
+  { corpus: "TS Next.js frontend", suite: "Concept", openez: ".89 / .69", graphify: ".78 / .37" },
+  { corpus: "", suite: "Identifiers", openez: "1.00 / 1.00", graphify: ".89 / .89" },
+  { corpus: "", suite: "Relations", openez: ".75 / .75", graphify: ".75 / .25" },
+  { corpus: "", suite: "Documentation", openez: ".80 / .80", graphify: "N/A" },
+];
+
 function BenchmarkPage() {
   const { data: metrics, isLoading, error } = useQuery(metricsQueryOptions());
 
@@ -137,6 +158,49 @@ function BenchmarkPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>OpenEZ and Graphify</CardTitle>
+          <CardDescription>
+            Recall@5 / MRR, measured 2026-11-06 without embeddings. Graphify 0.9.103 ran with
+            --code-only, so it made no LLM calls and indexed no documentation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Corpus</TableHead>
+                <TableHead>Questions</TableHead>
+                <TableHead className="text-right">OpenEZ</TableHead>
+                <TableHead className="text-right">Graphify</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {COMPARISON.map((row, index) => (
+                <TableRow key={index}>
+                  <TableCell className="font-medium">{row.corpus}</TableCell>
+                  <TableCell>{row.suite}</TableCell>
+                  <TableCell className="text-right tabular-nums">{row.openez}</TableCell>
+                  <TableCell className="text-right tabular-nums">{row.graphify}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              The Python and Next.js numbers are optimistic: OpenEZ&apos;s ranking was improved
+              using those questions. The desktop app&apos;s concept questions were written first and
+              never tuned against, so they are the fairest row.
+            </p>
+            <p>
+              Suites hold 4 to 15 questions, so small differences are noise. Warm query latency is
+              comparable. These numbers are a snapshot and do not come from this workspace.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

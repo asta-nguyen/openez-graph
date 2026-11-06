@@ -1,0 +1,23 @@
+[
+  { "query": "ApiError", "expectedPaths": ["lib/api/client.ts"] },
+  { "query": "createApiClient", "expectedPaths": ["lib/api/client.ts"] },
+  {
+    "query": "useEnvelope",
+    "expectedPaths": ["features/envelope/useEnvelope.ts"]
+  },
+  {
+    "query": "useEnvelopeStore",
+    "expectedPaths": ["stores/useEnvelopeStore.ts"]
+  },
+  {
+    "query": "AuthProvider",
+    "expectedPaths": ["providers/AuthProvider.tsx"]
+  },
+  { "query": "cn", "expectedPaths": ["utils/cn.ts"] },
+  { "query": "getReceiverToken", "expectedPaths": ["lib/token.ts"] },
+  { "query": "withFreshToken", "expectedPaths": ["lib/api/client.ts"] },
+  {
+    "query": "isSessionAgnosticEndpoint",
+    "expectedPaths": ["lib/api/client.ts"]
+  }
+]

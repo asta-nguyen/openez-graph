@@ -1,0 +1,49 @@
+[
+  {
+    "query": "where is the FastAPI app factory and middleware configured?",
+    "expectedPaths": ["src/app.py"]
+  },
+  {
+    "query": "where is the chat agent built per request?",
+    "expectedPaths": ["src/agents/build.py"]
+  },
+  {
+    "query": "where does the chat agent retrieve document chunks for RAG?",
+    "expectedPaths": ["src/domains/chat/rag_retriever.py"]
+  },
+  {
+    "query": "where are the SAQ document pipeline tasks defined?",
+    "expectedPaths": ["src/tasks/documents.py"]
+  },
+  {
+    "query": "where is Supabase JWT authentication verified?",
+    "expectedPaths": ["src/core/auth.py"]
+  },
+  {
+    "query": "where is the Stripe webhook handled?",
+    "expectedPaths": ["src/api/routes/webhook.py"]
+  },
+  {
+    "query": "where are environment variables and feature flags bound?",
+    "expectedPaths": ["src/core/config.py"]
+  },
+  {
+    "query": "where is per-user document pipeline concurrency capped?",
+    "expectedPaths": ["src/tasks/fairness.py"]
+  },
+  {
+    "query": "where are lifecycle email events emitted?",
+    "expectedPaths": ["src/email/event_emitter.py"]
+  },
+  {
+    "query": "where are API routers registered?",
+    "expectedPaths": ["src/api/main.py"]
+  },
+  {
+    "query": "where is the document preflight pipeline step implemented?",
+    "expectedPaths": [
+      "src/pipeline/functions/documents/document_preflight.py",
+      "src/tasks/documents.py"
+    ]
+  }
+]

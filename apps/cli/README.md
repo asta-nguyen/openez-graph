@@ -163,16 +163,25 @@ and tracked in [issue #39](https://github.com/asta-nguyen/openez-graph/issues/39
 
 ## Retrieval quality
 
-Measured on 2026-08-10 against the openez codebase (180 files, 979 chunks, 17 fixture-backed
-queries):
+| Corpus                 | Suite       | OpenEZ      | Graphify    |
+| ---------------------- | ----------- | ----------- | ----------- |
+| Rust + TS desktop app  | concept     | .40 / .37   | .53 / .27   |
+|                        | identifiers | 1.00 / 1.00 | 1.00 / 1.00 |
+|                        | relations   | 1.00 / .94  | .50 / .16   |
+| Python FastAPI service | concept     | .91 / .71   | .45 / .31   |
+|                        | identifiers | 1.00 / 1.00 | .80 / .80   |
+|                        | relations   | .75 / .75   | .50 / .28   |
+| TS Next.js frontend    | concept     | .89 / .69   | .78 / .37   |
+|                        | identifiers | 1.00 / 1.00 | .89 / .89   |
+|                        | relations   | .75 / .75   | .75 / .25   |
 
-| Metric      | FTS only |
-| ----------- | -------: |
-| Recall@5    |   76.47% |
-| MRR         |   0.6564 |
-| Avg latency |  12.1 ms |
+Recall@5 / MRR, measured 2026-11-06 with no embeddings against Graphify 0.9.103 `--code-only`
+(no LLM calls). The Python and Next.js numbers are optimistic: OpenEZ's ranking was improved using
+those questions. The desktop app's concept suite is the fairest row, because it was written first
+and never tuned against; both tools miss most questions phrased differently from the code. Suites
+are small (4 to 15 questions), and warm query latency is comparable.
 
-FTS-only remains the default. Embedding comparison is opt-in and is not claimed by this baseline.
+FTS-only remains the default. Embedding comparison is opt-in and is not claimed by this benchmark.
 
 ```bash
 # Enable Ollama embeddings (bge-m3 recommended for code search)

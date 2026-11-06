@@ -1,0 +1,2691 @@
+{
+  "wy-ask-api": {
+    "lexical/concept": {
+      "evaluatedRuns": 11,
+      "recallAt5": 0.8181818181818182,
+      "mrr": 0.712121212121212,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 57.63895799999955,
+      "details": [
+        {
+          "query": "where is the FastAPI app factory and middleware configured?",
+          "firstRelevantRank": 2,
+          "latencyMs": 105.87820899999997,
+          "top5": [
+            "src/infra/storage/factory.py",
+            "src/app.py",
+            "src/domains/documents/embeddings/factory.py",
+            "src/agents/middleware.py",
+            "src/agents/build.py"
+          ]
+        },
+        {
+          "query": "where is the chat agent built per request?",
+          "firstRelevantRank": 1,
+          "latencyMs": 89.3384159999996,
+          "top5": [
+            "src/agents/build.py",
+            "AGENTS.md",
+            "src/agents/tool_manifest.py",
+            "docs/llm/AGENTS.md",
+            "src/api/routes/chat.py"
+          ]
+        },
+        {
+          "query": "where does the chat agent retrieve document chunks for RAG?",
+          "firstRelevantRank": 1,
+          "latencyMs": 127.10545899999988,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "src/domains/documents/chunking.py",
+            "docs/llm/workflows/chat-rag.md",
+            "src/domains/chat/retrieval_telemetry_sink.py",
+            "src/pipeline/functions/documents/document_chunk.py"
+          ]
+        },
+        {
+          "query": "where are the SAQ document pipeline tasks defined?",
+          "firstRelevantRank": 1,
+          "latencyMs": 57.63895799999955,
+          "top5": [
+            "src/tasks/documents.py",
+            "src/pipeline/__init__.py",
+            "src/agents/injection_classifier.py",
+            "src/core/errors/document.py",
+            "src/pipeline/functions/documents/document_prepare.py"
+          ]
+        },
+        {
+          "query": "where is Supabase JWT authentication verified?",
+          "firstRelevantRank": null,
+          "latencyMs": 20.228541999999834,
+          "top5": [
+            "src/core/config.py",
+            "src/schemas/supabase.py",
+            "ARCHITECTURE.md",
+            "src/core/errors/supabase.py",
+            "src/api/routes/documents.py"
+          ]
+        },
+        {
+          "query": "where is the Stripe webhook handled?",
+          "firstRelevantRank": 1,
+          "latencyMs": 26.286207999999533,
+          "top5": [
+            "src/api/routes/webhook.py",
+            "src/email/routes/webhooks.py",
+            "src/api/routes/payment.py",
+            "src/api/docs/webhook.py",
+            "src/domains/payments/payment_service.py"
+          ]
+        },
+        {
+          "query": "where are environment variables and feature flags bound?",
+          "firstRelevantRank": null,
+          "latencyMs": 90.93566700000065,
+          "top5": [
+            "scripts/ci/quarantine/gate.py",
+            "scripts/ci/quarantine/selftest_gate.py",
+            "scripts/eval/langfuse_store.py",
+            "scripts/ci/check_quarantine_shrink.py",
+            "scripts/ci/quarantine/skips.py"
+          ]
+        },
+        {
+          "query": "where is per-user document pipeline concurrency capped?",
+          "firstRelevantRank": 1,
+          "latencyMs": 90.92845799999941,
+          "top5": [
+            "src/tasks/fairness.py",
+            "src/core/errors/document.py",
+            "src/serve.py",
+            "src/domains/integrations/web/pipeline.py",
+            "AGENTS.md"
+          ]
+        },
+        {
+          "query": "where are lifecycle email events emitted?",
+          "firstRelevantRank": 1,
+          "latencyMs": 44.53016699999989,
+          "top5": [
+            "src/email/event_emitter.py",
+            "src/api/routes/chat_history.py",
+            "src/tasks/scheduled.py",
+            "src/models/email_event.py",
+            "src/email/scheduler.py"
+          ]
+        },
+        {
+          "query": "where are API routers registered?",
+          "firstRelevantRank": 3,
+          "latencyMs": 45.78850000000057,
+          "top5": [
+            "src/api/routes/advanced_analytics/__init__.py",
+            "src/agents/toolkit/api.py",
+            "src/api/main.py",
+            "src/email/routes/__init__.py",
+            "src/api/routes/admin.py"
+          ]
+        },
+        {
+          "query": "where is the document preflight pipeline step implemented?",
+          "firstRelevantRank": 1,
+          "latencyMs": 52.25354199999947,
+          "top5": [
+            "src/pipeline/functions/documents/document_preflight.py",
+            "src/pipeline/functions/documents/document_prepare.py",
+            "src/core/errors/document.py",
+            "src/tasks/documents.py",
+            "src/domains/integrations/web/pipeline.py"
+          ]
+        }
+      ]
+    },
+    "lexical/identifiers": {
+      "evaluatedRuns": 10,
+      "recallAt5": 1,
+      "mrr": 0.825,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 26.402415999999903,
+      "details": [
+        {
+          "query": "build_agent",
+          "firstRelevantRank": 1,
+          "latencyMs": 55.70979100000022,
+          "top5": [
+            "src/agents/build.py",
+            "src/agents/__init__.py",
+            "src/api/routes/chat.py",
+            "AGENTS.md",
+            "src/agents/envelope_listing.py"
+          ]
+        },
+        {
+          "query": "search_documents",
+          "firstRelevantRank": 1,
+          "latencyMs": 47.233541000000514,
+          "top5": [
+            "src/agents/tools.py",
+            "src/core/errors/document.py",
+            "src/domains/chat/rag_retriever.py",
+            "tests/eval/test_search_documents_wrapper.py",
+            "src/domains/documents/pdf_font_headings.py"
+          ]
+        },
+        {
+          "query": "get_current_user",
+          "firstRelevantRank": 2,
+          "latencyMs": 71.5365839999995,
+          "top5": [
+            "src/core/authorization.py",
+            "src/core/auth.py",
+            "src/api/routes/user.py",
+            "src/domains/users/user_service.py",
+            "src/api/routes/team.py"
+          ]
+        },
+        {
+          "query": "EmailEventEmitter",
+          "firstRelevantRank": 2,
+          "latencyMs": 7.280499999999847,
+          "top5": [
+            "src/domains/conversation_behavior/team_question_service.py",
+            "src/email/event_emitter.py",
+            "src/email/__init__.py",
+            "src/email/scheduler.py",
+            "src/email/event_processor.py"
+          ]
+        },
+        {
+          "query": "RagRetriever",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.983375000000706,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "src/domains/chat/small_corpus.py",
+            "src/domains/chat/retrieval_telemetry_sink.py",
+            "src/domains/documents/chunking.py",
+            "scripts/eval/calibrate_abstention_threshold.py"
+          ]
+        },
+        {
+          "query": "ConfigSettings",
+          "firstRelevantRank": 1,
+          "latencyMs": 6.4548750000003565,
+          "top5": [
+            "src/core/config.py",
+            "src/agents/output_tripwires.py",
+            "scripts/fetch_guard_model.py",
+            "scripts/ci/check_settings_parity.py",
+            "src/core/llm_models.py"
+          ]
+        },
+        {
+          "query": "tenant_limited",
+          "firstRelevantRank": 1,
+          "latencyMs": 26.402415999999903,
+          "top5": [
+            "src/tasks/fairness.py",
+            "src/tasks/web_source_render.py",
+            "src/agents/toolkit/api.py",
+            "src/domains/documents/content_repository.py",
+            "src/agents/tools.py"
+          ]
+        },
+        {
+          "query": "rrf_fuse",
+          "firstRelevantRank": 4,
+          "latencyMs": 8.758249999999862,
+          "top5": [
+            "scripts/eval/multichunk_bench.py",
+            "scripts/eval/measure_pdf_headings.py",
+            "scripts/eval/score_dense_and_fused.py",
+            "src/domains/chat/rag_retriever.py",
+            "scripts/eval/build_llm_rankings.py"
+          ]
+        },
+        {
+          "query": "require_tenant_scope",
+          "firstRelevantRank": 1,
+          "latencyMs": 40.24562500000047,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "src/domains/chat/small_corpus.py",
+            "src/domains/shares/share_repository.py",
+            "src/agents/tools.py",
+            "src/domains/chat/retrieval_telemetry_sink.py"
+          ]
+        },
+        {
+          "query": "acquire_tenant_slot",
+          "firstRelevantRank": 1,
+          "latencyMs": 17.557875000000422,
+          "top5": [
+            "src/tasks/fairness.py",
+            "src/email/rate_limiter.py",
+            "src/core/guard_gate.py",
+            "src/core/guard_service.py",
+            "scripts/verify_email_client.py"
+          ]
+        }
+      ]
+    },
+    "lexical/relations": {
+      "evaluatedRuns": 4,
+      "recallAt5": 0.5,
+      "mrr": 0.375,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 103.24008400000002,
+      "details": [
+        {
+          "query": "what calls build_agent",
+          "firstRelevantRank": null,
+          "latencyMs": 100.44604099999924,
+          "top5": [
+            "src/agents/build.py",
+            "src/agents/envelope_listing.py",
+            "src/agents/tool_manifest.py",
+            "AGENTS.md",
+            "docs/llm/AGENTS.md"
+          ]
+        },
+        {
+          "query": "what does build_agent call",
+          "firstRelevantRank": 3,
+          "latencyMs": 103.24008400000002,
+          "top5": [
+            "src/agents/build.py",
+            "src/agents/envelope_listing.py",
+            "src/agents/tool_manifest.py",
+            "AGENTS.md",
+            "docs/llm/AGENTS.md"
+          ]
+        },
+        {
+          "query": "what calls EmailEventEmitter",
+          "firstRelevantRank": 1,
+          "latencyMs": 62.897915999999896,
+          "top5": [
+            "src/domains/conversation_behavior/team_question_service.py",
+            "src/email/event_emitter.py",
+            "src/email/__init__.py",
+            "src/email/scheduler.py",
+            "docs/llm/integrations/email.md"
+          ]
+        },
+        {
+          "query": "what does search_documents call",
+          "firstRelevantRank": 6,
+          "latencyMs": 107.3427499999998,
+          "top5": [
+            "src/agents/address_decline.py",
+            "src/core/errors/document.py",
+            "src/domains/chat/rag_retriever.py",
+            "tests/eval/test_search_documents_wrapper.py",
+            "src/agents/tools.py"
+          ]
+        }
+      ]
+    },
+    "lexical/docs": {
+      "evaluatedRuns": 6,
+      "recallAt5": 0.5,
+      "mrr": 0.5,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 51.8936249999997,
+      "details": [
+        {
+          "query": "architecture overview and route topology",
+          "firstRelevantRank": 1,
+          "latencyMs": 132.23500000000058,
+          "top5": [
+            "docs/llm/architecture/overview.md",
+            "ARCHITECTURE.md",
+            "docs/llm/INDEX.md",
+            "docs/agent-devkit/plans/decision-log.md",
+            "docs/llm/domains/legal.md"
+          ]
+        },
+        {
+          "query": "how does the chat RAG workflow work",
+          "firstRelevantRank": 1,
+          "latencyMs": 51.8936249999997,
+          "top5": [
+            "docs/llm/workflows/chat-rag.md",
+            "docs/llm/INDEX.md",
+            "docs/llm/eval/ttft-ab.md",
+            "docs/llm/workflows/chat-guardrails.md",
+            "docs/agent-devkit/specs/2026-10-01-web-context-isolation-design.md"
+          ]
+        },
+        {
+          "query": "how are payments integrated",
+          "firstRelevantRank": 1,
+          "latencyMs": 29.400792000000365,
+          "top5": [
+            "docs/llm/integrations/payments.md",
+            "docs/llm/INDEX.md",
+            "docs/llm/operations/background-tasks.md",
+            "src/schemas/integrations.py",
+            "src/api/routes/integrations.py"
+          ]
+        },
+        {
+          "query": "how does the email platform work",
+          "firstRelevantRank": null,
+          "latencyMs": 38.327917000000525,
+          "top5": [
+            "src/schemas/lead_report.py",
+            "src/domains/analytics/analytics_service.py",
+            "scripts/compile_mjml.py",
+            "evalgate/runner.py",
+            "src/domains/advanced_analytics/lead_report/service.py"
+          ]
+        },
+        {
+          "query": "how is authentication handled",
+          "firstRelevantRank": null,
+          "latencyMs": 23.14587500000016,
+          "top5": [
+            "src/domains/integrations/web/renderer.py",
+            "src/email/template_resolver.py",
+            "src/api/routes/envelope.py",
+            "src/templates/emails/README.md",
+            "ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "setup instructions and environment variables",
+          "firstRelevantRank": null,
+          "latencyMs": 120.72387499999968,
+          "top5": [
+            "scripts/ci/quarantine/skips.py",
+            "scripts/ci/compare_runs.py",
+            "scripts/ci/quarantine/gate.py",
+            "scripts/ci/quarantine/selftest_gate.py",
+            "scripts/ci/run_like_ci.py"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/concept": {
+      "evaluatedRuns": 11,
+      "recallAt5": 0.9090909090909091,
+      "mrr": 0.7075757575757575,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 72.09787499999948,
+      "details": [
+        {
+          "query": "where is the FastAPI app factory and middleware configured?",
+          "firstRelevantRank": 5,
+          "latencyMs": 121.87708300000122,
+          "top5": [
+            "src/infra/storage/factory.py",
+            "src/agents/checkpointer.py",
+            "src/domains/documents/document_service.py",
+            "src/domains/chat/rag_retriever.py",
+            "src/app.py"
+          ]
+        },
+        {
+          "query": "where is the chat agent built per request?",
+          "firstRelevantRank": 1,
+          "latencyMs": 108.1755409999987,
+          "top5": [
+            "src/agents/build.py",
+            "AGENTS.md",
+            "src/api/routes/chat.py",
+            "docs/llm/AGENTS.md",
+            "src/api/routes/chat_streaming.py"
+          ]
+        },
+        {
+          "query": "where does the chat agent retrieve document chunks for RAG?",
+          "firstRelevantRank": 1,
+          "latencyMs": 143.72387499999968,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "src/domains/documents/chunking.py",
+            "docs/llm/workflows/chat-rag.md",
+            "src/domains/chat/small_corpus.py",
+            "src/domains/chat/retrieval_telemetry_sink.py"
+          ]
+        },
+        {
+          "query": "where are the SAQ document pipeline tasks defined?",
+          "firstRelevantRank": 1,
+          "latencyMs": 70.68716700000004,
+          "top5": [
+            "src/tasks/documents.py",
+            "src/pipeline/functions/documents/document_prepare.py",
+            "src/pipeline/helpers.py",
+            "src/domains/documents/document_service.py",
+            "src/pipeline/__init__.py"
+          ]
+        },
+        {
+          "query": "where is Supabase JWT authentication verified?",
+          "firstRelevantRank": 4,
+          "latencyMs": 29.69012499999917,
+          "top5": [
+            "src/core/config.py",
+            "src/api/routes/documents.py",
+            "ARCHITECTURE.md",
+            "src/core/auth.py",
+            "src/schemas/supabase.py"
+          ]
+        },
+        {
+          "query": "where is the Stripe webhook handled?",
+          "firstRelevantRank": 1,
+          "latencyMs": 37.146082999999635,
+          "top5": [
+            "src/api/routes/webhook.py",
+            "src/email/routes/webhooks.py",
+            "src/api/routes/payment.py",
+            "src/services/payments/stripe_service.py",
+            "src/api/docs/webhook.py"
+          ]
+        },
+        {
+          "query": "where are environment variables and feature flags bound?",
+          "firstRelevantRank": null,
+          "latencyMs": 130.9724580000002,
+          "top5": [
+            "scripts/ci/quarantine/gate.py",
+            "scripts/ci/quarantine/selftest_gate.py",
+            "scripts/eval/langfuse_store.py",
+            "scripts/ci/check_quarantine_shrink.py",
+            "scripts/ci/compare_runs.py"
+          ]
+        },
+        {
+          "query": "where is per-user document pipeline concurrency capped?",
+          "firstRelevantRank": 1,
+          "latencyMs": 121.61091699999997,
+          "top5": [
+            "src/tasks/fairness.py",
+            "src/serve.py",
+            "src/domains/integrations/web/pipeline.py",
+            "src/core/errors/document.py",
+            "AGENTS.md"
+          ]
+        },
+        {
+          "query": "where are lifecycle email events emitted?",
+          "firstRelevantRank": 1,
+          "latencyMs": 57.46033299999908,
+          "top5": [
+            "src/email/event_emitter.py",
+            "src/api/routes/chat_history.py",
+            "src/tasks/scheduled.py",
+            "src/models/email_event.py",
+            "src/email/scheduler.py"
+          ]
+        },
+        {
+          "query": "where are API routers registered?",
+          "firstRelevantRank": 3,
+          "latencyMs": 66.16404200000034,
+          "top5": [
+            "src/api/routes/advanced_analytics/__init__.py",
+            "src/agents/toolkit/api.py",
+            "src/api/main.py",
+            "src/email/routes/__init__.py",
+            "src/api/routes/admin.py"
+          ]
+        },
+        {
+          "query": "where is the document preflight pipeline step implemented?",
+          "firstRelevantRank": 1,
+          "latencyMs": 72.09787499999948,
+          "top5": [
+            "src/pipeline/functions/documents/document_preflight.py",
+            "src/pipeline/functions/documents/document_prepare.py",
+            "src/tasks/documents.py",
+            "src/domains/integrations/web/pipeline.py",
+            "src/domains/documents/document_service.py"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/identifiers": {
+      "evaluatedRuns": 10,
+      "recallAt5": 1,
+      "mrr": 1,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 40.782875000000786,
+      "details": [
+        {
+          "query": "build_agent",
+          "firstRelevantRank": 1,
+          "latencyMs": 68.58124999999927,
+          "top5": [
+            "src/agents/build.py",
+            "src/api/routes/chat.py",
+            "src/agents/envelope_listing.py",
+            "AGENTS.md",
+            "src/core/llm_models.py"
+          ]
+        },
+        {
+          "query": "search_documents",
+          "firstRelevantRank": 1,
+          "latencyMs": 66.95008400000006,
+          "top5": [
+            "src/agents/tools.py",
+            "src/domains/chat/rag_retriever.py",
+            "tests/eval/test_search_documents_wrapper.py",
+            "src/domains/documents/pdf_font_headings.py",
+            "src/core/errors/document.py"
+          ]
+        },
+        {
+          "query": "get_current_user",
+          "firstRelevantRank": 1,
+          "latencyMs": 91.43845900000088,
+          "top5": [
+            "src/core/auth.py",
+            "src/core/authorization.py",
+            "src/api/routes/user.py",
+            "src/domains/users/user_service.py",
+            "src/api/routes/team.py"
+          ]
+        },
+        {
+          "query": "EmailEventEmitter",
+          "firstRelevantRank": 1,
+          "latencyMs": 19.135874999999942,
+          "top5": [
+            "src/email/event_emitter.py",
+            "src/email/event_processor.py",
+            "src/domains/conversation_behavior/team_question_service.py",
+            "src/email/__init__.py",
+            "src/email/scheduler.py"
+          ]
+        },
+        {
+          "query": "RagRetriever",
+          "firstRelevantRank": 1,
+          "latencyMs": 21.064374999999927,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "src/domains/chat/small_corpus.py",
+            "src/domains/documents/chunking.py",
+            "src/domains/chat/retrieval_telemetry_sink.py",
+            "scripts/eval/calibrate_abstention_threshold.py"
+          ]
+        },
+        {
+          "query": "ConfigSettings",
+          "firstRelevantRank": 1,
+          "latencyMs": 20.25799999999981,
+          "top5": [
+            "src/core/config.py",
+            "src/agents/output_tripwires.py",
+            "scripts/ci/check_settings_parity.py",
+            "scripts/fetch_guard_model.py",
+            "src/core/llm_models.py"
+          ]
+        },
+        {
+          "query": "tenant_limited",
+          "firstRelevantRank": 1,
+          "latencyMs": 40.782875000000786,
+          "top5": [
+            "src/tasks/fairness.py",
+            "src/tasks/web_source_render.py",
+            "src/agents/tools.py",
+            "src/agents/toolkit/api.py",
+            "src/domains/documents/content_repository.py"
+          ]
+        },
+        {
+          "query": "rrf_fuse",
+          "firstRelevantRank": 1,
+          "latencyMs": 20.991374999999607,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "scripts/eval/multichunk_bench.py",
+            "scripts/eval/measure_pdf_headings.py",
+            "scripts/eval/score_dense_and_fused.py",
+            "scripts/eval/build_llm_rankings.py"
+          ]
+        },
+        {
+          "query": "require_tenant_scope",
+          "firstRelevantRank": 1,
+          "latencyMs": 50.3861250000009,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "src/domains/chat/small_corpus.py",
+            "src/agents/tools.py",
+            "src/core/errors/chat.py",
+            "tests/db/test_tenant_predicate_parity.py"
+          ]
+        },
+        {
+          "query": "acquire_tenant_slot",
+          "firstRelevantRank": 1,
+          "latencyMs": 27.709709000000657,
+          "top5": [
+            "src/tasks/fairness.py",
+            "src/email/rate_limiter.py",
+            "src/core/guard_gate.py",
+            "src/core/guard_service.py",
+            "scripts/verify_email_client.py"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/relations": {
+      "evaluatedRuns": 4,
+      "recallAt5": 0.75,
+      "mrr": 0.75,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 102.29766700000073,
+      "details": [
+        {
+          "query": "what calls build_agent",
+          "firstRelevantRank": 1,
+          "latencyMs": 105.01745800000026,
+          "top5": [
+            "src/api/routes/chat.py",
+            "src/domains/shares/share_escalation_service.py",
+            "tests/agents/test_build.py",
+            "tests/agents/test_calculate_group_binding.py",
+            "tests/agents/test_citation_middleware.py"
+          ]
+        },
+        {
+          "query": "what does build_agent call",
+          "firstRelevantRank": null,
+          "latencyMs": 102.29766700000073,
+          "top5": [
+            "src/agents/address_decline.py",
+            "src/agents/citation_middleware.py",
+            "src/agents/citation_nonce_middleware.py",
+            "src/agents/dangling_tool_calls.py",
+            "src/agents/empty_answer_retry.py"
+          ]
+        },
+        {
+          "query": "what calls EmailEventEmitter",
+          "firstRelevantRank": 1,
+          "latencyMs": 64.3486670000002,
+          "top5": [
+            "src/api/routes/_email_forms.py",
+            "src/api/routes/chat.py",
+            "src/api/routes/chat_history.py",
+            "src/api/routes/email.py",
+            "src/domains/conversation_behavior/team_question_service.py"
+          ]
+        },
+        {
+          "query": "what does search_documents call",
+          "firstRelevantRank": 1,
+          "latencyMs": 102.05075000000033,
+          "top5": [
+            "src/agents/search_scope.py",
+            "src/core/_citation_grammar.py",
+            "src/core/_citation_turn_context.py",
+            "src/core/citation_register.py",
+            "src/core/perf.py"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/docs": {
+      "evaluatedRuns": 6,
+      "recallAt5": 0.5,
+      "mrr": 0.5,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 43.72929100000147,
+      "details": [
+        {
+          "query": "architecture overview and route topology",
+          "firstRelevantRank": 1,
+          "latencyMs": 105.48833399999967,
+          "top5": [
+            "docs/llm/architecture/overview.md",
+            "ARCHITECTURE.md",
+            "docs/llm/INDEX.md",
+            "docs/agent-devkit/plans/decision-log.md",
+            "docs/llm/domains/legal.md"
+          ]
+        },
+        {
+          "query": "how does the chat RAG workflow work",
+          "firstRelevantRank": 1,
+          "latencyMs": 43.72929100000147,
+          "top5": [
+            "docs/llm/workflows/chat-rag.md",
+            "docs/llm/INDEX.md",
+            "docs/llm/eval/ttft-ab.md",
+            "docs/llm/workflows/chat-guardrails.md",
+            "docs/agent-devkit/specs/2026-10-01-web-context-isolation-design.md"
+          ]
+        },
+        {
+          "query": "how are payments integrated",
+          "firstRelevantRank": 1,
+          "latencyMs": 33.11504200000127,
+          "top5": [
+            "docs/llm/integrations/payments.md",
+            "docs/llm/INDEX.md",
+            "docs/llm/operations/background-tasks.md",
+            "src/schemas/integrations.py",
+            "src/api/routes/integrations.py"
+          ]
+        },
+        {
+          "query": "how does the email platform work",
+          "firstRelevantRank": null,
+          "latencyMs": 42.73479200000111,
+          "top5": [
+            "src/schemas/lead_report.py",
+            "scripts/compile_mjml.py",
+            "evalgate/runner.py",
+            "src/domains/advanced_analytics/lead_report/service.py",
+            "src/domains/analytics/analytics_service.py"
+          ]
+        },
+        {
+          "query": "how is authentication handled",
+          "firstRelevantRank": null,
+          "latencyMs": 30.3195829999986,
+          "top5": [
+            "src/domains/integrations/web/renderer.py",
+            "src/email/template_resolver.py",
+            "src/api/routes/envelope.py",
+            "src/templates/emails/README.md",
+            "ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "setup instructions and environment variables",
+          "firstRelevantRank": null,
+          "latencyMs": 107.49466699999903,
+          "top5": [
+            "scripts/ci/quarantine/skips.py",
+            "scripts/ci/compare_runs.py",
+            "scripts/ci/quarantine/selftest_gate.py",
+            "scripts/ci/run_like_ci.py",
+            "scripts/ci/quarantine/gate.py"
+          ]
+        }
+      ]
+    }
+  },
+  "wyask-fe": {
+    "lexical/concept": {
+      "evaluatedRuns": 9,
+      "recallAt5": 0.8888888888888888,
+      "mrr": 0.7222222222222222,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 12.851625000000013,
+      "details": [
+        {
+          "query": "where is the HTTP client with automatic token refresh?",
+          "firstRelevantRank": 1,
+          "latencyMs": 12.851625000000013,
+          "top5": [
+            "lib/api/client.ts",
+            "lib/token.ts",
+            "lib/connectors/client.ts",
+            "CLAUDE.md",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "where are receiver access tokens stored and cleared?",
+          "firstRelevantRank": 1,
+          "latencyMs": 13.929791999999964,
+          "top5": [
+            "lib/token.ts",
+            "features/behavior-response/storage.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Workspace/Storage.tsx",
+            "components/Envelope/EmbedEnvelopePage.tsx"
+          ]
+        },
+        {
+          "query": "where is the React Query client configured?",
+          "firstRelevantRank": 2,
+          "latencyMs": 13.348916000000031,
+          "top5": [
+            "components/Workspace/PlusGoogleDrivePicker.tsx",
+            "lib/query/queryClient.ts",
+            "test/test-utils.tsx",
+            "lib/api/client.ts",
+            "app/layout.tsx"
+          ]
+        },
+        {
+          "query": "where is authentication state provided to the app?",
+          "firstRelevantRank": 2,
+          "latencyMs": 12.75812499999995,
+          "top5": [
+            "vitest.config.mts",
+            "providers/AuthProvider.tsx",
+            "components/Envelope/BeforeWeContinueDialog.tsx",
+            "features/auth/auth.service.ts",
+            "app/connectors/oauth-callback/page.tsx"
+          ]
+        },
+        {
+          "query": "where is the global app store defined?",
+          "firstRelevantRank": 1,
+          "latencyMs": 9.89879099999996,
+          "top5": [
+            "stores/useAppStore.ts",
+            "app/globals.css",
+            "app/global-error.tsx",
+            "vitest.config.mts",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "where is the envelope API service?",
+          "firstRelevantRank": 1,
+          "latencyMs": 17.17220800000007,
+          "top5": [
+            "features/envelope/envelope.service.ts",
+            "features/envelope/envelope.server.ts",
+            "features/analytics/analytics.service.ts",
+            "features/team/team.service.ts",
+            "features/envelope/envelope.mutation.ts"
+          ]
+        },
+        {
+          "query": "where are the MSW API mocks for tests?",
+          "firstRelevantRank": 3,
+          "latencyMs": 16.106333000000063,
+          "top5": [
+            "CLAUDE.md",
+            "docs/ARCHITECTURE.md",
+            "test/mocks/handlers.ts",
+            "features/learn-walkthrough/__tests__/useLearnWalkthrough.test.ts",
+            "components/Workspace/Analytics/EnvelopeReceiverActivityTable.tsx"
+          ]
+        },
+        {
+          "query": "where is the checkout page?",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.590625000000045,
+          "top5": [
+            "app/checkout/page.tsx",
+            "app/checkout/CheckoutCallbackPageClient.tsx",
+            "app/workspace/layout.tsx",
+            "features/payment/types.ts",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "where are cross-cutting app constants defined?",
+          "firstRelevantRank": 6,
+          "latencyMs": 9.359083000000055,
+          "top5": [
+            "CLAUDE.md",
+            "docs/ARCHITECTURE.md",
+            "vitest.config.mts",
+            "app/global-error.tsx",
+            "features/reports/types.ts"
+          ]
+        }
+      ]
+    },
+    "lexical/identifiers": {
+      "evaluatedRuns": 9,
+      "recallAt5": 1,
+      "mrr": 1,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 2.9317499999999654,
+      "details": [
+        {
+          "query": "ApiError",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.9247080000000096,
+          "top5": [
+            "lib/api/client.ts",
+            "lib/api/server.ts",
+            "utils/error.ts",
+            "features/legal/legal.service.ts",
+            "app/workspace/approvals/ApprovalsPageClient.tsx"
+          ]
+        },
+        {
+          "query": "createApiClient",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.6061249999999063,
+          "top5": [
+            "lib/api/client.ts",
+            "docs/ARCHITECTURE.md",
+            "lib/api/__tests__/client-requests.test.ts"
+          ]
+        },
+        {
+          "query": "useEnvelope",
+          "firstRelevantRank": 1,
+          "latencyMs": 3.64391599999999,
+          "top5": [
+            "features/envelope/useEnvelope.ts",
+            "stores/useEnvelopeStore.ts",
+            "features/analytics/useAnalytics.ts",
+            "components/Workspace/Analytics/Pro/CTAAnalyticsTab/EnvelopePicker/useEnvelopePickerGroups.ts",
+            "hooks/useHasEnvelopeSession.ts"
+          ]
+        },
+        {
+          "query": "useEnvelopeStore",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.306291999999985,
+          "top5": [
+            "stores/useEnvelopeStore.ts",
+            "hooks/useHasEnvelopeSession.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "docs/ARCHITECTURE.md",
+            "CLAUDE.md"
+          ]
+        },
+        {
+          "query": "AuthProvider",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.9317499999999654,
+          "top5": [
+            "providers/AuthProvider.tsx",
+            "features/auth/auth.service.ts",
+            "app/layout.tsx",
+            "features/auth/auth.mutation.ts",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md"
+          ]
+        },
+        {
+          "query": "cn",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.563833000000045,
+          "top5": [
+            "utils/cn.ts",
+            "lib/utils.ts",
+            "components/Workspace/Analytics/Pro/EnvelopeTab/EnvelopePerformanceIntelligenceTable.tsx",
+            "components/KnowledgeVault/Upload/ChooseSourceStep.tsx",
+            "components/Pricing/PricingCard.tsx"
+          ]
+        },
+        {
+          "query": "getReceiverToken",
+          "firstRelevantRank": 1,
+          "latencyMs": 3.4139999999999873,
+          "top5": [
+            "lib/token.ts",
+            "hooks/useHasEnvelopeSession.ts",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "features/document/useDocumentStatusStream.ts",
+            "lib/api/client.ts"
+          ]
+        },
+        {
+          "query": "withFreshToken",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.840624999999932,
+          "top5": [
+            "lib/api/client.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Auth/Password/SetPasswordForm.tsx",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md"
+          ]
+        },
+        {
+          "query": "isSessionAgnosticEndpoint",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.3147089999999935,
+          "top5": ["lib/api/client.ts"]
+        }
+      ]
+    },
+    "lexical/relations": {
+      "evaluatedRuns": 4,
+      "recallAt5": 0.75,
+      "mrr": 0.425,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 10.34949999999992,
+      "details": [
+        {
+          "query": "what imports the api client",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.34949999999992,
+          "top5": [
+            "lib/connectors/client.ts",
+            "lib/api/client.ts",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "components/KnowledgeVault/Upload/UploadDialog.tsx",
+            "components/Workspace/EmbedGuideDialog.tsx"
+          ]
+        },
+        {
+          "query": "what uses useEnvelope",
+          "firstRelevantRank": 5,
+          "latencyMs": 7.836208000000056,
+          "top5": [
+            "features/envelope/useEnvelope.ts",
+            "components/Workspace/Analytics/Pro/EnvelopeTab/EnvelopesTab.tsx",
+            "stores/useEnvelopeStore.ts",
+            "features/analytics/useAnalytics.ts",
+            "components/Envelope/ClientEnvelopePage.tsx"
+          ]
+        },
+        {
+          "query": "what uses useEnvelopeStore",
+          "firstRelevantRank": 2,
+          "latencyMs": 7.339541999999938,
+          "top5": [
+            "stores/useEnvelopeStore.ts",
+            "hooks/useHasEnvelopeSession.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "docs/ARCHITECTURE.md",
+            "CLAUDE.md"
+          ]
+        },
+        {
+          "query": "what uses the shared queryClient",
+          "firstRelevantRank": null,
+          "latencyMs": 15.155291000000034,
+          "top5": [
+            "features/document/document.mutation.ts",
+            "features/payment/payment.mutation.ts",
+            "features/savedAnswers/savedAnswers.mutation.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Envelope/Chat/ChatPromptInput.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical/docs": {
+      "evaluatedRuns": 5,
+      "recallAt5": 0.8,
+      "mrr": 0.8,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 9.544624999999996,
+      "details": [
+        {
+          "query": "SSE integration guide",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.04033400000003,
+          "top5": [
+            "docs/SSE-INTEGRATION.md",
+            "docs/embed-guide.md",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "features/prompt-builder/types.ts",
+            "components/shared/DocumentProcessingFailedGuide.tsx"
+          ]
+        },
+        {
+          "query": "billing and Stripe integration",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.850958999999989,
+          "top5": [
+            "docs/BILLING-INTEGRATION.md",
+            "components/Workspace/Settings/ProTeamsUpgradeDialog.tsx",
+            "components/Workspace/Settings/BillingCard.tsx",
+            "components/Workspace/Analytics/Pro/EnvelopeTab/EnvelopeReportCheckoutModal.tsx",
+            "proxy.ts"
+          ]
+        },
+        {
+          "query": "frontend architecture overview",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.52820799999995,
+          "top5": [
+            "docs/ARCHITECTURE.md",
+            "components/Workspace/Analytics/Overview.tsx",
+            "docs/SSE-INTEGRATION.md",
+            "README.md",
+            "docs/BILLING-INTEGRATION.md"
+          ]
+        },
+        {
+          "query": "how the frontend calls the backend api",
+          "firstRelevantRank": 1,
+          "latencyMs": 9.544624999999996,
+          "top5": [
+            "docs/API_CALLS.md",
+            "lib/connectors/client.ts",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "features/chat/useChat.ts",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "how embed mode works",
+          "firstRelevantRank": null,
+          "latencyMs": 13.486500000000092,
+          "top5": [
+            "lib/token.ts",
+            "components/Envelope/New/EnvelopeCreatedResult.tsx",
+            "components/Envelope/New/Pro/ProEnvelopeCreatedResult.tsx",
+            "components/Envelope/EmbedEnvelopePage.tsx",
+            "components/Workspace/EnvelopeActionsMenu.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/concept": {
+      "evaluatedRuns": 9,
+      "recallAt5": 0.8888888888888888,
+      "mrr": 0.6851851851851852,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 15.699041999999963,
+      "details": [
+        {
+          "query": "where is the HTTP client with automatic token refresh?",
+          "firstRelevantRank": 1,
+          "latencyMs": 15.320124999999962,
+          "top5": [
+            "lib/api/client.ts",
+            "lib/token.ts",
+            "lib/connectors/client.ts",
+            "CLAUDE.md",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "where are receiver access tokens stored and cleared?",
+          "firstRelevantRank": 1,
+          "latencyMs": 16.923583000000008,
+          "top5": [
+            "lib/token.ts",
+            "features/behavior-response/storage.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "lib/api/client.ts",
+            "components/Workspace/Storage.tsx"
+          ]
+        },
+        {
+          "query": "where is the React Query client configured?",
+          "firstRelevantRank": 2,
+          "latencyMs": 16.672166999999945,
+          "top5": [
+            "components/Workspace/PlusGoogleDrivePicker.tsx",
+            "lib/query/queryClient.ts",
+            "test/test-utils.tsx",
+            "lib/api/client.ts",
+            "app/layout.tsx"
+          ]
+        },
+        {
+          "query": "where is authentication state provided to the app?",
+          "firstRelevantRank": 4,
+          "latencyMs": 15.699041999999963,
+          "top5": [
+            "vitest.config.mts",
+            "components/Envelope/BeforeWeContinueDialog.tsx",
+            "features/auth/auth.mutation.ts",
+            "providers/AuthProvider.tsx",
+            "features/auth/auth.service.ts"
+          ]
+        },
+        {
+          "query": "where is the global app store defined?",
+          "firstRelevantRank": 1,
+          "latencyMs": 12.710915999999997,
+          "top5": [
+            "stores/useAppStore.ts",
+            "app/globals.css",
+            "app/global-error.tsx",
+            "vitest.config.mts",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "where is the envelope API service?",
+          "firstRelevantRank": 1,
+          "latencyMs": 21.999958000000106,
+          "top5": [
+            "features/envelope/envelope.service.ts",
+            "features/envelope/envelope.mutation.ts",
+            "features/envelope/envelope.server.ts",
+            "features/analytics/analytics.service.ts",
+            "features/team/team.service.ts"
+          ]
+        },
+        {
+          "query": "where are the MSW API mocks for tests?",
+          "firstRelevantRank": 4,
+          "latencyMs": 17.515750000000025,
+          "top5": [
+            "CLAUDE.md",
+            "docs/ARCHITECTURE.md",
+            "components/Workspace/Analytics/EnvelopeReceiverActivityTable.tsx",
+            "test/mocks/handlers.ts",
+            "features/learn-walkthrough/__tests__/useLearnWalkthrough.test.ts"
+          ]
+        },
+        {
+          "query": "where is the checkout page?",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.290249999999787,
+          "top5": [
+            "app/checkout/page.tsx",
+            "features/payment/usePayment.ts",
+            "app/checkout/CheckoutCallbackPageClient.tsx",
+            "app/workspace/layout.tsx",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "where are cross-cutting app constants defined?",
+          "firstRelevantRank": 6,
+          "latencyMs": 11.691041999999925,
+          "top5": [
+            "CLAUDE.md",
+            "docs/ARCHITECTURE.md",
+            "vitest.config.mts",
+            "app/global-error.tsx",
+            "features/reports/types.ts"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/identifiers": {
+      "evaluatedRuns": 9,
+      "recallAt5": 1,
+      "mrr": 1,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 5.312458000000106,
+      "details": [
+        {
+          "query": "ApiError",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.821207999999842,
+          "top5": [
+            "lib/api/client.ts",
+            "lib/api/server.ts",
+            "utils/error.ts",
+            "app/workspace/approvals/ApprovalsPageClient.tsx",
+            "features/learn-walkthrough/useLearnWalkthrough.ts"
+          ]
+        },
+        {
+          "query": "createApiClient",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.463874999999916,
+          "top5": [
+            "lib/api/client.ts",
+            "docs/ARCHITECTURE.md",
+            "lib/api/__tests__/client-requests.test.ts"
+          ]
+        },
+        {
+          "query": "useEnvelope",
+          "firstRelevantRank": 1,
+          "latencyMs": 6.55920900000001,
+          "top5": [
+            "features/envelope/useEnvelope.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/layout/Header/HeaderMobile.tsx",
+            "components/Workspace/Dashboard/Pro/ProEnvelopeModal.tsx",
+            "stores/useEnvelopeStore.ts"
+          ]
+        },
+        {
+          "query": "useEnvelopeStore",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.312458000000106,
+          "top5": [
+            "stores/useEnvelopeStore.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/layout/Header/HeaderMobile.tsx",
+            "docs/ARCHITECTURE.md",
+            "CLAUDE.md"
+          ]
+        },
+        {
+          "query": "AuthProvider",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.899458999999979,
+          "top5": [
+            "providers/AuthProvider.tsx",
+            "features/auth/auth.service.ts",
+            "app/layout.tsx",
+            "features/auth/auth.mutation.ts",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md"
+          ]
+        },
+        {
+          "query": "cn",
+          "firstRelevantRank": 1,
+          "latencyMs": 12.338999999999942,
+          "top5": [
+            "utils/cn.ts",
+            "app/workspace/components/StatusBadge.tsx",
+            "components/Envelope/ExpireBadge.tsx",
+            "lib/utils.ts",
+            "components/Workspace/Analytics/Pro/EnvelopeTab/EnvelopePerformanceIntelligenceTable.tsx"
+          ]
+        },
+        {
+          "query": "getReceiverToken",
+          "firstRelevantRank": 1,
+          "latencyMs": 6.008041999999932,
+          "top5": [
+            "lib/token.ts",
+            "features/document/useDocumentStatusStream.ts",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "lib/api/client.ts",
+            "components/Envelope/EmbedEnvelopePage.tsx"
+          ]
+        },
+        {
+          "query": "withFreshToken",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.992250000000013,
+          "top5": [
+            "lib/api/client.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Auth/Password/SetPasswordForm.tsx",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "utils/amplitude.ts"
+          ]
+        },
+        {
+          "query": "isSessionAgnosticEndpoint",
+          "firstRelevantRank": 1,
+          "latencyMs": 3.706542000000127,
+          "top5": ["lib/api/client.ts"]
+        }
+      ]
+    },
+    "lexical+graph/relations": {
+      "evaluatedRuns": 4,
+      "recallAt5": 0.75,
+      "mrr": 0.75,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 12.052332999999862,
+      "details": [
+        {
+          "query": "what imports the api client",
+          "firstRelevantRank": 1,
+          "latencyMs": 12.052332999999862,
+          "top5": [
+            "lib/connectors/client.ts",
+            "components/KnowledgeVault/Upload/UploadDialog.tsx",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "components/Workspace/EmbedGuideDialog.tsx",
+            "lib/api/client.ts"
+          ]
+        },
+        {
+          "query": "what uses useEnvelope",
+          "firstRelevantRank": 1,
+          "latencyMs": 9.736583999999993,
+          "top5": [
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Envelope/New/CreateEnvelopeFlow.tsx",
+            "components/Home/Hero.tsx",
+            "features/envelope/useEnvelope.ts",
+            "features/analytics/useAnalytics.ts"
+          ]
+        },
+        {
+          "query": "what uses useEnvelopeStore",
+          "firstRelevantRank": 1,
+          "latencyMs": 9.069291999999905,
+          "top5": [
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/layout/Header/HeaderMobile.tsx",
+            "hooks/useHasEnvelopeSession.ts",
+            "stores/useEnvelopeStore.ts",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "what uses the shared queryClient",
+          "firstRelevantRank": null,
+          "latencyMs": 15.018125000000055,
+          "top5": [
+            "features/document/document.mutation.ts",
+            "features/savedAnswers/savedAnswers.mutation.ts",
+            "features/document/useDocument.ts",
+            "features/payment/payment.mutation.ts",
+            "components/Envelope/ClientEnvelopePage.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/docs": {
+      "evaluatedRuns": 5,
+      "recallAt5": 0.8,
+      "mrr": 0.8,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 11.119916999999987,
+      "details": [
+        {
+          "query": "SSE integration guide",
+          "firstRelevantRank": 1,
+          "latencyMs": 6.396959000000152,
+          "top5": [
+            "docs/SSE-INTEGRATION.md",
+            "docs/embed-guide.md",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "features/prompt-builder/types.ts",
+            "components/shared/DocumentProcessingFailedGuide.tsx"
+          ]
+        },
+        {
+          "query": "billing and Stripe integration",
+          "firstRelevantRank": 1,
+          "latencyMs": 14.357833000000028,
+          "top5": [
+            "docs/BILLING-INTEGRATION.md",
+            "components/Workspace/Settings/ProTeamsUpgradeDialog.tsx",
+            "components/Workspace/Settings/BillingCard.tsx",
+            "components/Workspace/Analytics/Pro/EnvelopeTab/EnvelopeReportCheckoutModal.tsx",
+            "proxy.ts"
+          ]
+        },
+        {
+          "query": "frontend architecture overview",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.41295799999989,
+          "top5": [
+            "docs/ARCHITECTURE.md",
+            "components/Workspace/Analytics/Overview.tsx",
+            "docs/SSE-INTEGRATION.md",
+            "README.md",
+            "docs/BILLING-INTEGRATION.md"
+          ]
+        },
+        {
+          "query": "how the frontend calls the backend api",
+          "firstRelevantRank": 1,
+          "latencyMs": 11.119916999999987,
+          "top5": [
+            "docs/API_CALLS.md",
+            "components/Envelope/Chat/ChatPromptInput.tsx",
+            "docs/CLERK-AUTHENTICATION-INTEGRATION.md",
+            "lib/connectors/client.ts",
+            "docs/ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "how embed mode works",
+          "firstRelevantRank": null,
+          "latencyMs": 14.110916999999972,
+          "top5": [
+            "lib/token.ts",
+            "components/Envelope/New/EnvelopeCreatedResult.tsx",
+            "components/Envelope/New/Pro/ProEnvelopeCreatedResult.tsx",
+            "components/Envelope/EmbedEnvelopePage.tsx",
+            "components/Workspace/EnvelopeActionsMenu.tsx"
+          ]
+        }
+      ]
+    }
+  },
+  "openez": {
+    "lexical/concept": {
+      "evaluatedRuns": 17,
+      "recallAt5": 0.9411764705882353,
+      "mrr": 0.7965686274509803,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 11.397874999998749,
+      "details": [
+        {
+          "query": "where is workspace indexing implemented?",
+          "firstRelevantRank": 1,
+          "latencyMs": 14.331874999999854,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "apps/web/src/routes/workspaces/$workspaceId/index.tsx",
+            "apps/web/src/routes/workspaces/index.tsx",
+            "apps/mcp/src/mcp-core.ts",
+            "packages/indexer/src/embed-workspace.ts"
+          ]
+        },
+        {
+          "query": "how does the retrieval pipeline work?",
+          "firstRelevantRank": 1,
+          "latencyMs": 9.168792000000394,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "documents/backlogs/TREE_SITTER_UPGRADE_GUIDE.md",
+            "CHANGELOG.md",
+            "docs/research/openez-vs-graphify/graphify-eval.json",
+            "docs/research/openez-vs-graphify/eval/wy-ask-api/concept.json"
+          ]
+        },
+        {
+          "query": "where are embeddings written?",
+          "firstRelevantRank": 2,
+          "latencyMs": 7.377124999999069,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/core/src/local-embedding.ts",
+            "packages/db/src/sqlite/types.ts"
+          ]
+        },
+        {
+          "query": "how does codeQuery work?",
+          "firstRelevantRank": 1,
+          "latencyMs": 106.51545799999803,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/types.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "query": "where is the embedding provider selected?",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.801332999999431,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/ui/src/components/select.tsx",
+            "packages/core/src/retrieval.ts"
+          ]
+        },
+        {
+          "query": "how does vector search run?",
+          "firstRelevantRank": 4,
+          "latencyMs": 11.397874999998749,
+          "top5": [
+            "tests/vector-search.test.ts",
+            "packages/core/src/vector.ts",
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/local-embedding.ts"
+          ]
+        },
+        {
+          "query": "where is the MCP server implemented?",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.964250000000902,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "apps/cli/src/setup-codex.ts",
+            "apps/web/src/server/sqlite.ts",
+            "apps/cli/src/mcp-bridge.ts",
+            "apps/cli/src/setup-windsurf.ts"
+          ]
+        },
+        {
+          "query": "where is the SQLite workspace registry opened?",
+          "firstRelevantRank": 3,
+          "latencyMs": 23.708708000001934,
+          "top5": [
+            "apps/web/src/server/sqlite.ts",
+            "packages/db/src/sqlite/local-workspace.ts",
+            "packages/db/src/sqlite/registry-db.ts",
+            "apps/cli/tsup.config.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "how is markdown split into chunks?",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.200832999998966,
+          "top5": [
+            "packages/indexer/src/markdown.ts",
+            "packages/native/src/lib.rs",
+            "packages/db/src/sqlite/document-repository.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "where are TypeScript symbols extracted?",
+          "firstRelevantRank": 3,
+          "latencyMs": 10.536917000001267,
+          "top5": [
+            "packages/indexer/src/python-resolver.ts",
+            "packages/indexer/src/java-resolver.ts",
+            "packages/indexer/src/parsers/oxc-parser.ts",
+            "packages/indexer/src/rust-resolver.ts",
+            "packages/native/index.d.ts"
+          ]
+        },
+        {
+          "query": "how are YAML JSON and TOML configs chunked?",
+          "firstRelevantRank": 1,
+          "latencyMs": 28.234583000001294,
+          "top5": [
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/tree-sitter/configs.ts",
+            "README.md",
+            "apps/web/src/components/context-blocks.tsx",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "query": "where is the local workspace hint written?",
+          "firstRelevantRank": 1,
+          "latencyMs": 13.401292000002286,
+          "top5": [
+            "packages/db/src/sqlite/local-workspace.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "README.md",
+            "AGENTS.md",
+            "packages/indexer/src/index-workspace.ts"
+          ]
+        },
+        {
+          "query": "how does Codex MCP setup work?",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.165625000001455,
+          "top5": [
+            "apps/cli/src/setup-codex.ts",
+            "apps/cli/src/cli.ts",
+            "README.md",
+            "apps/cli/README.md",
+            "AGENTS.md"
+          ]
+        },
+        {
+          "query": "where are graph neighbors traversed?",
+          "firstRelevantRank": 8,
+          "latencyMs": 35.47929199999999,
+          "top5": [
+            "packages/db/src/sqlite/graph-traversal-ops.ts",
+            "graphify-out/graph.json",
+            "apps/cli/README.md",
+            "packages/db/src/sqlite/graph-repository.ts",
+            "landing/src/app/components/workspace-graph.tsx"
+          ]
+        },
+        {
+          "query": "how is the FTS5 chunk index synchronized?",
+          "firstRelevantRank": 1,
+          "latencyMs": 18.708167000000685,
+          "top5": [
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/db/src/sqlite/fts-repository.ts",
+            "apps/cli/README.md",
+            "CHANGELOG.md",
+            "packages/native/src/parser.rs"
+          ]
+        },
+        {
+          "query": "how does MCP resolve a workspace path?",
+          "firstRelevantRank": 1,
+          "latencyMs": 19.5660420000022,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "apps/cli/src/setup-windsurf.ts",
+            "apps/cli/src/setup-opencode.ts",
+            "apps/cli/src/setup-devin.ts",
+            "apps/cli/src/setup-claude.ts"
+          ]
+        },
+        {
+          "query": "where is text truncated to a token budget?",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.525084000000788,
+          "top5": [
+            "packages/core/src/tokenizer.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "packages/core/src/graph.ts",
+            "packages/ui/src/components/textarea.tsx",
+            "packages/core/src/embeddings.ts"
+          ]
+        }
+      ]
+    },
+    "lexical/identifiers": {
+      "evaluatedRuns": 19,
+      "recallAt5": 1,
+      "mrr": 0.9298245614035089,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 57.18383299999914,
+      "details": [
+        {
+          "query": "codeQuery",
+          "firstRelevantRank": 1,
+          "latencyMs": 106.9731249999968,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/types.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "query": "graphExpand",
+          "firstRelevantRank": 1,
+          "latencyMs": 54.84049999999843,
+          "top5": ["packages/core/src/retrieval.ts", "tests/graph-expand-ranking.test.ts"]
+        },
+        {
+          "query": "vectorSearch",
+          "firstRelevantRank": 1,
+          "latencyMs": 106.85599999999977,
+          "top5": ["packages/core/src/retrieval.ts", "packages/core/src/vector.ts", "CHANGELOG.md"]
+        },
+        {
+          "query": "rankStoredEmbeddings",
+          "firstRelevantRank": 1,
+          "latencyMs": 106.06512500000099,
+          "top5": ["packages/core/src/retrieval.ts"]
+        },
+        {
+          "query": "cosineSimilarity",
+          "firstRelevantRank": 1,
+          "latencyMs": 55.22620800000004,
+          "top5": ["packages/core/src/retrieval.ts"]
+        },
+        {
+          "query": "reciprocalRankFusion",
+          "firstRelevantRank": 1,
+          "latencyMs": 58.03533299999981,
+          "top5": ["packages/core/src/rrf.ts", "packages/core/src/retrieval.ts"]
+        },
+        {
+          "query": "evaluateRetrieval",
+          "firstRelevantRank": 1,
+          "latencyMs": 56.584124999997584,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "tests/embed-benchmark.test.ts"
+          ]
+        },
+        {
+          "query": "summarizeQuality",
+          "firstRelevantRank": 1,
+          "latencyMs": 56.850084000001516,
+          "top5": ["packages/indexer/src/retrieval-eval.ts", "tests/embed-benchmark.test.ts"]
+        },
+        {
+          "query": "embedWorkspace",
+          "firstRelevantRank": 1,
+          "latencyMs": 247.06462499999907,
+          "top5": ["packages/indexer/src/embed-workspace.ts"]
+        },
+        {
+          "query": "getDefaultSettings",
+          "firstRelevantRank": 1,
+          "latencyMs": 149.81420800000342,
+          "top5": [
+            "packages/config/src/types.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/core/src/retrieval.ts"
+          ]
+        },
+        {
+          "query": "formatEmbeddingInput",
+          "firstRelevantRank": 1,
+          "latencyMs": 63.92541699999856,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "documents/backlogs/embedding-review.md",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/core/src/retrieval.ts"
+          ]
+        },
+        {
+          "query": "createWorkspaceResolver.resolveWorkspaceByPath",
+          "firstRelevantRank": 1,
+          "latencyMs": 55.282250000000204,
+          "top5": ["apps/mcp/src/mcp-core.ts"]
+        },
+        {
+          "query": "fitToTokenBudget.measure",
+          "firstRelevantRank": 1,
+          "latencyMs": 60.29658300000301,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "landing/src/app/components/particle-text.tsx",
+            "landing/src/app/components/dashboard-preview.tsx",
+            "apps/web/src/routes/benchmark.tsx",
+            "docs/research/openez-vs-graphify/REPORT.md"
+          ]
+        },
+        {
+          "query": "indexWorkspace",
+          "firstRelevantRank": 3,
+          "latencyMs": 11.41545799999949,
+          "top5": [
+            "packages/indexer/src/types.ts",
+            "apps/web/src/lib/api.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "tests/exact-symbol-retrieval.test.ts"
+          ]
+        },
+        {
+          "query": "createWorkspaceRepository",
+          "firstRelevantRank": 1,
+          "latencyMs": 13.079124999996566,
+          "top5": [
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/core/src/memory.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/core/src/graph.ts"
+          ]
+        },
+        {
+          "query": "parseRetrievalCases",
+          "firstRelevantRank": 3,
+          "latencyMs": 58.18158300000141,
+          "top5": [
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "packages/native/src/parser.rs",
+            "packages/indexer/src/retrieval-eval.ts",
+            "packages/indexer/src/tree-sitter/parse.ts",
+            "tests/embed-benchmark.test.ts"
+          ]
+        },
+        {
+          "query": "ensureGraphReadySafely",
+          "firstRelevantRank": 1,
+          "latencyMs": 57.18383299999914,
+          "top5": ["apps/mcp/src/mcp-core.ts"]
+        },
+        {
+          "query": "createGraphService.ensureGraphReadyInternal",
+          "firstRelevantRank": 1,
+          "latencyMs": 55.37029199999961,
+          "top5": ["packages/indexer/src/graph-service.ts"]
+        },
+        {
+          "query": "show me indexWorkspace",
+          "firstRelevantRank": 1,
+          "latencyMs": 13.609457999998995,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "packages/ui/src/components/ui/sidebar.tsx",
+            "packages/indexer/src/types.ts",
+            "apps/web/src/lib/api.ts",
+            "apps/web/src/routes/memories.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical/relations": {
+      "evaluatedRuns": 7,
+      "recallAt5": 0.7142857142857143,
+      "mrr": 0.29047619047619044,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 19.069541999997455,
+      "details": [
+        {
+          "query": "what calls getDefaultSettings",
+          "firstRelevantRank": 2,
+          "latencyMs": 21.39695799999754,
+          "top5": [
+            "packages/config/src/types.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/ruby-resolver.ts"
+          ]
+        },
+        {
+          "query": "what calls reciprocalRankFusion",
+          "firstRelevantRank": 2,
+          "latencyMs": 18.251749999999447,
+          "top5": [
+            "packages/core/src/rrf.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/ruby-resolver.ts",
+            "packages/native/src/parser.rs"
+          ]
+        },
+        {
+          "query": "what calls formatEmbeddingInput",
+          "firstRelevantRank": 2,
+          "latencyMs": 18.667124999999942,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "packages/core/src/retrieval.ts",
+            "documents/backlogs/embedding-review.md",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/indexer/src/languages.ts"
+          ]
+        },
+        {
+          "query": "what calls parseRetrievalCases",
+          "firstRelevantRank": 5,
+          "latencyMs": 19.069541999997455,
+          "top5": [
+            "packages/native/src/parser.rs",
+            "packages/indexer/src/tree-sitter/parse.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "packages/indexer/src/retrieval-eval.ts",
+            "tests/embed-benchmark.test.ts"
+          ]
+        },
+        {
+          "query": "what does codeQuery call",
+          "firstRelevantRank": null,
+          "latencyMs": 20.52666600000157,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "packages/core/src/types.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "query": "what does embedWorkspace call",
+          "firstRelevantRank": null,
+          "latencyMs": 23.399708000000828,
+          "top5": [
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/ruby-resolver.ts",
+            "packages/native/src/parser.rs",
+            "packages/indexer/src/tree-sitter/parse.ts"
+          ]
+        },
+        {
+          "query": "what calls evaluateRetrieval",
+          "firstRelevantRank": 3,
+          "latencyMs": 15.822542000001704,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "tests/embed-benchmark.test.ts",
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/ruby-resolver.ts"
+          ]
+        }
+      ]
+    },
+    "lexical/docs": {
+      "evaluatedRuns": 7,
+      "recallAt5": 1,
+      "mrr": 0.7428571428571429,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 10.974167000000307,
+      "details": [
+        {
+          "query": "steps to publish a new CLI version to npm",
+          "firstRelevantRank": 1,
+          "latencyMs": 17.630958000001556,
+          "top5": [
+            "AGENTS.md",
+            "apps/cli/src/cli.ts",
+            "apps/cli/README.md",
+            "apps/web/src/routes/workspaces/new.tsx",
+            "landing/src/app/page.tsx"
+          ]
+        },
+        {
+          "query": "quick start install guide",
+          "firstRelevantRank": 2,
+          "latencyMs": 10.974167000000307,
+          "top5": [
+            "landing/src/app/page.tsx",
+            "README.md",
+            "landing/src/app/components/site-header.tsx",
+            "apps/cli/src/setup-instructions.ts",
+            "apps/cli/src/agent-hooks.ts"
+          ]
+        },
+        {
+          "query": "plan for upgrading the tree-sitter parsers",
+          "firstRelevantRank": 1,
+          "latencyMs": 20.13604199999827,
+          "top5": [
+            "documents/backlogs/TREE_SITTER_UPGRADE_GUIDE.md",
+            "packages/indexer/src/parsers/tree-sitter-parser.ts",
+            "packages/native/src/parser.rs",
+            "packages/indexer/src/tree-sitter/parse.ts",
+            "packages/indexer/src/index-workspace.ts"
+          ]
+        },
+        {
+          "query": "product direction and core decisions",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.405875000000378,
+          "top5": [
+            "documents/PROJECT_OPERATIONS.md",
+            "apps/mcp/src/mcp-core.ts",
+            "README.md",
+            "docs/research/distill-publish-jina-code-static-256.md",
+            "documents/backlogs/embedding-review.md"
+          ]
+        },
+        {
+          "query": "embedding review backlog notes",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.369750000001659,
+          "top5": [
+            "documents/backlogs/embedding-review.md",
+            "packages/core/src/embeddings.ts",
+            "graphify-out/cache/stat-index.json",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "README.md"
+          ]
+        },
+        {
+          "query": "what changed in each release",
+          "firstRelevantRank": 2,
+          "latencyMs": 7.274792000000161,
+          "top5": [
+            "apps/web/src/routes/changelog.tsx",
+            "CHANGELOG.md",
+            "packages/core/src/diff-context.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "apps/cli/README.md"
+          ]
+        },
+        {
+          "query": "which content types are supported",
+          "firstRelevantRank": 5,
+          "latencyMs": 21.57762499999808,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/db/src/sqlite/fts-repository.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "README.md"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/concept": {
+      "evaluatedRuns": 17,
+      "recallAt5": 0.9411764705882353,
+      "mrr": 0.8014705882352942,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 21.89129199999661,
+      "details": [
+        {
+          "query": "where is workspace indexing implemented?",
+          "firstRelevantRank": 1,
+          "latencyMs": 22.507916000002297,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "apps/web/src/routes/workspaces/$workspaceId/index.tsx",
+            "apps/web/src/routes/workspaces/index.tsx"
+          ]
+        },
+        {
+          "query": "how does the retrieval pipeline work?",
+          "firstRelevantRank": 1,
+          "latencyMs": 12.891625000000204,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "documents/backlogs/TREE_SITTER_UPGRADE_GUIDE.md",
+            "CHANGELOG.md",
+            "docs/research/openez-vs-graphify/graphify-eval.json",
+            "docs/research/openez-vs-graphify/eval/wy-ask-api/concept.json"
+          ]
+        },
+        {
+          "query": "where are embeddings written?",
+          "firstRelevantRank": 2,
+          "latencyMs": 9.297875000000204,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/core/src/local-embedding.ts",
+            "packages/db/src/sqlite/local-workspace.ts"
+          ]
+        },
+        {
+          "query": "how does codeQuery work?",
+          "firstRelevantRank": 1,
+          "latencyMs": 113.35829100000046,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/types.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "query": "where is the embedding provider selected?",
+          "firstRelevantRank": 1,
+          "latencyMs": 19.30750000000262,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "how does vector search run?",
+          "firstRelevantRank": 3,
+          "latencyMs": 12.861292000001413,
+          "top5": [
+            "tests/vector-search.test.ts",
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/local-embedding.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "where is the MCP server implemented?",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.266292000000249,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "apps/cli/src/setup-codex.ts",
+            "apps/web/src/server/sqlite.ts",
+            "apps/cli/src/setup-windsurf.ts",
+            "apps/cli/src/mcp-bridge.ts"
+          ]
+        },
+        {
+          "query": "where is the SQLite workspace registry opened?",
+          "firstRelevantRank": 3,
+          "latencyMs": 22.106167000001733,
+          "top5": [
+            "apps/web/src/server/sqlite.ts",
+            "packages/db/src/sqlite/local-workspace.ts",
+            "packages/db/src/sqlite/registry-db.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/indexer/src/index-workspace.ts"
+          ]
+        },
+        {
+          "query": "how is markdown split into chunks?",
+          "firstRelevantRank": 1,
+          "latencyMs": 14.267000000003463,
+          "top5": [
+            "packages/indexer/src/markdown.ts",
+            "packages/native/src/lib.rs",
+            "packages/db/src/sqlite/document-repository.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "where are TypeScript symbols extracted?",
+          "firstRelevantRank": 3,
+          "latencyMs": 38.04112499999974,
+          "top5": [
+            "packages/indexer/src/python-resolver.ts",
+            "packages/indexer/src/java-resolver.ts",
+            "packages/indexer/src/parsers/oxc-parser.ts",
+            "packages/indexer/src/rust-resolver.ts",
+            "packages/native/index.d.ts"
+          ]
+        },
+        {
+          "query": "how are YAML JSON and TOML configs chunked?",
+          "firstRelevantRank": 1,
+          "latencyMs": 39.92749999999796,
+          "top5": [
+            "packages/indexer/src/languages.ts",
+            "apps/web/src/components/context-blocks.tsx",
+            "README.md",
+            "packages/indexer/src/parsers/config-parser.ts",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "query": "where is the local workspace hint written?",
+          "firstRelevantRank": 1,
+          "latencyMs": 15.218375000000378,
+          "top5": [
+            "packages/db/src/sqlite/local-workspace.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "README.md",
+            "AGENTS.md",
+            "packages/indexer/src/index-workspace.ts"
+          ]
+        },
+        {
+          "query": "how does Codex MCP setup work?",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.987084000000323,
+          "top5": [
+            "apps/cli/src/setup-codex.ts",
+            "apps/cli/src/cli.ts",
+            "README.md",
+            "apps/cli/README.md",
+            "AGENTS.md"
+          ]
+        },
+        {
+          "query": "where are graph neighbors traversed?",
+          "firstRelevantRank": 8,
+          "latencyMs": 34.05745899999965,
+          "top5": [
+            "packages/db/src/sqlite/graph-traversal-ops.ts",
+            "landing/src/app/components/workspace-graph.tsx",
+            "apps/cli/README.md",
+            "graphify-out/graph.json",
+            "packages/db/src/sqlite/graph-repository.ts"
+          ]
+        },
+        {
+          "query": "how is the FTS5 chunk index synchronized?",
+          "firstRelevantRank": 1,
+          "latencyMs": 21.89129199999661,
+          "top5": [
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/db/src/sqlite/fts-repository.ts",
+            "apps/cli/README.md",
+            "CHANGELOG.md",
+            "packages/native/src/parser.rs"
+          ]
+        },
+        {
+          "query": "how does MCP resolve a workspace path?",
+          "firstRelevantRank": 1,
+          "latencyMs": 31.19550000000163,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "apps/cli/src/setup-windsurf.ts",
+            "apps/cli/src/setup-opencode.ts",
+            "apps/cli/src/setup-devin.ts",
+            "apps/cli/src/setup-claude.ts"
+          ]
+        },
+        {
+          "query": "where is text truncated to a token budget?",
+          "firstRelevantRank": 1,
+          "latencyMs": 38.490749999997206,
+          "top5": [
+            "packages/core/src/tokenizer.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "packages/core/src/graph.ts",
+            "packages/core/src/embeddings.ts",
+            "packages/ui/src/components/textarea.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/identifiers": {
+      "evaluatedRuns": 19,
+      "recallAt5": 1,
+      "mrr": 1,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 59.10887499999808,
+      "details": [
+        {
+          "query": "codeQuery",
+          "firstRelevantRank": 1,
+          "latencyMs": 106.07825000000594,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/types.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "CHANGELOG.md"
+          ]
+        },
+        {
+          "query": "graphExpand",
+          "firstRelevantRank": 1,
+          "latencyMs": 62.8874580000047,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "tests/graph-expand-ranking.test.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "vectorSearch",
+          "firstRelevantRank": 1,
+          "latencyMs": 110.44483400000172,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/vector.ts",
+            "CHANGELOG.md",
+            "packages/core/src/embeddings.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "rankStoredEmbeddings",
+          "firstRelevantRank": 1,
+          "latencyMs": 104.34554200000275,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/embeddings.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "cosineSimilarity",
+          "firstRelevantRank": 1,
+          "latencyMs": 55.772625000005064,
+          "top5": ["packages/core/src/retrieval.ts"]
+        },
+        {
+          "query": "reciprocalRankFusion",
+          "firstRelevantRank": 1,
+          "latencyMs": 54.038040999999794,
+          "top5": ["packages/core/src/rrf.ts", "packages/core/src/retrieval.ts"]
+        },
+        {
+          "query": "evaluateRetrieval",
+          "firstRelevantRank": 1,
+          "latencyMs": 57.09799999999814,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "tests/embed-benchmark.test.ts",
+            "packages/core/src/retrieval.ts"
+          ]
+        },
+        {
+          "query": "summarizeQuality",
+          "firstRelevantRank": 1,
+          "latencyMs": 59.29670800000167,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "tests/embed-benchmark.test.ts",
+            "packages/core/src/retrieval.ts"
+          ]
+        },
+        {
+          "query": "embedWorkspace",
+          "firstRelevantRank": 1,
+          "latencyMs": 105.25624999999854,
+          "top5": ["packages/indexer/src/embed-workspace.ts"]
+        },
+        {
+          "query": "getDefaultSettings",
+          "firstRelevantRank": 1,
+          "latencyMs": 57.363291999994544,
+          "top5": [
+            "packages/config/src/types.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/core/src/retrieval.ts"
+          ]
+        },
+        {
+          "query": "formatEmbeddingInput",
+          "firstRelevantRank": 1,
+          "latencyMs": 58.58612500000163,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "documents/backlogs/embedding-review.md",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "createWorkspaceResolver.resolveWorkspaceByPath",
+          "firstRelevantRank": 1,
+          "latencyMs": 57.148166999999376,
+          "top5": ["apps/mcp/src/mcp-core.ts", "packages/db/src/sqlite/registry-repository.ts"]
+        },
+        {
+          "query": "fitToTokenBudget.measure",
+          "firstRelevantRank": 1,
+          "latencyMs": 59.10887499999808,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "landing/src/app/components/particle-text.tsx",
+            "landing/src/app/components/dashboard-preview.tsx",
+            "apps/web/src/routes/benchmark.tsx",
+            "docs/research/openez-vs-graphify/REPORT.md"
+          ]
+        },
+        {
+          "query": "indexWorkspace",
+          "firstRelevantRank": 1,
+          "latencyMs": 24.39991700000246,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "packages/indexer/src/types.ts",
+            "apps/web/src/lib/api.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "tests/exact-symbol-retrieval.test.ts"
+          ]
+        },
+        {
+          "query": "createWorkspaceRepository",
+          "firstRelevantRank": 1,
+          "latencyMs": 34.437917000002926,
+          "top5": [
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "packages/core/src/memory.ts"
+          ]
+        },
+        {
+          "query": "parseRetrievalCases",
+          "firstRelevantRank": 1,
+          "latencyMs": 116.29387499999575,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "packages/native/src/parser.rs",
+            "packages/indexer/src/tree-sitter/parse.ts",
+            "tests/embed-benchmark.test.ts"
+          ]
+        },
+        {
+          "query": "ensureGraphReadySafely",
+          "firstRelevantRank": 1,
+          "latencyMs": 92.44933299999684,
+          "top5": ["apps/mcp/src/mcp-core.ts"]
+        },
+        {
+          "query": "createGraphService.ensureGraphReadyInternal",
+          "firstRelevantRank": 1,
+          "latencyMs": 76.28549999999814,
+          "top5": ["packages/indexer/src/graph-service.ts"]
+        },
+        {
+          "query": "show me indexWorkspace",
+          "firstRelevantRank": 1,
+          "latencyMs": 26.25087500000518,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "packages/ui/src/components/ui/sidebar.tsx",
+            "packages/indexer/src/types.ts",
+            "apps/web/src/lib/api.ts",
+            "apps/web/src/routes/memories.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/relations": {
+      "evaluatedRuns": 7,
+      "recallAt5": 1,
+      "mrr": 0.8571428571428571,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 25.07391600000119,
+      "details": [
+        {
+          "query": "what calls getDefaultSettings",
+          "firstRelevantRank": 1,
+          "latencyMs": 51.84375,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/config/src/types.ts",
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/ruby-resolver.ts"
+          ]
+        },
+        {
+          "query": "what calls reciprocalRankFusion",
+          "firstRelevantRank": 1,
+          "latencyMs": 23.86250000000291,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/rrf.ts",
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/ruby-resolver.ts",
+            "packages/native/src/parser.rs"
+          ]
+        },
+        {
+          "query": "what calls formatEmbeddingInput",
+          "firstRelevantRank": 1,
+          "latencyMs": 24.07012499999837,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/core/src/embeddings.ts",
+            "documents/backlogs/embedding-review.md",
+            "packages/indexer/src/languages.ts"
+          ]
+        },
+        {
+          "query": "what calls parseRetrievalCases",
+          "firstRelevantRank": 2,
+          "latencyMs": 24.71387500000128,
+          "top5": [
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "tests/embed-benchmark.test.ts",
+            "packages/indexer/src/retrieval-eval.ts",
+            "packages/native/src/parser.rs",
+            "packages/indexer/src/tree-sitter/parse.ts"
+          ]
+        },
+        {
+          "query": "what does codeQuery call",
+          "firstRelevantRank": 1,
+          "latencyMs": 27.387459000005038,
+          "top5": [
+            "packages/config/src/types.ts",
+            "packages/core/src/rrf.ts",
+            "packages/core/src/tokenizer.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "what does embedWorkspace call",
+          "firstRelevantRank": 1,
+          "latencyMs": 29.99149999999645,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "packages/core/src/local-embedding.ts",
+            "packages/db/src/sqlite/local-workspace.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/indexer/src/embed-workspace.ts"
+          ]
+        },
+        {
+          "query": "what calls evaluateRetrieval",
+          "firstRelevantRank": 2,
+          "latencyMs": 25.07391600000119,
+          "top5": [
+            "docs/research/openez-vs-graphify/run-openez-eval.ts",
+            "tests/embed-benchmark.test.ts",
+            "packages/indexer/src/retrieval-eval.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/languages.ts"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/docs": {
+      "evaluatedRuns": 7,
+      "recallAt5": 1,
+      "mrr": 0.7428571428571429,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 16.570583000000624,
+      "details": [
+        {
+          "query": "steps to publish a new CLI version to npm",
+          "firstRelevantRank": 1,
+          "latencyMs": 19.521542000002228,
+          "top5": [
+            "AGENTS.md",
+            "apps/cli/src/cli.ts",
+            "apps/cli/README.md",
+            "apps/web/src/routes/workspaces/new.tsx",
+            "landing/src/app/page.tsx"
+          ]
+        },
+        {
+          "query": "quick start install guide",
+          "firstRelevantRank": 2,
+          "latencyMs": 16.570583000000624,
+          "top5": [
+            "landing/src/app/page.tsx",
+            "README.md",
+            "apps/cli/src/setup-instructions.ts",
+            "apps/cli/src/agent-hooks.ts",
+            "apps/cli/src/setup-codex.ts"
+          ]
+        },
+        {
+          "query": "plan for upgrading the tree-sitter parsers",
+          "firstRelevantRank": 1,
+          "latencyMs": 25.21154099999694,
+          "top5": [
+            "documents/backlogs/TREE_SITTER_UPGRADE_GUIDE.md",
+            "packages/native/src/parser.rs",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/indexer/src/parsers/tree-sitter-parser.ts",
+            "packages/indexer/src/tree-sitter/parse.ts"
+          ]
+        },
+        {
+          "query": "product direction and core decisions",
+          "firstRelevantRank": 1,
+          "latencyMs": 14.203208999999333,
+          "top5": [
+            "documents/PROJECT_OPERATIONS.md",
+            "apps/mcp/src/mcp-core.ts",
+            "README.md",
+            "docs/research/distill-publish-jina-code-static-256.md",
+            "documents/backlogs/embedding-review.md"
+          ]
+        },
+        {
+          "query": "embedding review backlog notes",
+          "firstRelevantRank": 1,
+          "latencyMs": 12.68729099999473,
+          "top5": [
+            "documents/backlogs/embedding-review.md",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/db/src/sqlite/embedding-repository.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/embed-workspace.ts"
+          ]
+        },
+        {
+          "query": "what changed in each release",
+          "firstRelevantRank": 2,
+          "latencyMs": 11.66687500000262,
+          "top5": [
+            "apps/web/src/routes/changelog.tsx",
+            "CHANGELOG.md",
+            "packages/core/src/diff-context.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "apps/cli/README.md"
+          ]
+        },
+        {
+          "query": "which content types are supported",
+          "firstRelevantRank": 5,
+          "latencyMs": 27.63104200000089,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/languages.ts",
+            "packages/db/src/sqlite/fts-repository.ts",
+            "README.md"
+          ]
+        }
+      ]
+    }
+  }
+}

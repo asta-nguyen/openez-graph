@@ -1,0 +1,468 @@
+{
+  "goko": {
+    "graphify/concept": {
+      "evaluatedRuns": 15,
+      "recallAt5": 0.5333333333333333,
+      "mrr": 0.26791245791245794,
+      "medianLatencyMs": 239.95308300072793,
+      "details": [
+        {
+          "query": "how does the daemon check the secret a client presents?",
+          "firstRelevantRank": null,
+          "top5": [
+            "crates/daemon/src/server.rs",
+            "apps/desktop/src-tauri/src/error.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/worktrees/WorktreeRows.tsx"
+          ]
+        },
+        {
+          "query": "where is recent terminal output kept so a reconnecting client can catch up?",
+          "firstRelevantRank": null,
+          "top5": [
+            "crates/daemon/src/server.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "crates/protocol/src/message.rs",
+            "apps/desktop/src-tauri/src/activity.rs",
+            "apps/desktop/src/features/terminal/TerminalWorkspace.tsx"
+          ]
+        },
+        {
+          "query": "what stops two copies of the daemon from running at once?",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src-tauri/src/activity.rs",
+            "crates/protocol/src/session.rs",
+            "apps/desktop/src-tauri/src/error.rs",
+            "crates/daemon/src/auth.rs",
+            "apps/desktop/src-tauri/src/worktrees.rs"
+          ]
+        },
+        {
+          "query": "where are the unix socket and log file locations decided?",
+          "firstRelevantRank": 4,
+          "top5": [
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "apps/desktop/src-tauri/src/daemon_client/connect.rs",
+            "apps/desktop/src-tauri/src/usage.rs",
+            "crates/daemon/src/paths.rs",
+            "apps/desktop/src-tauri/src/commands.rs"
+          ]
+        },
+        {
+          "query": "how are messages framed on the wire between the app and the daemon?",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src-tauri/src/error.rs",
+            "apps/desktop/src-tauri/tauri.conf.json",
+            "apps/desktop/src-tauri/src/terminal/tests.rs",
+            "apps/desktop/src-tauri/src/wiring_tests.rs"
+          ]
+        },
+        {
+          "query": "which session state changes are allowed?",
+          "firstRelevantRank": 3,
+          "top5": [
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "crates/daemon/src/server.rs",
+            "crates/daemon/src/session.rs",
+            "crates/protocol/src/session.rs",
+            "crates/daemon/tests/session_manager.rs"
+          ]
+        },
+        {
+          "query": "where does the desktop app launch the background daemon when it is not running?",
+          "firstRelevantRank": 11,
+          "top5": [
+            "apps/desktop/src-tauri/src/commands.rs",
+            "apps/desktop/src-tauri/src/activity.rs",
+            "crates/protocol/src/session.rs",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src-tauri/src/error.rs"
+          ]
+        },
+        {
+          "query": "where is project and session metadata persisted in SQLite?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src-tauri/src/store.rs",
+            "apps/desktop/src/services/types.ts",
+            "crates/daemon/src/session.rs",
+            "apps/desktop/src/features/projects/ProjectTree.test.tsx",
+            "apps/desktop/src/App.test.tsx"
+          ]
+        },
+        {
+          "query": "how does the app tell whether an agent is working or waiting for input?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src-tauri/src/activity.rs",
+            "apps/desktop/src/components/ui/input.tsx",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src-tauri/src/agents.rs",
+            "apps/desktop/src-tauri/src/commands.rs"
+          ]
+        },
+        {
+          "query": "where are installed command line agents found on the user's PATH?",
+          "firstRelevantRank": 5,
+          "top5": [
+            "apps/desktop/src-tauri/src/terminal.rs",
+            "apps/desktop/src/features/worktrees/queries.ts",
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "apps/desktop/src-tauri/src/usage.rs",
+            "apps/desktop/src-tauri/src/agents.rs"
+          ]
+        },
+        {
+          "query": "where are Claude and Codex rate limits polled?",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src-tauri/src/activity.rs",
+            "apps/desktop/src/features/usage/UsageChips.tsx",
+            "apps/desktop/src-tauri/src/store.rs",
+            "apps/desktop/src/features/usage/tone.ts",
+            "apps/desktop/src/App.tsx"
+          ]
+        },
+        {
+          "query": "where is a unified diff turned into side by side rows?",
+          "firstRelevantRank": 2,
+          "top5": [
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "apps/desktop/src/features/editor/diff-view.ts",
+            "apps/desktop/src/features/worktrees/WorktreeRows.tsx",
+            "apps/desktop/src-tauri/src/commands/tests.rs",
+            "apps/desktop/src/features/editor/panes.tsx"
+          ]
+        },
+        {
+          "query": "where do daemon events get written into the React Query cache?",
+          "firstRelevantRank": 9,
+          "top5": [
+            "crates/daemon/src/session.rs",
+            "apps/desktop/src-tauri/src/error.rs",
+            "apps/desktop/src/features/terminal/TerminalController.test.ts",
+            "apps/desktop/package.json",
+            "apps/desktop/src/queryClient.ts"
+          ]
+        },
+        {
+          "query": "how does the frontend invoke Tauri commands and normalize errors?",
+          "firstRelevantRank": 5,
+          "top5": [
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "apps/desktop/package.json",
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "apps/desktop/src-tauri/src/commands.rs",
+            "apps/desktop/src/services/errors.ts"
+          ]
+        },
+        {
+          "query": "where are environment files copied into a new checkout?",
+          "firstRelevantRank": 3,
+          "top5": [
+            "apps/desktop/src/features/worktrees/WorktreeRows.tsx",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "apps/desktop/src/features/editor/EditorFiles.tsx",
+            "crates/daemon/src/buffer.rs"
+          ]
+        }
+      ]
+    },
+    "graphify/identifiers": {
+      "evaluatedRuns": 10,
+      "recallAt5": 1.0,
+      "mrr": 1.0,
+      "medianLatencyMs": 231.5589589998126,
+      "details": [
+        {
+          "query": "RingBuffer",
+          "firstRelevantRank": 1,
+          "top5": [
+            "crates/daemon/src/buffer.rs",
+            "crates/daemon/src/pty.rs",
+            "crates/daemon/src/server.rs"
+          ]
+        },
+        {
+          "query": "SessionManager",
+          "firstRelevantRank": 1,
+          "top5": [
+            "crates/daemon/src/session.rs",
+            "crates/daemon/src/server.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "crates/daemon/tests/session_manager.rs",
+            "crates/protocol/src/session.rs"
+          ]
+        },
+        {
+          "query": "encode_output",
+          "firstRelevantRank": 1,
+          "top5": [
+            "crates/protocol/src/frame.rs",
+            "crates/daemon/src/server.rs",
+            "crates/protocol/src/session.rs",
+            "crates/daemon/src/pty.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs"
+          ]
+        },
+        {
+          "query": "connect_or_spawn",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "crates/daemon/src/pty.rs",
+            "apps/desktop/src-tauri/src/agents.rs",
+            "crates/daemon/tests/pty_spawn.rs",
+            "crates/daemon/src/server.rs"
+          ]
+        },
+        {
+          "query": "match_codex_rollouts",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src-tauri/src/activity.rs",
+            "apps/desktop/src-tauri/src/usage.rs",
+            "apps/desktop/src/features/editor/panes.tsx",
+            "apps/desktop/src/features/editor/EditorFiles.tsx",
+            "apps/desktop/src/features/editor/EditorChanges.tsx"
+          ]
+        },
+        {
+          "query": "toSplitRows",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src/features/editor/diff-view.ts",
+            "apps/desktop/src/features/editor/panes.tsx",
+            "apps/desktop/src/features/editor/diff-view.test.ts",
+            "apps/desktop/src/lib/utils.ts",
+            "apps/desktop/src/features/editor/EditorChanges.tsx"
+          ]
+        },
+        {
+          "query": "startQuerySync",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src/services/sync.ts",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src/services/sync.test.tsx",
+            "apps/desktop/src/queryClient.ts",
+            "apps/desktop/src/services/types.ts"
+          ]
+        },
+        {
+          "query": "TerminalController",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "apps/desktop/src/features/terminal/TerminalController.test.ts",
+            "apps/desktop/src/features/terminal/TerminalView.tsx",
+            "apps/desktop/package.json",
+            "apps/desktop/src/features/terminal/TerminalWorkspace.tsx"
+          ]
+        },
+        {
+          "query": "usageTone",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src/features/usage/tone.ts",
+            "apps/desktop/src/features/sessions/SessionItems.tsx",
+            "apps/desktop/src/features/usage/tone.test.ts",
+            "apps/desktop/src/lib/utils.ts",
+            "apps/desktop/src/features/projects/ProjectTree.tsx"
+          ]
+        },
+        {
+          "query": "checkoutForCwd",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/projects/ProjectTree.tsx",
+            "apps/desktop/src/features/worktrees/WorktreeRows.tsx",
+            "apps/desktop/src/stores/ui.test.tsx",
+            "apps/desktop/src/lib/utils.ts"
+          ]
+        }
+      ]
+    },
+    "graphify/relations": {
+      "evaluatedRuns": 8,
+      "recallAt5": 0.5,
+      "mrr": 0.16041666666666665,
+      "medianLatencyMs": 232.51366699696518,
+      "details": [
+        {
+          "query": "what calls create_token",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "crates/daemon/src/auth.rs",
+            "apps/desktop/src-tauri/src/commands/tests.rs",
+            "apps/desktop/src/features/terminal/TerminalView.tsx",
+            "apps/desktop/src/services/errors.ts"
+          ]
+        },
+        {
+          "query": "what calls encode_output",
+          "firstRelevantRank": null,
+          "top5": ["apps/desktop/src-tauri/src/daemon_client.rs", "crates/protocol/src/frame.rs"]
+        },
+        {
+          "query": "what calls connect_or_spawn",
+          "firstRelevantRank": null,
+          "top5": [
+            "crates/daemon/tests/common/mod.rs",
+            "crates/daemon/tests/pty_spawn.rs",
+            "apps/desktop/src-tauri/src/daemon_client/spawn.rs",
+            "crates/daemon/src/pty.rs",
+            "apps/desktop/src-tauri/src/agents.rs"
+          ]
+        },
+        {
+          "query": "what uses startQuerySync",
+          "firstRelevantRank": 3,
+          "top5": [
+            "apps/desktop/src/services/sync.ts",
+            "apps/desktop/src/features/sessions/queries.ts",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src/services/sync.test.tsx",
+            "apps/desktop/src/queryClient.ts"
+          ]
+        },
+        {
+          "query": "what uses sessionService",
+          "firstRelevantRank": 2,
+          "top5": [
+            "apps/desktop/src/services/session.ts",
+            "apps/desktop/src/features/sessions/queries.ts",
+            "apps/desktop/src/features/terminal/TerminalWorkspace.tsx",
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "apps/desktop/src/features/terminal/TerminalView.tsx"
+          ]
+        },
+        {
+          "query": "what uses usageTone",
+          "firstRelevantRank": 4,
+          "top5": [
+            "apps/desktop/src/features/usage/tone.ts",
+            "apps/desktop/src/features/activity/queries.ts",
+            "apps/desktop/src/features/usage/queries.ts",
+            "apps/desktop/src/features/sessions/SessionItems.tsx",
+            "apps/desktop/src/features/usage/tone.test.ts"
+          ]
+        },
+        {
+          "query": "what does startQuerySync call",
+          "firstRelevantRank": 5,
+          "top5": [
+            "apps/desktop/src/services/sync.ts",
+            "apps/desktop/src/services/call.ts",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src/services/errors.ts",
+            "apps/desktop/src/queryClient.ts"
+          ]
+        },
+        {
+          "query": "what does create_token call",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src/services/call.ts",
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "crates/daemon/src/auth.rs",
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "apps/desktop/src-tauri/src/commands.rs"
+          ]
+        }
+      ]
+    },
+    "graphify/docs": {
+      "evaluatedRuns": 7,
+      "recallAt5": 0.0,
+      "mrr": 0.0,
+      "medianLatencyMs": 238.44624999037478,
+      "details": [
+        {
+          "query": "how do I run the macOS app in development",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src-tauri/src/lib.rs",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src-tauri/tauri.conf.json",
+            "apps/desktop/src-tauri/src/events.rs",
+            "apps/desktop/src-tauri/src/activity.rs"
+          ]
+        },
+        {
+          "query": "how do the React UI, Rust bridge and daemon fit together",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src-tauri/src/bridge.rs",
+            "apps/desktop/src-tauri/src/commands/tests.rs",
+            "apps/desktop/src-tauri/src/error.rs",
+            "apps/desktop/package.json",
+            "apps/desktop/src-tauri/src/daemon_client.rs"
+          ]
+        },
+        {
+          "query": "requirements for the CodeMirror source editor",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/package.json",
+            "apps/desktop/src/features/editor/EditorFiles.tsx",
+            "apps/desktop/src/features/editor/EditorSearch.tsx",
+            "apps/desktop/src/features/editor/EditorChanges.tsx",
+            "apps/desktop/src/features/editor/EditorHistory.tsx"
+          ]
+        },
+        {
+          "query": "what is the default dark palette",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src-tauri/src/commands.rs",
+            "crates/daemon/src/paths.rs",
+            "crates/daemon/src/pty.rs",
+            "crates/daemon/src/buffer.rs",
+            "apps/desktop/src-tauri/src/commands/tests.rs"
+          ]
+        },
+        {
+          "query": "what should happen when the settings page opens",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src/features/settings/SettingsPage.tsx",
+            "apps/desktop/src/features/editor/queries.test.tsx",
+            "apps/desktop/src/features/settings/SettingsPage.test.tsx",
+            "apps/desktop/src/services/settings.ts",
+            "apps/desktop/src/lib/utils.ts"
+          ]
+        },
+        {
+          "query": "what changed in recent releases",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src/features/editor/panes.tsx",
+            "apps/desktop/src-tauri/src/activity.rs",
+            "crates/daemon/tests/flow.rs",
+            "apps/desktop/src-tauri/src/usage.rs",
+            "apps/desktop/src/features/editor/EditorHistory.tsx"
+          ]
+        },
+        {
+          "query": "how do I keep development data separate from normal app data",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/desktop/src/App.tsx",
+            "crates/daemon/src/buffer.rs",
+            "apps/desktop/src-tauri/tauri.conf.json",
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "apps/desktop/src-tauri/src/commands/tests.rs"
+          ]
+        }
+      ]
+    }
+  }
+}

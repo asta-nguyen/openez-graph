@@ -1,0 +1,1007 @@
+{
+  "goko": {
+    "lexical/concept": {
+      "evaluatedRuns": 15,
+      "recallAt5": 0.4666666666666667,
+      "mrr": 0.37193121693121695,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 8.551666000000012,
+      "details": [
+        {
+          "query": "how does the daemon check the secret a client presents?",
+          "firstRelevantRank": null,
+          "latencyMs": 7.022707999999966,
+          "top5": [
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "crates/protocol/src/frame.rs",
+            "apps/desktop/src-tauri/src/agents.rs"
+          ]
+        },
+        {
+          "query": "where is recent terminal output kept so a reconnecting client can catch up?",
+          "firstRelevantRank": null,
+          "latencyMs": 9.041457999999977,
+          "top5": [
+            "apps/desktop/src-tauri/src/terminal.rs",
+            "apps/desktop/src/features/terminal/TerminalWorkspace.tsx",
+            "apps/desktop/src-tauri/src/terminal/tests.rs",
+            "crates/daemon/src/server.rs",
+            "crates/daemon/tests/subscribe_ipc.rs"
+          ]
+        },
+        {
+          "query": "what stops two copies of the daemon from running at once?",
+          "firstRelevantRank": null,
+          "latencyMs": 8.963041999999973,
+          "top5": [
+            "crates/daemon/src/session.rs",
+            "crates/daemon/tests/lifecycle.rs",
+            "crates/daemon/tests/session_manager.rs",
+            "crates/daemon/tests/e2e.rs",
+            "apps/desktop/src/services/sync.ts"
+          ]
+        },
+        {
+          "query": "where are the unix socket and log file locations decided?",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.551666000000012,
+          "top5": [
+            "crates/daemon/src/paths.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "crates/daemon/tests/handshake.rs",
+            "apps/desktop/src-tauri/src/daemon_client/connect.rs",
+            "crates/daemon/src/main.rs"
+          ]
+        },
+        {
+          "query": "how are messages framed on the wire between the app and the daemon?",
+          "firstRelevantRank": 5,
+          "latencyMs": 12.99350000000004,
+          "top5": [
+            "crates/protocol/src/message.rs",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src-tauri/src/terminal/tests.rs",
+            "crates/protocol/src/frame.rs"
+          ]
+        },
+        {
+          "query": "which session state changes are allowed?",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.989666999999997,
+          "top5": [
+            "crates/daemon/src/session.rs",
+            "CHANGELOG.md",
+            "apps/desktop/src-tauri/src/events.rs",
+            "apps/desktop/src-tauri/src/commands/tests.rs",
+            "crates/daemon/src/pty.rs"
+          ]
+        },
+        {
+          "query": "where does the desktop app launch the background daemon when it is not running?",
+          "firstRelevantRank": null,
+          "latencyMs": 12.74166699999995,
+          "top5": [
+            "apps/desktop/src-tauri/src/lib.rs",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src-tauri/src/test_support.rs",
+            "apps/desktop/src/App.test.tsx",
+            "apps/desktop/src/features/terminal/TerminalController.ts"
+          ]
+        },
+        {
+          "query": "where is project and session metadata persisted in SQLite?",
+          "firstRelevantRank": 8,
+          "latencyMs": 9.216666000000032,
+          "top5": [
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src/services/projects.ts",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "README.md",
+            "ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "how does the app tell whether an agent is working or waiting for input?",
+          "firstRelevantRank": null,
+          "latencyMs": 14.929417,
+          "top5": [
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "docs/agent-devkit/changes/2026-11-05-agent-activity/design.md",
+            "apps/desktop/src/App.tsx",
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src/App.test.tsx"
+          ]
+        },
+        {
+          "query": "where are installed command line agents found on the user's PATH?",
+          "firstRelevantRank": 2,
+          "latencyMs": 8.382083999999963,
+          "top5": [
+            "apps/desktop/src-tauri/src/commands.rs",
+            "apps/desktop/src-tauri/src/agents.rs",
+            "crates/daemon/src/paths.rs",
+            "apps/desktop/src/services/types.ts",
+            "apps/desktop/src/features/sessions/SessionLaunch.tsx"
+          ]
+        },
+        {
+          "query": "where are Claude and Codex rate limits polled?",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.643957999999998,
+          "top5": [
+            "apps/desktop/src-tauri/src/usage.rs",
+            "CLAUDE.md",
+            "docs/llm/architecture/overview.md",
+            "ARCHITECTURE.md",
+            "apps/desktop/src-tauri/src/activity.rs"
+          ]
+        },
+        {
+          "query": "where is a unified diff turned into side by side rows?",
+          "firstRelevantRank": 2,
+          "latencyMs": 5.752999999999986,
+          "top5": [
+            "apps/desktop/src/features/editor/panes.tsx",
+            "apps/desktop/src/features/editor/diff-view.ts",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "apps/desktop/src/services/types.ts"
+          ]
+        },
+        {
+          "query": "where do daemon events get written into the React Query cache?",
+          "firstRelevantRank": 9,
+          "latencyMs": 9.205084,
+          "top5": [
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src-tauri/src/events.rs",
+            "docs/agent-devkit/roadmap.md",
+            "docs/agent-devkit/changes/2026-11-05-agent-activity/tasks.md",
+            "apps/desktop/src-tauri/src/store.rs"
+          ]
+        },
+        {
+          "query": "how does the frontend invoke Tauri commands and normalize errors?",
+          "firstRelevantRank": 7,
+          "latencyMs": 8.435124999999971,
+          "top5": [
+            "apps/desktop/src-tauri/src/commands.rs",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "apps/desktop/src-tauri/tauri.conf.json",
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src-tauri/src/error.rs"
+          ]
+        },
+        {
+          "query": "where are environment files copied into a new checkout?",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.441624999999988,
+          "top5": [
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "apps/desktop/src/features/projects/ProjectTree.tsx",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "apps/desktop/src/features/worktrees/WorktreeCreateDialog.tsx",
+            "apps/desktop/vite.config.ts"
+          ]
+        }
+      ]
+    },
+    "lexical/identifiers": {
+      "evaluatedRuns": 10,
+      "recallAt5": 1,
+      "mrr": 0.9333333333333333,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 2.4146670000000086,
+      "details": [
+        {
+          "query": "RingBuffer",
+          "firstRelevantRank": 1,
+          "latencyMs": 1.4041659999999183,
+          "top5": ["crates/daemon/src/buffer.rs", "crates/daemon/src/pty.rs"]
+        },
+        {
+          "query": "SessionManager",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.2354589999999916,
+          "top5": [
+            "crates/daemon/src/session.rs",
+            "crates/daemon/src/server.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "crates/daemon/tests/session_manager.rs",
+            "crates/daemon/src/main.rs"
+          ]
+        },
+        {
+          "query": "encode_output",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.05662499999994,
+          "top5": [
+            "crates/protocol/src/frame.rs",
+            "crates/daemon/src/server.rs",
+            "apps/desktop/src-tauri/src/test_support.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "crates/daemon/tests/terminal_io_ipc.rs"
+          ]
+        },
+        {
+          "query": "connect_or_spawn",
+          "firstRelevantRank": 3,
+          "latencyMs": 5.562958999999978,
+          "top5": [
+            "apps/desktop/src-tauri/src/daemon_client/spawn.rs",
+            "apps/desktop/src-tauri/src/daemon_client/connect.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "apps/desktop/src-tauri/src/bridge.rs",
+            "apps/desktop/src-tauri/src/test_support.rs"
+          ]
+        },
+        {
+          "query": "match_codex_rollouts",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.898500000000013,
+          "top5": [
+            "apps/desktop/src-tauri/src/activity.rs",
+            "apps/desktop/src-tauri/src/usage.rs",
+            "docs/agent-devkit/changes/2026-11-05-agent-activity/tasks.md",
+            "docs/agent-devkit/changes/2026-11-05-agent-activity/design.md",
+            "docs/llm/architecture/overview.md"
+          ]
+        },
+        {
+          "query": "toSplitRows",
+          "firstRelevantRank": 1,
+          "latencyMs": 1.7971670000000586,
+          "top5": [
+            "apps/desktop/src/features/editor/diff-view.ts",
+            "apps/desktop/src/features/editor/panes.tsx"
+          ]
+        },
+        {
+          "query": "startQuerySync",
+          "firstRelevantRank": 1,
+          "latencyMs": 1.5659160000000156,
+          "top5": ["apps/desktop/src/services/sync.ts", "apps/desktop/src/App.tsx"]
+        },
+        {
+          "query": "TerminalController",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.4146670000000086,
+          "top5": [
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "apps/desktop/src-tauri/src/terminal.rs",
+            "apps/desktop/src/features/terminal/TerminalView.tsx",
+            "docs/llm/domains/desktop-theme.md",
+            "apps/desktop/src/features/terminal/TerminalController.test.ts"
+          ]
+        },
+        {
+          "query": "usageTone",
+          "firstRelevantRank": 1,
+          "latencyMs": 1.663791999999944,
+          "top5": [
+            "apps/desktop/src/features/usage/tone.ts",
+            "apps/desktop/src/features/sessions/SessionItems.tsx",
+            "apps/desktop/src/features/usage/UsageChips.tsx"
+          ]
+        },
+        {
+          "query": "checkoutForCwd",
+          "firstRelevantRank": 1,
+          "latencyMs": 3.662249999999972,
+          "top5": [
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/worktrees/WorktreeRows.tsx",
+            "apps/desktop/src/features/projects/ProjectTree.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical/relations": {
+      "evaluatedRuns": 8,
+      "recallAt5": 0.375,
+      "mrr": 0.33556547619047616,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 4.167791999999963,
+      "details": [
+        {
+          "query": "what calls create_token",
+          "firstRelevantRank": null,
+          "latencyMs": 4.895792000000029,
+          "top5": [
+            "apps/desktop/src/services/call.ts",
+            "crates/daemon/src/auth.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "apps/desktop/src/styles/tokens.css",
+            "apps/desktop/src/features/terminal/TerminalController.ts"
+          ]
+        },
+        {
+          "query": "what calls encode_output",
+          "firstRelevantRank": 4,
+          "latencyMs": 4.167791999999963,
+          "top5": [
+            "apps/desktop/src/services/call.ts",
+            "apps/desktop/src-tauri/src/commands.rs",
+            "crates/protocol/src/frame.rs",
+            "crates/daemon/src/server.rs",
+            "apps/desktop/src-tauri/src/test_support.rs"
+          ]
+        },
+        {
+          "query": "what calls connect_or_spawn",
+          "firstRelevantRank": 6,
+          "latencyMs": 5.343250000000012,
+          "top5": [
+            "apps/desktop/src-tauri/src/daemon_client/spawn.rs",
+            "apps/desktop/src-tauri/src/daemon_client/connect.rs",
+            "apps/desktop/src/services/call.ts",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "apps/desktop/src-tauri/src/commands/tests.rs"
+          ]
+        },
+        {
+          "query": "what uses startQuerySync",
+          "firstRelevantRank": 7,
+          "latencyMs": 3.122624999999971,
+          "top5": [
+            "apps/desktop/src/services/sync.ts",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/sessions/queries.ts",
+            "apps/desktop/src/features/activity/queries.ts",
+            "apps/desktop/src/features/usage/queries.ts"
+          ]
+        },
+        {
+          "query": "what uses sessionService",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.853749999999991,
+          "top5": [
+            "apps/desktop/src/features/sessions/queries.ts",
+            "apps/desktop/src/services/session.ts",
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "apps/desktop/src/features/terminal/TerminalView.tsx",
+            "apps/desktop/src/stores/ui.ts"
+          ]
+        },
+        {
+          "query": "what uses usageTone",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.841166000000044,
+          "top5": [
+            "apps/desktop/src/features/sessions/SessionItems.tsx",
+            "apps/desktop/src/features/usage/tone.ts",
+            "apps/desktop/src/features/usage/UsageChips.tsx",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/sessions/queries.ts"
+          ]
+        },
+        {
+          "query": "what does startQuerySync call",
+          "firstRelevantRank": null,
+          "latencyMs": 2.583665999999994,
+          "top5": [
+            "apps/desktop/src/services/call.ts",
+            "apps/desktop/src/services/sync.ts",
+            "apps/desktop/src-tauri/src/bridge.rs",
+            "apps/desktop/src-tauri/src/daemon_client/spawn.rs",
+            "apps/desktop/src/features/editor/CodeEditor.tsx"
+          ]
+        },
+        {
+          "query": "what does create_token call",
+          "firstRelevantRank": 8,
+          "latencyMs": 4.820333000000005,
+          "top5": [
+            "apps/desktop/src/services/call.ts",
+            "crates/daemon/src/auth.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "apps/desktop/src/styles/tokens.css",
+            "apps/desktop/src/features/terminal/TerminalController.ts"
+          ]
+        }
+      ]
+    },
+    "lexical/docs": {
+      "evaluatedRuns": 7,
+      "recallAt5": 0.8571428571428571,
+      "mrr": 0.7777777777777778,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 5.900666000000001,
+      "details": [
+        {
+          "query": "how do I run the macOS app in development",
+          "firstRelevantRank": 1,
+          "latencyMs": 9.173874999999953,
+          "top5": [
+            "README.md",
+            "apps/desktop/src/App.tsx",
+            "docs/agent-devkit/roadmap.md",
+            "apps/desktop/src/App.test.tsx",
+            "docs/llm/architecture/overview.md"
+          ]
+        },
+        {
+          "query": "how do the React UI, Rust bridge and daemon fit together",
+          "firstRelevantRank": 9,
+          "latencyMs": 10.102959000000055,
+          "top5": [
+            "apps/desktop/src/components/ui/field.tsx",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/components/ui/toggle-group.tsx",
+            "apps/desktop/src/stores/ui.test.tsx",
+            "apps/desktop/src/features/terminal/TerminalController.ts"
+          ]
+        },
+        {
+          "query": "requirements for the CodeMirror source editor",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.900666000000001,
+          "top5": [
+            "docs/llm/architecture/editor.md",
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src/features/editor/CodeEditor.tsx",
+            "docs/llm/INDEX.md",
+            "docs/llm/AGENTS.md"
+          ]
+        },
+        {
+          "query": "what is the default dark palette",
+          "firstRelevantRank": 1,
+          "latencyMs": 3.507208999999989,
+          "top5": [
+            "docs/llm/domains/desktop-theme.md",
+            "apps/desktop/src-tauri/capabilities/default.json",
+            "docs/agent-devkit/s1-contract.md",
+            "docs/llm/INDEX.md",
+            "apps/desktop/src/components/ui/dropdown-menu.tsx"
+          ]
+        },
+        {
+          "query": "what should happen when the settings page opens",
+          "firstRelevantRank": 3,
+          "latencyMs": 4.508666999999946,
+          "top5": [
+            "apps/desktop/src/features/settings/SettingsPage.tsx",
+            "apps/desktop/src/features/settings/SettingsPage.test.tsx",
+            "docs/llm/domains/desktop-settings.md",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "apps/desktop/src/services/settings.ts"
+          ]
+        },
+        {
+          "query": "what changed in recent releases",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.211915999999974,
+          "top5": [
+            "CHANGELOG.md",
+            "apps/desktop/src-tauri/src/activity.rs",
+            "apps/desktop/src-tauri/src/terminal.rs",
+            "apps/desktop/src-tauri/src/usage.rs",
+            "apps/desktop/src-tauri/src/bridge.rs"
+          ]
+        },
+        {
+          "query": "how do I keep development data separate from normal app data",
+          "firstRelevantRank": 1,
+          "latencyMs": 11.518125000000055,
+          "top5": [
+            "README.md",
+            "apps/desktop/src/App.tsx",
+            "ARCHITECTURE.md",
+            "apps/desktop/src/App.test.tsx",
+            "crates/daemon/tests/subscribe_ipc.rs"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/concept": {
+      "evaluatedRuns": 15,
+      "recallAt5": 0.4,
+      "mrr": 0.3652645502645502,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 9.665124999999989,
+      "details": [
+        {
+          "query": "how does the daemon check the secret a client presents?",
+          "firstRelevantRank": null,
+          "latencyMs": 7.652207999999973,
+          "top5": [
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "apps/desktop/src-tauri/src/agents.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "crates/protocol/src/frame.rs"
+          ]
+        },
+        {
+          "query": "where is recent terminal output kept so a reconnecting client can catch up?",
+          "firstRelevantRank": null,
+          "latencyMs": 11.906082999999967,
+          "top5": [
+            "apps/desktop/src-tauri/src/terminal.rs",
+            "apps/desktop/src/features/terminal/TerminalWorkspace.tsx",
+            "apps/desktop/src-tauri/src/terminal/tests.rs",
+            "crates/daemon/tests/subscribe_ipc.rs",
+            "crates/daemon/src/server.rs"
+          ]
+        },
+        {
+          "query": "what stops two copies of the daemon from running at once?",
+          "firstRelevantRank": null,
+          "latencyMs": 9.665124999999989,
+          "top5": [
+            "crates/daemon/src/session.rs",
+            "crates/daemon/tests/session_manager.rs",
+            "crates/daemon/tests/e2e.rs",
+            "crates/daemon/tests/lifecycle.rs",
+            "apps/desktop/src/services/sync.ts"
+          ]
+        },
+        {
+          "query": "where are the unix socket and log file locations decided?",
+          "firstRelevantRank": 1,
+          "latencyMs": 6.638292000000092,
+          "top5": [
+            "crates/daemon/src/paths.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "crates/daemon/src/main.rs",
+            "crates/daemon/src/server.rs",
+            "apps/desktop/src-tauri/src/test_support.rs"
+          ]
+        },
+        {
+          "query": "how are messages framed on the wire between the app and the daemon?",
+          "firstRelevantRank": 7,
+          "latencyMs": 12.54566599999987,
+          "top5": [
+            "crates/protocol/src/message.rs",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "apps/desktop/src-tauri/src/terminal/tests.rs",
+            "apps/desktop/src-tauri/src/test_support.rs",
+            "apps/desktop/src/App.tsx"
+          ]
+        },
+        {
+          "query": "which session state changes are allowed?",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.345708000000059,
+          "top5": [
+            "crates/daemon/src/session.rs",
+            "CHANGELOG.md",
+            "apps/desktop/src-tauri/src/events.rs",
+            "apps/desktop/src-tauri/src/commands/tests.rs",
+            "crates/daemon/src/pty.rs"
+          ]
+        },
+        {
+          "query": "where does the desktop app launch the background daemon when it is not running?",
+          "firstRelevantRank": null,
+          "latencyMs": 14.200207999999975,
+          "top5": [
+            "apps/desktop/src-tauri/src/lib.rs",
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src-tauri/src/test_support.rs",
+            "apps/desktop/src/App.test.tsx"
+          ]
+        },
+        {
+          "query": "where is project and session metadata persisted in SQLite?",
+          "firstRelevantRank": 8,
+          "latencyMs": 12.181416999999783,
+          "top5": [
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src/services/projects.ts",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "README.md",
+            "ARCHITECTURE.md"
+          ]
+        },
+        {
+          "query": "how does the app tell whether an agent is working or waiting for input?",
+          "firstRelevantRank": null,
+          "latencyMs": 13.52150000000006,
+          "top5": [
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "docs/agent-devkit/changes/2026-11-05-agent-activity/design.md",
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src/App.tsx"
+          ]
+        },
+        {
+          "query": "where are installed command line agents found on the user's PATH?",
+          "firstRelevantRank": 2,
+          "latencyMs": 9.14041599999996,
+          "top5": [
+            "apps/desktop/src-tauri/src/commands.rs",
+            "apps/desktop/src-tauri/src/agents.rs",
+            "crates/daemon/src/paths.rs",
+            "apps/desktop/src/services/types.ts",
+            "apps/desktop/src/features/sessions/SessionLaunch.tsx"
+          ]
+        },
+        {
+          "query": "where are Claude and Codex rate limits polled?",
+          "firstRelevantRank": 1,
+          "latencyMs": 6.196957999999995,
+          "top5": [
+            "apps/desktop/src-tauri/src/usage.rs",
+            "CLAUDE.md",
+            "docs/llm/architecture/overview.md",
+            "ARCHITECTURE.md",
+            "apps/desktop/src-tauri/src/activity.rs"
+          ]
+        },
+        {
+          "query": "where is a unified diff turned into side by side rows?",
+          "firstRelevantRank": 2,
+          "latencyMs": 6.872665999999981,
+          "top5": [
+            "apps/desktop/src/features/editor/panes.tsx",
+            "apps/desktop/src/features/editor/diff-view.ts",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src-tauri/src/git_view.rs",
+            "apps/desktop/src/services/types.ts"
+          ]
+        },
+        {
+          "query": "where do daemon events get written into the React Query cache?",
+          "firstRelevantRank": 9,
+          "latencyMs": 10.032624999999825,
+          "top5": [
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src-tauri/src/events.rs",
+            "docs/agent-devkit/roadmap.md",
+            "docs/agent-devkit/changes/2026-11-05-agent-activity/tasks.md",
+            "apps/desktop/src-tauri/src/store.rs"
+          ]
+        },
+        {
+          "query": "how does the frontend invoke Tauri commands and normalize errors?",
+          "firstRelevantRank": 10,
+          "latencyMs": 10.001833999999917,
+          "top5": [
+            "apps/desktop/src-tauri/src/commands.rs",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src-tauri/src/agents.rs"
+          ]
+        },
+        {
+          "query": "where are environment files copied into a new checkout?",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.804750000000013,
+          "top5": [
+            "apps/desktop/src-tauri/src/worktrees.rs",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "apps/desktop/src-tauri/src/test_support.rs",
+            "apps/desktop/src-tauri/src/commands.rs",
+            "apps/desktop/src/features/projects/ProjectTree.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/identifiers": {
+      "evaluatedRuns": 10,
+      "recallAt5": 1,
+      "mrr": 1,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 3.52408400000013,
+      "details": [
+        {
+          "query": "RingBuffer",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.494874999999865,
+          "top5": ["crates/daemon/src/buffer.rs", "crates/daemon/src/pty.rs"]
+        },
+        {
+          "query": "SessionManager",
+          "firstRelevantRank": 1,
+          "latencyMs": 3.52408400000013,
+          "top5": [
+            "crates/daemon/src/session.rs",
+            "crates/daemon/src/server.rs",
+            "crates/daemon/src/main.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "crates/daemon/tests/session_manager.rs"
+          ]
+        },
+        {
+          "query": "encode_output",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.985582999999906,
+          "top5": [
+            "crates/protocol/src/frame.rs",
+            "crates/daemon/src/server.rs",
+            "apps/desktop/src-tauri/src/test_support.rs",
+            "crates/daemon/tests/terminal_io_ipc.rs",
+            "apps/desktop/src-tauri/src/daemon_client/connect.rs"
+          ]
+        },
+        {
+          "query": "connect_or_spawn",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.1216669999998885,
+          "top5": [
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "apps/desktop/src-tauri/src/daemon_client/spawn.rs",
+            "apps/desktop/src-tauri/src/daemon_client/connect.rs",
+            "apps/desktop/src-tauri/src/bridge.rs",
+            "apps/desktop/src-tauri/src/test_support.rs"
+          ]
+        },
+        {
+          "query": "match_codex_rollouts",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.44745799999987,
+          "top5": [
+            "apps/desktop/src-tauri/src/activity.rs",
+            "apps/desktop/src-tauri/src/usage.rs",
+            "docs/agent-devkit/changes/2026-11-05-agent-activity/tasks.md",
+            "docs/agent-devkit/changes/2026-11-05-agent-activity/design.md",
+            "docs/llm/architecture/overview.md"
+          ]
+        },
+        {
+          "query": "toSplitRows",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.748583999999937,
+          "top5": [
+            "apps/desktop/src/features/editor/diff-view.ts",
+            "apps/desktop/src/features/editor/panes.tsx",
+            "apps/desktop/src/features/editor/highlight.ts",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/lib/utils.ts"
+          ]
+        },
+        {
+          "query": "startQuerySync",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.457458000000088,
+          "top5": [
+            "apps/desktop/src/services/sync.ts",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src/queryClient.ts"
+          ]
+        },
+        {
+          "query": "TerminalController",
+          "firstRelevantRank": 1,
+          "latencyMs": 3.2842920000000504,
+          "top5": [
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "apps/desktop/src-tauri/src/terminal.rs",
+            "apps/desktop/src/features/terminal/TerminalView.tsx",
+            "docs/llm/domains/desktop-theme.md",
+            "apps/desktop/src/features/terminal/TerminalController.test.ts"
+          ]
+        },
+        {
+          "query": "usageTone",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.682125000000042,
+          "top5": [
+            "apps/desktop/src/features/usage/tone.ts",
+            "apps/desktop/src/features/sessions/SessionItems.tsx",
+            "apps/desktop/src/features/usage/UsageChips.tsx",
+            "apps/desktop/src/features/activity/queries.ts",
+            "apps/desktop/src/features/usage/queries.ts"
+          ]
+        },
+        {
+          "query": "checkoutForCwd",
+          "firstRelevantRank": 1,
+          "latencyMs": 2.551249999999982,
+          "top5": [
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/worktrees/WorktreeRows.tsx",
+            "apps/desktop/src/features/projects/ProjectTree.tsx"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/relations": {
+      "evaluatedRuns": 8,
+      "recallAt5": 1,
+      "mrr": 0.9375,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 6.110333000000082,
+      "details": [
+        {
+          "query": "what calls create_token",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.615375000000085,
+          "top5": [
+            "crates/daemon/src/main.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "crates/daemon/src/auth.rs",
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "crates/daemon/src/paths.rs"
+          ]
+        },
+        {
+          "query": "what calls encode_output",
+          "firstRelevantRank": 2,
+          "latencyMs": 6.110333000000082,
+          "top5": [
+            "crates/protocol/src/frame.rs",
+            "crates/daemon/src/server.rs",
+            "apps/desktop/src-tauri/src/test_support.rs",
+            "apps/desktop/src-tauri/src/bridge.rs",
+            "apps/desktop/src/services/call.ts"
+          ]
+        },
+        {
+          "query": "what calls connect_or_spawn",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.526582999999846,
+          "top5": [
+            "apps/desktop/src-tauri/src/bridge.rs",
+            "apps/desktop/src-tauri/src/daemon_client.rs",
+            "apps/desktop/src-tauri/src/test_support.rs",
+            "apps/desktop/src-tauri/src/daemon_client/spawn.rs",
+            "apps/desktop/src-tauri/src/daemon_client/connect.rs"
+          ]
+        },
+        {
+          "query": "what uses startQuerySync",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.038125000000036,
+          "top5": [
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src/services/sync.ts",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/activity/queries.ts",
+            "apps/desktop/src/features/sessions/queries.ts"
+          ]
+        },
+        {
+          "query": "what uses sessionService",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.019457999999986,
+          "top5": [
+            "apps/desktop/src/features/sessions/queries.ts",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/sessions/SessionControls.tsx",
+            "apps/desktop/src/features/projects/ProjectTree.tsx",
+            "apps/desktop/src/services/session.ts"
+          ]
+        },
+        {
+          "query": "what uses usageTone",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.768624999999929,
+          "top5": [
+            "apps/desktop/src/features/sessions/SessionItems.tsx",
+            "apps/desktop/src/features/usage/tone.ts",
+            "apps/desktop/src/features/usage/UsageChips.tsx",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/features/sessions/queries.ts"
+          ]
+        },
+        {
+          "query": "what does startQuerySync call",
+          "firstRelevantRank": 1,
+          "latencyMs": 4.8745000000001255,
+          "top5": [
+            "apps/desktop/src/queryClient.ts",
+            "apps/desktop/src/services/sync.ts",
+            "apps/desktop/src-tauri/src/bridge.rs",
+            "apps/desktop/src-tauri/src/commands.rs",
+            "apps/desktop/src-tauri/src/test_support.rs"
+          ]
+        },
+        {
+          "query": "what does create_token call",
+          "firstRelevantRank": 1,
+          "latencyMs": 8.7065419999999,
+          "top5": [
+            "crates/daemon/src/paths.rs",
+            "crates/daemon/src/auth.rs",
+            "crates/daemon/tests/common/mod.rs",
+            "apps/desktop/src/features/terminal/TerminalController.ts",
+            "crates/daemon/src/main.rs"
+          ]
+        }
+      ]
+    },
+    "lexical+graph/docs": {
+      "evaluatedRuns": 7,
+      "recallAt5": 0.8571428571428571,
+      "mrr": 0.7777777777777778,
+      "duplicatePathRate": 0,
+      "medianLatencyMs": 7.574791000000005,
+      "details": [
+        {
+          "query": "how do I run the macOS app in development",
+          "firstRelevantRank": 1,
+          "latencyMs": 10.532083000000057,
+          "top5": [
+            "README.md",
+            "apps/desktop/src/App.tsx",
+            "docs/agent-devkit/roadmap.md",
+            "apps/desktop/src/App.test.tsx",
+            "docs/llm/architecture/overview.md"
+          ]
+        },
+        {
+          "query": "how do the React UI, Rust bridge and daemon fit together",
+          "firstRelevantRank": 9,
+          "latencyMs": 11.573125000000118,
+          "top5": [
+            "apps/desktop/src/components/ui/field.tsx",
+            "apps/desktop/src/stores/ui.ts",
+            "apps/desktop/src/components/ui/toggle-group.tsx",
+            "apps/desktop/src/stores/ui.test.tsx",
+            "apps/desktop/src/features/terminal/TerminalController.ts"
+          ]
+        },
+        {
+          "query": "requirements for the CodeMirror source editor",
+          "firstRelevantRank": 1,
+          "latencyMs": 7.574791000000005,
+          "top5": [
+            "docs/llm/architecture/editor.md",
+            "docs/llm/architecture/overview.md",
+            "apps/desktop/src/features/editor/CodeEditor.tsx",
+            "docs/llm/INDEX.md",
+            "docs/llm/AGENTS.md"
+          ]
+        },
+        {
+          "query": "what is the default dark palette",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.7805839999998625,
+          "top5": [
+            "docs/llm/domains/desktop-theme.md",
+            "apps/desktop/src-tauri/capabilities/default.json",
+            "docs/agent-devkit/s1-contract.md",
+            "docs/llm/INDEX.md",
+            "apps/desktop/src/components/ui/dropdown-menu.tsx"
+          ]
+        },
+        {
+          "query": "what should happen when the settings page opens",
+          "firstRelevantRank": 3,
+          "latencyMs": 5.829707999999982,
+          "top5": [
+            "apps/desktop/src/features/settings/SettingsPage.tsx",
+            "apps/desktop/src-tauri/src/wiring_tests.rs",
+            "docs/llm/domains/desktop-settings.md",
+            "apps/desktop/src-tauri/src/store.rs",
+            "apps/desktop/src/features/settings/SettingsPage.test.tsx"
+          ]
+        },
+        {
+          "query": "what changed in recent releases",
+          "firstRelevantRank": 1,
+          "latencyMs": 5.533125000000155,
+          "top5": [
+            "CHANGELOG.md",
+            "apps/desktop/src-tauri/src/activity.rs",
+            "apps/desktop/src-tauri/src/terminal.rs",
+            "apps/desktop/src-tauri/src/usage.rs",
+            "apps/desktop/src-tauri/src/bridge.rs"
+          ]
+        },
+        {
+          "query": "how do I keep development data separate from normal app data",
+          "firstRelevantRank": 1,
+          "latencyMs": 12.42599999999993,
+          "top5": [
+            "README.md",
+            "crates/daemon/tests/subscribe_ipc.rs",
+            "ARCHITECTURE.md",
+            "apps/desktop/src/App.tsx",
+            "apps/desktop/src/App.test.tsx"
+          ]
+        }
+      ]
+    }
+  }
+}

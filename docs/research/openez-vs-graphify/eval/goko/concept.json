@@ -1,0 +1,62 @@
+[
+  {
+    "query": "how does the daemon check the secret a client presents?",
+    "expectedPaths": ["crates/daemon/src/auth.rs"]
+  },
+  {
+    "query": "where is recent terminal output kept so a reconnecting client can catch up?",
+    "expectedPaths": ["crates/daemon/src/buffer.rs"]
+  },
+  {
+    "query": "what stops two copies of the daemon from running at once?",
+    "expectedPaths": ["crates/daemon/src/lock.rs"]
+  },
+  {
+    "query": "where are the unix socket and log file locations decided?",
+    "expectedPaths": ["crates/daemon/src/paths.rs"]
+  },
+  {
+    "query": "how are messages framed on the wire between the app and the daemon?",
+    "expectedPaths": ["crates/protocol/src/frame.rs"]
+  },
+  {
+    "query": "which session state changes are allowed?",
+    "expectedPaths": ["crates/daemon/src/session.rs"]
+  },
+  {
+    "query": "where does the desktop app launch the background daemon when it is not running?",
+    "expectedPaths": ["apps/desktop/src-tauri/src/daemon_client.rs"]
+  },
+  {
+    "query": "where is project and session metadata persisted in SQLite?",
+    "expectedPaths": ["apps/desktop/src-tauri/src/store.rs"]
+  },
+  {
+    "query": "how does the app tell whether an agent is working or waiting for input?",
+    "expectedPaths": ["apps/desktop/src-tauri/src/activity.rs"]
+  },
+  {
+    "query": "where are installed command line agents found on the user's PATH?",
+    "expectedPaths": ["apps/desktop/src-tauri/src/agents.rs"]
+  },
+  {
+    "query": "where are Claude and Codex rate limits polled?",
+    "expectedPaths": ["apps/desktop/src-tauri/src/usage.rs"]
+  },
+  {
+    "query": "where is a unified diff turned into side by side rows?",
+    "expectedPaths": ["apps/desktop/src/features/editor/diff-view.ts"]
+  },
+  {
+    "query": "where do daemon events get written into the React Query cache?",
+    "expectedPaths": ["apps/desktop/src/services/sync.ts"]
+  },
+  {
+    "query": "how does the frontend invoke Tauri commands and normalize errors?",
+    "expectedPaths": ["apps/desktop/src/services/call.ts", "apps/desktop/src/services/errors.ts"]
+  },
+  {
+    "query": "where are environment files copied into a new checkout?",
+    "expectedPaths": ["apps/desktop/src-tauri/src/worktrees.rs"]
+  }
+]

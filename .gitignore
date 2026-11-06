@@ -37,3 +37,6 @@ packages/native/package-lock.json
 # Review files
 reviews/
 video/*
+
+# benchmark
+graphify-out/

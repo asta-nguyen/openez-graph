@@ -1,0 +1,30 @@
+[
+  {
+    "query": "how do I run the macOS app in development",
+    "expectedPaths": ["README.md"]
+  },
+  {
+    "query": "how do the React UI, Rust bridge and daemon fit together",
+    "expectedPaths": ["ARCHITECTURE.md", "docs/llm/architecture/overview.md"]
+  },
+  {
+    "query": "requirements for the CodeMirror source editor",
+    "expectedPaths": ["docs/llm/architecture/editor.md"]
+  },
+  {
+    "query": "what is the default dark palette",
+    "expectedPaths": ["docs/llm/domains/desktop-theme.md"]
+  },
+  {
+    "query": "what should happen when the settings page opens",
+    "expectedPaths": ["docs/llm/domains/desktop-settings.md"]
+  },
+  {
+    "query": "what changed in recent releases",
+    "expectedPaths": ["CHANGELOG.md"]
+  },
+  {
+    "query": "how do I keep development data separate from normal app data",
+    "expectedPaths": ["README.md"]
+  }
+]

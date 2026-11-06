@@ -135,14 +135,24 @@ Embeddings are optional. The default retrieval path works with SQLite full-text 
 
 ### Retrieval benchmark
 
-| Metric      | FTS only |
-| ----------- | -------: |
-| Recall@5    |   76.47% |
-| MRR         |   0.6564 |
-| Avg latency |  12.1 ms |
+| Corpus                 | Suite       | OpenEZ      | Graphify    |
+| ---------------------- | ----------- | ----------- | ----------- |
+| Rust + TS desktop app  | concept     | .40 / .37   | .53 / .27   |
+|                        | identifiers | 1.00 / 1.00 | 1.00 / 1.00 |
+|                        | relations   | 1.00 / .94  | .50 / .16   |
+| Python FastAPI service | concept     | .91 / .71   | .45 / .31   |
+|                        | identifiers | 1.00 / 1.00 | .80 / .80   |
+|                        | relations   | .75 / .75   | .50 / .28   |
+| TS Next.js frontend    | concept     | .89 / .69   | .78 / .37   |
+|                        | identifiers | 1.00 / 1.00 | .89 / .89   |
+|                        | relations   | .75 / .75   | .75 / .25   |
 
-Measured on 2026-08-10 against 180 files, 979 chunks, and 17 fixture-backed queries. Embedding
-comparison is opt-in and is not claimed by this baseline. See [BENCHMARK.md](BENCHMARK.md).
+Recall@5 / MRR, measured 2026-11-06 with no embeddings against Graphify 0.9.103 `--code-only`
+(no LLM calls). The Python and Next.js numbers are optimistic: OpenEZ's ranking was improved using
+those questions. The desktop app's concept suite is the fairest row, because it was written first
+and never tuned against; both tools miss most questions phrased differently from the code. Suites
+are small (4 to 15 questions), and warm query latency is comparable.
+See [BENCHMARK.md](BENCHMARK.md) for documentation questions, speed, and caveats.
 
 ### Embedding configuration
 

@@ -1,0 +1,1249 @@
+{
+  "wy-ask-api": {
+    "graphify/concept": {
+      "evaluatedRuns": 11,
+      "recallAt5": 0.45454545454545453,
+      "mrr": 0.3103896103896104,
+      "medianLatencyMs": 2219.688708006288,
+      "details": [
+        {
+          "query": "where is the FastAPI app factory and middleware configured?",
+          "firstRelevantRank": 7,
+          "top5": [
+            "src/domains/analytics/analytics_service.py",
+            "tests/core/test_guard_service_bulkhead.py",
+            "scripts/ci/run_like_ci.py",
+            "tests/tasks/test_handoff_outbox.py",
+            "tests/core/test_citation_raw_url_wya_701.py"
+          ]
+        },
+        {
+          "query": "where is the chat agent built per request?",
+          "firstRelevantRank": null,
+          "top5": [
+            "src/api/routes/chat.py",
+            "src/domains/chat/rag_retriever.py",
+            "src/schemas/chat.py",
+            "tests/eval/gate/test_arm_worker.py",
+            "scripts/eval/hosted_judge.py"
+          ]
+        },
+        {
+          "query": "where does the chat agent retrieve document chunks for RAG?",
+          "firstRelevantRank": 3,
+          "top5": [
+            "src/agents/search_pipeline.py",
+            "src/api/routes/chat.py",
+            "src/domains/chat/rag_retriever.py",
+            "tests/eval/gate/test_arm_worker.py",
+            "tests/domains/documents/test_select_summary_chunks.py"
+          ]
+        },
+        {
+          "query": "where are the SAQ document pipeline tasks defined?",
+          "firstRelevantRank": 2,
+          "top5": [
+            "src/tasks/analytics.py",
+            "src/tasks/documents.py",
+            "tests/agents/test_output_guard_pii_diff.py",
+            "tests/agents/test_calculate_limits.py",
+            "tests/eval/test_conversation_behavior_tools_eval.py"
+          ]
+        },
+        {
+          "query": "where is Supabase JWT authentication verified?",
+          "firstRelevantRank": 14,
+          "top5": [
+            "tests/core/test_request_path_deadlines.py",
+            "src/core/errors/supabase.py",
+            "src/infra/supabase/supabase_storage.py",
+            "src/domains/otp/otp_service.py",
+            "src/infra/supabase/supabase_client.py"
+          ]
+        },
+        {
+          "query": "where is the Stripe webhook handled?",
+          "firstRelevantRank": null,
+          "top5": [
+            "src/api/routes/payment.py",
+            "src/email/routes/webhooks.py",
+            "src/domains/legal/legal_service.py",
+            "tests/api/routes/test_auth_events.py",
+            "src/core/errors/auth.py"
+          ]
+        },
+        {
+          "query": "where are environment variables and feature flags bound?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/core/config.py",
+            "src/agents/calc_math.py",
+            "eval/gate/protocol.yaml",
+            "scripts/ci/run_like_ci.py",
+            "src/models/connection_features.py"
+          ]
+        },
+        {
+          "query": "where is per-user document pipeline concurrency capped?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/tasks/fairness.py",
+            "src/models/user.py",
+            "src/api/routes/documents.py",
+            ".github/workflows/build-ami.yml",
+            "tests/agents/test_output_guard_pii_diff.py"
+          ]
+        },
+        {
+          "query": "where are lifecycle email events emitted?",
+          "firstRelevantRank": 5,
+          "top5": [
+            "src/api/routes/calendly.py",
+            "src/schemas/plan.py",
+            "src/api/routes/chat_team_question_actions.py",
+            "tests/agents/test_handoff_tools.py",
+            "src/email/event_emitter.py"
+          ]
+        },
+        {
+          "query": "where are API routers registered?",
+          "firstRelevantRank": 6,
+          "top5": [
+            "src/core/_citation_turn_context.py",
+            "src/core/listed_page_urls.py",
+            "src/tasks/outbox.py",
+            "src/api/routes/admin.py",
+            "src/domains/model_router/model_router_service.py"
+          ]
+        },
+        {
+          "query": "where is the document preflight pipeline step implemented?",
+          "firstRelevantRank": null,
+          "top5": [
+            "scripts/eval/build_embedding_cache.py",
+            "scripts/ci/pre_push.sh",
+            "src/schemas/journeys.py",
+            "tests/agents/test_output_guard_pii_diff.py",
+            "tests/eval/test_conversation_behavior_tools_eval.py"
+          ]
+        }
+      ]
+    },
+    "graphify/identifiers": {
+      "evaluatedRuns": 10,
+      "recallAt5": 0.8,
+      "mrr": 0.8,
+      "medianLatencyMs": 2214.4784580013948,
+      "details": [
+        {
+          "query": "build_agent",
+          "firstRelevantRank": null,
+          "top5": []
+        },
+        {
+          "query": "search_documents",
+          "firstRelevantRank": null,
+          "top5": []
+        },
+        {
+          "query": "get_current_user",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/core/auth.py",
+            "src/models/user.py",
+            "scripts/bench/guard_service_peak.py",
+            "src/domains/documents/content_repository.py",
+            "src/api/routes/user.py"
+          ]
+        },
+        {
+          "query": "EmailEventEmitter",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/email/event_emitter.py",
+            "tests/api/routes/test_chat_events.py",
+            "tests/api/routes/test_envelope_events.py",
+            "tests/test_email/test_event_emitter_integration.py",
+            "src/domains/shares/share_service.py"
+          ]
+        },
+        {
+          "query": "RagRetriever",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "tests/eval/_db_fixture.py",
+            "tests/db/test_shared_context_isolation.py",
+            "tests/db/test_tenant_predicate_parity.py",
+            "tests/domains/chat/test_retrieval_telemetry.py"
+          ]
+        },
+        {
+          "query": "ConfigSettings",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/core/config.py",
+            "tests/api/test_client_ip.py",
+            "tests/core/test_config_masking.py",
+            "tests/core/test_summarizer_bounds_validation.py",
+            "tests/domains/chat/test_citation_granularity.py"
+          ]
+        },
+        {
+          "query": "tenant_limited",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/tasks/fairness.py",
+            "tests/tasks/test_fairness.py",
+            "src/tasks/web_source_render.py",
+            "src/tasks/documents.py",
+            "src/agents/toolkit/api.py"
+          ]
+        },
+        {
+          "query": "rrf_fuse",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "scripts/eval/score_dense_and_fused.py",
+            "tests/eval/test_retrieval_width_sweeps.py",
+            "tests/eval/test_hybrid_retrieval.py",
+            "scripts/eval/multichunk_bench.py"
+          ]
+        },
+        {
+          "query": "require_tenant_scope",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/domains/chat/rag_retriever.py",
+            "devops/scripts/lib.sh",
+            "tests/tasks/test_fairness.py",
+            "src/agents/handoff_tools.py",
+            "src/core/errors/chat.py"
+          ]
+        },
+        {
+          "query": "acquire_tenant_slot",
+          "firstRelevantRank": 1,
+          "top5": [
+            "src/tasks/fairness.py",
+            "tests/tasks/test_fairness.py",
+            "src/core/guard_gate.py",
+            "tests/core/test_guard_gate.py",
+            "src/core/config.py"
+          ]
+        }
+      ]
+    },
+    "graphify/relations": {
+      "evaluatedRuns": 4,
+      "recallAt5": 0.5,
+      "mrr": 0.28125,
+      "medianLatencyMs": 2524.7562500007916,
+      "details": [
+        {
+          "query": "what calls build_agent",
+          "firstRelevantRank": 2,
+          "top5": [
+            "scripts/eval/build_contextual_cache.py",
+            "src/api/routes/chat.py",
+            "src/agents/build.py",
+            "tests/eval/gate/test_arm_worker.py",
+            "tests/agents/_chat_route_ast.py"
+          ]
+        },
+        {
+          "query": "what does build_agent call",
+          "firstRelevantRank": null,
+          "top5": [
+            "tests/agents/_chat_route_ast.py",
+            "scripts/eval/build_contextual_cache.py",
+            "tests/eval/gate/test_arm_worker.py",
+            "src/api/routes/chat.py",
+            "tests/agents/test_intelligence_mode.py"
+          ]
+        },
+        {
+          "query": "what calls EmailEventEmitter",
+          "firstRelevantRank": 2,
+          "top5": [
+            "src/email/event_emitter.py",
+            "src/api/routes/chat.py",
+            "src/domains/handoff/email.py",
+            "src/api/routes/chat_history.py",
+            "src/domains/shares/share_service.py"
+          ]
+        },
+        {
+          "query": "what does search_documents call",
+          "firstRelevantRank": 8,
+          "top5": [
+            "src/agents/search_pipeline.py",
+            "src/agents/tools.py",
+            "src/domains/chat/rag_retriever.py",
+            "tests/domains/chat/test_lexical_hit_survives_threshold.py",
+            "tests/agents/test_onyx_transcripts.py"
+          ]
+        }
+      ]
+    },
+    "graphify/docs": {
+      "evaluatedRuns": 6,
+      "recallAt5": 0.0,
+      "mrr": 0.018518518518518517,
+      "medianLatencyMs": 2534.5407919958234,
+      "details": [
+        {
+          "query": "architecture overview and route topology",
+          "firstRelevantRank": null,
+          "top5": [
+            "src/domains/documents/extraction_router.py",
+            "src/domains/dashboard/dashboard_repository.py",
+            "src/schemas/envelope.py",
+            "src/domains/dashboard/dashboard_service.py",
+            "src/domains/documents/document_extraction_abstract.py"
+          ]
+        },
+        {
+          "query": "how does the chat RAG workflow work",
+          "firstRelevantRank": null,
+          "top5": [
+            "src/api/routes/chat.py",
+            "tests/agents/test_plain_agent_transcripts.py",
+            "scripts/ci/local_witness.py",
+            "src/domains/chat/rag_retriever.py"
+          ]
+        },
+        {
+          "query": "how are payments integrated",
+          "firstRelevantRank": null,
+          "top5": [
+            "src/domains/payments/constants.py",
+            "src/domains/payments/payment_service.py",
+            "tests/domains/payments/test_frozen_recovery.py"
+          ]
+        },
+        {
+          "query": "how does the email platform work",
+          "firstRelevantRank": null,
+          "top5": [
+            "src/schemas/envelope_report.py",
+            "tests/agents/test_handoff_tools.py",
+            "src/email/event_emitter.py",
+            "tests/agents/test_handoff_scenarios.py",
+            "evalgate/runner.py"
+          ]
+        },
+        {
+          "query": "how is authentication handled",
+          "firstRelevantRank": 9,
+          "top5": [
+            "src/core/admin_auth.py",
+            "src/domains/otp/otp_service.py",
+            "tests/api/routes/test_auth_events.py",
+            "src/core/config.py",
+            "src/api/routes/envelope.py"
+          ]
+        },
+        {
+          "query": "setup instructions and environment variables",
+          "firstRelevantRank": null,
+          "top5": [
+            "src/core/config.py",
+            "scripts/bench/match_doc_chunks_scaling_bench.py",
+            "scripts/ci/run_like_ci.py",
+            "tests/api/routes/test_chat_delivery.py",
+            "tests/scripts/test_backfill_chunk_injection_scores.py"
+          ]
+        }
+      ]
+    }
+  },
+  "wyask-fe": {
+    "graphify/concept": {
+      "evaluatedRuns": 9,
+      "recallAt5": 0.7777777777777778,
+      "mrr": 0.37222222222222223,
+      "medianLatencyMs": 389.99008398968726,
+      "details": [
+        {
+          "query": "where is the HTTP client with automatic token refresh?",
+          "firstRelevantRank": 5,
+          "top5": [
+            "lib/token.ts",
+            "features/auth/types.ts",
+            "app/workspace/knowledge-vault/client-page.tsx",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "lib/api/client.ts"
+          ]
+        },
+        {
+          "query": "where are receiver access tokens stored and cleared?",
+          "firstRelevantRank": null,
+          "top5": [
+            "components/Workspace/Analytics/Pro/CTAAnalyticsTab/AccessEmailsTable.tsx",
+            "components/Workspace/Analytics/ReceiverActivityTable.tsx",
+            "features/behavior-response/storage.ts",
+            "components/Workspace/Analytics/VerifiedAccessTable.tsx",
+            "components/Workspace/Analytics/EnvelopeReceiverActivityTable.tsx"
+          ]
+        },
+        {
+          "query": "where is the React Query client configured?",
+          "firstRelevantRank": 2,
+          "top5": [
+            "package.json",
+            "lib/query/queryClient.ts",
+            "app/workspace/knowledge-vault/client-page.tsx",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Workspace/Analytics/QueryBudgetCard.tsx"
+          ]
+        },
+        {
+          "query": "where is authentication state provided to the app?",
+          "firstRelevantRank": null,
+          "top5": [
+            "components/Approvals/ApprovedEmptyState.tsx",
+            "stores/useAppStore.ts",
+            "app/workspace/approvals/ApprovalsPageClient.tsx",
+            "components/layout/Header/__tests__/HeaderDesktop.test.tsx",
+            "app/workspace/approvals/page.tsx"
+          ]
+        },
+        {
+          "query": "where is the global app store defined?",
+          "firstRelevantRank": 5,
+          "top5": [
+            "app/global-error.tsx",
+            "globals.d.ts",
+            "stores/index.ts",
+            "app/workspace/approvals/ApprovalsPageClient.tsx",
+            "stores/useAppStore.ts"
+          ]
+        },
+        {
+          "query": "where is the envelope API service?",
+          "firstRelevantRank": 4,
+          "top5": [
+            "lib/api/client.ts",
+            "components/Envelope/Chat/__tests__/ChatPromptInput.behavior.test.tsx",
+            "features/analytics/analytics.service.ts",
+            "features/envelope/envelope.service.ts",
+            "app/envelope/[s"
+          ]
+        },
+        {
+          "query": "where are the MSW API mocks for tests?",
+          "firstRelevantRank": 5,
+          "top5": [
+            "lib/api/client.ts",
+            "package.json",
+            "test/mocks/server.ts",
+            "components/Envelope/Chat/BehaviorEvents/__tests__/BehaviorEventList.test.tsx",
+            "test/mocks/handlers.ts"
+          ]
+        },
+        {
+          "query": "where is the checkout page?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "app/checkout/page.tsx",
+            "app/workspace/analytics/envelope/[id",
+            "app/checkout/CheckoutCallbackPageClient.tsx",
+            "features/payment/payment.mutation.ts",
+            "features/payment/types.ts"
+          ]
+        },
+        {
+          "query": "where are cross-cutting app constants defined?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "utils/constants.ts",
+            "app/workspace/approvals/ApprovalsPageClient.tsx",
+            "app/workspace/approvals/page.tsx",
+            "components/Approvals/ApprovalActionFooter.tsx",
+            "components/Approvals/ApprovalDetailsHeader.tsx"
+          ]
+        }
+      ]
+    },
+    "graphify/identifiers": {
+      "evaluatedRuns": 9,
+      "recallAt5": 0.8888888888888888,
+      "mrr": 0.8888888888888888,
+      "medianLatencyMs": 363.91987500246614,
+      "details": [
+        {
+          "query": "ApiError",
+          "firstRelevantRank": 1,
+          "top5": [
+            "lib/api/client.ts",
+            "features/behavior-response/__tests__/useBehaviorResponse.test.ts",
+            "features/learn-walkthrough/__tests__/useLearnWalkthrough.test.ts",
+            "features/auth/auth.mutation.ts",
+            "app/workspace/approvals/ApprovalsPageClient.tsx"
+          ]
+        },
+        {
+          "query": "createApiClient",
+          "firstRelevantRank": 1,
+          "top5": [
+            "lib/api/client.ts",
+            "lib/token.ts",
+            "lib/api/__tests__/client-errors.test.ts",
+            "lib/api/__tests__/client-requests.test.ts",
+            "lib/api/__tests__/client-helpers.test.ts"
+          ]
+        },
+        {
+          "query": "useEnvelope",
+          "firstRelevantRank": 1,
+          "top5": [
+            "features/envelope/useEnvelope.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Envelope/New/CreateEnvelopeFlow.tsx",
+            "components/Home/Hero.tsx",
+            "features/envelope/envelope.mutation.ts"
+          ]
+        },
+        {
+          "query": "useEnvelopeStore",
+          "firstRelevantRank": 1,
+          "top5": [
+            "stores/useEnvelopeStore.ts",
+            "stores/__tests__/useEnvelopeStore.test.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/layout/Header/HeaderMobile.tsx",
+            "stores/index.ts"
+          ]
+        },
+        {
+          "query": "AuthProvider",
+          "firstRelevantRank": 1,
+          "top5": [
+            "providers/AuthProvider.tsx",
+            "app/layout.tsx",
+            "lib/api/client.ts",
+            "package.json",
+            "components/shared/ui/index.ts"
+          ]
+        },
+        {
+          "query": "cn",
+          "firstRelevantRank": null,
+          "top5": []
+        },
+        {
+          "query": "getReceiverToken",
+          "firstRelevantRank": 1,
+          "top5": [
+            "lib/token.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "lib/api/client.ts",
+            "components/Envelope/EmbedEnvelopePage.tsx",
+            "features/document/useDocumentStatusStream.ts"
+          ]
+        },
+        {
+          "query": "withFreshToken",
+          "firstRelevantRank": 1,
+          "top5": [
+            "lib/api/client.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Auth/Password/SetPasswordForm.tsx",
+            "package.json",
+            "components/shared/Button.tsx"
+          ]
+        },
+        {
+          "query": "isSessionAgnosticEndpoint",
+          "firstRelevantRank": 1,
+          "top5": [
+            "lib/api/client.ts",
+            "features/analytics/analytics.service.ts",
+            "features/envelope/envelope.service.ts",
+            "features/document/document.service.ts",
+            "features/team/team.service.ts"
+          ]
+        }
+      ]
+    },
+    "graphify/relations": {
+      "evaluatedRuns": 4,
+      "recallAt5": 0.75,
+      "mrr": 0.25,
+      "medianLatencyMs": 393.7914580019424,
+      "details": [
+        {
+          "query": "what imports the api client",
+          "firstRelevantRank": 2,
+          "top5": [
+            "lib/api/client.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "lib/api/server.ts",
+            "app/workspace/knowledge-vault/client-page.tsx",
+            "app/workspace/submissions/ClientSubmissionPage.tsx"
+          ]
+        },
+        {
+          "query": "what uses useEnvelope",
+          "firstRelevantRank": 4,
+          "top5": [
+            "features/envelope/useEnvelope.ts",
+            ".github/workflows/ci.yml",
+            "features/envelope/envelope.mutation.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/Envelope/New/CreateEnvelopeFlow.tsx"
+          ]
+        },
+        {
+          "query": "what uses useEnvelopeStore",
+          "firstRelevantRank": 4,
+          "top5": [
+            "stores/useEnvelopeStore.ts",
+            ".github/workflows/ci.yml",
+            "stores/__tests__/useEnvelopeStore.test.ts",
+            "components/Envelope/ClientEnvelopePage.tsx",
+            "components/layout/Header/HeaderMobile.tsx"
+          ]
+        },
+        {
+          "query": "what uses the shared queryClient",
+          "firstRelevantRank": null,
+          "top5": [
+            ".github/workflows/ci.yml",
+            "lib/query/queryClient.ts",
+            "components/Envelope/ShareDialog.tsx",
+            "components/shared/index.ts",
+            "components/KnowledgeVault/Info/SharedContextCard.tsx"
+          ]
+        }
+      ]
+    },
+    "graphify/docs": {
+      "evaluatedRuns": 5,
+      "recallAt5": 0.0,
+      "mrr": 0.0,
+      "medianLatencyMs": 379.85287500487175,
+      "details": [
+        {
+          "query": "SSE integration guide",
+          "firstRelevantRank": null,
+          "top5": [
+            "constants/connectorsAndFeatures.ts",
+            "components/Workspace/EmbedGuideDialog.tsx",
+            "components/Workspace/Analytics/Pro/CTAAnalyticsTab/AccessEmailsTable.tsx",
+            "components/Workspace/Analytics/Pro/OverviewTab/PortfolioSignalsSection.tsx",
+            "features/analytics/analytics.mutation.ts"
+          ]
+        },
+        {
+          "query": "billing and Stripe integration",
+          "firstRelevantRank": null,
+          "top5": [
+            "constants/connectorsAndFeatures.ts",
+            "components/Workspace/Settings/BillingCard.tsx",
+            "package.json",
+            "utils/error.ts",
+            "features/payment/payment.mutation.ts"
+          ]
+        },
+        {
+          "query": "frontend architecture overview",
+          "firstRelevantRank": null,
+          "top5": [
+            "components/Workspace/Analytics/Overview.tsx",
+            "components/Workspace/Analytics/OverviewCard.tsx",
+            "components/Workspace/Dashboard/MyDashboardOverview.tsx",
+            "features/analytics/types.ts",
+            "components/Workspace/Analytics/PlusAnalyticsPage.tsx"
+          ]
+        },
+        {
+          "query": "how the frontend calls the backend api",
+          "firstRelevantRank": null,
+          "top5": ["lib/api/client.ts"]
+        },
+        {
+          "query": "how embed mode works",
+          "firstRelevantRank": null,
+          "top5": [
+            "app/embed/[shortCode",
+            "components/Envelope/EmbedEnvelopePage.tsx",
+            "public/embed.js",
+            "utils/constants.ts",
+            "components/Embed/EmbedWidgetSection.tsx"
+          ]
+        }
+      ]
+    }
+  },
+  "openez": {
+    "graphify/concept": {
+      "evaluatedRuns": 17,
+      "recallAt5": 0.8235294117647058,
+      "mrr": 0.6127450980392156,
+      "medianLatencyMs": 308.1295830052113,
+      "details": [
+        {
+          "query": "where is workspace indexing implemented?",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/web/src/components/graph/WorkspaceGraph.tsx",
+            "apps/web/src/routes/workspaces.tsx",
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/db/src/sqlite/types.ts",
+            "apps/web/src/routes/workspaces/index.tsx"
+          ]
+        },
+        {
+          "query": "how does the retrieval pipeline work?",
+          "firstRelevantRank": 2,
+          "top5": [
+            "landing/src/app/components/retrieval-stage.tsx",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/retrieval-eval.ts",
+            "landing/src/app/components/retrieval-demo.ts",
+            "tests/retrieval-eval.test.ts"
+          ]
+        },
+        {
+          "query": "where are embeddings written?",
+          "firstRelevantRank": null,
+          "top5": [
+            "packages/db/src/sqlite/schema.ts",
+            "packages/db/src/sqlite/index.ts",
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/db/src/sqlite/registry-db.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "how does codeQuery work?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/types.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "apps/mcp/src/mcp-core.ts"
+          ]
+        },
+        {
+          "query": "where is the embedding provider selected?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "tests/embed-workspace.test.ts",
+            "packages/core/src/local-embedding.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/embed-workspace.ts"
+          ]
+        },
+        {
+          "query": "how does vector search run?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            ".github/workflows/native.yml",
+            "apps/web/src/server/sqlite.ts",
+            "tests/fixtures/parity/rust/calls.rs",
+            "tests/vector-search.test.ts"
+          ]
+        },
+        {
+          "query": "where is the MCP server implemented?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "apps/mcp/package.json",
+            "apps/mcp/src/server.ts",
+            "apps/web/src/server/index.ts",
+            "apps/cli/src/mcp-bridge.ts"
+          ]
+        },
+        {
+          "query": "where is the SQLite workspace registry opened?",
+          "firstRelevantRank": 2,
+          "top5": [
+            "packages/db/src/sqlite/types.ts",
+            "packages/db/src/sqlite/registry-db.ts",
+            "apps/web/src/server/sqlite.ts",
+            "packages/db/src/sqlite/workspace-db.ts",
+            "tests/fixtures/parity/ruby/example.rb"
+          ]
+        },
+        {
+          "query": "how is markdown split into chunks?",
+          "firstRelevantRank": 3,
+          "top5": [
+            "packages/db/src/sqlite/schema.ts",
+            "apps/web/src/components/context-blocks.tsx",
+            "packages/indexer/src/markdown.ts",
+            "packages/core/src/tokenizer.ts",
+            "packages/indexer/src/parsers/markdown-parser.ts"
+          ]
+        },
+        {
+          "query": "where are TypeScript symbols extracted?",
+          "firstRelevantRank": 3,
+          "top5": [
+            "package.json",
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/parsers/oxc-parser.ts",
+            "apps/cli/package.json",
+            "apps/web/package.json"
+          ]
+        },
+        {
+          "query": "how are YAML JSON and TOML configs chunked?",
+          "firstRelevantRank": 4,
+          "top5": [
+            "packages/indexer/package.json",
+            "packages/indexer/src/tree-sitter/configs.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "packages/indexer/src/languages.ts"
+          ]
+        },
+        {
+          "query": "where is the local workspace hint written?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/db/src/sqlite/local-workspace.ts",
+            "tests/fixtures/go-edges/modules/b/b.go",
+            "packages/db/src/sqlite/workspace-db.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/db/src/sqlite/schema.ts"
+          ]
+        },
+        {
+          "query": "how does Codex MCP setup work?",
+          "firstRelevantRank": 2,
+          "top5": [
+            "apps/cli/src/cli.ts",
+            "apps/cli/src/setup-codex.ts",
+            "apps/mcp/package.json",
+            "apps/cli/src/setup-claude.ts",
+            "apps/cli/src/setup-devin.ts"
+          ]
+        },
+        {
+          "query": "where are graph neighbors traversed?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/graph.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "landing/src/app/components/workspace-graph.tsx",
+            "packages/indexer/src/graph-service.ts",
+            "landing/src/app/components/graph-explorer.tsx"
+          ]
+        },
+        {
+          "query": "how is the FTS5 chunk index synchronized?",
+          "firstRelevantRank": null,
+          "top5": [
+            "packages/indexer/src/types.ts",
+            "package.json",
+            "tests/exact-symbol-retrieval.test.ts",
+            "packages/db/src/sqlite/chunk-repository.ts",
+            "packages/indexer/src/index-workspace.ts"
+          ]
+        },
+        {
+          "query": "how does MCP resolve a workspace path?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "apps/web/src/server/sqlite.ts",
+            "packages/indexer/src/rust-resolver.ts",
+            "apps/mcp/package.json",
+            ".github/workflows/native.yml"
+          ]
+        },
+        {
+          "query": "where is text truncated to a token budget?",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/tokenizer.ts",
+            "packages/indexer/src/rust-resolver.ts",
+            "packages/ui/src/components/textarea.tsx",
+            "apps/mcp/src/mcp-core.ts",
+            "tests/tokenizer-concurrency.test.ts"
+          ]
+        }
+      ]
+    },
+    "graphify/identifiers": {
+      "evaluatedRuns": 19,
+      "recallAt5": 0.9473684210526315,
+      "mrr": 0.9473684210526315,
+      "medianLatencyMs": 368.7919999938458,
+      "details": [
+        {
+          "query": "codeQuery",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/types.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "apps/mcp/src/mcp-core.ts"
+          ]
+        },
+        {
+          "query": "graphExpand",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "tests/graph-expand-ranking.test.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "vectorSearch",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/core/src/embeddings.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "apps/mcp/src/mcp-core.ts"
+          ]
+        },
+        {
+          "query": "rankStoredEmbeddings",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "tests/vector-search.test.ts",
+            "packages/core/src/embeddings.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "cosineSimilarity",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "tests/vector-search.test.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/db/src/sqlite/index.ts"
+          ]
+        },
+        {
+          "query": "reciprocalRankFusion",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/rrf.ts",
+            "packages/core/src/retrieval.ts",
+            "tests/vector-search.test.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "evaluateRetrieval",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "tests/embed-benchmark.test.ts",
+            "tests/retrieval-eval.test.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "summarizeQuality",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "tests/embed-benchmark.test.ts",
+            "tests/retrieval-eval.test.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "embedWorkspace",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "apps/cli/src/cli.ts",
+            "tests/embed-benchmark.test.ts",
+            "tests/embed-workspace.test.ts"
+          ]
+        },
+        {
+          "query": "getDefaultSettings",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/config/src/types.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "formatEmbeddingInput",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "tests/vector-search.test.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "createWorkspaceResolver.resolveWorkspaceByPath",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/local-workspace.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "fitToTokenBudget.measure",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "landing/src/app/components/dashboard-preview.tsx",
+            "packages/core/src/tokenizer.ts",
+            "packages/core/src/retrieval.ts",
+            "landing/src/app/page.tsx"
+          ]
+        },
+        {
+          "query": "indexWorkspace",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "apps/web/src/server/index.ts"
+          ]
+        },
+        {
+          "query": "createWorkspaceRepository",
+          "firstRelevantRank": null,
+          "top5": []
+        },
+        {
+          "query": "parseRetrievalCases",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "tests/embed-benchmark.test.ts",
+            "tests/retrieval-eval.test.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts"
+          ]
+        },
+        {
+          "query": "ensureGraphReadySafely",
+          "firstRelevantRank": 1,
+          "top5": [
+            "apps/mcp/src/mcp-core.ts",
+            "packages/indexer/src/graph-service.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "createGraphService.ensureGraphReadyInternal",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/indexer/src/graph-service.ts",
+            "tests/graph-lifecycle.test.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "show me indexWorkspace",
+          "firstRelevantRank": 1,
+          "top5": [
+            "packages/indexer/src/index-workspace.ts",
+            "tests/fixtures/parity/java/example.java",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "apps/mcp/src/mcp-core.ts"
+          ]
+        }
+      ]
+    },
+    "graphify/relations": {
+      "evaluatedRuns": 7,
+      "recallAt5": 1.0,
+      "mrr": 0.3142857142857142,
+      "medianLatencyMs": 522.2607499890728,
+      "details": [
+        {
+          "query": "what calls getDefaultSettings",
+          "firstRelevantRank": 5,
+          "top5": [
+            "packages/config/src/types.ts",
+            "tests/fixtures/parity/java/calls.java",
+            "packages/indexer/src/languages.ts",
+            "packages/indexer/src/python-resolver.ts",
+            "packages/indexer/src/index-workspace.ts"
+          ]
+        },
+        {
+          "query": "what calls reciprocalRankFusion",
+          "firstRelevantRank": 3,
+          "top5": [
+            "packages/core/src/rrf.ts",
+            "tests/fixtures/parity/java/calls.java",
+            "packages/core/src/retrieval.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "what calls formatEmbeddingInput",
+          "firstRelevantRank": 3,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "tests/fixtures/parity/java/calls.java",
+            "packages/core/src/retrieval.ts",
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/db/src/sqlite/workspace-repository.ts"
+          ]
+        },
+        {
+          "query": "what calls parseRetrievalCases",
+          "firstRelevantRank": 3,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "tests/fixtures/parity/java/calls.java",
+            "tests/embed-benchmark.test.ts"
+          ]
+        },
+        {
+          "query": "what does codeQuery call",
+          "firstRelevantRank": 3,
+          "top5": [
+            "packages/core/src/retrieval.ts",
+            "packages/core/src/memory.ts",
+            "packages/db/src/sqlite/registry-repository.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "apps/mcp/src/mcp-core.ts"
+          ]
+        },
+        {
+          "query": "what does embedWorkspace call",
+          "firstRelevantRank": 3,
+          "top5": [
+            "packages/indexer/src/embed-workspace.ts",
+            "packages/core/src/memory.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/core/src/embeddings.ts",
+            "packages/core/src/local-embedding.ts"
+          ]
+        },
+        {
+          "query": "what calls evaluateRetrieval",
+          "firstRelevantRank": 3,
+          "top5": [
+            "packages/indexer/src/retrieval-eval.ts",
+            "tests/fixtures/parity/java/calls.java",
+            "tests/embed-benchmark.test.ts",
+            "packages/core/src/retrieval.ts"
+          ]
+        }
+      ]
+    },
+    "graphify/docs": {
+      "evaluatedRuns": 7,
+      "recallAt5": 0.0,
+      "mrr": 0.0,
+      "medianLatencyMs": 308.8544169877423,
+      "details": [
+        {
+          "query": "steps to publish a new CLI version to npm",
+          "firstRelevantRank": null,
+          "top5": [
+            "landing/src/app/page.tsx",
+            "apps/cli/package.json",
+            "tests/fixtures/go-edges/packages/a/a.go",
+            "apps/cli/src/cli.ts",
+            "pnpm-workspace.yaml"
+          ]
+        },
+        {
+          "query": "quick start install guide",
+          "firstRelevantRank": null,
+          "top5": ["landing/package.json", "install.ps1", "install.sh", "package.json"]
+        },
+        {
+          "query": "plan for upgrading the tree-sitter parsers",
+          "firstRelevantRank": null,
+          "top5": [
+            "packages/indexer/src/parsers/parser-registry.ts",
+            "packages/indexer/src/parsers/tree-sitter-parser.ts",
+            "tests/fixtures/parity/cpp/edge.cpp",
+            "packages/native/src/lib.rs",
+            "packages/indexer/src/tree-sitter/index.ts"
+          ]
+        },
+        {
+          "query": "product direction and core decisions",
+          "firstRelevantRank": null,
+          "top5": [
+            "packages/core/src/index.ts",
+            "packages/core/src/tokenizer.ts",
+            "packages/core/src/types.ts",
+            "apps/mcp/src/mcp-core.ts",
+            "packages/core/src/diff-context.ts"
+          ]
+        },
+        {
+          "query": "embedding review backlog notes",
+          "firstRelevantRank": null,
+          "top5": [
+            "packages/core/src/embeddings.ts",
+            "packages/db/src/sqlite/embedding-repository.ts",
+            "landing/src/app/components/dashboard-preview.tsx",
+            "packages/core/src/local-embedding.ts",
+            "packages/core/src/retrieval.ts"
+          ]
+        },
+        {
+          "query": "what changed in each release",
+          "firstRelevantRank": null,
+          "top5": [
+            "packages/core/src/diff-context.ts",
+            "packages/db/src/sqlite/types.ts",
+            "packages/db/src/sqlite/workspace-repository.ts",
+            "packages/indexer/src/graph-service.ts",
+            "packages/db/src/sqlite-index.ts"
+          ]
+        },
+        {
+          "query": "which content types are supported",
+          "firstRelevantRank": null,
+          "top5": [
+            "apps/mcp/package.json",
+            "landing/src/app/opengraph-image.tsx",
+            "packages/indexer/src/typescript-resolver.ts",
+            "packages/indexer/src/index-workspace.ts",
+            "landing/package.json"
+          ]
+        }
+      ]
+    }
+  }
+}
