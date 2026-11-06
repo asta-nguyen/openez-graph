@@ -56,6 +56,8 @@ openez setup devin        # Devin CLI
 # 3. Restart your agent — it will auto-index (auto-sync opt-in via OPENEZ_MCP_WATCH=1)
 ```
 
+Every `setup` writes the OpenEZ instructions block into the project's `AGENTS.md` or `CLAUDE.md`. `openez setup claude` also adds a PreToolUse hook to the project's `.claude/settings.local.json`: once per session, before the agent greps or runs `grep`/`rg` in an indexed project, it reminds the agent to try `code_query` first. It never blocks a tool call. `openez setup codex` and `openez setup devin` add a SessionStart hook (user-level `~/.codex/hooks.json`, `~/.config/devin/config.json`) that adds the same reminder when a session starts in an indexed project, because their PreToolUse hooks cannot add context without blocking; Codex runs it only after you trust it with `/hooks`. OpenCode and Windsurf rely on the instructions block.
+
 ## Commands
 
 ```bash

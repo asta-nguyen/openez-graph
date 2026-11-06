@@ -53,8 +53,11 @@ export async function setupWindsurf(rootPath: string): Promise<void> {
     args,
   };
 
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
-  fs.chmodSync(configPath, 0o644);
+  // Owner-only when created; an existing file keeps the permissions its owner chose.
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
   const instructionsPath = installAgentInstructions(resolvedPath, "AGENTS.md");
 
   console.log(`Windsurf MCP server configured: '${label}'`);

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { installSessionStartHook } from "./agent-hooks";
 import { resolveCliInvocation } from "./resolve-cli";
 import { installAgentInstructions } from "./setup-instructions";
 import { parse, stringify } from "smol-toml";
@@ -59,15 +60,18 @@ export async function setupCodex(rootPath: string): Promise<void> {
 
   const output = stringify(config);
 
-  fs.writeFileSync(configPath, output, "utf-8");
-  fs.chmodSync(configPath, 0o644);
+  // Owner-only when created; an existing file keeps the permissions its owner chose.
+  fs.writeFileSync(configPath, output, { encoding: "utf-8", mode: 0o600 });
   const instructionsPath = installAgentInstructions(resolvedPath, "AGENTS.md");
+  const hooksPath = installSessionStartHook(path.join(os.homedir(), ".codex", "hooks.json"));
 
   console.log(`Codex MCP server configured: '${label}'`);
   console.log("  Mode:    shared multi-workspace MCP");
   console.log(`  Repo:    ${repoRoot}`);
   console.log(`  Config:  ${configPath}`);
   console.log(`  Rules:   ${instructionsPath}`);
+  console.log(`  Hook:    ${hooksPath} (code_query reminder at session start)`);
+  console.log("           Codex runs it only after you trust it: open Codex and run /hooks.");
   console.log("");
   console.log("Restart Codex or open a new session for the changes to take effect.");
 }

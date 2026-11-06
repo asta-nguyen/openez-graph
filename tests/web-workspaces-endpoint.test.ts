@@ -106,3 +106,36 @@ describe("PATCH /api/workspaces/:id/pin", () => {
     expect(missing.status).toBe(404);
   });
 });
+
+describe("cross-site protection", () => {
+  const memory = JSON.stringify({ title: "Decision", content: "Injected" });
+
+  it("rejects a write from another site's page (CSRF)", async () => {
+    const response = await app.request("/api/memories", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain", Origin: "https://evil.example" },
+      body: memory,
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it("rejects requests addressed to a foreign host name (DNS rebinding)", async () => {
+    const response = await app.request("http://evil.example:11368/api/workspaces");
+    expect(response.status).toBe(403);
+  });
+
+  it("allows the local UI on any loopback port and non-browser clients", async () => {
+    for (const origin of ["http://127.0.0.1:11368", "http://localhost:5173", undefined]) {
+      const response = await app.request("http://127.0.0.1:11368/api/workspaces", {
+        headers: origin ? { Origin: origin } : {},
+      });
+      expect(response.status).toBe(200);
+    }
+    const write = await app.request("http://localhost:11368/api/workspaces/nope/pin", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Origin: "http://localhost:11368" },
+      body: JSON.stringify({ pinned: true }),
+    });
+    expect(write.status).not.toBe(403);
+  });
+});
