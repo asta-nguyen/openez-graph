@@ -69,6 +69,51 @@ describe("graphExpand neighbor ordering", () => {
     expect(await oneNeighborQuery()).toEqual(["leaf.ts"]);
   });
 
+  // ledger.ts defines the queried symbol (rank 1 before the graph); money.ts is the next text match
+  // and also holds roundCents, which settleLedger calls, so the graph boost alone used to lift it.
+  async function ledgerQuery(query: string) {
+    write(
+      "ledger.ts",
+      'import { roundCents } from "./money";\nexport function settleLedger() { return roundCents(1); }\n',
+    );
+    write(
+      "money.ts",
+      'export function moneyNotes() { return "settleLedger ledger settlement totals settleLedger"; }\n' +
+        "export function roundCents(n: number) { return n; }\n",
+    );
+    for (const n of [3, 4, 5]) {
+      write(`n${n}.ts`, `export function n${n}() { return "ledger settlement ${n}"; }\n`);
+    }
+    const workspace = await createRegistryRepository().ensureWorkspace({ rootPath: workspaceRoot });
+    await indexWorkspace({ workspaceId: workspace.id });
+    const run = async (graph: boolean) =>
+      (
+        await codeQuery({
+          workspaceId: workspace.id,
+          query,
+          recordMetrics: false,
+          ...(graph ? { ensureGraph: ensureGraphReady } : { skipGraphExpand: true as const }),
+        })
+      ).sources.map((s) => s.path);
+    await run(true); // build the graph so the exact-symbol stage sees it in both runs
+    return { before: await run(false), after: await run(true) };
+  }
+
+  it("keeps the file that defines a queried symbol first", async () => {
+    const { before, after } = await ledgerQuery("settleLedger");
+    expect(before.slice(0, 2)).toEqual(["ledger.ts", "money.ts"]);
+    expect(after[0]).toBe("ledger.ts");
+  });
+
+  it("keeps the best text match first for a question without a symbol name", async () => {
+    write(
+      "guide-code.ts",
+      'export function settlementGuide() { return "how ledger settlement totals are rounded rounded"; }\n',
+    );
+    const { before, after } = await ledgerQuery("how are ledger settlement totals rounded");
+    expect(after[0]).toBe(before[0]);
+  });
+
   it("keeps a document's pre-graph rank when graph neighbors are boosted", async () => {
     // guide.md leads the text ranking; four code files fill the seed slots; helper.ts matches
     // weakly (rank 6) but is called by a seed, so the graph boost lifts it above the guide.

@@ -467,10 +467,15 @@ export async function codeQuery(input: CodeQueryInput): Promise<CodeQueryResult>
       (item) => item.path,
     );
 
-    // The graph only links code, so its boost would push every document down. Documents keep
-    // their pre-graph rank; code is reordered by the graph in the remaining slots.
+    // RRF ranks by position only, so the graph's small boost lifts any neighbor over the entry
+    // above it, however strong that entry's own match. These keep their pre-graph rank: the best
+    // text match, files defining a queried symbol, and documents (the graph only links code, so
+    // its boost would push every document down). The graph reorders the remaining slots.
+    const exactPaths = new Set(exactResults.map((item) => item.path));
     const pinned = beforeGraph.flatMap((entry, index) =>
-      DOCUMENT_PATH.test(entry.item.path) ? [{ entry, index }] : [],
+      index === 0 || exactPaths.has(entry.item.path) || DOCUMENT_PATH.test(entry.item.path)
+        ? [{ entry, index }]
+        : [],
     );
     if (pinned.length > 0) {
       const pinnedPaths = new Set(pinned.map(({ entry }) => entry.item.path));
