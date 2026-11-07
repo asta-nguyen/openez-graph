@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import type { RegistryWorkspace } from "./types";
+import { assertNotFilesystemRoot } from "./utils";
 
 const OPENEZ_DIRNAME = ".openez";
 const WORKSPACE_CONFIG_FILENAME = "workspace.json";
@@ -24,6 +25,7 @@ export function getLocalWorkspaceConfigPath(rootPath: string): string {
 export async function writeLocalWorkspaceConfig(
   workspace: Pick<RegistryWorkspace, "id" | "name" | "rootPath">,
 ): Promise<void> {
+  assertNotFilesystemRoot(workspace.rootPath);
   const configPath = getLocalWorkspaceConfigPath(workspace.rootPath);
 
   await fs.mkdir(path.dirname(configPath), { recursive: true });

@@ -7,6 +7,20 @@
  * needs.
  */
 
+import path from "node:path";
+
+/** True for `/` (or `C:\`): never a project, and a cwd fallback (e.g. a GUI-launched MCP) lands there. */
+export function isFilesystemRoot(rootPath: string): boolean {
+  const resolved = path.resolve(rootPath);
+  return path.parse(resolved).root === resolved;
+}
+
+export function assertNotFilesystemRoot(rootPath: string): void {
+  if (isFilesystemRoot(rootPath)) {
+    throw new Error(`Refusing to use filesystem root "${rootPath}" as a workspace root`);
+  }
+}
+
 export function safeParseJson<T>(value: string | undefined, fallback: T): T {
   if (!value) return fallback;
   try {

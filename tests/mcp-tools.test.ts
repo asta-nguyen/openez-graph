@@ -484,6 +484,7 @@ describe("MCP agent contracts", () => {
   });
 
   it("does not re-index an already indexed empty workspace on restart", async () => {
+    fs.mkdirSync(path.join(tempRoot, ".git")); // MCP startup only auto-registers git projects
     await startSourceMcp(tempRoot);
     const workspace = await createRegistryRepository().getWorkspaceByPath(tempRoot);
     expect(workspace?.lastIndexedAt).toBeTruthy();

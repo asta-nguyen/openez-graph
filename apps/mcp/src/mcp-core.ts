@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import chokidar from "chokidar";
@@ -26,6 +27,7 @@ import {
   createRegistryRepository,
   createWorkspaceRepository,
   findLocalWorkspaceConfig,
+  isFilesystemRoot,
   removeWorkspace,
 } from "@openez-graph/db";
 import {
@@ -1288,10 +1290,23 @@ const WATCH_IGNORE_PATTERNS = [
   "**/.openez/**",
 ];
 
+/** Nearest ancestor (or self) holding `.git` — a directory, or a file in a linked worktree. */
+function findGitRoot(startPath: string): string | null {
+  for (let dir = startPath; ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, ".git"))) return dir;
+    if (path.dirname(dir) === dir) return null;
+  }
+}
+
 export async function autoIndexAndSync(searchRoot: string): Promise<void> {
   const resolvedRoot = path.resolve(searchRoot);
 
-  if (!fs.existsSync(resolvedRoot) || !fs.statSync(resolvedRoot).isDirectory()) {
+  // A GUI-launched server has cwd "/": nothing to auto-register or index there.
+  if (
+    isFilesystemRoot(resolvedRoot) ||
+    !fs.existsSync(resolvedRoot) ||
+    !fs.statSync(resolvedRoot).isDirectory()
+  ) {
     return;
   }
 
@@ -1307,7 +1322,11 @@ export async function autoIndexAndSync(searchRoot: string): Promise<void> {
   }
 
   if (!workspace) {
-    workspace = await registry.ensureWorkspace({ rootPath: resolvedRoot });
+    // Hosts launch the server from anywhere ("/", ~/.codex, $HOME, temp dirs), so only a git
+    // project is auto-registered, as its repo root. `openez init <path>` opts any other dir in.
+    const projectRoot = findGitRoot(resolvedRoot);
+    if (!projectRoot || isFilesystemRoot(projectRoot) || projectRoot === os.homedir()) return;
+    workspace = await registry.ensureWorkspace({ rootPath: projectRoot });
   }
 
   // Auto-index workspaces that have never completed an index, including legacy pending rows.

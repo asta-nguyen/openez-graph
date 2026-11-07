@@ -53,6 +53,7 @@ openez status [path]
 openez diff [ref]
 openez list
 openez remove [path]        remove workspace from registry and delete its .openez data dir (--id, -y; alias: rm)
+openez prune                list registry entries whose directory is gone (e.g. deleted worktrees); -y removes them
 openez serve --mcp
 openez setup codex
 ```
@@ -91,6 +92,10 @@ For questions about a codebase that has been indexed:
 7. Only fall back to direct file reads when MCP results are insufficient or need verification.
 
 When no explicit workspace scope is provided, MCP should default by reading `.openez/workspace.json` from the current project or one of its parent directories.
+
+MCP startup auto-registers and indexes its cwd only when that cwd is inside a git repository
+(the repo root is registered, not a subdirectory). Any other cwd — `/`, `~/.codex`, `$HOME`, a
+temp dir — registers nothing; run `openez init <path>` to opt such a directory in.
 
 For cross-workspace questions, pass explicit multi-workspace scope:
 
