@@ -5,6 +5,23 @@ All notable changes to OpenEZ Graph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-11-07
+
+Run `openez prune` after upgrading to list workspaces that earlier versions left in the registry.
+
+### Added
+
+- `openez prune` lists registry entries whose directory no longer exists (deleted worktrees, temp dirs) and, with `-y`, removes them. A `/` entry left by an earlier version is included.
+
+### Changed
+
+- MCP startup registers and indexes its working directory only when it is inside a git repository, and registers the repository root instead of a subdirectory. Hosts that launch the server from `/`, `~/.codex`, `$HOME` or a temp dir no longer create workspaces there; run `openez init <path>` to index such a directory. A repository rooted at `$HOME` is skipped.
+
+### Fixed
+
+- A registered workspace with root `/` no longer breaks `/api/memories` and `/api/documents` with "Workspace root path does not exist". The dashboard, documents, memories and metrics now choose their workspace through one check that skips an unusable root.
+- `openez init`, `index`, `watch` and the MCP server refuse the filesystem root as a workspace root instead of registering it.
+
 ## [1.7.0] - 2026-11-06
 
 Run `openez reindex <path>` after upgrading: symbol extraction changed (`oxc-v6`).
@@ -413,7 +430,8 @@ Remediation release — index/graph correctness, data protection, and web flow f
 
 [1.5.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.4.0...v1.5.0
 [1.6.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.5.0...v1.6.0
-[1.7.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.6.1...HEAD
+[1.7.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.6.0...v1.6.1
 [1.4.0]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/asta-nguyen/openez-graph/compare/v1.3.0...v1.3.1
