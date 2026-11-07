@@ -1,0 +1,70 @@
+tests/mcp-auto-register.test.ts
+  s_29073870c0de05::t_7e2b5f9ca64e49 1-75,84-94
+  s_29073870c0de05::t_f0c4154f8b1c94 76-83
+apps/web/src/server/index.ts
+  s_29073870c0de05::t_1690ad3b125d61 39
+  s_29073870c0de05::t_4c6921e7d72fde 774
+  s_29073870c0de05::t_e510c15acb3fe5 221-222
+  s_29073870c0de05::t_318dbcd517d641 53
+  s_29073870c0de05::t_0ed687a69ec992 315-317
+  s_29073870c0de05::t_47bf0718093fbf 687-688
+  s_29073870c0de05::t_4132c6248be137 236-238
+  s_29073870c0de05::t_54c66af1730357 160
+tests/filesystem-root-workspace.test.ts
+  s_29073870c0de05::t_1c66f15ab1e2ea 1-122
+packages/db/src/sqlite/registry-repository.ts
+  s_29073870c0de05::t_6db5146fedfa9c 119
+  s_29073870c0de05::t_96c49adaab71d3 162
+  s_29073870c0de05::t_b18e4b922a46af 10
+packages/db/src/sqlite/local-workspace.ts
+  s_29073870c0de05::t_460c52d5be4d11 5
+  s_29073870c0de05::t_ce5d72fa25a21d 28
+packages/db/src/sqlite/workspace-db.ts
+  s_29073870c0de05::t_4c550c03dd9122 14
+  s_29073870c0de05::t_5382835315d187 78
+apps/cli/src/cli.ts
+  s_29073870c0de05::t_5185411ffdee7c 13
+  s_29073870c0de05::t_8ebeb2b09d61f0 83-87
+  s_29073870c0de05::t_6af36f29eee265 518-549
+  s_29073870c0de05::t_c87cc6e80589c5 56
+AGENTS.md
+  s_29073870c0de05::t_433b2ba3d7f383 96-99
+  s_29073870c0de05::t_5eb150def65d82 56
+apps/mcp/src/mcp-core.ts
+  s_29073870c0de05::t_ce8c4550912527 2
+  s_29073870c0de05::t_5bab9a825c8f35 1325-1327,1329
+  s_29073870c0de05::t_cc318702f5a80a 1293-1300
+  s_29073870c0de05::t_21e34d5ad4b9a6 30
+  s_29073870c0de05::t_97a1ba109b6216 1304-1309
+  s_29073870c0de05::t_b4876b3ded04ba 1328
+tests/mcp-tools.test.ts
+  s_29073870c0de05::t_f57a85015291ea 487
+packages/db/src/sqlite/utils.ts
+  s_29073870c0de05::t_46145b7dd2bedb 10-11,13-23
+  s_29073870c0de05::t_746a58f0c0d304 12
+packages/db/src/sqlite/index.ts
+  s_29073870c0de05::t_11d1311f0346ff 21
+tests/cli-prune.test.ts
+  s_29073870c0de05::t_3a3de716a59e21 1-84
+apps/web/src/server/sqlite.ts
+  s_29073870c0de05::t_e6359e743fa34f 251
+  s_29073870c0de05::t_73a94aba8553cf 126-131
+  s_29073870c0de05::t_9a4bfe19c6b0c8 321
+  s_29073870c0de05::t_292bfbdda6462f 6-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a1cbd639a4b1ca382a17d9aaa0f70d93fd0f1279",
+  "prompts": {},
+  "sessions": {
+    "s_29073870c0de05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3095a8ab-e060-40fb-9391-93f37ce8e0f3",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
