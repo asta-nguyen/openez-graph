@@ -3,7 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-import { getFullWorkspaceDdl, getRegistryDdl, migrateRegistrySchema } from "@openez-graph/db";
+import {
+  assertNotFilesystemRoot,
+  getFullWorkspaceDdl,
+  getRegistryDdl,
+  isFilesystemRoot,
+  migrateRegistrySchema,
+} from "@openez-graph/db";
 
 function getRequireUrl(): string {
   try {
@@ -115,6 +121,12 @@ function safeParseJson<T>(value: string | undefined, fallback: T): T {
 
 function normalizeRootPath(rootPath: string): string {
   return rootPath.trim().replace(/[\\/]+$/, "") || rootPath;
+}
+
+/** A root the web server can open a workspace db at: on disk and not the filesystem root. */
+export function isUsableWorkspaceRoot(rootPath: string): boolean {
+  const normalized = normalizeRootPath(rootPath);
+  return normalized !== "" && !isFilesystemRoot(normalized) && fs.existsSync(normalized);
 }
 
 function slugify(value: string): string {
@@ -236,7 +248,7 @@ function getWorkspaceDb(rootPath: string): SqliteDb {
   const normalized = normalizeRootPath(rootPath);
 
   // Guard: reject invalid root paths (e.g. "/" or non-existent dirs)
-  if (normalized === "/" || normalized === "" || !fs.existsSync(normalized)) {
+  if (!isUsableWorkspaceRoot(normalized)) {
     throw new Error(`Workspace root path does not exist: "${rootPath}"`);
   }
 
@@ -306,6 +318,7 @@ export function ensureRegistryWorkspace(input: {
   includeGlobs?: string;
   excludeGlobs?: string;
 }): WebRegistryWorkspace {
+  assertNotFilesystemRoot(input.rootPath);
   const existing = getRegistryWorkspaceByPath(input.rootPath);
   if (existing) {
     return existing;

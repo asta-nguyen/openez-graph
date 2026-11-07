@@ -7,6 +7,7 @@ import { getRegistryDb, getRegistryNativeDb } from "./registry-db";
 import * as schema from "./schema";
 import { decryptValue, encryptValue, isSensitiveKey } from "./secure-storage";
 import type { RegistryRepository, RegistryWorkspace } from "./types";
+import { assertNotFilesystemRoot } from "./utils";
 
 function normalizeRootPath(rootPath: string): string {
   const resolved = path.resolve(rootPath.trim());
@@ -115,6 +116,7 @@ export function createRegistryRepository(): RegistryRepository {
 
     async ensureWorkspace(input): Promise<RegistryWorkspace> {
       const normalizedRootPath = normalizeRootPath(input.rootPath);
+      assertNotFilesystemRoot(normalizedRootPath);
       const existing = await this.getWorkspaceByPath(normalizedRootPath);
       if (existing) {
         return existing;
@@ -157,6 +159,7 @@ export function createRegistryRepository(): RegistryRepository {
       excludeGlobs?: string;
     }): Promise<RegistryWorkspace> {
       const normalizedRootPath = normalizeRootPath(input.rootPath);
+      assertNotFilesystemRoot(normalizedRootPath);
       const existing = await this.getWorkspaceByPath(normalizedRootPath);
       if (existing) {
         return existing;

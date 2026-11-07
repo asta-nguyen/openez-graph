@@ -36,6 +36,7 @@ import {
   getWorkspaceGraphOptimized,
   getWorkspaceMemory,
   insertWorkspaceMemory,
+  isUsableWorkspaceRoot,
   listRegistryWorkspaces,
   closeWorkspaceDb,
   listWorkspaceDocuments,
@@ -49,6 +50,7 @@ import { LOCAL_EMBEDDING_MODELS, codeQuery } from "@openez-graph/core";
 import {
   createRegistryRepository,
   createWorkspaceRepository,
+  isFilesystemRoot,
   removeWorkspace,
 } from "@openez-graph/db";
 import { ensureGraphReady, indexWorkspace } from "@openez-graph/indexer";
@@ -155,16 +157,7 @@ function mapWorkspace(ws: {
 // Dashboard
 app.get("/api/dashboard", (c) => {
   try {
-    const all = listRegistryWorkspaces();
-    // Find first workspace with a valid root path
-    const target =
-      all.find((ws) => {
-        try {
-          return ws.rootPath && ws.rootPath !== "/" && existsSync(ws.rootPath);
-        } catch {
-          return false;
-        }
-      }) ?? all[0];
+    const target = resolveActiveWorkspace();
     if (!target) {
       return c.json({
         workspace: { id: "", name: "No workspace", root: "" },
@@ -225,9 +218,8 @@ app.get("/api/documents", (c) => {
   try {
     const limit = Number(c.req.query("limit") ?? 10);
     const offset = Number(c.req.query("offset") ?? 0);
-    const all = listRegistryWorkspaces();
-    if (all.length === 0) return c.json({ items: [], totalCount: 0 });
-    const ws = all[0];
+    const ws = resolveActiveWorkspace();
+    if (!ws) return c.json({ items: [], totalCount: 0 });
     const items = listWorkspaceDocuments(ws.rootPath, limit, offset);
     const totalCount = countWorkspaceDocuments(ws.rootPath);
     return c.json({ items, totalCount });
@@ -241,6 +233,9 @@ app.post("/api/validate-path", async (c) => {
   const body = await c.req.json<{ rootPath?: string }>();
   const rootPath = body.rootPath;
   if (!rootPath) return c.json({ valid: false, error: "Path is required" });
+  if (isFilesystemRoot(rootPath)) {
+    return c.json({ valid: false, error: "The filesystem root cannot be a workspace" });
+  }
   try {
     const stats = await fs.stat(rootPath);
     if (!stats.isDirectory()) return c.json({ valid: false, error: "Path is not a directory" });
@@ -317,6 +312,9 @@ app.post("/api/workspaces", async (c) => {
     }>();
     const rootPath = body.rootPath;
     if (!rootPath) return c.json({ success: false, error: "rootPath is required" });
+    if (isFilesystemRoot(rootPath)) {
+      return c.json({ success: false, error: "The filesystem root cannot be a workspace" });
+    }
     try {
       const stats = await fs.stat(rootPath);
       if (!stats.isDirectory()) return c.json({ success: false, error: "Path is not a directory" });
@@ -686,9 +684,8 @@ app.get("/api/settings/env", (c) => {
 function resolveActiveWorkspace() {
   const all = listRegistryWorkspaces();
   if (all.length === 0) return null;
-  // Prefer workspace whose rootPath exists on disk
-  const valid = all.find((w) => existsSync(w.rootPath));
-  return valid ?? all[0];
+  // Prefer the first workspace whose rootPath can actually hold a workspace db
+  return all.find((w) => isUsableWorkspaceRoot(w.rootPath)) ?? all[0];
 }
 
 app.get("/api/memories", (c) => {
@@ -774,15 +771,7 @@ function resolveMetricsWorkspace(c: Context) {
     return all.find((w) => w.id === workspaceId) ?? null;
   }
   // Default: same logic as dashboard — first workspace with valid root path
-  return (
-    all.find((w) => {
-      try {
-        return w.rootPath && w.rootPath !== "/" && existsSync(w.rootPath);
-      } catch {
-        return false;
-      }
-    }) ?? all[0]
-  );
+  return resolveActiveWorkspace();
 }
 
 app.get("/api/metrics", (c) => {

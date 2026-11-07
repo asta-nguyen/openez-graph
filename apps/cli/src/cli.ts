@@ -10,6 +10,7 @@ import {
   createWorkspaceRepository,
   findLocalWorkspaceConfig,
   getLocalWorkspaceDir,
+  isFilesystemRoot,
   isSensitiveKey,
   removeWorkspace,
   writeLocalWorkspaceConfig,
@@ -52,6 +53,7 @@ program
 
 // Setup commands seed a .openezignore with common skip patterns; an existing one is never touched.
 function createOpenezIgnore(rootPath: string): void {
+  if (isFilesystemRoot(rootPath)) return;
   if (!fs.existsSync(rootPath) || !fs.statSync(rootPath).isDirectory()) return;
   if (ensureOpenezIgnore(rootPath)) {
     console.log(`Created ${path.join(rootPath, ".openezignore")} (edit it to skip more paths)`);
@@ -75,6 +77,11 @@ program
 
     if (!fs.statSync(resolvedPath).isDirectory()) {
       console.error(`Error: path is not a directory: ${resolvedPath}`);
+      process.exit(1);
+    }
+
+    if (isFilesystemRoot(resolvedPath)) {
+      console.error(`Error: the filesystem root cannot be a workspace: ${resolvedPath}`);
       process.exit(1);
     }
 
@@ -506,6 +513,38 @@ program
     for (const warning of report.warnings) {
       console.log(`! ${warning}`);
     }
+  });
+
+// ── openez prune ──
+
+program
+  .command("prune")
+  .description("Remove registry entries whose directory is gone (or is the filesystem root)")
+  .option("-y, --yes", "remove them (default: only list)")
+  .action(async (options) => {
+    const registry = createRegistryRepository();
+    const stale = (await registry.listWorkspaces()).filter(
+      (w) => isFilesystemRoot(w.rootPath) || !fs.existsSync(w.rootPath),
+    );
+    if (stale.length === 0) {
+      console.log("No workspaces with a missing root.");
+      return;
+    }
+
+    let pruned = 0;
+    for (const workspace of stale) {
+      console.log(`  ✗ ${workspace.name} (${workspace.id})\n       ${workspace.rootPath}`);
+      if (!options.yes) continue;
+      // removeWorkspace only unregisters when the root is confirmed gone (ENOENT), not on EACCES.
+      const report = await removeWorkspace({ id: workspace.id });
+      if (report?.unregistered) pruned++;
+      else for (const warning of report?.warnings ?? []) console.log(`    ! ${warning}`);
+    }
+    console.log(
+      options.yes
+        ? `Pruned ${pruned} of ${stale.length} workspace(s).`
+        : `${stale.length} workspace(s) with a missing root. Run 'openez prune -y' to remove them.`,
+    );
   });
 
 // ── openez config ──

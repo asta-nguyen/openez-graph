@@ -11,6 +11,7 @@ import {
   FTS_SCHEMA_VERSION,
   restoreFtsTriggerDefinitions,
 } from "./fts-repository";
+import { assertNotFilesystemRoot } from "./utils";
 
 const WORKSPACE_DB_DIR_NAME = ".openez";
 const WORKSPACE_DB_FILE_NAME = "index.sqlite";
@@ -74,6 +75,7 @@ export function getWorkspaceDb(rootPath: string) {
   const cached = dbCache.get(rootPath);
   if (cached) return cached;
 
+  assertNotFilesystemRoot(rootPath);
   const { sqlite, db } = getWorkspaceDbRaw(rootPath);
   initializeWorkspaceSchema(sqlite);
   dbCache.set(rootPath, db);
