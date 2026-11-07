@@ -1,0 +1,24 @@
+CHANGELOG.md
+  s_29073870c0de05::t_817e18855e1d02 8
+  s_29073870c0de05::t_cd6a63874e4d14 434
+  s_29073870c0de05::t_8036cb1546b91f 9-24
+  s_29073870c0de05::t_9d8f438216af4a 433
+apps/cli/package.json
+  s_29073870c0de05::t_d3c1c0ade74b62 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac5ec1a0b058e175fd6e7c85dc943827f0d31215",
+  "prompts": {},
+  "sessions": {
+    "s_29073870c0de05": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3095a8ab-e060-40fb-9391-93f37ce8e0f3",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "asta-nguyen <asta.dev.520@gmail.com>"
+    }
+  }
+}
